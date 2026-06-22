@@ -62,7 +62,6 @@ export default function PaketPage() {
       return;
     }
     
-    // PERBAIKAN: Gunakan setTimeout agar tidak memicu error linter
     setTimeout(() => setPicName(nama), 0);
 
     const timer = setInterval(() => {
@@ -234,6 +233,20 @@ export default function PaketPage() {
     return timestamp.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
+  // Shared Style agar kolom input seragam dengan Modal Portal SIBM
+  const sharedInputStyle = {
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e0",
+    fontSize: "14px",
+    background: "#f8fafc",
+    outline: "none",
+    boxSizing: "border-box" as const,
+    boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)",
+    transition: "all 0.2s"
+  };
+
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
@@ -265,19 +278,19 @@ export default function PaketPage() {
         {/* ============================================================== */}
         <div style={{ flex: "1 1 350px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
           <h3 style={{ marginTop: "0", color: "#2d3748", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", display: "flex", alignItems: "center", gap: "10px", fontSize: "18px" }}>
-            <span>📥</span> Input Penerimaan
+            <span style={{background:"#fff5f5", padding:"8px", borderRadius:"12px"}}>📥</span> Input Penerimaan
           </h3>
           
           {isSuccess && (
-            <div style={{ background: "#f0fff4", color: "#22543d", padding: "12px", borderRadius: "8px", marginBottom: "20px", fontSize: "13px", fontWeight: "bold", border: "1px solid #c6f6d5", display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ background: "#f0fff4", color: "#22543d", padding: "12px", borderRadius: "12px", marginBottom: "20px", fontSize: "13px", fontWeight: "bold", border: "1px solid #c6f6d5", display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "16px" }}>✅</span> Paket berhasil dicatat ke sistem!
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <div>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "13px", color: "#4a5568" }}>Jenis Titipan:</label>
-              <select value={jenisBarang} onChange={(e) => setJenisBarang(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc" }}>
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>Jenis Titipan:</label>
+              <select value={jenisBarang} onChange={(e) => setJenisBarang(e.target.value)} style={{...sharedInputStyle, cursor:"pointer", padding:"13px 16px"}}>
                 <option value="Paket / Barang">📦 Paket / Barang</option>
                 <option value="Dokumen / Surat">✉️ Dokumen / Surat</option>
                 <option value="Makanan / Minuman">🍔 Makanan / Minuman</option>
@@ -285,8 +298,8 @@ export default function PaketPage() {
             </div>
 
             <div style={{ position: "relative" }}>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "13px", color: "#4a5568" }}>Karyawan Penerima *</label>
-              <input type="text" placeholder="Ketik nama karyawan..." value={penerima} onChange={(e) => { setPenerima(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "2px solid #63b3ed", fontSize: "14px", background: "#ebf8ff", color: "#2b6cb0", fontWeight: "bold" }} required />
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>Karyawan Penerima *</label>
+              <input type="text" placeholder="Ketik nama karyawan..." value={penerima} onChange={(e) => { setPenerima(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} style={{...sharedInputStyle, border: "2px solid #63b3ed", background: "#ebf8ff", color: "#2b6cb0", fontWeight: "bold"}} required />
               
               {showDropdown && penerima && (
                 <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #e2e8f0", borderRadius: "10px", marginTop: "5px", zIndex: 50, maxHeight: "200px", overflowY: "auto", boxShadow: "0 10px 15px rgba(0,0,0,0.1)" }}>
@@ -303,26 +316,26 @@ export default function PaketPage() {
             </div>
 
             <div>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "13px", color: "#4a5568" }}>Nama Kurir / Ekspedisi *</label>
-              <input type="text" placeholder="Cth: JNE, GoSend, SiCepat..." value={kurir} onChange={(e) => setKurir(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc" }} required />
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>Nama Kurir / Ekspedisi *</label>
+              <input type="text" placeholder="Cth: JNE, GoSend, SiCepat..." value={kurir} onChange={(e) => setKurir(e.target.value)} style={sharedInputStyle} required />
             </div>
 
-            <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "2px dashed #cbd5e0", textAlign: "center" }}>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "10px", fontSize: "13px", color: "#4a5568" }}>📸 Bukti Fisik Paket</label>
+            <div style={{ background: "#f8fafc", padding: "25px 20px", borderRadius: "16px", border: "2px dashed #cbd5e0", textAlign: "center" }}>
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "12px", fontSize: "13px", color: "#4a5568" }}>📸 Bukti Fisik Paket</label>
               
               {previewUrl ? (
                 <div style={{ position: "relative", display: "inline-block" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={previewUrl} alt="Preview" style={{ height: "120px", borderRadius: "8px", border: "2px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }} />
-                  <button type="button" onClick={() => { setFileFoto(null); setPreviewUrl(""); }} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "2px solid white", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
+                  <img src={previewUrl} alt="Preview" style={{ height: "150px", borderRadius: "10px", border: "1px solid #cbd5e0", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />
+                  <button type="button" onClick={() => { setFileFoto(null); setPreviewUrl(""); }} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", borderRadius: "50%", width: "25px", height: "25px", cursor: "pointer", fontWeight: "bold", fontSize:"12px", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
                   <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} id="fileInput" />
-                  <label htmlFor="fileInput" style={{ padding: "10px 15px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", color: "#4a5568", display: "flex", alignItems: "center", gap: "5px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                  <label htmlFor="fileInput" style={{ padding: "12px 18px", background: "white", border: "1px solid #cbd5e0", borderRadius: "10px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", color: "#4a5568", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                     <span>📁</span> Galeri
                   </label>
-                  <button type="button" onClick={startCamera} style={{ padding: "10px 15px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", color: "#4a5568", display: "flex", alignItems: "center", gap: "5px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                  <button type="button" onClick={startCamera} style={{ padding: "12px 18px", background: "white", border: "1px solid #cbd5e0", borderRadius: "10px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", color: "#4a5568", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                     <span>📷</span> Kamera
                   </button>
                 </div>
@@ -330,11 +343,11 @@ export default function PaketPage() {
             </div>
 
             <div>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "13px", color: "#4a5568" }}>Keterangan Tambahan / No. Resi</label>
-              <textarea placeholder="Opsional..." value={keterangan} onChange={(e) => setKeterangan(e.target.value)} style={{ width: "100%", padding: "12px", height: "70px", borderRadius: "10px", border: "1px solid #cbd5e0", resize: "none", fontSize: "14px", background: "#f8fafc" }} />
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>Keterangan Tambahan / No. Resi</label>
+              <textarea placeholder="Opsional..." value={keterangan} onChange={(e) => setKeterangan(e.target.value)} style={{ ...sharedInputStyle, height: "80px", resize: "vertical" }} />
             </div>
 
-            <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "15px", background: isLoading ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "15px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "10px", boxShadow: isLoading ? "none" : "0 4px 6px rgba(229,62,62,0.3)", transition: "0.2s" }}>
+            <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "16px", background: isLoading ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "15px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "10px", boxShadow: isLoading ? "none" : "0 10px 15px -3px rgba(229, 62, 62, 0.3)", transition: "0.2s" }}>
               {isLoading ? "Mengunggah Data..." : "✔️ Simpan Log Paket"}
             </button>
           </form>
@@ -354,7 +367,7 @@ export default function PaketPage() {
               placeholder="🔍 Cari penerima / kurir..." 
               value={searchTabel}
               onChange={(e) => setSearchTabel(e.target.value)}
-              style={{ padding: "10px 15px", borderRadius: "20px", border: "1px solid #cbd5e0", fontSize: "13px", width: "250px", background: "#f8fafc" }}
+              style={{ ...sharedInputStyle, padding: "12px 16px", borderRadius: "20px", width: "250px" }}
             />
           </div>
 
@@ -401,14 +414,14 @@ export default function PaketPage() {
                         {pkt.status === "Belum Diambil" ? (
                           <button 
                             onClick={() => handleDiambil(pkt.id, pkt.penerima)}
-                            style={{ padding: "6px 12px", background: "#dd6b20", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(221,107,32,0.2)" }}
+                            style={{ padding: "8px 14px", background: "#dd6b20", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold", boxShadow: "0 4px 6px rgba(221,107,32,0.2)" }}
                           >
                             Serahkan ➔
                           </button>
                         ) : (
                           <div>
-                            <span style={{ background: "#c6f6d5", color: "#22543d", padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "bold" }}>✓ DIAMBIL</span>
-                            <div style={{ fontSize: "10px", color: "#a0aec0", marginTop: "4px" }}>{formatWaktu(pkt.waktu_diambil)}</div>
+                            <span style={{ background: "#c6f6d5", color: "#22543d", padding: "6px 10px", borderRadius: "8px", fontSize: "10px", fontWeight: "bold" }}>✓ DIAMBIL</span>
+                            <div style={{ fontSize: "10px", color: "#a0aec0", marginTop: "6px", fontWeight:"bold" }}>{formatWaktu(pkt.waktu_diambil)}</div>
                           </div>
                         )}
                       </td>
