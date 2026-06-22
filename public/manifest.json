@@ -1,0 +1,23 @@
+{
+  "name": "Portal SIBM Samudera",
+  "short_name": "SIBM",
+  "description": "Sistem Informasi Building Management - General Affairs PT Samudera",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#e53e3e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

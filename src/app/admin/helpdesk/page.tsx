@@ -2,88 +2,128 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
-interface Ticket {
+interface HelpdeskTicket {
   id: string;
   nama_pelapor: string;
   departemen: string;
   lokasi: string;
   deskripsi: string;
-  status: "Menunggu" | "Sedang Dikerjakan" | "Selesai";
-  waktu_lapor: Timestamp | null;
-  foto_awal?: string; // Link foto kerusakan dari pelapor
-  foto_proses?: string; // Link foto perbaikan dari GA
-  waktu_selesai?: Timestamp | null;
+  status: string;
+  foto_awal?: string;
+  foto_proses?: string;
+  waktu_lapor?: Timestamp | null;
 }
+
+// Menentukan tipe data khusus agar TypeScript tidak protes
+type StatusFilterType = "Semua" | "Menunggu" | "Sedang Dikerjakan" | "Selesai";
 
 export default function AdminHelpdeskPage() {
   const router = useRouter();
-  
-  const [adminName, setAdminName] = useState("Admin");
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [adminName, setAdminName] = useState("Admin GA");
+  const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
+  const [isReady, setIsReady] = useState(false);
 
-  // State untuk Modal Update Status
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [fotoProses, setFotoProses] = useState("");
+  // Modal State
+  const [selectedTicket, setSelectedTicket] = useState<HelpdeskTicket | null>(null);
+  const [statusUbah, setStatusUbah] = useState<string>("");
+  const [fotoHasil, setFotoHasil] = useState<string>("");
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Filter State
+  const [filterStatus, setFilterStatus] = useState<StatusFilterType>("Semua");
 
   useEffect(() => {
     const role = localStorage.getItem("pic_role");
+    const dept = localStorage.getItem("pic_dept");
     const nama = localStorage.getItem("pic_nama");
-    if (!role || (!role.includes("Admin") && !role.includes("Koordinator") && !role.includes("GA"))) {
-      alert("Akses Ditolak! Halaman ini khusus Administrator / GA.");
-      router.push("/dashboard");
+
+    if (!role || (dept !== "Admin GA" && dept !== "Management")) {
+      alert("Akses Ditolak! Halaman ini khusus Admin GA.");
+      router.push("/");
       return;
     }
+    
+    // Membungkus dengan setTimeout untuk menghindari error "cascading renders" dari ESLint
     setTimeout(() => setAdminName(nama || "Admin GA"), 0);
 
+    // Tarik data tiket secara real-time
     const q = query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setTickets(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Ticket[]);
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as HelpdeskTicket));
+      setTickets(data);
+      setIsReady(true);
     });
 
-    return () => unsub();
+    return () => unsubscribe();
   }, [router]);
 
-  const formatWaktu = (ts: Timestamp | null | undefined) => {
+  const formatJam = (ts: Timestamp | null | undefined) => {
     if (!ts) return "-";
-    return ts.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    return new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
-  const handleKerjakan = async (e: React.FormEvent) => {
+  const handleBukaModal = (tiket: HelpdeskTicket) => {
+    setSelectedTicket(tiket);
+    setStatusUbah(tiket.status);
+    setFotoHasil(tiket.foto_proses || "");
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 600; 
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          setFotoHasil(canvas.toDataURL("image/jpeg", 0.6));
+        }
+      };
+      if (typeof ev.target?.result === 'string') img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSimpanPerubahan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicket) return;
-    if (!fotoProses.trim()) return alert("Mohon lampirkan link/URL foto bukti pengerjaan!");
 
-    setIsLoading(true);
+    if (statusUbah === "Selesai" && !fotoHasil && !selectedTicket.foto_proses) {
+      return alert("Untuk menutup tiket (Selesai), Anda WAJIB melampirkan Foto Hasil Perbaikan!");
+    }
+
+    setIsUpdating(true);
     try {
-      await updateDoc(doc(db, "helpdesk_tickets", selectedTicket.id), {
-        status: "Sedang Dikerjakan",
-        foto_proses: fotoProses,
-        waktu_update: serverTimestamp()
+      const ref = doc(db, "helpdesk_tickets", selectedTicket.id);
+      await updateDoc(ref, {
+        status: statusUbah,
+        foto_proses: fotoHasil || null
       });
+
+      alert("✅ Status tiket berhasil diperbarui!");
       setSelectedTicket(null);
-      setFotoProses("");
     } catch (error) {
-      alert("Gagal memperbarui status tiket.");
+      console.error(error);
+      alert("Gagal memperbarui tiket.");
     } finally {
-      setIsLoading(false);
+      setIsUpdating(false);
     }
   };
 
-  const handleSelesai = async (id: string) => {
-    if (!window.confirm("Tandai perbaikan fasilitas ini sebagai SELESAI?")) return;
-    try {
-      await updateDoc(doc(db, "helpdesk_tickets", id), {
-        status: "Selesai",
-        waktu_selesai: serverTimestamp()
-      });
-    } catch (error) {
-      alert("Gagal menyelesaikan tiket.");
-    }
-  };
+  const filteredTickets = filterStatus === "Semua" ? tickets : tickets.filter(t => t.status === filterStatus);
+
+  if (!isReady) return null;
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
@@ -95,103 +135,149 @@ export default function AdminHelpdeskPage() {
           <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Admin</span>
         </div>
         <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          👑 {adminName}
+          🛠️ Tim GA: {adminName}
         </div>
       </div>
 
-      {/* 🔹 HERO */}
-      <div style={{ background: "linear-gradient(135deg, #2b6cb0 0%, #4299e1 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(66, 153, 225, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>HELPDESK FASILITAS</h1>
-        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Manajemen Tiket Laporan Kerusakan Gedung (Building Management)</p>
+      {/* 🔹 HERO SECTION */}
+      <div style={{ background: "linear-gradient(135deg, #1a365d 0%, #3182ce 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(49, 130, 206, 0.2)" }}>
+        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>HELPDESK COMMAND CENTER</h1>
+        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung</p>
       </div>
 
       {/* 🔹 KONTEN UTAMA */}
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         
-        <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-            <h2 style={{ margin: 0, color: "#2d3748", fontSize: "18px", display: "flex", alignItems: "center", gap: "8px" }}>
-              🛠️ Daftar Laporan Kerusakan
-            </h2>
-          </div>
-
-          <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
-                  <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Pelapor</th>
-                  <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Lokasi & Kendala</th>
-                  <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Status & Waktu</th>
-                  <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Tindakan GA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tickets.length > 0 ? tickets.map(t => (
-                  <tr key={t.id} style={{ borderBottom: "1px solid #edf2f7" }}>
-                    <td style={{ padding: "12px 15px" }}>
-                      <div style={{ fontWeight: "bold", color: "#2b6cb0", fontSize: "14px" }}>{t.nama_pelapor}</div>
-                      <div style={{ fontSize: "11px", color: "#718096" }}>{t.departemen}</div>
-                    </td>
-                    <td style={{ padding: "12px 15px", color: "#4a5568", maxWidth: "300px" }}>
-                      <div style={{ fontWeight: "bold" }}>📍 {t.lokasi}</div>
-                      <div style={{ fontSize: "12px", marginTop: "4px" }}>{t.deskripsi}</div>
-                    </td>
-                    <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                      <div style={{ background: t.status === "Menunggu" ? "#feebc8" : (t.status === "Sedang Dikerjakan" ? "#ebf8ff" : "#c6f6d5"), color: t.status === "Menunggu" ? "#9c4221" : (t.status === "Sedang Dikerjakan" ? "#2b6cb0" : "#22543d"), padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", marginBottom: "5px", display: "inline-block" }}>
-                        {t.status === "Menunggu" ? "⏳ Menunggu Teknisi" : t.status === "Sedang Dikerjakan" ? "🧑‍🔧 Sedang Dikerjakan" : "✅ Selesai"}
-                      </div>
-                      <div style={{ fontSize: "10px", color: "#718096" }}>{formatWaktu(t.waktu_lapor)}</div>
-                    </td>
-                    <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                      {t.status === "Menunggu" && (
-                        <button onClick={() => setSelectedTicket(t)} style={{ background: "#3182ce", color: "white", border: "none", padding: "8px 15px", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", boxShadow: "0 4px 6px rgba(49,130,206,0.2)" }}>
-                          Mulai Kerjakan
-                        </button>
-                      )}
-                      {t.status === "Sedang Dikerjakan" && (
-                        <button onClick={() => handleSelesai(t.id)} style={{ background: "#38a169", color: "white", border: "none", padding: "8px 15px", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", boxShadow: "0 4px 6px rgba(56,161,105,0.2)" }}>
-                          Tandai Selesai
-                        </button>
-                      )}
-                      {t.status === "Selesai" && (
-                        <span style={{ fontSize: "12px", fontWeight: "bold", color: "#a0aec0" }}>Closed</span>
-                      )}
-                    </td>
-                  </tr>
-                )) : <tr><td colSpan={4} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada laporan kerusakan masuk.</td></tr>}
-              </tbody>
-            </table>
+        {/* STATISTIK & FILTER */}
+        <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+          <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px" }}>
+            {["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai"].map(status => {
+              const count = status === "Semua" ? tickets.length : tickets.filter(t => t.status === status).length;
+              return (
+                <button 
+                  key={status} onClick={() => setFilterStatus(status as StatusFilterType)}
+                  style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: filterStatus === status ? "#3182ce" : "#edf2f7", color: filterStatus === status ? "white" : "#4a5568", fontSize: "13px" }}
+                >
+                  {status} ({count})
+                </button>
+              );
+            })}
           </div>
         </div>
 
-      </div>
-
-      {/* 🔹 MODAL KERJAKAN TIKET */}
-      {selectedTicket && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px", backdropFilter: "blur(5px)" }}>
-          <div style={{ background: "white", padding: "25px", borderRadius: "20px", width: "100%", maxWidth: "500px" }}>
-            <h2 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "18px" }}>🧑‍🔧 Update Pekerjaan</h2>
-            <p style={{ fontSize: "13px", color: "#718096", marginBottom: "20px" }}>
-              Anda akan memproses perbaikan untuk <strong>{selectedTicket.lokasi}</strong>. Silakan lampirkan foto dokumentasi pengerjaan.
-            </p>
-
-            <form onSubmit={handleKerjakan} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>URL Foto Proses Perbaikan *</label>
-                <input type="url" required value={fotoProses} onChange={(e) => setFotoProses(e.target.value)} placeholder="https://contoh.com/foto-perbaikan.jpg" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc" }} />
-                <span style={{ fontSize: "10px", color: "#a0aec0" }}>*Untuk sementara gunakan link/URL foto (Google Drive/Imgur).</span>
+        {/* DAFTAR TIKET (GRID CARDS) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "20px" }}>
+          {filteredTickets.length > 0 ? filteredTickets.map((tiket) => (
+            <div key={tiket.id} style={{ background: "white", borderRadius: "20px", overflow: "hidden", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column" }}>
+              <div style={{ padding: "15px", background: tiket.status === "Menunggu" ? "#fffaf0" : (tiket.status === "Sedang Dikerjakan" ? "#ebf8ff" : "#f0fff4"), borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: "900", color: "#2d3748", fontSize: "15px", marginBottom: "3px" }}>📍 {tiket.lokasi}</div>
+                  <div style={{ fontSize: "11px", color: "#718096" }}>Dilaporkan: {formatJam(tiket.waktu_lapor)}</div>
+                </div>
+                <span style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", background: tiket.status === "Menunggu" ? "#feebc8" : (tiket.status === "Sedang Dikerjakan" ? "#bee3f8" : "#c6f6d5"), color: tiket.status === "Menunggu" ? "#9c4221" : (tiket.status === "Sedang Dikerjakan" ? "#2b6cb0" : "#22543d"), whiteSpace: "nowrap" }}>
+                  {tiket.status}
+                </span>
               </div>
               
-              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "12px", background: isLoading ? "#a0aec0" : "#3182ce", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isLoading ? "not-allowed" : "pointer" }}>
-                  {isLoading ? "Menyimpan..." : "Simpan & Proses"}
-                </button>
-                <button type="button" onClick={() => { setSelectedTicket(null); setFotoProses(""); }} style={{ padding: "12px 20px", background: "#edf2f7", color: "#4a5568", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}>Batal</button>
+              <div style={{ padding: "15px", flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                  <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "14px" }}>🧑‍💼</div>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: "bold", color: "#2d3748" }}>{tiket.nama_pelapor}</div>
+                    <div style={{ fontSize: "11px", color: "#a0aec0" }}>{tiket.departemen}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: "13px", color: "#4a5568", background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #edf2f7", fontStyle: "italic", minHeight: "50px" }}>
+                  &quot;{tiket.deskripsi}&quot;
+                </div>
               </div>
-            </form>
+
+              <div style={{ padding: "15px", borderTop: "1px solid #e2e8f0", background: "#f8fafc" }}>
+                <button onClick={() => handleBukaModal(tiket)} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "none", background: "#3182ce", color: "white", fontWeight: "bold", cursor: "pointer", fontSize: "13px", boxShadow: "0 2px 4px rgba(49,130,206,0.2)", transition: "0.2s" }}>
+                  {tiket.status === "Selesai" ? "Lihat Detail Bukti" : "Tindak Lanjuti Laporan"}
+                </button>
+              </div>
+            </div>
+          )) : (
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "50px 20px", background: "white", borderRadius: "20px", border: "1px dashed #cbd5e0", color: "#a0aec0" }}>
+              <div style={{ fontSize: "40px", marginBottom: "10px" }}>🎉</div>
+              <h3 style={{ margin: "0 0 5px 0", color: "#4a5568" }}>Tidak ada tiket di kategori ini!</h3>
+              <p style={{ margin: 0, fontSize: "13px" }}>Tim GA sedang bersantai atau semua fasilitas dalam kondisi prima.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 🔹 MODAL EKSEKUSI TIKET */}
+      {selectedTicket && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(5px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
+          <div style={{ background: "white", width: "100%", maxWidth: "600px", borderRadius: "24px", overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+            
+            <div style={{ background: "#2d3748", color: "white", padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 style={{ margin: "0 0 5px 0", fontSize: "18px", fontWeight: "800" }}>📝 Eksekusi Tiket GA</h2>
+                <div style={{ fontSize: "12px", color: "#a0aec0" }}>Tiket ID: {selectedTicket.id.slice(0,8).toUpperCase()}</div>
+              </div>
+              <button onClick={() => setSelectedTicket(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", width: "35px", height: "35px", borderRadius: "50%", cursor: "pointer", color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "14px" }}>✖</button>
+            </div>
+
+            <div style={{ padding: "20px", overflowY: "auto", flex: 1, background: "#f8fafc" }}>
+              
+              <div style={{ background: "white", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "bold", color: "#a0aec0", textTransform: "uppercase", marginBottom: "8px" }}>Detail Laporan Kerusakan</div>
+                <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: "8px", fontSize: "13px" }}>
+                  <div style={{ color: "#718096" }}>Pelapor:</div><div style={{ fontWeight: "bold", color: "#2d3748" }}>{selectedTicket.nama_pelapor} ({selectedTicket.departemen})</div>
+                  <div style={{ color: "#718096" }}>Lokasi:</div><div style={{ fontWeight: "bold", color: "#2d3748" }}>{selectedTicket.lokasi}</div>
+                  <div style={{ color: "#718096" }}>Keluhan:</div><div style={{ color: "#4a5568", fontStyle: "italic" }}>&quot;{selectedTicket.deskripsi}&quot;</div>
+                </div>
+              </div>
+
+              {selectedTicket.foto_awal && (
+                <div style={{ marginBottom: "20px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "8px" }}>📸 Foto Kondisi Awal (Dari Pelapor)</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={selectedTicket.foto_awal} alt="Foto Awal" style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "12px", border: "1px solid #e2e8f0" }} />
+                </div>
+              )}
+
+              <form onSubmit={handleSimpanPerubahan} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                <div style={{ background: "#ebf8ff", padding: "15px", borderRadius: "12px", border: "1px solid #bee3f8" }}>
+                  <label style={{ fontSize: "13px", fontWeight: "bold", color: "#2b6cb0", display: "block", marginBottom: "8px" }}>Ubah Status Pengerjaan:</label>
+                  <select value={statusUbah} onChange={(e) => setStatusUbah(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #90cdf4", fontSize: "14px", fontWeight: "bold", outline: "none", cursor: "pointer" }}>
+                    <option value="Menunggu">⏳ Menunggu (Belum direspon)</option>
+                    <option value="Sedang Dikerjakan">🧑‍🔧 Sedang Dikerjakan (In Progress)</option>
+                    <option value="Selesai">✅ Selesai (Closed)</option>
+                  </select>
+                </div>
+
+                {statusUbah === "Selesai" && (
+                  <div style={{ background: fotoHasil ? "#f0fff4" : "white", border: fotoHasil ? "2px solid #9ae6b4" : "2px dashed #cbd5e0", padding: "20px", borderRadius: "12px", textAlign: "center", transition: "0.2s", animation: "fadeIn 0.3s" }}>
+                    <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "30px", filter: fotoHasil ? "none" : "grayscale(100%) opacity(0.5)" }}>📸</span>
+                      <div style={{ fontSize: "13px", fontWeight: "bold", color: fotoHasil ? "#22543d" : "#4a5568" }}>{fotoHasil ? "Foto Hasil Perbaikan Siap Diunggah ✓" : "Upload Foto Hasil Perbaikan (Wajib) *"}</div>
+                      {!fotoHasil && <div style={{ fontSize: "11px", color: "#a0aec0" }}>Sebagai bukti untuk menutup tiket ini</div>}
+                      <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} style={{ display: "none" }} />
+                    </label>
+                    {fotoHasil && (
+                      <div style={{ marginTop: "15px", position: "relative", display: "inline-block" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={fotoHasil} alt="Hasil" style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "8px", border: "1px solid #c6f6d5" }} />
+                        <button type="button" onClick={() => setFotoHasil("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", width: "25px", height: "25px", borderRadius: "50%", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>✖</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button type="submit" disabled={isUpdating} style={{ width: "100%", padding: "16px", background: isUpdating ? "#a0aec0" : "#2d3748", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "15px", cursor: isUpdating ? "not-allowed" : "pointer", marginTop: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", transition: "0.2s" }}>
+                  {isUpdating ? "Menyimpan Perubahan..." : "💾 Simpan Pembaruan Tiket"}
+                </button>
+              </form>
+
+            </div>
           </div>
         </div>
       )}
+      
     </div>
   );
 }
