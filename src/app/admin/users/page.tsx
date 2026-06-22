@@ -8,7 +8,7 @@ import { db } from "../../../lib/firebase";
 interface UserData {
   id: string;
   nama: string;
-  email: string; // <-- Tambahan Field Baru
+  email: string; 
   departemen: string;
   role: string;
 }
@@ -16,18 +16,35 @@ interface UserData {
 export default function UserManagementPage() {
   const router = useRouter();
   
+  const [adminName, setAdminName] = useState("Admin");
   const [users, setUsers] = useState<UserData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [formData, setFormData] = useState({
     nama: "",
-    email: "", // <-- Tambahan Field Baru
+    email: "", 
     departemen: "OB & CS",
     role: "Staff"
   });
 
+  // 1. Verifikasi Admin & Set Nama
+  useEffect(() => {
+    const role = localStorage.getItem("pic_role");
+    const nama = localStorage.getItem("pic_nama");
+    
+    if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
+      alert("Akses Ditolak! Halaman ini khusus untuk Administrator.");
+      router.push("/dashboard");
+      return;
+    }
+    
+    setTimeout(() => setAdminName(nama || "Admin"), 0);
+  }, [router]);
+
+  // 2. Tarik Data Users dari Firestore
   useEffect(() => {
     const usersRef = collection(db, "users_master");
     const unsubscribe = onSnapshot(usersRef, (snapshot) => {
@@ -73,7 +90,7 @@ export default function UserManagementPage() {
       setEditId(null);
     } catch (error) {
       console.error("Gagal menyimpan data:", error);
-      alert("Terjadi kesalahan sistem.");
+      alert("Terjadi kesalahan sistem saat menyimpan.");
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +104,7 @@ export default function UserManagementPage() {
   };
 
   const handleDelete = async (id: string, nama: string) => {
-    if (!window.confirm(`Hapus user: ${nama}?`)) return;
+    if (!window.confirm(`PERINGATAN: Hapus akses login untuk ${nama}?`)) return;
     try {
       await deleteDoc(doc(db, "users_master", id));
     } catch (error) {
@@ -95,98 +112,183 @@ export default function UserManagementPage() {
     }
   };
 
+  // Filter pencarian
+  const filteredUsers = users.filter(user => 
+    user.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.departemen.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1200px", margin: "0 auto", background: "#f7fafc", minHeight: "100vh" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <button onClick={() => router.push("/admin")} style={{ padding: "8px 12px", background: "#e2e8f0", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
-          ⬅ Kembali ke Dashboard
-        </button>
-        <div style={{ fontSize: "14px", fontWeight: "bold", color: "#2c5282" }}>⚙️ Data Master</div>
+      {/* 🔹 TOP BAR NAVBAR */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>⬅️</button>
+          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Control Panel</span>
+        </div>
+        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
+          👑 Admin: {adminName}
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "25px", alignItems: "start" }}>
+      {/* 🔹 HERO SECTION */}
+      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
+        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>MANAJEMEN PENGGUNA</h1>
+        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola akses login staf operasional (Security, OB, Driver, QHSE, GA)</p>
+      </div>
+
+      {/* 🔹 MAIN CONTENT WRAPPER */}
+      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         
-        {/* FORM TAMBAH USER */}
-        <div style={{ background: "white", padding: "25px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-          <h2 style={{ margin: "0 0 15px 0", color: "#2c5282", fontSize: "18px" }}>
-            {isEditMode ? "✏️ Edit Pengguna" : "➕ Tambah Pengguna"}
-          </h2>
+        <div style={{ display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
           
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px" }}>Nama Lengkap Asli:</label>
-              <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Hilal Akbar" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0" }} />
-            </div>
+          {/* ============================================================== */}
+          {/* KOLOM KIRI: FORM TAMBAH / EDIT USER */}
+          {/* ============================================================== */}
+          <div style={{ flex: "1 1 350px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            <h2 style={{ margin: "0 0 20px 0", color: isEditMode ? "#d69e2e" : "#1a202c", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "2px solid #edf2f7", paddingBottom: "10px" }}>
+              <span>{isEditMode ? "✏️" : "👤"}</span> {isEditMode ? "Edit Data Pengguna" : "Input Pengguna Baru"}
+            </h2>
             
-            {/* INPUT EMAIL BARU */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px" }}>Email Login:</label>
-              <input type="email" name="email" value={formData.email} onChange={handleInputChange} required placeholder="contoh@sibm.com" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0" }} />
-            </div>
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Nama Lengkap Asli *</label>
+                <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Hilal Akbar" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", background: "#f8fafc", fontSize: "14px", outline: "none" }} />
+              </div>
+              
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Email Login *</label>
+                <input type="email" name="email" value={formData.email} onChange={handleInputChange} required placeholder="contoh@sibm.com" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", background: "#f8fafc", fontSize: "14px", outline: "none" }} />
+              </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px" }}>Departemen:</label>
-              <select name="departemen" value={formData.departemen} onChange={handleInputChange} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0" }}>
-                <option value="OB & CS">OB & CS</option>
-                <option value="Security">Security</option>
-                <option value="Driver">Driver</option>
-                <option value="Admin GA">Admin GA</option>
-                <option value="Management">Management</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px" }}>Role / Jabatan:</label>
-              <select name="role" value={formData.role} onChange={handleInputChange} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0" }}>
-                <option value="Staff">Staff / Anggota</option>
-                <option value="Koordinator / Danru">Koordinator / Danru</option>
-                <option value="Administrator">Administrator</option>
-              </select>
-            </div>
-            <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-              <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "12px", background: isEditMode ? "#d69e2e" : "#3182ce", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>
-                {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "Tambahkan")}
-              </button>
-              {isEditMode && <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff" }); }} style={{ padding: "12px", background: "#e2e8f0", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Batal</button>}
-            </div>
-          </form>
-        </div>
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Departemen / Divisi *</label>
+                <select name="departemen" value={formData.departemen} onChange={handleInputChange} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", background: "#f8fafc", fontSize: "14px", cursor: "pointer", outline: "none" }}>
+                  <option value="OB & CS">OB & CS</option>
+                  <option value="Security">Security</option>
+                  <option value="Driver">Driver</option>
+                  {/* TAMBAHAN DIVISI QHSE DI SINI */}
+                  <option value="QHSE">QHSE (Safety & Env)</option>
+                  <option value="Admin GA">Admin GA</option>
+                  <option value="Management">Management</option>
+                </select>
+              </div>
 
-        {/* TABEL USERS */}
-        <div style={{ background: "white", padding: "25px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-          <h2 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "18px" }}>📋 Daftar Pengguna Sistem ({users.length})</h2>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
-              <thead>
-                <tr style={{ background: "#edf2f7", color: "#4a5568" }}>
-                  <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Nama & Email</th>
-                  <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Departemen</th>
-                  <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0" }}>Role</th>
-                  <th style={{ padding: "12px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                    <td style={{ padding: "12px" }}>
-                      <strong style={{ color: "#2d3748" }}>{user.nama}</strong><br/>
-                      <span style={{ color: "#718096", fontSize: "12px" }}>{user.email || "Email belum diset"}</span>
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <span style={{ background: "#edf2f7", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: "bold" }}>{user.departemen}</span>
-                    </td>
-                    <td style={{ padding: "12px", color: "#718096" }}>{user.role}</td>
-                    <td style={{ padding: "12px", textAlign: "center" }}>
-                      <button onClick={() => handleEdit(user)} style={{ background: "#ecc94b", color: "#744210", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", marginRight: "5px", fontWeight: "bold", fontSize: "12px" }}>Edit</button>
-                      <button onClick={() => handleDelete(user.id, user.nama)} style={{ background: "#fc8181", color: "#742a2a", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Hapus</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Role / Jabatan *</label>
+                <select name="role" value={formData.role} onChange={handleInputChange} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", background: "#f8fafc", fontSize: "14px", cursor: "pointer", outline: "none" }}>
+                  <option value="Staff">Staff / Anggota</option>
+                  <option value="Koordinator / Danru">Koordinator / Danru / SPV</option>
+                  <option value="Administrator">Administrator / Manager</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "#d69e2e" : "#3182ce"), color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isLoading ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 4px 6px ${isEditMode ? "rgba(214,158,46,0.3)" : "rgba(49,130,206,0.3)"}`, transition: "0.2s" }}>
+                  {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Tambahkan")}
+                </button>
+                {isEditMode && (
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff" }); }} style={{ padding: "15px", background: "#edf2f7", color: "#4a5568", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+                    Batal
+                  </button>
+                )}
+              </div>
+            </form>
           </div>
-        </div>
 
+          {/* ============================================================== */}
+          {/* KOLOM KANAN: TABEL DAFTAR PENGGUNA */}
+          {/* ============================================================== */}
+          <div style={{ flex: "2 1 600px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
+              <h2 style={{ margin: 0, color: "#2d3748", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
+                <span>📋</span> Daftar Pengguna Sistem <span style={{ background: "#edf2f7", padding: "4px 10px", borderRadius: "8px", fontSize: "12px", color: "#4a5568" }}>{users.length} Akun</span>
+              </h2>
+              
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
+                <input 
+                  type="text" 
+                  placeholder="Cari nama, email, atau dept..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid #cbd5e0", fontSize: "13px", width: "260px", background: "#f8fafc", outline: "none" }}
+                />
+              </div>
+            </div>
+
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Nama & Email</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Departemen</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Role / Akses</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.length > 0 ? filteredUsers.map((user) => {
+                    // Warna khusus untuk label departemen
+                    const deptColor = user.departemen === "QHSE" ? "#38a169" : (user.departemen === "Security" ? "#e53e3e" : (user.departemen.includes("OB") ? "#dd6b20" : "#4a5568"));
+                    const deptBg = user.departemen === "QHSE" ? "#f0fff4" : (user.departemen === "Security" ? "#fff5f5" : (user.departemen.includes("OB") ? "#fffaf0" : "#edf2f7"));
+
+                    return (
+                      <tr key={user.id} style={{ borderBottom: "1px solid #edf2f7", transition: "background 0.2s" }} onMouseOver={(e) => e.currentTarget.style.background = "#f7fafc"} onMouseOut={(e) => e.currentTarget.style.background = "white"}>
+                        <td style={{ padding: "12px 15px" }}>
+                          <div style={{ fontWeight: "bold", color: "#2c5282", marginBottom: "3px" }}>{user.nama}</div>
+                          <div style={{ color: "#718096", fontSize: "12px" }}>{user.email || <span style={{ fontStyle: "italic", opacity: 0.7 }}>Email belum diset</span>}</div>
+                        </td>
+                        <td style={{ padding: "12px 15px" }}>
+                          <span style={{ background: deptBg, color: deptColor, padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" }}>{user.departemen}</span>
+                        </td>
+                        <td style={{ padding: "12px 15px" }}>
+                          <span style={{ 
+                            background: user.role.includes("Administrator") ? "#fff5f5" : (user.role.includes("Koordinator") ? "#fffaf0" : "#ebf8ff"), 
+                            color: user.role.includes("Administrator") ? "#c53030" : (user.role.includes("Koordinator") ? "#dd6b20" : "#3182ce"), 
+                            padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" 
+                          }}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 15px", textAlign: "center", display: "flex", gap: "8px", justifyContent: "center" }}>
+                          <button 
+                            onClick={() => handleEdit(user)} 
+                            style={{ background: "#fffaf0", color: "#dd6b20", border: "1px solid #feebc8", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
+                            onMouseOver={(e) => { e.currentTarget.style.background = "#dd6b20"; e.currentTarget.style.color = "white"; }}
+                            onMouseOut={(e) => { e.currentTarget.style.background = "#fffaf0"; e.currentTarget.style.color = "#dd6b20"; }}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(user.id, user.nama)} 
+                            style={{ background: "#fff5f5", color: "#e53e3e", border: "1px solid #fed7d7", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
+                            onMouseOver={(e) => { e.currentTarget.style.background = "#e53e3e"; e.currentTarget.style.color = "white"; }}
+                            onMouseOut={(e) => { e.currentTarget.style.background = "#fff5f5"; e.currentTarget.style.color = "#e53e3e"; }}
+                          >
+                            Hapus
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={4} style={{ padding: "50px 20px", textAlign: "center", color: "#a0aec0" }}>
+                        <div style={{ fontSize: "30px", marginBottom: "10px" }}>📭</div>
+                        Tidak ada pengguna yang sesuai dengan pencarian Anda.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+        </div>
       </div>
     </div>
   );

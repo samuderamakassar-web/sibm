@@ -20,7 +20,6 @@ interface VisitorLog {
   pic_bertugas: string;
 }
 
-// Interface untuk data Karyawan dari Database
 interface EmployeeData {
   nama: string;
   departemen: string;
@@ -56,7 +55,6 @@ export default function BukuTamuSecurity() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // 1. Load Data Real-time, Identitas, dan Daftar Karyawan
   useEffect(() => {
     const nama = localStorage.getItem("pic_nama");
     if (!nama) {
@@ -65,7 +63,6 @@ export default function BukuTamuSecurity() {
     }
     setTimeout(() => setPicName(nama), 0);
 
-    // A. Listener Data Tamu
     const logsRef = collection(db, "security_visitor_logs");
     const q = query(logsRef, orderBy("waktu_masuk", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -76,7 +73,6 @@ export default function BukuTamuSecurity() {
       setVisitorLogs(logs);
     });
 
-    // B. Ambil Master Data Karyawan (Satu kali jalan)
     const fetchKaryawan = async () => {
       try {
         const empRef = collection(db, "employees_directory");
@@ -87,7 +83,7 @@ export default function BukuTamuSecurity() {
           empList.push({
             nama: d.nama || "",
             departemen: d.departemen || "Umum",
-            plat_kendaraan: d.plat_kendaraan || "" // Menyokong jika ada plat di DB
+            plat_kendaraan: d.plat_kendaraan || "" 
           });
         });
         setKaryawanDB(empList);
@@ -99,7 +95,6 @@ export default function BukuTamuSecurity() {
 
     return () => {
       unsubscribe();
-      // Langsung matikan stream kamera di sini tanpa memanggil fungsi di bawah
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -110,7 +105,6 @@ export default function BukuTamuSecurity() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Fungsi khusus saat Security memilih karyawan dari Dropdown
   const pilihKaryawan = (emp: EmployeeData) => {
     setSearchKaryawan(emp.nama);
     setFormData({
@@ -122,18 +116,17 @@ export default function BukuTamuSecurity() {
     setShowDropdown(false);
   };
 
-  // 2. Kendali Kamera Wajah / KTP
   const bukaKamera = async () => {
     setIsCameraOpen(true);
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); // Diubah ke environment (Kamera belakang)
       streamRef.current = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
     } catch (error) {
       console.error(error);
-      alert("Gagal mengakses kamera. Pastikan izin kamera telah diberikan di browser.");
+      alert("Gagal mengakses kamera. Pastikan izin kamera telah diberikan.");
       setIsCameraOpen(false);
     }
   };
@@ -151,7 +144,7 @@ export default function BukuTamuSecurity() {
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const MAX_WIDTH = 400;
+    const MAX_WIDTH = 600;
     const scale = MAX_WIDTH / video.videoWidth;
     canvas.width = MAX_WIDTH;
     canvas.height = video.videoHeight * scale;
@@ -167,7 +160,6 @@ export default function BukuTamuSecurity() {
 
   const hapusFoto = () => setFotoBukti(null);
 
-  // 3. Eksekusi Simpan Data (Check-In)
   const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -189,7 +181,6 @@ export default function BukuTamuSecurity() {
 
       alert(`${jenisPengunjung} berhasil didaftarkan (Check-In)!`);
       
-      // Reset Form
       setFormData({ nama: "", instansi_dept: "", tujuan: "", bertemu_dengan: "", no_kendaraan: "" });
       setSearchKaryawan("");
       setFotoBukti(null);
@@ -202,7 +193,6 @@ export default function BukuTamuSecurity() {
     }
   };
 
-  // 4. Eksekusi Tamu/Karyawan Keluar
   const handleCheckOut = async (id: string, namaPengunjung: string) => {
     if (!window.confirm(`Konfirmasi: Apakah ${namaPengunjung} sudah meninggalkan area SIBM?`)) return;
 
@@ -224,213 +214,230 @@ export default function BukuTamuSecurity() {
 
   const pengunjungAktif = visitorLogs.filter(log => log.status === "Di Dalam Area");
   const riwayatPengunjung = visitorLogs.filter(log => log.status === "Selesai / Keluar");
-
-  // Filter list karyawan untuk Dropdown
   const filteredKaryawan = karyawanDB.filter(emp => emp.nama.toLowerCase().includes(searchKaryawan.toLowerCase()));
 
   return (
-    <div style={{ backgroundColor: "#f0f4f8", minHeight: "100vh", fontFamily: "sans-serif", paddingBottom: "50px" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
-      {/* HEADER */}
-      <div style={{ background: "white", padding: "15px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", position: "sticky", top: 0, zIndex: 10 }}>
-        <button onClick={() => router.push("/dashboard/security")} style={{ background: "none", border: "none", fontSize: "16px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
-          ⬅ Kembali
-        </button>
-        <div style={{ fontWeight: "bold", color: "#3182ce" }}>📋 Log Akses Gedung</div>
-        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#718096" }}>👮 {picName}</div>
+      {/* 🔹 TOP BAR NAVBAR */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button onClick={() => router.push("/dashboard/security")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
+          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali</span>
+        </div>
+        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
+          👮 {picName}
+        </div>
       </div>
 
-      <div style={{ maxWidth: "1000px", margin: "20px auto", padding: "0 20px" }}>
+      {/* 🔹 HERO SECTION (TEMA MERAH SAMUDERA) */}
+      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
+        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>BUKU TAMU DIGITAL</h1>
+        <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>Registrasi dan pemantauan pergerakan akses area SIBM</p>
+      </div>
+
+      <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         
-        {/* NAVIGASI TAB */}
-        <div style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "5px" }}>
-          <button onClick={() => setActiveTab("input")} style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "input" ? "#3182ce" : "#e2e8f0", color: activeTab === "input" ? "white" : "#4a5568", transition: "0.2s" }}>
+        {/* 🔹 NAVIGASI TAB MODERN */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" }}>
+          <button 
+            onClick={() => setActiveTab("input")} 
+            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "input" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "input" ? "#e53e3e" : "#718096", boxShadow: activeTab === "input" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "input" ? "3px solid #e53e3e" : "3px solid transparent" }}
+          >
             ✏️ Input Kedatangan
           </button>
-          <button onClick={() => setActiveTab("aktif")} style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "aktif" ? "#3182ce" : "#e2e8f0", color: activeTab === "aktif" ? "white" : "#4a5568", transition: "0.2s" }}>
-            🟢 Di Dalam Area ({pengunjungAktif.length})
+          <button 
+            onClick={() => setActiveTab("aktif")} 
+            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "aktif" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "aktif" ? "#38a169" : "#718096", boxShadow: activeTab === "aktif" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "aktif" ? "3px solid #38a169" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
+          >
+            Di Dalam Area <span style={{ background: activeTab === "aktif" ? "#c6f6d5" : "#e2e8f0", color: activeTab === "aktif" ? "#22543d" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{pengunjungAktif.length}</span>
           </button>
-          <button onClick={() => setActiveTab("riwayat")} style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "riwayat" ? "#3182ce" : "#e2e8f0", color: activeTab === "riwayat" ? "white" : "#4a5568", transition: "0.2s" }}>
-            📜 Riwayat Keluar ({riwayatPengunjung.length})
+          <button 
+            onClick={() => setActiveTab("riwayat")} 
+            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "riwayat" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "riwayat" ? "#dd6b20" : "#718096", boxShadow: activeTab === "riwayat" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "riwayat" ? "3px solid #dd6b20" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
+          >
+            Riwayat Keluar <span style={{ background: activeTab === "riwayat" ? "#feebc8" : "#e2e8f0", color: activeTab === "riwayat" ? "#9c4221" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{riwayatPengunjung.length}</span>
           </button>
         </div>
 
-        {/* TAB 1: FORM INPUT KEDATANGAN */}
+        {/* 🔹 TAB 1: FORM INPUT KEDATANGAN */}
         {activeTab === "input" && (
-          <div style={{ background: "white", padding: "30px", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", borderTop: "5px solid #3182ce" }}>
-            <h2 style={{ margin: "0 0 15px 0", color: "#2b6cb0", display: "flex", alignItems: "center", gap: "10px" }}>
-              <span>✏️</span> Pencatatan Masuk
-            </h2>
+          <div style={{ background: "white", padding: "30px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
             
             {/* TOGGLE TAMU VS KARYAWAN */}
-            <div style={{ display: "flex", gap: "10px", marginBottom: "25px", background: "#edf2f7", padding: "5px", borderRadius: "8px" }}>
-              <button type="button" onClick={() => setJenisPengunjung("Tamu Eksternal")} style={{ flex: 1, padding: "10px", borderRadius: "6px", fontWeight: "bold", border: "none", cursor: "pointer", background: jenisPengunjung === "Tamu Eksternal" ? "white" : "transparent", color: jenisPengunjung === "Tamu Eksternal" ? "#2c5282" : "#718096", boxShadow: jenisPengunjung === "Tamu Eksternal" ? "0 2px 4px rgba(0,0,0,0.05)" : "none", transition: "0.2s" }}>
-                👔 Tamu Luar
+            <div style={{ display: "flex", gap: "10px", marginBottom: "30px", background: "#f8fafc", padding: "8px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
+              <button type="button" onClick={() => setJenisPengunjung("Tamu Eksternal")} style={{ flex: 1, padding: "12px", borderRadius: "10px", fontWeight: "bold", border: "none", cursor: "pointer", background: jenisPengunjung === "Tamu Eksternal" ? "#e53e3e" : "transparent", color: jenisPengunjung === "Tamu Eksternal" ? "white" : "#718096", boxShadow: jenisPengunjung === "Tamu Eksternal" ? "0 4px 6px rgba(229, 62, 62, 0.3)" : "none", transition: "0.2s" }}>
+                👔 Tamu Eksternal
               </button>
-              <button type="button" onClick={() => { setJenisPengunjung("Karyawan"); setFormData({ nama: "", instansi_dept: "", tujuan: "", bertemu_dengan: "", no_kendaraan: "" }); setSearchKaryawan(""); setFotoBukti(null); }} style={{ flex: 1, padding: "10px", borderRadius: "6px", fontWeight: "bold", border: "none", cursor: "pointer", background: jenisPengunjung === "Karyawan" ? "white" : "transparent", color: jenisPengunjung === "Karyawan" ? "#2c5282" : "#718096", boxShadow: jenisPengunjung === "Karyawan" ? "0 2px 4px rgba(0,0,0,0.05)" : "none", transition: "0.2s" }}>
-                🏢 Karyawan SIBM
+              <button type="button" onClick={() => { setJenisPengunjung("Karyawan"); setFormData({ nama: "", instansi_dept: "", tujuan: "", bertemu_dengan: "", no_kendaraan: "" }); setSearchKaryawan(""); setFotoBukti(null); }} style={{ flex: 1, padding: "12px", borderRadius: "10px", fontWeight: "bold", border: "none", cursor: "pointer", background: jenisPengunjung === "Karyawan" ? "#3182ce" : "transparent", color: jenisPengunjung === "Karyawan" ? "white" : "#718096", boxShadow: jenisPengunjung === "Karyawan" ? "0 4px 6px rgba(49, 130, 206, 0.3)" : "none", transition: "0.2s" }}>
+                🏢 Karyawan / Staf
               </button>
             </div>
             
-            <form onSubmit={handleCheckIn} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", position: "relative" }}>
+            <form onSubmit={handleCheckIn} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", position: "relative" }}>
               
               <div style={{ gridColumn: "span 2", position: "relative" }}>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Nama Lengkap *</label>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Nama Lengkap *</label>
                 
                 {jenisPengunjung === "Karyawan" ? (
-                  // INPUT AUTOCOMPLETE KARYAWAN
                   <div style={{ position: "relative" }}>
-                    <input type="text" value={searchKaryawan} onChange={(e) => { setSearchKaryawan(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} required placeholder="Ketik nama karyawan..." style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "2px solid #63b3ed", fontSize: "15px", background: "#ebf8ff", color: "#2b6cb0", fontWeight: "bold" }} />
+                    <input type="text" value={searchKaryawan} onChange={(e) => { setSearchKaryawan(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} required placeholder="Ketik nama karyawan..." style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "2px solid #3182ce", fontSize: "15px", background: "#ebf8ff", color: "#2b6cb0", fontWeight: "bold" }} />
                     
                     {showDropdown && searchKaryawan && (
-                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #e2e8f0", borderRadius: "8px", marginTop: "5px", zIndex: 50, maxHeight: "200px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #e2e8f0", borderRadius: "12px", marginTop: "8px", zIndex: 50, maxHeight: "250px", overflowY: "auto", boxShadow: "0 10px 25px rgba(0,0,0,0.15)" }}>
                         {filteredKaryawan.length > 0 ? filteredKaryawan.map((emp, idx) => (
-                          <div key={idx} onClick={() => pilihKaryawan(emp)} style={{ padding: "12px", borderBottom: "1px solid #edf2f7", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseOver={(e) => e.currentTarget.style.background = "#ebf8ff"} onMouseOut={(e) => e.currentTarget.style.background = "white"}>
+                          <div key={idx} onClick={() => pilihKaryawan(emp)} style={{ padding: "15px", borderBottom: "1px solid #edf2f7", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.background = "#f7fafc"} onMouseOut={(e) => e.currentTarget.style.background = "white"}>
                             <span style={{ fontWeight: "bold", color: "#2d3748" }}>{emp.nama}</span>
-                            <span style={{ fontSize: "12px", color: "#718096", background: "#edf2f7", padding: "2px 8px", borderRadius: "10px" }}>{emp.departemen}</span>
+                            <span style={{ fontSize: "11px", color: "#718096", background: "#edf2f7", padding: "4px 8px", borderRadius: "8px", fontWeight: "bold" }}>{emp.departemen}</span>
                           </div>
                         )) : (
-                          <div style={{ padding: "12px", color: "#a0aec0", textAlign: "center", fontSize: "13px" }}>Nama tidak ditemukan di database.</div>
+                          <div style={{ padding: "15px", color: "#a0aec0", textAlign: "center", fontSize: "13px" }}>Karyawan tidak ditemukan.</div>
                         )}
                       </div>
                     )}
                   </div>
                 ) : (
-                  // INPUT NORMAL TAMU
-                  <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Budi Santoso" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "15px" }} />
+                  <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Budi Santoso" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
                 )}
               </div>
               
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>
                   {jenisPengunjung === "Karyawan" ? "Unit Bisnis / Departemen *" : "Asal Instansi / Perusahaan *"}
                 </label>
-                <input type="text" name="instansi_dept" value={formData.instansi_dept} onChange={handleInputChange} required readOnly={jenisPengunjung === "Karyawan"} placeholder={jenisPengunjung === "Karyawan" ? "Otomatis Terisi..." : "Contoh: PT. Maju Bersama"} style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "15px", background: jenisPengunjung === "Karyawan" ? "#edf2f7" : "white" }} />
+                <input type="text" name="instansi_dept" value={formData.instansi_dept} onChange={handleInputChange} required readOnly={jenisPengunjung === "Karyawan"} placeholder={jenisPengunjung === "Karyawan" ? "Otomatis Terisi..." : "Contoh: PT. Maju Bersama"} style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: jenisPengunjung === "Karyawan" ? "#edf2f7" : "#f8fafc" }} />
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Plat Nomor Kendaraan</label>
-                <input type="text" name="no_kendaraan" value={formData.no_kendaraan} onChange={handleInputChange} placeholder={jenisPengunjung === "Karyawan" ? "Kosongkan jika tidak ada" : "Contoh: DD 1234 XY"} style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "15px" }} />
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>No. Plat Kendaraan</label>
+                <input type="text" name="no_kendaraan" value={formData.no_kendaraan} onChange={handleInputChange} placeholder={jenisPengunjung === "Karyawan" ? "Opsional" : "Contoh: DD 1234 XY"} style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
               </div>
 
               {/* HANYA TAMPIL UNTUK TAMU EKSTERNAL */}
               {jenisPengunjung === "Tamu Eksternal" && (
                 <>
                   <div>
-                    <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Bertemu Dengan (Host) *</label>
-                    <input type="text" name="bertemu_dengan" value={formData.bertemu_dengan} onChange={handleInputChange} required placeholder="Contoh: Pak Anton (HRD)" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "15px" }} />
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Bertemu Dengan (Host) *</label>
+                    <input type="text" name="bertemu_dengan" value={formData.bertemu_dengan} onChange={handleInputChange} required placeholder="Contoh: Pak Anton (HRD)" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Tujuan Kunjungan *</label>
-                    <input type="text" name="tujuan" value={formData.tujuan} onChange={handleInputChange} required placeholder="Contoh: Meeting / Interview" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "15px" }} />
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Tujuan Kunjungan *</label>
+                    <input type="text" name="tujuan" value={formData.tujuan} onChange={handleInputChange} required placeholder="Contoh: Meeting / Interview" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
                   </div>
                   
-                  {/* AREA FOTO HANYA UNTUK TAMU */}
-                  <div style={{ gridColumn: "span 2", marginTop: "10px", background: "#f7fafc", padding: "15px", borderRadius: "8px", border: "1px dashed #cbd5e0" }}>
-                    <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "10px", color: "#4a5568" }}>📸 Foto Wajah / KTP (Wajib untuk Tamu Luar)</label>
+                  {/* AREA KAMERA (Dipercantik) */}
+                  <div style={{ gridColumn: "span 2", marginTop: "10px", background: "#f8fafc", padding: "20px", borderRadius: "16px", border: "2px dashed #cbd5e0", textAlign: "center" }}>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", marginBottom: "15px", color: "#4a5568" }}>📸 Wajib Foto Wajah / KTP Tamu</label>
                     {fotoBukti ? (
-                      <div style={{ position: "relative", width: "fit-content" }}>
+                      <div style={{ position: "relative", display: "inline-block" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={fotoBukti} alt="Bukti Kedatangan" style={{ width: "200px", borderRadius: "8px", border: "2px solid #3182ce" }} />
-                        <button type="button" onClick={hapusFoto} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontWeight: "bold" }}>✖</button>
+                        <img src={fotoBukti} alt="Bukti Kedatangan" style={{ height: "150px", borderRadius: "12px", border: "3px solid #e53e3e", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }} />
+                        <button type="button" onClick={hapusFoto} style={{ position: "absolute", top: "-15px", right: "-15px", background: "#e53e3e", color: "white", border: "3px solid white", borderRadius: "50%", width: "40px", height: "40px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                       </div>
                     ) : (
-                      <button type="button" onClick={bukaKamera} style={{ width: "100%", padding: "15px", background: "white", border: "2px dashed #a0aec0", color: "#4a5568", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
-                        <span style={{ fontSize: "20px" }}>📷</span> Ambil Foto dari Kamera
+                      <button type="button" onClick={bukaKamera} style={{ width: "100%", padding: "20px", background: "white", border: "1px solid #cbd5e0", color: "#2d3748", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", fontSize: "16px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.borderColor = "#e53e3e"}>
+                        <span style={{ fontSize: "24px" }}>📷</span> Buka Kamera Perangkat
                       </button>
                     )}
                   </div>
                 </>
               )}
 
-              <div style={{ gridColumn: "span 2", marginTop: "15px" }}>
-                <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "15px", background: isLoading ? "#a0aec0" : "#3182ce", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(49, 130, 206, 0.2)" }}>
-                  {isLoading ? "Memproses Data..." : `✔️ Catat Masuk ${jenisPengunjung}`}
+              <div style={{ gridColumn: "span 2", marginTop: "20px" }}>
+                <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "18px", background: isLoading ? "#a0aec0" : (jenisPengunjung === "Tamu Eksternal" ? "#e53e3e" : "#3182ce"), color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 10px 15px -3px ${jenisPengunjung === "Tamu Eksternal" ? "rgba(229,62,62,0.4)" : "rgba(49,130,206,0.4)"}`, transition: "0.2s" }}>
+                  {isLoading ? "Menyimpan Data..." : `✔️ Check-In ${jenisPengunjung}`}
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* TAB 2: PENGUNJUNG DI DALAM */}
+        {/* 🔹 TAB 2: PENGUNJUNG DI DALAM AREA */}
         {activeTab === "aktif" && (
           <div style={{ display: "grid", gap: "15px" }}>
             {pengunjungAktif.length > 0 ? pengunjungAktif.map(visitor => (
-              <div key={visitor.id} style={{ background: "white", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", borderLeft: visitor.jenis === "Karyawan" ? "5px solid #d69e2e" : "5px solid #38a169", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px" }}>
-                <div style={{ display: "flex", gap: "15px", alignItems: "flex-start" }}>
+              <div key={visitor.id} style={{ background: "white", padding: "20px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", borderLeft: visitor.jenis === "Karyawan" ? "6px solid #3182ce" : "6px solid #e53e3e", borderTop: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
+                <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
                   
                   {visitor.jenis === "Tamu Eksternal" ? (
                     visitor.foto_bukti ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={visitor.foto_bukti} alt="Foto" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0" }} />
+                      <img src={visitor.foto_bukti} alt="Foto" style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }} />
                     ) : (
-                      <div style={{ width: "60px", height: "60px", background: "#edf2f7", borderRadius: "8px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "20px" }}>📸</div>
+                      <div style={{ width: "80px", height: "80px", background: "#f8fafc", borderRadius: "12px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "30px", border: "1px solid #e2e8f0" }}>📸</div>
                     )
                   ) : (
-                    <div style={{ width: "60px", height: "60px", background: "#feebc8", color: "#d69e2e", borderRadius: "8px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px", fontWeight: "bold" }}>
+                    <div style={{ width: "80px", height: "80px", background: "#ebf8ff", color: "#3182ce", borderRadius: "12px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "30px", fontWeight: "900", border: "1px solid #bee3f8" }}>
                       {visitor.nama.charAt(0).toUpperCase()}
                     </div>
                   )}
 
                   <div>
-                    <h3 style={{ margin: "0 0 5px 0", color: "#2d3748", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <h3 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
                       {visitor.nama} 
-                      <span style={{ fontSize: "11px", background: visitor.jenis === "Karyawan" ? "#faf089" : "#c6f6d5", color: visitor.jenis === "Karyawan" ? "#744210" : "#22543d", padding: "2px 6px", borderRadius: "4px" }}>
+                      <span style={{ fontSize: "10px", background: visitor.jenis === "Karyawan" ? "#ebf8ff" : "#fff5f5", color: visitor.jenis === "Karyawan" ? "#2b6cb0" : "#c53030", padding: "4px 8px", borderRadius: "6px", textTransform: "uppercase" }}>
                         {visitor.jenis}
                       </span>
                     </h3>
                     
                     {visitor.jenis === "Tamu Eksternal" ? (
                       <>
-                        <div style={{ fontSize: "13px", color: "#4a5568", marginBottom: "3px" }}>🏢 {visitor.instansi_dept} | 🤝 Bertemu: <b>{visitor.bertemu_dengan}</b></div>
+                        <div style={{ fontSize: "13px", color: "#4a5568", marginBottom: "3px" }}>🏢 Asal: <b>{visitor.instansi_dept}</b> | 🤝 Host: <b>{visitor.bertemu_dengan}</b></div>
                         <div style={{ fontSize: "13px", color: "#4a5568" }}>🎯 {visitor.tujuan} | 🚙 {visitor.no_kendaraan || "Tanpa Kendaraan"}</div>
                       </>
                     ) : (
                       <div style={{ fontSize: "13px", color: "#4a5568", marginBottom: "3px" }}>🏢 Unit Bisnis: <b>{visitor.instansi_dept}</b> | 🚙 Plat: {visitor.no_kendaraan || "Tidak ada"}</div>
                     )}
                     
-                    <div style={{ fontSize: "12px", color: "#3182ce", marginTop: "8px", fontWeight: "bold" }}>🕒 Masuk: {formatJam(visitor.waktu_masuk)}</div>
+                    <div style={{ fontSize: "12px", color: "#38a169", marginTop: "10px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "5px" }}>
+                      <span style={{ display: "inline-block", width: "8px", height: "8px", background: "#38a169", borderRadius: "50%", boxShadow: "0 0 5px #38a169" }}></span>
+                      Masuk: {formatJam(visitor.waktu_masuk)}
+                    </div>
                   </div>
                 </div>
 
-                <button onClick={() => handleCheckOut(visitor.id, visitor.nama)} style={{ padding: "10px 15px", background: "#e53e3e", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 2px 4px rgba(229,62,62,0.3)" }}>
-                  Keluar Area ➔
+                <button onClick={() => handleCheckOut(visitor.id, visitor.nama)} style={{ padding: "12px 20px", background: "white", color: "#e53e3e", border: "2px solid #e53e3e", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }} onMouseOver={(e) => { e.currentTarget.style.background = "#e53e3e"; e.currentTarget.style.color = "white"; }} onMouseOut={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#e53e3e"; }}>
+                  Check-Out Area ➔
                 </button>
               </div>
             )) : (
-              <div style={{ textAlign: "center", padding: "40px", background: "white", borderRadius: "12px", color: "#a0aec0", border: "1px dashed #cbd5e0" }}>
-                Area clear. Tidak ada tamu atau staf SIBM yang terdata di dalam area saat ini.
+              <div style={{ textAlign: "center", padding: "60px 20px", background: "white", borderRadius: "20px", color: "#a0aec0", border: "1px dashed #cbd5e0" }}>
+                <div style={{ fontSize: "40px", marginBottom: "15px" }}>🛡️</div>
+                Area Clear. Tidak ada tamu atau staf yang tertahan di dalam area saat ini.
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 3: RIWAYAT KELUAR */}
+        {/* 🔹 TAB 3: RIWAYAT KELUAR */}
         {activeTab === "riwayat" && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "15px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
             {riwayatPengunjung.length > 0 ? riwayatPengunjung.map(visitor => (
-              <div key={visitor.id} style={{ background: "white", padding: "15px 20px", borderRadius: "8px", borderTop: visitor.jenis === "Karyawan" ? "4px solid #d69e2e" : "4px solid #38a169", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", display: "flex", gap: "15px" }}>
+              <div key={visitor.id} style={{ background: "white", padding: "20px", borderRadius: "16px", borderTop: visitor.jenis === "Karyawan" ? "5px solid #3182ce" : "5px solid #e53e3e", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", display: "flex", gap: "15px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
                 
-                {visitor.foto_bukti && (
+                {visitor.foto_bukti ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={visitor.foto_bukti} alt="Foto" style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e2e8f0" }} />
+                  <img src={visitor.foto_bukti} alt="Foto" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
+                ) : (
+                  <div style={{ width: "60px", height: "60px", background: "#f8fafc", borderRadius: "10px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px", border: "1px solid #e2e8f0" }}>{visitor.jenis === "Karyawan" ? "🏢" : "👔"}</div>
                 )}
 
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
-                    <h4 style={{ margin: 0, color: "#4a5568" }}>{visitor.nama}</h4>
-                    <span style={{ fontSize: "10px", background: "#edf2f7", color: "#4a5568", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold" }}>{visitor.jenis}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", alignItems: "flex-start" }}>
+                    <h4 style={{ margin: 0, color: "#2d3748", fontSize: "15px" }}>{visitor.nama}</h4>
+                    <span style={{ fontSize: "9px", background: "#edf2f7", color: "#4a5568", padding: "3px 6px", borderRadius: "4px", fontWeight: "bold", textTransform: "uppercase" }}>{visitor.jenis}</span>
                   </div>
-                  <div style={{ fontSize: "11px", color: "#718096", marginBottom: "8px" }}>{visitor.instansi_dept}</div>
-                  <div style={{ fontSize: "12px", color: "#4a5568", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px", background: "#f7fafc", padding: "8px", borderRadius: "6px" }}>
-                    <div><span style={{ color: "#38a169", fontWeight: "bold" }}>In:</span> {formatJam(visitor.waktu_masuk)}</div>
-                    <div><span style={{ color: "#e53e3e", fontWeight: "bold" }}>Out:</span> {formatJam(visitor.waktu_keluar)}</div>
+                  <div style={{ fontSize: "12px", color: "#718096", marginBottom: "10px" }}>{visitor.instansi_dept}</div>
+                  <div style={{ fontSize: "11px", color: "#4a5568", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px", background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #edf2f7" }}>
+                    <div><span style={{ color: "#38a169", fontWeight: "bold" }}>In:</span><br/>{formatJam(visitor.waktu_masuk)}</div>
+                    <div><span style={{ color: "#e53e3e", fontWeight: "bold" }}>Out:</span><br/>{formatJam(visitor.waktu_keluar)}</div>
                   </div>
                 </div>
               </div>
             )) : (
-              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "30px", background: "white", borderRadius: "8px", color: "#a0aec0", border: "1px dashed #cbd5e0" }}>
-                Belum ada riwayat pergerakan keluar hari ini.
+              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 20px", background: "white", borderRadius: "20px", color: "#a0aec0", border: "1px dashed #cbd5e0" }}>
+                <div style={{ fontSize: "40px", marginBottom: "15px" }}>📜</div>
+                Belum ada riwayat pergerakan keluar yang terekam.
               </div>
             )}
           </div>
@@ -438,20 +445,24 @@ export default function BukuTamuSecurity() {
 
       </div>
 
-      {/* OVERLAY KAMERA MENGAMBANG */}
+      {/* 🔹 OVERLAY KAMERA (Dipercantik untuk Mobile) */}
       {isCameraOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.9)", zIndex: 100, display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontWeight: "bold" }}>📸 Pindai Wajah / KTP Tamu</span>
-            <button onClick={matikanKamera} style={{ background: "none", border: "none", color: "white", fontSize: "24px", cursor: "pointer" }}>✖</button>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 100, display: "flex", flexDirection: "column", backdropFilter: "blur(10px)" }}>
+          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+            <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "10px" }}><span>📸</span> Arahkan Wajah / KTP</span>
+            <button onClick={matikanKamera} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", fontSize: "18px", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}>✖</button>
           </div>
+          
           <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
             <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }}></video>
             <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "80%", height: "50%", border: "2px solid rgba(255,255,255,0.7)", borderRadius: "16px" }}></div>
+            
+            {/* Guide Box (Target area wajah/KTP) */}
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "80%", maxWidth: "350px", height: "50%", maxHeight: "350px", border: "3px dashed rgba(255,255,255,0.7)", borderRadius: "24px", boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)" }}></div>
           </div>
-          <div style={{ padding: "30px", display: "flex", justifyContent: "center" }}>
-            <button onClick={ambilFoto} style={{ width: "70px", height: "70px", borderRadius: "50%", background: "white", border: "5px solid #a0aec0", cursor: "pointer" }}></button>
+          
+          <div style={{ padding: "40px", display: "flex", justifyContent: "center", background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
+            <button onClick={ambilFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: "white", border: "6px solid rgba(255,255,255,0.3)", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.5)", transition: "transform 0.1s" }} onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.9)"} onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}></button>
           </div>
         </div>
       )}

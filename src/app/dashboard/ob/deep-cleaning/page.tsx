@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
-import { db } from "../../../../lib/firebase"; // Sesuaikan jika path firebase.ts Anda berbeda
+import { db } from "../../../../lib/firebase"; 
 
 interface DeepCleaningTask {
   id: string;
-  tanggal: string; // Format YYYY-MM-DD
+  tanggal: string; 
   area: string;
   tugas: string;
   status: "Belum Dikerjakan" | "Selesai";
@@ -25,7 +25,7 @@ export default function DeepCleaningManager() {
   
   // State Form
   const [formData, setFormData] = useState({
-    tanggal: new Date().toISOString().split("T")[0], // Default hari ini
+    tanggal: new Date().toISOString().split("T")[0], 
     area: DAFTAR_LANTAI[0],
     tugas: ""
   });
@@ -33,24 +33,34 @@ export default function DeepCleaningManager() {
 
   useEffect(() => {
     const siapkanHalaman = async () => {
-      const nama = localStorage.getItem("pic_nama");
-      
-      // Validasi: Hanya Kordinator yang boleh menjadwalkan Deep Cleaning
-      if (!nama || (!nama.includes("Hilal") && !nama.includes("Koordinator"))) {
+      // 1. Verifikasi Keamanan (Sangat toleran mengenali Koordinator/Admin/Hilal)
+      const nama = localStorage.getItem("pic_nama") || "";
+      const role = (localStorage.getItem("pic_role") || "").toLowerCase();
+      const namaLower = nama.toLowerCase();
+
+      const isAuthorized = 
+        namaLower.includes("hilal") || 
+        namaLower.includes("kord") || 
+        namaLower.includes("koordinator") || 
+        role.includes("admin") || 
+        role.includes("kord") ||
+        role.includes("koordinator");
+
+      if (!isAuthorized) {
         alert("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.");
-        router.push("/dashboard/ob");
+        router.push("/shift-checkin");
         return;
       }
       setPicName(nama);
 
-      // Tarik semua tugas Deep Cleaning dari Firebase (Diurutkan dari jadwal terdekat/hari ini)
+      // 2. Tarik Data Tugas (Real-time)
       const tasksRef = collection(db, "deep_cleaning_tasks");
       const q = query(tasksRef, orderBy("tanggal", "desc"));
       
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const taskList: DeepCleaningTask[] = [];
-        snapshot.forEach(doc => {
-          taskList.push({ id: doc.id, ...doc.data() } as DeepCleaningTask);
+        snapshot.forEach(docSnap => {
+          taskList.push({ id: docSnap.id, ...docSnap.data() } as DeepCleaningTask);
         });
         setTasks(taskList);
         setIsReady(true);
@@ -81,7 +91,6 @@ export default function DeepCleaningManager() {
         waktu_dibuat: serverTimestamp()
       });
 
-      // Reset form ringan
       setFormData(prev => ({ ...prev, tugas: "" }));
     } catch (error) {
       console.error("Gagal menyimpan tugas:", error);
@@ -91,7 +100,6 @@ export default function DeepCleaningManager() {
     }
   };
 
-  // Fungsi untuk menandai selesai langsung dari halaman Admin
   const handleToggleStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === "Selesai" ? "Belum Dikerjakan" : "Selesai";
     try {
@@ -112,121 +120,157 @@ export default function DeepCleaningManager() {
     }
   };
 
-  // Fungsi bantu untuk mewarnai baris berdasarkan status dan tanggal (Lewat/Hari Ini/Mendatang)
-  const getRowStyle = (tanggalTugas: string, status: string) => {
+  // Fungsi Logika Tampilan Berdasarkan Status Waktu
+  const getTaskStatusInfo = (tanggalTugas: string, status: string) => {
     const today = new Date().toISOString().split("T")[0];
     
-    if (status === "Selesai") return { background: "#f0fff4", borderLeft: "4px solid #38a169", color: "#2d3748" }; // Hijau (Selesai)
-    if (tanggalTugas < today) return { background: "#fff5f5", borderLeft: "4px solid #e53e3e", color: "#c53030" }; // Merah (Terlewat & Belum Selesai)
-    if (tanggalTugas === today) return { background: "#fffff0", borderLeft: "4px solid #d69e2e", color: "#975a16" }; // Kuning (Jadwal Hari Ini)
-    return { background: "white", borderLeft: "4px solid #cbd5e0", color: "#4a5568" }; // Abu-abu (Jadwal Mendatang)
+    if (status === "Selesai") {
+      return { bg: "#f0fff4", border: "#38a169", text: "#22543d", badgeBg: "#c6f6d5", badgeText: "✔ Selesai", icon: "✨" };
+    }
+    if (tanggalTugas < today) {
+      return { bg: "#fff5f5", border: "#e53e3e", text: "#742a2a", badgeBg: "#fed7d7", badgeText: "Terlewat", icon: "⚠️" };
+    }
+    if (tanggalTugas === today) {
+      return { bg: "#fffff0", border: "#d69e2e", text: "#7b341e", badgeBg: "#fef08a", badgeText: "Hari Ini", icon: "🔥" };
+    }
+    return { bg: "white", border: "#cbd5e0", text: "#2d3748", badgeBg: "#e2e8f0", badgeText: "Mendatang", icon: "⏳" };
   };
 
   if (!isReady) return null;
 
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto", background: "#f7fafc", minHeight: "100vh" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <button onClick={() => router.push("/dashboard/ob")} style={{ padding: "8px 12px", background: "#e2e8f0", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", color: "#4a5568" }}>
-          ⬅ Kembali ke Dashboard
-        </button>
-        <div style={{ fontSize: "13px", fontWeight: "bold", color: "#44337a", background: "#faf5ff", padding: "5px 15px", borderRadius: "20px", border: "1px solid #d6bcfa" }}>
+      {/* 🔹 TOP BAR NAVBAR */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button onClick={() => router.push("/dashboard/ob")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>⬅️</button>
+          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali</span>
+        </div>
+        <div style={{ background: "#faf5ff", color: "#6b46c1", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #e9d8fd" }}>
           👑 Koordinator: {picName}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "25px", alignItems: "start" }}>
+      {/* 🔹 HERO SECTION (TEMA INDIGO / DEEP PURPLE) */}
+      <div style={{ background: "linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(124, 58, 237, 0.2)" }}>
+        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>DEEP CLEANING MANAGER</h1>
+        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Jadwalkan dan pantau target kebersihan ekstra di luar rutinitas harian</p>
+      </div>
+
+      {/* 🔹 MAIN CONTENT WRAPPER */}
+      <div style={{ maxWidth: "1100px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         
-        {/* KOLOM KIRI: FORM PENJADWALAN */}
-        <div style={{ background: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", borderTop: "5px solid #805ad5" }}>
-          <h2 style={{ margin: "0 0 5px 0", color: "#44337a", fontSize: "18px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span>📅</span> Jadwalkan Deep Cleaning
-          </h2>
-          <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "13px" }}>Buat tugas kebersihan ekstra (bulanan/mingguan) di luar rutinitas harian.</p>
+        {/* RESPONSIVE FLEX LAYOUT */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "25px", alignItems: "flex-start" }}>
           
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          {/* KOLOM KIRI: FORM PENJADWALAN (STICKY) */}
+          <div style={{ flex: "1 1 350px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", position: "sticky", top: "80px" }}>
+            <h2 style={{ margin: "0 0 5px 0", color: "#553c9a", fontSize: "18px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span>📅</span> Buat Jadwal Baru
+            </h2>
+            <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "13px" }}>Terbitkan instruksi pembersihan khusus.</p>
             
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Tanggal Pelaksanaan:</label>
-              <input type="date" name="tanggal" value={formData.tanggal} onChange={handleInputChange} required style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0", fontWeight: "bold", color: "#2d3748" }} />
-            </div>
-            
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Area / Lokasi Lantai:</label>
-              <select name="area" value={formData.area} onChange={handleInputChange} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0" }}>
-                {DAFTAR_LANTAI.map(lantai => (
-                  <option key={lantai} value={lantai}>{lantai}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "5px", color: "#4a5568" }}>Deskripsi Tugas:</label>
-              <textarea 
-                name="tugas" value={formData.tugas} onChange={handleInputChange} required 
-                placeholder="Contoh: Cuci karpet ruang rapat utama dan poles lantai marmer koridor VIP." 
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e0", minHeight: "80px", resize: "vertical" }} 
-              />
-            </div>
-            
-            <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "15px", background: isLoading ? "#b794f4" : "#805ad5", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", marginTop: "10px" }}>
-              {isLoading ? "Menjadwalkan..." : "🚀 Terbitkan Jadwal"}
-            </button>
-          </form>
-        </div>
-
-        {/* KOLOM KANAN: DAFTAR SELURUH TUGAS */}
-        <div style={{ background: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-          <h2 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "18px" }}>📋 Rekapitulasi Jadwal Deep Cleaning</h2>
-          
-          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-            {tasks.length > 0 ? tasks.map((task) => {
-              const rowStyle = getRowStyle(task.tanggal, task.status);
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               
-              return (
-                <div key={task.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px", borderRadius: "8px", background: rowStyle.background, borderLeft: rowStyle.borderLeft, boxShadow: "0 1px 2px rgba(0,0,0,0.05)", gap: "15px", flexWrap: "wrap" }}>
-                  
-                  {/* Info Tugas */}
-                  <div style={{ flex: "1", minWidth: "200px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "5px" }}>
-                      <span style={{ fontSize: "12px", background: "#edf2f7", color: "#4a5568", padding: "3px 8px", borderRadius: "4px", fontWeight: "bold" }}>📅 {task.tanggal}</span>
-                      <span style={{ fontSize: "12px", background: "#ebf8ff", color: "#2b6cb0", padding: "3px 8px", borderRadius: "4px", fontWeight: "bold" }}>📍 {task.area}</span>
-                    </div>
-                    <div style={{ fontWeight: "bold", fontSize: "15px", color: rowStyle.color, lineHeight: "1.4" }}>
-                      {task.tugas}
-                    </div>
-                  </div>
-
-                  {/* Aksi & Status */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    
-                    <button 
-                      onClick={() => handleToggleStatus(task.id, task.status)}
-                      style={{ padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", border: task.status === "Selesai" ? "1px solid #68d391" : "1px solid #a0aec0", background: task.status === "Selesai" ? "#c6f6d5" : "white", color: task.status === "Selesai" ? "#22543d" : "#718096", cursor: "pointer", transition: "all 0.2s" }}
-                    >
-                      {task.status === "Selesai" ? "✔ Selesai" : "Tandai Selesai"}
-                    </button>
-                    
-                    <button 
-                      onClick={() => handleDelete(task.id, task.tugas)}
-                      style={{ padding: "8px", borderRadius: "6px", fontSize: "16px", border: "none", background: "#fed7d7", color: "#c53030", cursor: "pointer" }}
-                      title="Hapus Tugas"
-                    >
-                      🗑️
-                    </button>
-
-                  </div>
-                </div>
-              );
-            }) : (
-              <div style={{ padding: "30px", textAlign: "center", color: "#a0aec0", border: "1px dashed #cbd5e0", borderRadius: "8px" }}>
-                Belum ada jadwal Deep Cleaning yang diterbitkan.
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "#4a5568" }}>Pilih Tanggal Pelaksanaan</label>
+                <input type="date" name="tanggal" value={formData.tanggal} onChange={handleInputChange} required style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", color: "#2d3748", outline: "none", cursor: "pointer" }} />
               </div>
-            )}
-          </div>
-        </div>
+              
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "#4a5568" }}>Tentukan Lokasi / Area</label>
+                <select name="area" value={formData.area} onChange={handleInputChange} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", color: "#2d3748", outline: "none", cursor: "pointer", background: "white" }}>
+                  {DAFTAR_LANTAI.map(lantai => (
+                    <option key={lantai} value={lantai}>{lantai}</option>
+                  ))}
+                </select>
+              </div>
 
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "#4a5568" }}>Instruksi Detail</label>
+                <textarea 
+                  name="tugas" value={formData.tugas} onChange={handleInputChange} required 
+                  placeholder="Cth: Vakum karpet ruang rapat direksi, cuci gorden, dan poles ulang marmer lantai..." 
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", minHeight: "90px", resize: "vertical", outline: "none", background: "#f8fafc" }} 
+                />
+              </div>
+              
+              <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "15px", background: isLoading ? "#b794f4" : "#6b46c1", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "15px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "10px", transition: "0.2s", boxShadow: isLoading ? "none" : "0 4px 10px rgba(107, 70, 193, 0.3)" }}>
+                {isLoading ? "Menyimpan ke Sistem..." : "🚀 Terbitkan Instruksi"}
+              </button>
+            </form>
+          </div>
+
+          {/* KOLOM KANAN: DAFTAR TUGAS */}
+          <div style={{ flex: "2 1 500px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            <h2 style={{ margin: "0 0 20px 0", color: "#2d3748", fontSize: "18px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px" }}>
+              📋 Rekapitulasi Tugas Deep Cleaning
+            </h2>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              {tasks.length > 0 ? tasks.map((task) => {
+                const info = getTaskStatusInfo(task.tanggal, task.status);
+                
+                return (
+                  <div key={task.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px", borderRadius: "12px", background: info.bg, border: `1px solid ${info.border}`, borderLeft: `6px solid ${info.border}`, gap: "15px", flexWrap: "wrap", transition: "0.2s" }}>
+                    
+                    {/* Info Tugas Utama */}
+                    <div style={{ flex: "1", minWidth: "250px" }}>
+                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "11px", background: "white", color: "#4a5568", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", border: "1px solid #e2e8f0" }}>📅 {task.tanggal}</span>
+                        <span style={{ fontSize: "11px", background: "#ebf8ff", color: "#2b6cb0", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", border: "1px solid #bee3f8" }}>📍 {task.area}</span>
+                        <span style={{ fontSize: "11px", background: info.badgeBg, color: info.text, padding: "4px 8px", borderRadius: "6px", fontWeight: "bold" }}>{info.icon} {info.badgeText}</span>
+                      </div>
+                      <div style={{ fontWeight: "600", fontSize: "15px", color: info.text, lineHeight: "1.5" }}>
+                        {task.tugas}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#718096", marginTop: "6px" }}>
+                        Diinstruksikan oleh: <strong>{task.dibuat_oleh}</strong>
+                      </div>
+                    </div>
+
+                    {/* Aksi & Status */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      
+                      {task.status !== "Selesai" ? (
+                        <button 
+                          onClick={() => handleToggleStatus(task.id, task.status)}
+                          style={{ padding: "10px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", border: "none", background: "#38a169", color: "white", cursor: "pointer", transition: "0.2s", boxShadow: "0 2px 4px rgba(56, 161, 105, 0.2)" }}
+                        >
+                          Tandai Selesai
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleToggleStatus(task.id, task.status)}
+                          style={{ padding: "10px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", border: "1px solid #cbd5e0", background: "white", color: "#718096", cursor: "pointer", transition: "0.2s" }}
+                        >
+                          Batal Selesai
+                        </button>
+                      )}
+                      
+                      <button 
+                        onClick={() => handleDelete(task.id, task.tugas)}
+                        style={{ padding: "10px", borderRadius: "8px", fontSize: "14px", border: "1px solid #feb2b2", background: "#fff5f5", color: "#e53e3e", cursor: "pointer", transition: "0.2s" }}
+                        title="Hapus Tugas"
+                      >
+                        🗑️
+                      </button>
+
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div style={{ padding: "50px 20px", textAlign: "center", color: "#a0aec0", border: "2px dashed #e2e8f0", borderRadius: "16px", background: "#f8fafc" }}>
+                  <div style={{ fontSize: "40px", marginBottom: "10px" }}>🧹</div>
+                  <div style={{ fontSize: "16px", fontWeight: "bold", color: "#718096" }}>Area Bebas Debu!</div>
+                  <div style={{ fontSize: "13px", marginTop: "5px" }}>Belum ada instruksi Deep Cleaning yang diterbitkan.</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );

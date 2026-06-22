@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 
 interface SlotHarian {
@@ -12,7 +12,6 @@ interface SlotHarian {
   plotKaryawan: Record<string, string>; 
 }
 
-const TIM_SECURITY = ["Awaluddin (Danru)", "Agusrahman", "Ibrahim"];
 const NAMA_HARI_IND = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export default function PengaturanJadwalSecurity() {
@@ -27,13 +26,14 @@ export default function PengaturanJadwalSecurity() {
   const [bulanPilihan, setBulanPilihan] = useState<number>(new Date().getMonth() + 1);
   const [tahunPilihan, setTahunPilihan] = useState<number>(new Date().getFullYear());
   
-  // State Utama Kalender Bulanan
+  // State Utama Kalender Bulanan & Daftar Staf
   const [matriksJadwal, setMatriksJadwal] = useState<SlotHarian[]>([]);
+  const [timSecurity, setTimSecurity] = useState<string[]>([]);
 
   // =========================================================================
-  // 1. DEKLARASI FUNGSI DULU (Bungkus useCallback agar linter React bahagia)
+  // 1. FUNGSI PENARIKAN DATA (DIBUNGKUS useCallback)
   // =========================================================================
-  const generateKalenderKosong = useCallback(async () => {
+  const generateKalenderKosong = useCallback(async (daftarStaf: string[]) => {
     const jumlahHari = new Date(tahunPilihan, bulanPilihan, 0).getDate();
     const daftarHari: SlotHarian[] = [];
 
@@ -58,7 +58,7 @@ export default function PengaturanJadwalSecurity() {
       const isWeekendKhusus = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
 
       const plotKaryawan: Record<string, string> = {};
-      TIM_SECURITY.forEach(karyawan => {
+      daftarStaf.forEach(karyawan => {
         plotKaryawan[karyawan] = dataSaves[tglFormat]?.[karyawan] || "";
       });
 
@@ -72,23 +72,51 @@ export default function PengaturanJadwalSecurity() {
 
     setMatriksJadwal(daftarHari);
     setIsReady(true);
-  }, [bulanPilihan, tahunPilihan]); // Efek ini akan di-update kalau bulan/tahun diubah
+  }, [bulanPilihan, tahunPilihan]);
 
   // =========================================================================
-  // 2. BARU DIPANGGIL OLEH USE-EFFECT SETELAH DIDEKLARASIKAN
+  // 2. VERIFIKASI IDENTITAS & TARIK DAFTAR SECURITY AKTIF DARI DATABASE
   // =========================================================================
   useEffect(() => {
     const siapkanHalaman = async () => {
       const nama = localStorage.getItem("pic_nama");
-      if (!nama || !nama.toLowerCase().includes("awaluddin")) {
-        alert("Akses Ditolak! Halaman ini khusus Komandan Regu (Danru).");
+      const role = localStorage.getItem("pic_role") || "Staff";
+      const dept = localStorage.getItem("pic_dept") || "";
+      
+      const roleLower = role.toLowerCase();
+      const isKoordinator = roleLower.includes("danru") || roleLower.includes("koordinator") || roleLower.includes("admin") || dept.includes("Admin");
+
+      if (!nama || !isKoordinator) {
+        alert("Akses Ditolak! Halaman ini khusus Komandan Regu (Danru) & Admin.");
         router.push("/dashboard/security");
         return;
       }
       setPicName(nama);
-      
-      // Sekarang aman dipanggil karena posisinya di bawah deklarasi
-      generateKalenderKosong(); 
+
+      try {
+        // Tarik Anggota Security dari Database Firebase
+        const q = query(collection(db, "users_master"), where("departemen", "==", "Security"));
+        const snap = await getDocs(q);
+        const staffList: string[] = [];
+        
+        snap.forEach(doc => {
+          staffList.push(doc.data().nama);
+        });
+        
+        // Urutkan Danru selalu di atas
+        staffList.sort((a, b) => {
+          if (a.toLowerCase().includes("danru") || a === "Awaluddin") return -1;
+          if (b.toLowerCase().includes("danru") || b === "Awaluddin") return 1;
+          return a.localeCompare(b);
+        });
+        
+        setTimSecurity(staffList);
+        // Lempar daftar yang ditarik ke dalam pembuat kalender
+        generateKalenderKosong(staffList);
+
+      } catch (error) {
+        console.error("Gagal menarik data tim dari database:", error);
+      }
     };
     siapkanHalaman();
   }, [router, generateKalenderKosong]);
@@ -137,93 +165,118 @@ export default function PengaturanJadwalSecurity() {
   if (!isReady) return null;
 
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto", background: "#f7fafc", minHeight: "100vh" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <button onClick={() => router.push("/dashboard/security")} style={{ padding: "8px 12px", background: "#e2e8f0", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
-          ⬅ Kembali ke Dashboard
-        </button>
-        <div style={{ fontSize: "13px", fontWeight: "bold", color: "#2b6cb0", background: "#ebf8ff", padding: "5px 15px", borderRadius: "20px" }}>
-          👑 Meja Roster Danru
+      {/* 🔹 TOP BAR NAVBAR (Sama dengan Dashboard) */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button onClick={() => router.push("/dashboard/security")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
+          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali</span>
+        </div>
+        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
+          👑 Danru Desk
         </div>
       </div>
 
-      <div style={{ background: "white", padding: "25px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-        <h2 style={{ margin: "0 0 5px 0", color: "#2c5282" }}>📅 Penyusunan Roster Bulanan Security</h2>
-        <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "14px" }}>Cukup klik/centang pilihan shift. Hari Jumat-Minggu otomatis dikunci menjadi 1 shift kerja bergantian.</p>
+      {/* 🔹 HERO SECTION (TEMA MERAH SAMUDERA) */}
+      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
+        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PENYUSUNAN ROSTER</h1>
+        <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>Atur matriks dinas harian regu pengamanan SIBM</p>
+      </div>
 
-        <div style={{ display: "flex", gap: "10px", marginBottom: "25px", background: "#edf2f7", padding: "15px", borderRadius: "6px" }}>
-          <select value={bulanPilihan} onChange={(e) => setBulanPilihan(Number(e.target.value))} style={{ padding: "10px", borderRadius: "4px", fontSize: "14px", fontWeight: "bold" }}>
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i+1} value={i+1}>{new Date(2026, i).toLocaleDateString("id-ID", { month: "long" })}</option>
-            ))}
-          </select>
-          <select value={tahunPilihan} onChange={(e) => setTahunPilihan(Number(e.target.value))} style={{ padding: "10px", borderRadius: "4px", fontSize: "14px", fontWeight: "bold" }}>
-            <option value={2026}>2026</option>
-            <option value={2027}>2027</option>
-          </select>
-        </div>
-
-        {isSuccess && (
-          <div style={{ background: "#c6f6d5", color: "#22543d", padding: "12px", borderRadius: "6px", marginBottom: "20px", fontWeight: "bold", textAlign: "center" }}>
-            ✓ Roster bulanan sukses diterbitkan!
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-          {matriksJadwal.map((hari, dayIdx) => (
-            <div key={hari.tanggalStr} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "15px", background: hari.isWeekendKhusus ? "#fffaf0" : "#fff" }}>
-              <div style={{ fontWeight: "bold", color: hari.isWeekendKhusus ? "#dd6b20" : "#2d3748", marginBottom: "10px", borderBottom: "1px solid #edf2f7", paddingBottom: "5px" }}>
-                📅 {hari.namaHari}, {hari.tanggalStr.split("-")[2]} ({hari.isWeekendKhusus ? "Weekend 1 Shift" : "Weekday 3 Shift"})
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {TIM_SECURITY.map(karyawan => {
-                  const shiftAktif = hari.plotKaryawan[karyawan];
-                  return (
-                    <div key={karyawan} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", background: "#f7fafc", padding: "8px 12px", borderRadius: "6px" }}>
-                      <span style={{ fontSize: "14px", fontWeight: "bold", color: "#4a5568", minWidth: "150px" }}>👤 {karyawan}</span>
-                      
-                      <div style={{ display: "flex", gap: "5px" }}>
-                        {hari.isWeekendKhusus ? (
-                          <>
-                            {["Masuk", "Off"].map(s => (
-                              <button
-                                key={s} type="button" onClick={() => handleSetShift(dayIdx, karyawan, s)}
-                                style={{ padding: "6px 12px", fontSize: "12px", borderRadius: "4px", border: "none", cursor: "pointer", fontWeight: "bold", background: shiftAktif === s ? (s === "Masuk" ? "#38a169" : "#e53e3e") : "#cbd5e0", color: "white" }}
-                              >
-                                {s === "Masuk" ? "🟢 Masuk" : "❌ Off"}
-                              </button>
-                            ))}
-                          </>
-                        ) : (
-                          <>
-                            {["Pagi", "Siang", "Malam", "Off"].map(s => (
-                              <button
-                                key={s} type="button" onClick={() => handleSetShift(dayIdx, karyawan, s)}
-                                style={{ padding: "6px 12px", fontSize: "12px", borderRadius: "4px", border: "none", cursor: "pointer", fontWeight: "bold", background: shiftAktif === s ? (s === "Off" ? "#e53e3e" : "#3182ce") : "#cbd5e0", color: "white" }}
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* 🔹 MAIN CONTENT WRAPPER */}
+      <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+        
+        <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+          
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "20px" }}>📅</span>
+            <div style={{ display: "flex", gap: "10px", flex: 1, flexWrap: "wrap" }}>
+              <select value={bulanPilihan} onChange={(e) => setBulanPilihan(Number(e.target.value))} style={{ flex: 1, minWidth: "150px", padding: "12px", borderRadius: "8px", fontSize: "14px", fontWeight: "bold", border: "1px solid #cbd5e0", background: "white" }}>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i+1} value={i+1}>{new Date(2026, i).toLocaleDateString("id-ID", { month: "long" })}</option>
+                ))}
+              </select>
+              <select value={tahunPilihan} onChange={(e) => setTahunPilihan(Number(e.target.value))} style={{ padding: "12px", borderRadius: "8px", fontSize: "14px", fontWeight: "bold", border: "1px solid #cbd5e0", background: "white" }}>
+                <option value={2026}>2026</option>
+                <option value={2027}>2027</option>
+              </select>
             </div>
-          ))}
+          </div>
+
+          <div style={{ background: "#fffaf0", border: "1px solid #feebc8", padding: "12px 15px", borderRadius: "12px", marginBottom: "25px", fontSize: "13px", color: "#c05621", display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "18px" }}>💡</span> Info: Jumat, Sabtu, dan Minggu otomatis menggunakan skema pengamanan ganda (Masuk/Off).
+          </div>
+
+          {isSuccess && (
+            <div style={{ background: "#f0fff4", border: "1px solid #c6f6d5", color: "#22543d", padding: "15px", borderRadius: "12px", marginBottom: "20px", fontWeight: "bold", textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+              <span style={{ fontSize: "20px" }}>✅</span> Roster bulan ini sukses diterbitkan ke sistem!
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+            {matriksJadwal.map((hari, dayIdx) => (
+              <div key={hari.tanggalStr} style={{ border: hari.isWeekendKhusus ? "2px solid #feebc8" : "1px solid #e2e8f0", borderRadius: "16px", padding: "20px", background: hari.isWeekendKhusus ? "#fffaf0" : "#ffffff", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", borderBottom: "1px solid #edf2f7", paddingBottom: "10px" }}>
+                  <div style={{ fontWeight: "900", color: hari.isWeekendKhusus ? "#dd6b20" : "#2d3748", fontSize: "16px" }}>
+                    {hari.namaHari}, {hari.tanggalStr.split("-")[2]}
+                  </div>
+                  <span style={{ fontSize: "10px", background: hari.isWeekendKhusus ? "#dd6b20" : "#e2e8f0", color: hari.isWeekendKhusus ? "white" : "#4a5568", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", textTransform: "uppercase" }}>
+                    {hari.isWeekendKhusus ? "Shift Ganda" : "Reguler (3 Shift)"}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {timSecurity.map(karyawan => {
+                    const shiftAktif = hari.plotKaryawan[karyawan];
+                    return (
+                      <div key={karyawan} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", background: "#f8fafc", padding: "12px 15px", borderRadius: "10px", border: "1px solid #edf2f7" }}>
+                        <span style={{ fontSize: "14px", fontWeight: "bold", color: "#1a202c", flex: 1, minWidth: "150px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ width: "24px", height: "24px", background: "#e2e8f0", borderRadius: "50%", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "10px" }}>👮</span> 
+                          {karyawan}
+                        </span>
+                        
+                        <div style={{ display: "flex", gap: "5px" }}>
+                          {hari.isWeekendKhusus ? (
+                            <>
+                              {["Masuk", "Off"].map(s => (
+                                <button
+                                  key={s} type="button" onClick={() => handleSetShift(dayIdx, karyawan, s)}
+                                  style={{ padding: "8px 12px", fontSize: "12px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: "bold", background: shiftAktif === s ? (s === "Masuk" ? "#38a169" : "#e53e3e") : "#cbd5e0", color: "white", transition: "0.2s" }}
+                                >
+                                  {s === "Masuk" ? "🟢 Masuk" : "❌ Off"}
+                                </button>
+                              ))}
+                            </>
+                          ) : (
+                            <>
+                              {["Pagi", "Siang", "Malam", "Off"].map(s => (
+                                <button
+                                  key={s} type="button" onClick={() => handleSetShift(dayIdx, karyawan, s)}
+                                  style={{ padding: "8px 12px", fontSize: "12px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: "bold", background: shiftAktif === s ? (s === "Off" ? "#e53e3e" : "#3182ce") : "#cbd5e0", color: "white", transition: "0.2s" }}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handleSimpanJadwal} disabled={isLoading}
+            style={{ width: "100%", padding: "16px", background: isLoading ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", marginTop: "30px", boxShadow: "0 4px 6px rgba(229,62,62,0.3)", transition: "0.2s" }}
+          >
+            {isLoading ? "Menyimpan Data Roster..." : "🚀 Terbitkan Roster Bulanan Resmi"}
+          </button>
+
         </div>
-
-        <button
-          onClick={handleSimpanJadwal} disabled={isLoading}
-          style={{ width: "100%", padding: "15px", background: isLoading ? "#a0aec0" : "#2c5282", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", marginTop: "30px" }}
-        >
-          {isLoading ? "Menyimpan Data Roster..." : "🚀 Terbitkan Roster Bulanan Resmi"}
-        </button>
-
       </div>
     </div>
   );

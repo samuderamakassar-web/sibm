@@ -5,7 +5,9 @@ import { useEffect, useState, useRef } from "react";
 import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 
-// Interface untuk Struktur Data
+// ==========================================
+// INTERFACES
+// ==========================================
 interface TugasDetail {
   nama_tugas: string;
   foto_before: string | null;
@@ -22,9 +24,9 @@ interface ChecklistLog {
 }
 
 const TUGAS_STANDAR = [
-  { id: "t1", nama: "Wastafel / Kaca / Meja" },
-  { id: "t2", nama: "Tempat Sampah" },
-  { id: "t3", nama: "Lantai (Sapu & Pel)" }
+  { id: "t1", nama: "Wastafel / Kaca / Meja", icon: "🚰" },
+  { id: "t2", nama: "Tempat Sampah", icon: "🗑️" },
+  { id: "t3", nama: "Lantai (Sapu & Pel)", icon: "🧹" }
 ];
 
 export default function ChecklistKameraPage() {
@@ -53,11 +55,16 @@ export default function ChecklistKameraPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // ==========================================
   // EFEK 1: Ambil Identitas & Data Ploting
+  // ==========================================
   useEffect(() => {
     const muatDataAwal = async () => {
-      const nama = localStorage.getItem("pic_nama");
-      if (!nama) {
+      const nama = localStorage.getItem("pic_nama") || "";
+      const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
+      
+      if (!nama || !dept.includes("ob & cs")) {
+        alert("Akses Ditolak! Halaman ini khusus staf OB & CS.");
         router.push("/shift-checkin");
         return;
       }
@@ -69,15 +76,13 @@ export default function ChecklistKameraPage() {
         const plotSnap = await getDoc(plotRef);
 
         if (plotSnap.exists()) {
-          const plots = plotSnap.data().plot_lantai || {};
+          const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
           const lantaiKu = Object.keys(plots).filter(
             (lantai) => plots[lantai] === nama || plots[lantai] === "Semua / All"
           );
           
           setAssignedAreas(lantaiKu);
-          if (lantaiKu.length > 0) {
-            setSelectedArea(lantaiKu[0]); 
-          }
+          if (lantaiKu.length > 0) setSelectedArea(lantaiKu[0]); 
         }
       } catch (error) {
         console.error("Gagal memuat data plotting:", error);
@@ -89,13 +94,13 @@ export default function ChecklistKameraPage() {
     muatDataAwal();
 
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
     };
   }, [router]);
 
+  // ==========================================
   // EFEK 2: Listener Riwayat Checklist Real-time
+  // ==========================================
   useEffect(() => {
     if (!picName) return;
 
@@ -113,19 +118,19 @@ export default function ChecklistKameraPage() {
     return () => unsubscribe();
   }, [picName]);
 
-  // KENDALI KAMERA
+  // ==========================================
+  // KENDALI KAMERA & FOTO
+  // ==========================================
   const bukaKamera = async (taskId: string, type: "before" | "after") => {
     setActiveTaskConfig({ taskId, type });
     setIsCameraOpen(true);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = mediaStream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = mediaStream;
     } catch (error) {
       console.error(error);
-      alert("Gagal mengakses kamera. Pastikan izin kamera diberikan.");
+      alert("Gagal mengakses kamera ponsel Anda. Pastikan izin kamera telah diberikan di browser.");
       setIsCameraOpen(false);
     }
   };
@@ -145,7 +150,8 @@ export default function ChecklistKameraPage() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    const MAX_WIDTH = 400;
+    // Menggunakan resolusi HD (kompromi ukuran file & ketajaman)
+    const MAX_WIDTH = 720;
     const scale = MAX_WIDTH / video.videoWidth;
     canvas.width = MAX_WIDTH;
     canvas.height = video.videoHeight * scale;
@@ -153,7 +159,7 @@ export default function ChecklistKameraPage() {
     const context = canvas.getContext("2d");
     if (context) {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const photoBase64 = canvas.toDataURL("image/jpeg", 0.6); 
+      const photoBase64 = canvas.toDataURL("image/jpeg", 0.7); // 70% Quality
       
       setPhotos(prev => ({
         ...prev,
@@ -169,9 +175,7 @@ export default function ChecklistKameraPage() {
   const hapusFoto = (taskId: string, type: "before" | "after") => {
     setPhotos(prev => {
       const newPhotos = { ...prev };
-      if (newPhotos[taskId]) {
-        delete newPhotos[taskId][type];
-      }
+      if (newPhotos[taskId]) delete newPhotos[taskId][type];
       return newPhotos;
     });
   };
@@ -179,7 +183,7 @@ export default function ChecklistKameraPage() {
   const handleKirimLaporan = async () => {
     const hasPhotos = Object.keys(photos).some(taskId => photos[taskId].before || photos[taskId].after);
     if (!hasPhotos) {
-      return alert("Mohon lengkapi minimal satu foto bukti (Before/After) sebelum mengirim laporan!");
+      return alert("📸 Mohon lampirkan minimal satu foto bukti (Before/After) sebelum mengirim laporan!");
     }
 
     setIsLoading(true);
@@ -198,84 +202,88 @@ export default function ChecklistKameraPage() {
         detail_tugas: detailTugas
       });
 
-      alert("Laporan Kebersihan berhasil dikirim! Riwayat visual Anda telah terekam.");
+      alert("Laporan Kebersihan berhasil dikirim! Riwayat visual Anda telah terekam di sistem.");
       setPhotos({});
       setStep(1);
       setActiveTab("history"); 
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
-      console.error("Gagal mengirim laporan:", error);
+      console.error(error);
       alert("Terjadi kesalahan sistem saat mengirim laporan.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const formatJam = (timestamp: Timestamp | null) => {
-    if (!timestamp) return "-";
-    return new Date(timestamp.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const formatJam = (ts: Timestamp | null) => {
+    if (!ts) return "-";
+    return new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
   if (isPageLoading) {
-    return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "#319795", fontWeight: "bold" }}>Menyelaraskan Tugas Ploting Anda...</div>;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "#f8fafc", color: "#319795" }}>
+        <div style={{ fontSize: "50px", marginBottom: "15px", animation: "spin 2s linear infinite" }}>⏳</div>
+        <div style={{ fontWeight: "bold", fontSize: "16px" }}>Menyelaraskan Tugas Ploting Anda...</div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ backgroundColor: "#f0f4f8", minHeight: "100vh", fontFamily: "sans-serif", paddingBottom: "50px" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
-      {/* HEADER UTAMA */}
-      <div style={{ background: "white", padding: "15px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", position: "sticky", top: 0, zIndex: 10 }}>
-        <button onClick={() => router.push("/dashboard/ob")} style={{ background: "none", border: "none", fontSize: "16px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
-          ⬅ Kembali
-        </button>
+      {/* 🔹 TOP BAR NAVBAR */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 10 }}>
+        <button onClick={() => router.push("/dashboard/ob")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>⬅️</button>
         
-        {/* SISTEM PEMILIHAN TAB */}
-        <div style={{ background: "#edf2f7", padding: "4px", borderRadius: "8px", display: "flex", gap: "5px" }}>
-          <button onClick={() => setActiveTab("form")} style={{ border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "form" ? "#319795" : "transparent", color: activeTab === "form" ? "white" : "#4a5568", transition: "all 0.2s" }}>
-            ✏️ Kirim Laporan
+        {/* TAB SWITCHER */}
+        <div style={{ background: "#edf2f7", padding: "4px", borderRadius: "10px", display: "flex", gap: "5px" }}>
+          <button onClick={() => setActiveTab("form")} style={{ border: "none", padding: "8px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "form" ? "white" : "transparent", color: activeTab === "form" ? "#319795" : "#718096", transition: "all 0.2s", boxShadow: activeTab === "form" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>
+            ✏️ Lapor Kerja
           </button>
-          <button onClick={() => setActiveTab("history")} style={{ border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "history" ? "#319795" : "transparent", color: activeTab === "history" ? "white" : "#4a5568", transition: "all 0.2s" }}>
+          <button onClick={() => setActiveTab("history")} style={{ border: "none", padding: "8px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "history" ? "white" : "transparent", color: activeTab === "history" ? "#319795" : "#718096", transition: "all 0.2s", boxShadow: activeTab === "history" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>
             📜 Riwayat ({riwayatKerja.length})
           </button>
         </div>
-
-        <div style={{ fontSize: "12px", fontWeight: "bold", color: "#718096", display: "none" }}>👤 {picName}</div>
       </div>
 
-      <div style={{ maxWidth: "800px", margin: "20px auto", padding: "0 20px" }}>
+      <div style={{ maxWidth: "600px", margin: "30px auto 0", padding: "0 20px" }}>
         
         {/* ========================================================================================= */}
         {/* TAB 1: FORMULIR INPUT CHEKLIST & KAMERA */}
         {/* ========================================================================================= */}
         {activeTab === "form" && (
-          <>
+          <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
             {step === 1 && (
-              <div style={{ background: "white", padding: "30px", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
+              <div style={{ background: "white", padding: "40px 25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", textAlign: "center", borderTop: "6px solid #319795" }}>
                 {assignedAreas.length > 0 ? (
                   <>
-                    <div style={{ fontSize: "50px", marginBottom: "15px" }}>📍</div>
-                    <h2 style={{ margin: "0 0 10px 0", color: "#2d3748" }}>Mulai Laporan Kebersihan</h2>
-                    <p style={{ color: "#718096", marginBottom: "25px", fontSize: "14px" }}>Pilih salah satu lokasi penugasan Anda untuk diverifikasi:</p>
+                    <div style={{ fontSize: "60px", marginBottom: "15px" }}>📍</div>
+                    <h2 style={{ margin: "0 0 10px 0", color: "#2d3748", fontSize: "22px" }}>Mulai Shift Kebersihan</h2>
+                    <p style={{ color: "#718096", marginBottom: "30px", fontSize: "14px", lineHeight: "1.5" }}>Pilih salah satu lokasi penugasan Anda hari ini untuk mulai merekam progres pekerjaan.</p>
                     
                     <select 
                       value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)}
-                      style={{ width: "100%", padding: "15px", borderRadius: "8px", border: "2px solid #319795", fontSize: "16px", fontWeight: "bold", color: "#234e52", marginBottom: "25px", cursor: "pointer", background: "#e6fffa" }}
+                      style={{ width: "100%", padding: "18px", borderRadius: "12px", border: "2px solid #319795", fontSize: "16px", fontWeight: "bold", color: "#234e52", marginBottom: "30px", cursor: "pointer", background: "#e6fffa", outline: "none", appearance: "none", textAlign: "center" }}
                     >
-                      {assignedAreas.map(area => <option key={area} value={area}>📍 {area}</option>)}
+                      {assignedAreas.map(area => <option key={area} value={area}>{area}</option>)}
                     </select>
 
                     <button 
                       onClick={() => setStep(2)}
-                      style={{ width: "100%", padding: "15px", background: "#319795", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: "pointer" }}
+                      style={{ width: "100%", padding: "18px", background: "#319795", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(49, 151, 149, 0.3)", transition: "transform 0.2s" }}
+                      onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-3px)"}
+                      onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}
                     >
-                      Buka Kamera & Mulai Kerja ➔
+                      📸 Buka Kamera Laporan ➔
                     </button>
                   </>
                 ) : (
                   <div style={{ padding: "20px" }}>
-                    <div style={{ fontSize: "50px", marginBottom: "15px" }}>⚠️</div>
-                    <h3 style={{ color: "#e53e3e", margin: "0 0 10px 0" }}>Belum Ada Ploting Tugas</h3>
-                    <p style={{ color: "#718096", fontSize: "14px", margin: 0 }}>
-                      Koordinator belum memetakan lokasi kerja Anda hari ini. Silakan hubungi Danru Anda agar menu checklist ini bisa terbuka.
+                    <div style={{ fontSize: "60px", marginBottom: "15px" }}>☕</div>
+                    <h3 style={{ color: "#e53e3e", margin: "0 0 10px 0", fontSize: "20px" }}>Anda Tidak Memiliki Jadwal</h3>
+                    <p style={{ color: "#718096", fontSize: "14px", margin: 0, lineHeight: "1.6" }}>
+                      Koordinator belum memetakan lokasi kerja Anda untuk hari ini. Silakan hubungi koordinator Anda untuk mendapatkan plot area.
                     </p>
                   </div>
                 )}
@@ -283,49 +291,55 @@ export default function ChecklistKameraPage() {
             )}
 
             {step === 2 && (
-              <div>
-                <div style={{ background: "#e6fffa", padding: "15px 20px", borderRadius: "8px", border: "1px solid #b2f5ea", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+                
+                {/* HEAD CARD AREA */}
+                <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #e2e8f0", borderLeft: "6px solid #319795" }}>
                   <div>
-                    <span style={{ fontSize: "12px", color: "#285e61", fontWeight: "bold" }}>Lokasi Validasi Kerja:</span>
-                    <h2 style={{ margin: "0", color: "#234e52", fontSize: "20px" }}>{selectedArea}</h2>
+                    <span style={{ fontSize: "11px", color: "#718096", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Lokasi Pelaporan:</span>
+                    <h2 style={{ margin: "5px 0 0 0", color: "#234e52", fontSize: "18px" }}>{selectedArea}</h2>
                   </div>
-                  <button onClick={() => setStep(1)} style={{ background: "white", border: "1px solid #cbd5e0", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>Ganti Area</button>
+                  <button onClick={() => setStep(1)} style={{ background: "#edf2f7", border: "none", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", color: "#4a5568" }}>Ganti Area</button>
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
                   {TUGAS_STANDAR.map((tugas) => (
-                    <div key={tugas.id} style={{ background: "white", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-                      <h3 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "16px", borderBottom: "1px solid #edf2f7", paddingBottom: "10px" }}>
-                        🧼 {tugas.nama}
+                    <div key={tugas.id} style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
+                      <h3 style={{ margin: "0 0 20px 0", color: "#2d3748", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>{tugas.icon}</span> {tugas.nama}
                       </h3>
                       
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                        <div>
-                          <div style={{ fontSize: "11px", fontWeight: "bold", color: "#e53e3e", marginBottom: "6px", textAlign: "center" }}>🔴 SEBELUM (BEFORE)</div>
+                        {/* KOTAK BEFORE */}
+                        <div style={{ background: "#fff5f5", padding: "10px", borderRadius: "16px", border: "1px dashed #feb2b2" }}>
+                          <div style={{ fontSize: "11px", fontWeight: "900", color: "#c53030", marginBottom: "10px", textAlign: "center", letterSpacing: "1px" }}>SEBELUM</div>
                           {photos[tugas.id]?.before ? (
                             <div style={{ position: "relative" }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={photos[tugas.id].before} alt="Before" style={{ width: "100%", borderRadius: "8px", border: "2px solid #fed7d7" }} />
-                              <button onClick={() => hapusFoto(tugas.id, "before")} style={{ position: "absolute", top: "5px", right: "5px", background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: "25px", height: "25px", cursor: "pointer" }}>✖</button>
+                              <img src={photos[tugas.id].before} alt="Before" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "12px", border: "2px solid #fed7d7" }} />
+                              <button onClick={() => hapusFoto(tugas.id, "before")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                             </div>
                           ) : (
-                            <button onClick={() => bukaKamera(tugas.id, "before")} style={{ width: "100%", height: "90px", background: "#fff5f5", border: "2px dashed #feb2b2", borderRadius: "8px", color: "#c53030", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "5px", fontWeight: "bold", fontSize: "13px" }}>
-                              <span>📷 Ambil Foto</span>
+                            <button onClick={() => bukaKamera(tugas.id, "before")} style={{ width: "100%", aspectRatio: "3/4", background: "white", border: "none", borderRadius: "12px", color: "#e53e3e", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", transition: "0.2s" }}>
+                              <span style={{ fontSize: "28px" }}>📷</span>
+                              <span style={{ fontSize: "12px", fontWeight: "bold" }}>Ambil Foto</span>
                             </button>
                           )}
                         </div>
 
-                        <div>
-                          <div style={{ fontSize: "11px", fontWeight: "bold", color: "#38a169", marginBottom: "6px", textAlign: "center" }}>🟢 SESUDAH (AFTER)</div>
+                        {/* KOTAK AFTER */}
+                        <div style={{ background: "#f0fff4", padding: "10px", borderRadius: "16px", border: "1px dashed #9ae6b4" }}>
+                          <div style={{ fontSize: "11px", fontWeight: "900", color: "#276749", marginBottom: "10px", textAlign: "center", letterSpacing: "1px" }}>SESUDAH</div>
                           {photos[tugas.id]?.after ? (
                             <div style={{ position: "relative" }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={photos[tugas.id].after} alt="After" style={{ width: "100%", borderRadius: "8px", border: "2px solid #c6f6d5" }} />
-                              <button onClick={() => hapusFoto(tugas.id, "after")} style={{ position: "absolute", top: "5px", right: "5px", background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: "25px", height: "25px", cursor: "pointer" }}>✖</button>
+                              <img src={photos[tugas.id].after} alt="After" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "12px", border: "2px solid #c6f6d5" }} />
+                              <button onClick={() => hapusFoto(tugas.id, "after")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#38a169", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                             </div>
                           ) : (
-                            <button onClick={() => bukaKamera(tugas.id, "after")} style={{ width: "100%", height: "90px", background: "#f0fff4", border: "2px dashed #9ae6b4", borderRadius: "8px", color: "#276749", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "5px", fontWeight: "bold", fontSize: "13px" }}>
-                              <span>📷 Ambil Foto</span>
+                            <button onClick={() => bukaKamera(tugas.id, "after")} style={{ width: "100%", aspectRatio: "3/4", background: "white", border: "none", borderRadius: "12px", color: "#38a169", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", transition: "0.2s" }}>
+                              <span style={{ fontSize: "28px" }}>📸</span>
+                              <span style={{ fontSize: "12px", fontWeight: "bold" }}>Ambil Foto</span>
                             </button>
                           )}
                         </div>
@@ -336,75 +350,80 @@ export default function ChecklistKameraPage() {
 
                 <button 
                   onClick={handleKirimLaporan} disabled={isLoading}
-                  style={{ width: "100%", padding: "18px", background: isLoading ? "#a0aec0" : "#2c5282", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "30px", boxShadow: "0 4px 6px rgba(44, 82, 130, 0.2)" }}
+                  style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "#234e52", color: "white", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "40px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(35, 78, 82, 0.4)", transition: "all 0.3s" }}
                 >
-                  {isLoading ? "Mengirim Laporan..." : "🚀 KUKUHKAN & KIRIM LAPORAN"}
+                  {isLoading ? "🔄 MENGUNGGAH FOTO..." : "🚀 KUKUHKAN & KIRIM LAPORAN"}
                 </button>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {/* ========================================================================================= */}
         {/* TAB 2: GALERI & TABEL RIWAYAT VISUAL */}
         {/* ========================================================================================= */}
         {activeTab === "history" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "25px", animation: "fadeIn 0.3s ease-in-out" }}>
             {riwayatKerja.length > 0 ? riwayatKerja.map((log) => (
-              <div key={log.id} style={{ background: "white", borderRadius: "16px", padding: "20px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)", borderLeft: "6px solid #319795" }}>
+              <div key={log.id} style={{ background: "white", borderRadius: "20px", padding: "25px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
                 
-                {/* Atas: Info Area & Jam */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", borderBottom: "1px dashed #edf2f7", paddingBottom: "12px" }}>
+                {/* Header Riwayat */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                   <div>
-                    <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px", color: "#a0aec0", fontWeight: "bold" }}>Selesai Dibersihkan:</span>
-                    <h3 style={{ margin: "2px 0 0 0", color: "#2d3748", fontSize: "18px" }}>📍 {log.area}</h3>
+                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", color: "#a0aec0", fontWeight: "bold" }}>Selesai Dibersihkan:</span>
+                    <h3 style={{ margin: "5px 0 0 0", color: "#2d3748", fontSize: "18px", display: "flex", alignItems: "center", gap: "5px" }}><span>📍</span> {log.area}</h3>
                   </div>
-                  <span style={{ background: "#e6fffa", color: "#234e52", padding: "6px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold" }}>
+                  <span style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#4a5568", padding: "8px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold" }}>
                     ⏱️ {formatJam(log.waktu_selesai)}
                   </span>
                 </div>
 
-                {/* Bawah: Baris Tugas dan Tampilan Foto Rekam Jejak */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                  {log.detail_tugas.map((sub, sIdx) => (
-                    <div key={sIdx} style={{ background: "#f7fafc", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontWeight: "bold", color: "#4a5568", fontSize: "14px", marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
-                        <span>🔹 {sub.nama_tugas}</span>
-                        <span style={{ fontSize: "11px", color: "#319795" }}>{sub.status}</span>
-                      </div>
-                      
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                        <div>
-                          <div style={{ fontSize: "10px", color: "#e53e3e", fontWeight: "bold", marginBottom: "4px" }}>BEFORE:</div>
-                          {sub.foto_before ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={sub.foto_before} alt="Bukti Kuno" style={{ width: "100%", borderRadius: "6px", border: "1px solid #feb2b2", aspectRatio: "4/3", objectFit: "cover" }} />
-                          ) : (
-                            // PERBAIKAN: italic diubah menjadi fontStyle
-                            <div style={{ fontSize: "11px", color: "#a0aec0", fontStyle: "italic", padding: "10px", background: "#fff", borderRadius: "4px", textAlign: "center" }}>Tanpa foto</div>
-                          )}
+                {/* Grid Bukti Foto */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {log.detail_tugas.map((sub, sIdx) => {
+                    const bgStatus = sub.status.includes("Sempurna") ? "#f0fff4" : (sub.status.includes("Sebagian") ? "#fffff0" : "#fff5f5");
+                    const icon = sub.nama_tugas.includes("Wastafel") ? "🚰" : (sub.nama_tugas.includes("Sampah") ? "🗑️" : "🧹");
+                    
+                    return (
+                      <div key={sIdx} style={{ background: bgStatus, padding: "15px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "14px", marginBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span>{icon}</span> {sub.nama_tugas}</span>
+                          <span style={{ fontSize: "10px", padding: "4px 8px", background: "white", borderRadius: "8px", color: sub.status.includes("Sempurna") ? "#38a169" : "#d69e2e", border: "1px solid #e2e8f0" }}>{sub.status}</span>
+                        </div>
+                        
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                          <div style={{ background: "white", padding: "8px", borderRadius: "12px", border: "1px solid #fed7d7" }}>
+                            <div style={{ fontSize: "10px", color: "#e53e3e", fontWeight: "900", marginBottom: "8px", textAlign: "center" }}>BEFORE</div>
+                            {sub.foto_before ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img src={sub.foto_before} alt="Sebelum" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px" }} />
+                            ) : (
+                              <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", borderRadius: "8px", color: "#a0aec0", fontSize: "12px", fontStyle: "italic" }}>Tidak ada foto</div>
+                            )}
+                          </div>
+
+                          <div style={{ background: "white", padding: "8px", borderRadius: "12px", border: "1px solid #c6f6d5" }}>
+                            <div style={{ fontSize: "10px", color: "#38a169", fontWeight: "900", marginBottom: "8px", textAlign: "center" }}>AFTER</div>
+                            {sub.foto_after ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img src={sub.foto_after} alt="Sesudah" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px" }} />
+                            ) : (
+                              <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", borderRadius: "8px", color: "#a0aec0", fontSize: "12px", fontStyle: "italic" }}>Tidak ada foto</div>
+                            )}
+                          </div>
                         </div>
 
-                        <div>
-                          <div style={{ fontSize: "10px", color: "#38a169", fontWeight: "bold", marginBottom: "4px" }}>AFTER:</div>
-                          {sub.foto_after ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={sub.foto_after} alt="Bukti Bersih" style={{ width: "100%", borderRadius: "6px", border: "1px solid #c6f6d5", aspectRatio: "4/3", objectFit: "cover" }} />
-                          ) : (
-                            // PERBAIKAN: italic diubah menjadi fontStyle
-                            <div style={{ fontSize: "11px", color: "#a0aec0", fontStyle: "italic", padding: "10px", background: "#fff", borderRadius: "4px", textAlign: "center" }}>Tanpa foto</div>
-                          )}
-                        </div>
                       </div>
-
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
               </div>
             )) : (
-              <div style={{ padding: "40px", textAlign: "center", background: "white", color: "#a0aec0", borderRadius: "12px", border: "1px dashed #cbd5e0" }}>
-                📭 Anda belum mengirimkan laporan kebersihan hari ini. Riwayat foto akan muncul setelah Anda mengirim laporan pertama Anda.
+              <div style={{ padding: "60px 20px", textAlign: "center", background: "white", borderRadius: "20px", border: "2px dashed #cbd5e0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: "50px", marginBottom: "15px" }}>📭</div>
+                <h3 style={{ color: "#4a5568", margin: "0 0 10px 0" }}>Belum Ada Riwayat</h3>
+                <p style={{ color: "#a0aec0", fontSize: "14px", margin: 0 }}>Log pekerjaan Anda akan terekam dan ditampilkan dengan apik di sini setelah Anda mengirimkan laporan pertama.</p>
               </div>
             )}
           </div>
@@ -412,21 +431,31 @@ export default function ChecklistKameraPage() {
 
       </div>
 
-      {/* 🌑 OVERLAY MODAL KAMERA JEPRETAN */}
+      {/* 🌑 OVERLAY MODAL KAMERA (LAYAR PENUH) */}
       {isCameraOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000", zIndex: 100, display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "15px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#1a1a1a" }}>
-            <span style={{ fontWeight: "bold", fontSize: "14px" }}>📸 BIDIK AREA PEMBERSIHAN</span>
-            <button onClick={matikanKamera} style={{ background: "none", border: "none", color: "white", fontSize: "24px", cursor: "pointer" }}>✖</button>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000", zIndex: 100, display: "flex", flexDirection: "column", animation: "fadeIn 0.2s ease-in" }}>
+          
+          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)", position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
+            <span style={{ fontWeight: "bold", fontSize: "14px", letterSpacing: "1px", textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>
+              {activeTaskConfig?.type === "before" ? "🔴 FOTOKAN KONDISI AWAL" : "🟢 FOTOKAN HASIL BERSIH"}
+            </span>
+            <button onClick={matikanKamera} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✖</button>
           </div>
-          <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
+          
+          <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", background: "#111" }}>
             <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }}></video>
             <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "75%", height: "55%", border: "2px dashed rgba(255,255,255,0.6)", borderRadius: "12px", pointerEvents: "none" }}></div>
+            
+            {/* Guide Grid Kamera */}
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "80%", height: "60%", border: "2px dashed rgba(255,255,255,0.5)", borderRadius: "20px", pointerEvents: "none" }}>
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "40px", height: "40px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "50%" }}></div>
+            </div>
           </div>
-          <div style={{ padding: "30px", display: "flex", justifyContent: "center", background: "#000" }}>
-            <button onClick={ambilFoto} style={{ width: "75px", height: "75px", borderRadius: "50%", background: "white", border: "6px solid #4a5568", cursor: "pointer", boxShadow: "0 0 15px rgba(255,255,255,0.3)" }}></button>
+          
+          <div style={{ padding: "40px", display: "flex", justifyContent: "center", background: "linear-gradient(to top, rgba(0,0,0,1), transparent)", position: "absolute", bottom: 0, left: 0, right: 0 }}>
+            <button onClick={ambilFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: activeTaskConfig?.type === "before" ? "#fed7d7" : "#c6f6d5", border: "6px solid white", cursor: "pointer", boxShadow: "0 0 20px rgba(255,255,255,0.5)", transition: "transform 0.1s" }} onTouchStart={(e) => e.currentTarget.style.transform = "scale(0.9)"} onTouchEnd={(e) => e.currentTarget.style.transform = "scale(1)"}></button>
           </div>
+
         </div>
       )}
 

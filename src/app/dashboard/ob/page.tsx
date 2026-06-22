@@ -15,7 +15,7 @@ interface StockItem {
 
 interface DeepCleaningTask {
   id: string;
-  tanggal: string; // <-- Tambahkan baris ini
+  tanggal: string; 
   area: string;
   tugas: string;
   status: string;
@@ -28,7 +28,7 @@ export default function OBDashboard() {
   const [isReady, setIsReady] = useState<boolean>(false);
   const [assignedFloors, setAssignedFloors] = useState<string[]>([]);
 
-  // State Fitur Baru
+  // State Fitur
   const [stokMenipis, setStokMenipis] = useState<StockItem[]>([]);
   const [tugasDeepCleaning, setTugasDeepCleaning] = useState<DeepCleaningTask[]>([]);
 
@@ -82,7 +82,6 @@ export default function OBDashboard() {
 
     // C. Listener Tugas Deep Cleaning Hari Ini
     const dcRef = collection(db, "deep_cleaning_tasks");
-    // Menggunakan ">=" agar menarik semua jadwal yang akan datang
     const qDC = query(dcRef, where("tanggal", ">=", todayISO)); 
     
     const unsubDC = onSnapshot(qDC, (snapshot) => {
@@ -91,7 +90,6 @@ export default function OBDashboard() {
         tasks.push({ ...doc.data(), id: doc.id } as DeepCleaningTask);
       });
       
-      // Urutkan jadwal yang terdekat berada di paling atas
       tasks.sort((a, b) => a.tanggal.localeCompare(b.tanggal));
       setTugasDeepCleaning(tasks);
     });
@@ -110,156 +108,164 @@ export default function OBDashboard() {
     router.push("/shift-checkin");
   };
 
-  // MENU UTAMA OB & CS (YANG SEMPAT HILANG)
+  // MENU UTAMA OB & CS
   const menuOB = [
-    {
-      title: "✨ Kerjaan Rutin Harian",
-      desc: "Checklist kebersihan area (Toilet, Lobby, Pantry, dll).",
-      path: "/dashboard/ob/checklist", 
-      color: "#319795", 
-      icon: "📸"
-    },
-    {
-      title: "🧴 Stock Opname Gudang",
-      desc: "Catat sisa stok chemical, sabun, tisu, dan alat pel.",
-      path: "/dashboard/ob/stok", 
-      color: "#dd6b20", 
-      icon: "📦"
-    },
-    {
-      title: "🛠️ Laporan Kerusakan",
-      desc: "Laporkan fasilitas rusak (lampu mati, keran bocor) ke GA.",
-      path: "/dashboard/ob/laporan", 
-      color: "#e53e3e", 
-      icon: "🔧"
-    },
+    { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", color: "#319795", bg: "#e6fffa", icon: "✨" },
+    { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", color: "#dd6b20", bg: "#fffaf0", icon: "🧴" },
+    { title: "Laporan Kerusakan", desc: "Lapor fasilitas rusak ke tim GA.", path: "/dashboard/ob/laporan", color: "#e53e3e", bg: "#fff5f5", icon: "🛠️" },
   ];
 
   if (!isReady) return null;
 
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1200px", margin: "0 auto", minHeight: "100vh", background: "#f7fafc" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       
-      {/* 1. HEADER DASHBOARD */}
-      <div style={{ background: "white", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", borderLeft: "6px solid #319795" }}>
-        <div>
-          <h1 style={{ margin: "0 0 5px 0", color: "#234e52" }}>🧹 Dashboard OB & CS</h1>
-          <p style={{ margin: "0", color: "#718096", fontSize: "14px" }}>Pilih menu operasional kebersihan dan fasilitas di bawah ini.</p>
+      {/* 🔹 TOP BAR NAVBAR */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" alt="Logo" style={{ height: "30px", filter: "invert(1) brightness(0.2)" }} />
+          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>OB & CS Desk</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "15px", flexWrap: "wrap" }}>
-          <div style={{ background: "#e6fffa", color: "#285e61", padding: "8px 15px", borderRadius: "50px", fontSize: "13px", fontWeight: "bold", border: "1px solid #b2f5ea", display: "flex", alignItems: "center", gap: "5px" }}>
-            <span>👤</span> PIC: {picName}
-          </div>
-          <button onClick={handleKeluar} style={{ padding: "10px 15px", background: "#edf2f7", color: "#4a5568", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
-            🔄 Ganti Shift / Keluar
-          </button>
+        <button onClick={handleKeluar} style={{ background: "#edf2f7", color: "#4a5568", border: "none", padding: "8px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.background = "#e2e8f0"} onMouseOut={(e) => e.currentTarget.style.background = "#edf2f7"}>
+          Keluar ➔
+        </button>
+      </div>
+
+      {/* 🔹 HERO SECTION (TEMA MERAH SAMUDERA) */}
+      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 80px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
+        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>CLEANING CENTER</h1>
+        <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Manajemen Kebersihan & Fasilitas Gedung</p>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(5px)", padding: "8px 20px", borderRadius: "50px", fontSize: "13px", fontWeight: "bold", border: "1px solid rgba(255,255,255,0.3)" }}>
+          <span>🧹</span> PIC: {picName}
         </div>
       </div>
 
-      {/* 2. BANNER PERINGATAN LOW STOCK */}
-      {stokMenipis.length > 0 && (
-        <div style={{ background: "#fff5f5", border: "2px solid #feb2b2", borderRadius: "12px", padding: "20px", marginBottom: "25px", display: "flex", gap: "15px", alignItems: "flex-start" }}>
-          <div style={{ fontSize: "30px" }}>⚠️</div>
+      {/* 🔹 MAIN CONTENT WRAPPER */}
+      <div style={{ maxWidth: "1100px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+        
+        {/* 📢 KARTU PENGUMUMAN SHIFT */}
+        <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", border: "1px solid #e2e8f0" }}>
           <div>
-            <h3 style={{ margin: "0 0 5px 0", color: "#c53030" }}>Peringatan Stok Gudang Menipis!</h3>
-            <p style={{ margin: "0 0 10px 0", color: "#742a2a", fontSize: "14px" }}>Beberapa item kebersihan di gudang sudah melewati batas minimum:</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-              {stokMenipis.map(item => (
-                <span key={item.id} style={{ background: "#e53e3e", color: "white", padding: "4px 10px", borderRadius: "6px", fontSize: "13px", fontWeight: "bold" }}>
-                  {item.nama_barang} (Sisa: {item.qty})
-                </span>
-              ))}
-            </div>
+            <p style={{ margin: "0 0 5px 0", color: "#718096", fontSize: "13px", fontWeight: "bold", textTransform: "uppercase" }}>Lokasi Shift Anda Hari Ini</p>
+            <h2 style={{ margin: 0, color: "#1a202c", fontSize: "18px", display: "flex", alignItems: "center", gap: "8px" }}>
+              {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+            </h2>
+          </div>
+          <div style={{ background: assignedFloors.length > 0 ? "#e6fffa" : "#fff5f5", color: assignedFloors.length > 0 ? "#234e52" : "#c53030", padding: "10px 20px", borderRadius: "12px", border: assignedFloors.length > 0 ? "1px solid #b2f5ea" : "1px solid #feb2b2", fontWeight: "900", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+            {assignedFloors.length > 0 ? `📍 AREA: ${assignedFloors.join(", ")}` : "⚠️ BELUM DIPLOT"}
           </div>
         </div>
-      )}
 
-      {/* 3. BANNER PENGUMUMAN SHIFT */}
-      {assignedFloors.length > 0 ? (
-        <div style={{ background: "#e6fffa", color: "#234e52", padding: "15px 20px", borderRadius: "12px", marginBottom: "25px", border: "1px solid #38b2ac", fontWeight: "bold", fontSize: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
-          📢 SHIFT HARI INI: Anda diplot di area <span style={{ color: "#319795", textDecoration: "underline" }}>{assignedFloors.join(", ")}</span>. Laksanakan tugas dengan baik!
-        </div>
-      ) : (
-        <div style={{ background: "#fff5f5", color: "#c53030", padding: "15px 20px", borderRadius: "12px", marginBottom: "25px", border: "1px solid #feb2b2", fontWeight: "bold", fontSize: "15px" }}>
-          ⚠️ PENGUMUMAN SHIFT: Anda belum diplot di lantai manapun hari ini. Hubungi Koordinator.
-        </div>
-      )}
-
-      {/* 4. PANEL KHUSUS KOORDINATOR (HILAL) */}
-      {picName.toLowerCase().includes("hilal") && (
-        <div style={{ display: "flex", gap: "20px", marginBottom: "25px", flexWrap: "wrap" }}>
-          
-          <div 
-            onClick={() => router.push("/dashboard/ob/plotting")}
-            style={{ flex: 1, minWidth: "250px", background: "#ebf8ff", border: "2px dashed #3182ce", padding: "20px", borderRadius: "8px", cursor: "pointer", textAlign: "center", transition: "all 0.2s" }}
-            onMouseOver={(e) => (e.currentTarget.style.background = "#bee3f8")}
-            onMouseOut={(e) => (e.currentTarget.style.background = "#ebf8ff")}
-          >
-            <h2 style={{ margin: "0 0 5px 0", color: "#2c5282", fontSize: "18px" }}>🗺️ PLOTTING TUGAS HARIAN</h2>
-            <p style={{ margin: "0", color: "#4a5568", fontSize: "13px" }}>Atur penugasan lantai dan absen staf.</p>
-          </div>
-
-          <div 
-            onClick={() => router.push("/dashboard/ob/deep-cleaning")}
-            style={{ flex: 1, minWidth: "250px", background: "#faf5ff", border: "2px dashed #805ad5", padding: "20px", borderRadius: "8px", cursor: "pointer", textAlign: "center", transition: "all 0.2s" }}
-            onMouseOver={(e) => (e.currentTarget.style.background = "#e9d8fd")}
-            onMouseOut={(e) => (e.currentTarget.style.background = "#faf5ff")}
-          >
-            <h2 style={{ margin: "0 0 5px 0", color: "#44337a", fontSize: "18px" }}>📅 JADWAL DEEP CLEANING</h2>
-            <p style={{ margin: "0", color: "#4a5568", fontSize: "13px" }}>Buat jadwal pembersihan ekstra (bulanan).</p>
-          </div>
-
-        </div>
-      )}
-
-      {/* 5. GRID MENU UTAMA OB */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px", marginBottom: "30px" }}>
-        {menuOB.map((menu, index) => (
-          <div key={index} onClick={() => router.push(menu.path)} style={{ background: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", cursor: "pointer", borderTop: `5px solid ${menu.color}`, display: "flex", gap: "15px", alignItems: "flex-start", transition: "transform 0.2s" }} onMouseOver={(e) => (e.currentTarget.style.transform = "translateY(-5px)")} onMouseOut={(e) => (e.currentTarget.style.transform = "translateY(0)")}>
-            <div style={{ fontSize: "30px" }}>{menu.icon}</div>
+        {/* ⚠️ BANNER PERINGATAN LOW STOCK */}
+        {stokMenipis.length > 0 && (
+          <div style={{ background: "#fff5f5", border: "1px solid #feb2b2", borderRadius: "20px", padding: "20px", marginBottom: "25px", display: "flex", gap: "15px", alignItems: "center", boxShadow: "0 4px 6px -1px rgba(229, 62, 62, 0.1)" }}>
+            <div style={{ background: "#fc8181", color: "white", width: "45px", height: "45px", borderRadius: "50%", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "20px", flexShrink: 0 }}>⚠️</div>
             <div>
-              <h2 style={{ marginTop: "0", color: menu.color, fontSize: "18px", marginBottom: "8px" }}>{menu.title}</h2>
-              <p style={{ margin: "0", color: "#718096", fontSize: "13px", lineHeight: "1.5" }}>{menu.desc}</p>
+              <h3 style={{ margin: "0 0 5px 0", color: "#c53030", fontSize: "16px" }}>Stok Gudang Menipis!</h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "5px" }}>
+                {stokMenipis.map(item => (
+                  <span key={item.id} style={{ background: "white", color: "#e53e3e", border: "1px solid #fc8181", padding: "4px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold" }}>
+                    {item.nama_barang} <span style={{ opacity: 0.7 }}>(Sisa: {item.qty})</span>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* 6. JADWAL DEEP CLEANING HARI INI */}
-      {tugasDeepCleaning.length > 0 && (
-        <div style={{ background: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", borderTop: "4px solid #805ad5" }}>
-          <h2 style={{ margin: "0 0 15px 0", color: "#44337a", display: "flex", alignItems: "center", gap: "10px" }}>
-            <span>📅</span> Daftar Tugas Ekstra (Deep Cleaning)
-          </h2>
-          <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "13px" }}>Daftar tugas perawatan khusus yang telah dijadwalkan oleh Koordinator.</p>
+        {/* 👑 PANEL KHUSUS KOORDINATOR (HILAL) */}
+        {picName.toLowerCase().includes("hilal") && (
+          <div style={{ display: "flex", gap: "20px", marginBottom: "30px", flexWrap: "wrap" }}>
+            
+            <div 
+              onClick={() => router.push("/dashboard/ob/plotting")}
+              style={{ flex: 1, minWidth: "250px", background: "linear-gradient(to right, #234e52, #319795)", color: "white", padding: "20px", borderRadius: "20px", cursor: "pointer", display: "flex", alignItems: "center", gap: "20px", boxShadow: "0 10px 15px -3px rgba(49, 151, 149, 0.3)", transition: "transform 0.2s" }}
+              onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-3px)"}
+              onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}
+            >
+              <div style={{ background: "rgba(255,255,255,0.2)", fontSize: "28px", padding: "12px", borderRadius: "16px" }}>🗺️</div>
+              <div>
+                <h2 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>Plotting Tugas Harian</h2>
+                <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>Atur area tugas staf OB & CS.</p>
+              </div>
+            </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {tugasDeepCleaning.map((tugas) => {
-              // Highlight kuning jika tugasnya hari ini
-              const isToday = tugas.tanggal === new Date().toISOString().split("T")[0];
+            <div 
+              onClick={() => router.push("/dashboard/ob/deep-cleaning")}
+              style={{ flex: 1, minWidth: "250px", background: "linear-gradient(to right, #44337a, #6b46c1)", color: "white", padding: "20px", borderRadius: "20px", cursor: "pointer", display: "flex", alignItems: "center", gap: "20px", boxShadow: "0 10px 15px -3px rgba(107, 70, 193, 0.3)", transition: "transform 0.2s" }}
+              onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-3px)"}
+              onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}
+            >
+              <div style={{ background: "rgba(255,255,255,0.2)", fontSize: "28px", padding: "12px", borderRadius: "16px" }}>📅</div>
+              <div>
+                <h2 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>Jadwal Deep Cleaning</h2>
+                <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>Manajemen tugas perawatan khusus.</p>
+              </div>
+            </div>
 
-              return (
-                <div key={tugas.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px", background: tugas.status === "Selesai" ? "#f0fff4" : (isToday ? "#fffff0" : "#faf5ff"), borderRadius: "8px", border: "1px solid #e2e8f0", borderLeft: isToday && tugas.status !== "Selesai" ? "4px solid #ecc94b" : "1px solid #e2e8f0" }}>
-                  <div>
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "5px" }}>
-                      <span style={{ fontSize: "11px", background: isToday ? "#ecc94b" : "#edf2f7", color: isToday ? "#744210" : "#4a5568", padding: "3px 8px", borderRadius: "4px", fontWeight: "bold" }}>
-                        {isToday ? "🔥 HARI INI" : `📅 ${tugas.tanggal}`}
-                      </span>
-                    </div>
-                    <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "15px" }}>{tugas.tugas}</div>
-                    <div style={{ fontSize: "13px", color: "#718096", marginTop: "4px" }}>Lokasi: 📍 {tugas.area}</div>
-                  </div>
-                  
-                  <button disabled={tugas.status === "Selesai"} style={{ padding: "8px 15px", borderRadius: "6px", fontWeight: "bold", border: "none", background: tugas.status === "Selesai" ? "#c6f6d5" : "#805ad5", color: tugas.status === "Selesai" ? "#22543d" : "white", cursor: tugas.status === "Selesai" ? "default" : "pointer" }}>
-                    {tugas.status === "Selesai" ? "✔ Selesai" : "Menunggu"}
-                  </button>
-                </div>
-              );
-            })}
           </div>
-        </div>
-      )}
+        )}
 
+        {/* 🔹 GRID MENU UTAMA OB */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px", marginBottom: "35px" }}>
+          {menuOB.map((menu, index) => (
+            <div 
+              key={index} onClick={() => router.push(menu.path)} 
+              style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", cursor: "pointer", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "15px", transition: "all 0.2s" }}
+              onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-5px)"; e.currentTarget.style.boxShadow = `0 10px 20px -5px ${menu.color}40`; e.currentTarget.style.borderColor = menu.color; }}
+              onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0,0,0,0.05)"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
+            >
+              <div style={{ background: menu.bg, color: menu.color, width: "55px", height: "55px", borderRadius: "16px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "28px" }}>
+                {menu.icon}
+              </div>
+              <div>
+                <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "17px" }}>{menu.title}</h2>
+                <p style={{ margin: "0", color: "#718096", fontSize: "13px", lineHeight: "1.5" }}>{menu.desc}</p>
+              </div>
+              <div style={{ marginTop: "auto", color: menu.color, fontSize: "12px", fontWeight: "bold" }}>Buka Modul ➔</div>
+            </div>
+          ))}
+        </div>
+
+        {/* 🗓️ JADWAL DEEP CLEANING */}
+        {tugasDeepCleaning.length > 0 && (
+          <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+              <div style={{ background: "#faf5ff", color: "#6b46c1", padding: "8px", borderRadius: "12px", fontSize: "20px" }}>📅</div>
+              <div>
+                <h2 style={{ margin: 0, color: "#2d3748", fontSize: "18px" }}>Tugas Ekstra (Deep Cleaning)</h2>
+                <p style={{ margin: "0", color: "#718096", fontSize: "13px" }}>Daftar tugas perawatan terjadwal dari Koordinator.</p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {tugasDeepCleaning.map((tugas) => {
+                const isToday = tugas.tanggal === new Date().toISOString().split("T")[0];
+
+                return (
+                  <div key={tugas.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: tugas.status === "Selesai" ? "#f0fff4" : (isToday ? "#fffff0" : "#f8fafc"), borderRadius: "16px", border: isToday && tugas.status !== "Selesai" ? "1px solid #ecc94b" : "1px solid #e2e8f0" }}>
+                    <div>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "5px" }}>
+                        <span style={{ fontSize: "10px", background: isToday ? "#ecc94b" : "#e2e8f0", color: isToday ? "#744210" : "#4a5568", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", textTransform: "uppercase" }}>
+                          {isToday ? "🔥 HARI INI" : `📅 ${tugas.tanggal}`}
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "15px" }}>{tugas.tugas}</div>
+                      <div style={{ fontSize: "12px", color: "#718096", marginTop: "4px" }}>Lokasi: 📍 {tugas.area}</div>
+                    </div>
+                    
+                    <span style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", background: tugas.status === "Selesai" ? "#c6f6d5" : "#edf2f7", color: tugas.status === "Selesai" ? "#22543d" : "#718096" }}>
+                      {tugas.status === "Selesai" ? "✔ Selesai" : "Menunggu"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
