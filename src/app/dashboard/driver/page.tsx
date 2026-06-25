@@ -17,6 +17,14 @@ interface KendaraanLog {
   waktu_catat: Timestamp | null;
 }
 
+interface OvertimeItemRequest {
+  tanggal: string;
+  jam_mulai: string;
+  jam_selesai: string;
+  area_ruangan: string;
+  alasan: string;
+}
+
 // ==========================================
 // MASTER DATA ARMADA
 // ==========================================
@@ -59,6 +67,15 @@ export default function DriverDashboardPage() {
 
   // Riwayat Terakhir
   const [riwayatKu, setRiwayatKu] = useState<KendaraanLog[]>([]);
+
+  // 💡 STATE BARU: MODAL OVERTIME
+  const todayISO = new Date().toISOString().split("T")[0];
+  const [activeModal, setActiveModal] = useState<"none" | "lembur">("none");
+  const [isLemburLoading, setIsLemburLoading] = useState(false);
+  const [periodeLembur, setPeriodeLembur] = useState("11 Juni - 10 Juli 2026");
+  const [formLemburItems, setFormLemburItems] = useState<OvertimeItemRequest[]>([
+    { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Perjalanan Dinas Luar Kota / Lembur", alasan: "Antar Jemput Manajemen" }
+  ]);
 
   // 1. Cek Login Otentikasi
   useEffect(() => {
@@ -174,7 +191,7 @@ export default function DriverDashboardPage() {
         waktu_catat: serverTimestamp(),
         kendaraan: kendaraan,
         status_kendaraan: statusMobil,
-        driver_bertugas: activeDriver, // 💡 Mengunci nama spesifik (Amal/Renaldy)
+        driver_bertugas: activeDriver, 
         tujuan_keperluan: tujuan || "-",
         kilometer_kendaraan: kilometer || "Tidak dicatat",
       });
@@ -186,7 +203,7 @@ export default function DriverDashboardPage() {
       }
 
       await addDoc(collection(db, "driver_status_logs"), {
-        nama_driver: activeDriver, // 💡 Sinkron ke identitas spesifik
+        nama_driver: activeDriver, 
         status: otomatisStatusDriver,
         waktu_ubah: serverTimestamp(),
         petugas_security: "Aplikasi Driver (Auto-Sync)"
@@ -203,6 +220,50 @@ export default function DriverDashboardPage() {
     }
   };
 
+  // 💡 HANDLERS MULTI-ROW OVERTIME
+  const handleAddLemburRow = () => {
+    setFormLemburItems([...formLemburItems, { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Perjalanan Dinas Luar Kota / Lembur", alasan: "Antar Jemput Manajemen" }]);
+  };
+
+  const handleRemoveLemburRow = (index: number) => {
+    const newItems = [...formLemburItems];
+    newItems.splice(index, 1);
+    setFormLemburItems(newItems);
+  };
+
+  const handleLemburRowChange = (index: number, field: keyof OvertimeItemRequest, value: string) => {
+    const newItems = [...formLemburItems];
+    newItems[index][field] = value;
+    setFormLemburItems(newItems);
+  };
+
+  const handleSubmitLemburKolektif = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formLemburItems.some(i => !i.tanggal || !i.jam_mulai || !i.jam_selesai || !i.area_ruangan || !i.alasan)) {
+      return alert("Mohon lengkapi seluruh kolom tanggal, jam, dan keterangan lembur yang Anda tambahkan!");
+    }
+    setIsLemburLoading(true);
+    try {
+      const dept = localStorage.getItem("pic_dept") || "Driver";
+      await addDoc(collection(db, "ga_overtime_requests"), {
+        nama_pemohon: activeDriver,
+        departemen: dept,
+        periode: periodeLembur, 
+        items: formLemburItems,  
+        status: "Menunggu Approval GA",
+        waktu_request: serverTimestamp()
+      });
+      alert(`✅ Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`);
+      setFormLemburItems([{ tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Perjalanan Dinas Luar Kota / Lembur", alasan: "Antar Jemput Manajemen" }]);
+      setActiveModal("none");
+    } catch (error) {
+      console.error(error);
+      alert("❌ Gagal mengirim rekapan klaim lembur.");
+    } finally {
+      setIsLemburLoading(false);
+    }
+  };
+
   const formatWaktu = (ts: Timestamp | null) => {
     if (!ts) return "-";
     return ts.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -216,7 +277,7 @@ export default function DriverDashboardPage() {
 
   if (!isReady) return null;
 
-  // 💡 RENDER LAYAR MINI CHECK-IN
+  // RENDER LAYAR MINI CHECK-IN
   if (showCheckIn) {
     return (
       <div style={{ backgroundColor: "#1a365d", minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "20px", fontFamily: "'Inter', sans-serif" }}>
@@ -248,7 +309,7 @@ export default function DriverDashboardPage() {
 
   // RENDER DASHBOARD DRIVER NORMAL
   return (
-    <div style={{ backgroundColor: "#f1f5f9", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "80px" }}>
+    <div style={{ backgroundColor: "#f1f5f9", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "100px" }}>
       
       {/* 🔹 TOP BAR NAVBAR */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
@@ -369,6 +430,123 @@ export default function DriverDashboardPage() {
         </div>
 
       </div>
+
+      {/* 💡 FLOATING ACTION BUTTON (FAB) UNTUK KLAIM LEMBUR */}
+      <button 
+        onClick={() => setActiveModal("lembur")}
+        style={{
+          position: "fixed",
+          bottom: "30px",
+          right: "30px",
+          background: "#d69e2e",
+          color: "white",
+          width: "60px",
+          height: "60px",
+          borderRadius: "50%",
+          border: "none",
+          boxShadow: "0 10px 25px rgba(214, 158, 46, 0.5)",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          fontSize: "28px",
+          zIndex: 90,
+          transition: "transform 0.2s"
+        }}
+        onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.1)"}
+        onMouseOut={(e) => e.currentTarget.style.transform = "scale(1)"}
+        title="Ajukan Lembur / Perjalanan Dinas"
+      >
+        ⏱️
+      </button>
+
+      {/* ========================================== */}
+      {/* 💡 MODAL PENGAJUAN LEMBUR MULTI-ROW BERDASARKAN PERIODE */}
+      {/* ========================================== */}
+      {activeModal === "lembur" && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
+          <div style={{ background: "white", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "30px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
+            
+            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "20px", right: "20px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✖</button>
+
+            <div style={{ marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px" }}>
+              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "20px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Klaim Overtime Driver
+              </h2>
+              <p style={{ margin: 0, color: "#718096", fontSize: "13px" }}>Input tanggal lembur operasional atau perjalanan dinas dalam satu siklus payroll.</p>
+            </div>
+
+            <form onSubmit={handleSubmitLemburKolektif} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              
+              {/* Pilihan Periode Cut-Off Gaji */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Nama Pengemudi</label>
+                  <input type="text" readOnly value={activeDriver} style={{...sharedInputStyle, background: "#e2e8f0"}} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
+                  <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "white", fontWeight: "bold", color: "#2d3748"}}>
+                    <option value="11 Juni - 10 Juli 2026">🗓️ 11 Juni - 10 Juli 2026 (Aktif)</option>
+                    <option value="11 Mei - 10 Juni 2026">🗓️ 11 Mei - 10 Juni 2026 (Lalu)</option>
+                    <option value="11 Juli - 10 Agustus 2026">🗓️ 11 Juli - 10 Agustus 2026 (Depan)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ fontWeight: "bold", fontSize: "13px", color: "#b7791f", marginTop: "10px" }}>📍 Daftar Tanggal Kerja Overtime:</div>
+
+              {/* Loop Form Dinamis */}
+              {formLemburItems.map((item, index) => (
+                <div key={index} style={{ border: "1px solid #cbd5e0", padding: "20px 15px 15px", borderRadius: "16px", background: "#f8fafc", position: "relative" }}>
+                  {index > 0 && (
+                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Hapus ✖</button>
+                  )}
+                  
+                  <span style={{ position: "absolute", top: "10px", left: "15px", fontSize: "11px", fontWeight: "900", color: "#d69e2e", background: "#fffff0", padding: "2px 8px", borderRadius: "4px", border: "1px solid #fefcbf" }}>DATA KLAIM #{index + 1}</span>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "15px", marginBottom: "10px" }}>
+                    <div>
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
+                      <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jenis Lembur *</label>
+                      <input type="text" required placeholder="Cth: Perjalanan Dinas Luar Kota" value={item.area_ruangan} onChange={(e) => handleLemburRowChange(index, "area_ruangan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
+                    <div>
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
+                      <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Selesai *</label>
+                      <input type="time" required value={item.jam_selesai} onChange={(e) => handleLemburRowChange(index, "jam_selesai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Detail Tugas / Kendaraan yang Digunakan *</label>
+                    <input type="text" required placeholder="Cth: Antar tamu VIP pakai B 1629 RKP" value={item.alasan} onChange={(e) => handleLemburRowChange(index, "alasan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                  </div>
+                </div>
+              ))}
+
+              <button type="button" onClick={handleAddLemburRow} style={{ background: "white", color: "#d69e2e", border: "2px dashed #feccbf", padding: "12px", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+                ➕ Tambah Tanggal Lembur Lain
+              </button>
+
+              <button type="submit" disabled={isLemburLoading} style={{ width: "100%", padding: "16px", background: isLemburLoading ? "#a0aec0" : "#d69e2e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", marginTop: "10px", cursor: isLemburLoading ? "not-allowed" : "pointer", boxShadow: isLemburLoading ? "none" : "0 4px 6px rgba(214,158,46,0.3)" }}>
+                {isLemburLoading ? "Sedang Mengirim..." : "Kirim Semua Klaim Overtime"}
+              </button>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
