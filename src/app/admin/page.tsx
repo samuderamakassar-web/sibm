@@ -39,12 +39,36 @@ export default function AdminDashboardPage() {
       icon: "🏢"
     },
     {
-      title: "QR Code Generator",
-      desc: "Cetak label QR Code untuk titik patroli & kebersihan.",
-      path: "/admin/qr-manager", 
-      color: "#805ad5", 
-      bg: "#faf5ff",
-      icon: "🖨️"
+      title: "Pengumuman Gedung",
+      desc: "Update teks berjalan (Info GA) di halaman utama Portal SIBM.",
+      path: "/admin/broadcast",
+      color: "#e53e3e",
+      bg: "#fff5f5",
+      icon: "📢"
+    },
+    {
+      title: "Gudang ATK",
+      desc: "Proses permintaan alat tulis kantor dan update status resi.",
+      path: "/admin/atk",
+      color: "#d53f8c",
+      bg: "#fdf4ff",
+      icon: "🖇️"
+    },
+    {
+      title: "Persetujuan Overtime",
+      desc: "Setujui/Tolak request lembur AC & Listrik dari tenant.",
+      path: "/admin/overtime",
+      color: "#dd6b20",
+      bg: "#fffff0",
+      icon: "⏱️"
+    },
+    {
+      title: "Helpdesk & Tiket Kerusakan",
+      desc: "Terima keluhan karyawan dan atur status perbaikan gedung.",
+      path: "/admin/helpdesk", 
+      color: "#2b6cb0", 
+      bg: "#ebf8ff",
+      icon: "🛠️"
     },
     {
       title: "Pantau Laporan OB & CS",
@@ -58,19 +82,18 @@ export default function AdminDashboardPage() {
       title: "Pantau Laporan Security",
       desc: "Monitoring log patroli, tamu, dan mobilitas kendaraan.",
       path: "/admin/monitor-security", 
-      color: "#e53e3e", 
-      bg: "#fff5f5",
+      color: "#4a5568", 
+      bg: "#f7fafc",
       icon: "🛡️"
     },
     {
-      title: "Helpdesk & Tiket Kerusakan",
-      desc: "Terima keluhan karyawan dan atur status perbaikan gedung.",
-      path: "/admin/helpdesk", 
-      color: "#2b6cb0", 
-      bg: "#ebf8ff",
-      icon: "🛠️"
+      title: "QR Code Generator",
+      desc: "Cetak label QR Code untuk titik patroli & kebersihan.",
+      path: "/admin/qr-manager", 
+      color: "#805ad5", 
+      bg: "#faf5ff",
+      icon: "🖨️"
     },
-    // Tambahkan objek ini di dalam daftar menu Admin Anda
     {
       title: "Laporan Eksekutif",
       desc: "Cetak rekapitulasi data operasional & logistik bulanan (PDF/Print).",
@@ -88,7 +111,7 @@ export default function AdminDashboardPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" alt="Logo" style={{ height: "30px", filter: "invert(1) brightness(0.2)" }} />
+          <img src="/logo-samudera.png" alt="Logo" style={{ height: "30px", filter: "invert(1) brightness(0.2)" }} />
           <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "18px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Admin Desk</span>
         </div>
         <button 
