@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../../../lib/firebase"; 
+// 💡 HAPUS firebase/storage KARENA KITA TIDAK PAKAI LAGI
+import { db } from "../../../../lib/firebase"; 
 
 interface TipePaket {
   id: string;
@@ -34,7 +34,8 @@ export default function PaketPage() {
   const [penerima, setPenerima] = useState("");
   const [kurir, setKurir] = useState("");
   const [keterangan, setKeterangan] = useState("");
-  const [fileFoto, setFileFoto] = useState<File | null>(null);
+  
+  // 💡 STATE FOTO DIGANTI MENJADI STRING BASE64
   const [previewUrl, setPreviewUrl] = useState<string>("");
 
   // State Autocomplete Karyawan
@@ -122,9 +123,8 @@ export default function PaketPage() {
     setShowDropdown(false);
   };
 
-  // 3. Kendali Kamera (Pop-up Layar Penuh)
+  // 3. Kendali Kamera & File (Diubah ke Base64)
   const startCamera = async () => {
-    setFileFoto(null);
     setPreviewUrl("");
     setIsCameraActive(true);
     try {
@@ -149,44 +149,56 @@ export default function PaketPage() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext("2d")?.drawImage(video, 0, 0);
       
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], `paket_${Date.now()}.jpg`, { type: "image/jpeg" });
-          setFileFoto(file);
-          setPreviewUrl(URL.createObjectURL(file)); 
-          stopCamera();
-        }
-      }, "image/jpeg", 0.7);
+      // Mengompres ukuran foto agar tidak memberatkan database
+      const MAX_WIDTH = 500;
+      const scaleSize = MAX_WIDTH / video.videoWidth;
+      canvas.width = MAX_WIDTH;
+      canvas.height = video.videoHeight * scaleSize;
+      
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Mengubah foto menjadi teks (Base64) dengan kompresi kualitas 0.6
+        const base64 = canvas.toDataURL("image/jpeg", 0.6);
+        setPreviewUrl(base64); 
+        stopCamera();
+      }
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setFileFoto(file);
-      setPreviewUrl(URL.createObjectURL(file)); 
-    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 500; 
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const base64 = canvas.toDataURL("image/jpeg", 0.6); 
+          setPreviewUrl(base64);
+        }
+      };
+      if (typeof ev.target?.result === 'string') img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
-  // 4. Submit & Update
+  // 4. Submit & Update (TANPA FIREBASE STORAGE)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setIsSuccess(false);
 
-    let fotoUrl = "";
-
     try {
-      if (fileFoto) {
-        const storageRef = ref(storage, `package_photos/${Date.now()}_${fileFoto.name}`);
-        await uploadBytes(storageRef, fileFoto);
-        fotoUrl = await getDownloadURL(storageRef);
-      }
-
       await addDoc(collection(db, "packages"), {
         jenis_barang: jenisBarang,
         penerima: penerima,
@@ -195,13 +207,12 @@ export default function PaketPage() {
         waktu_diterima: serverTimestamp(),
         waktu_diambil: null,
         status: "Belum Diambil",
-        foto_bukti_url: fotoUrl
+        foto_bukti_url: previewUrl // Langsung menyimpan teks foto ke database teks!
       });
 
       setPenerima("");
       setKurir("");
       setKeterangan("");
-      setFileFoto(null);
       setPreviewUrl("");
       setIsSuccess(true);
       
@@ -233,7 +244,6 @@ export default function PaketPage() {
     return timestamp.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  // Shared Style agar kolom input seragam dengan Modal Portal SIBM
   const sharedInputStyle = {
     width: "100%",
     padding: "14px 16px",
@@ -327,11 +337,11 @@ export default function PaketPage() {
                 <div style={{ position: "relative", display: "inline-block" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={previewUrl} alt="Preview" style={{ height: "150px", borderRadius: "10px", border: "1px solid #cbd5e0", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />
-                  <button type="button" onClick={() => { setFileFoto(null); setPreviewUrl(""); }} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", borderRadius: "50%", width: "25px", height: "25px", cursor: "pointer", fontWeight: "bold", fontSize:"12px", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
+                  <button type="button" onClick={() => { setPreviewUrl(""); }} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", borderRadius: "50%", width: "25px", height: "25px", cursor: "pointer", fontWeight: "bold", fontSize:"12px", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-                  <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} id="fileInput" />
+                  <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} style={{ display: "none" }} id="fileInput" />
                   <label htmlFor="fileInput" style={{ padding: "12px 18px", background: "white", border: "1px solid #cbd5e0", borderRadius: "10px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", color: "#4a5568", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                     <span>📁</span> Galeri
                   </label>

@@ -69,7 +69,7 @@ export default function PortalSIBM() {
   const [mobilStatus, setMobilStatus] = useState<KendaraanLog[]>([]);
   const [securityShift, setSecurityShift] = useState<SecurityShift>({ current: [], next: [], currentName: "Memuat...", nextName: "Memuat..." });
   
-  // 💡 STATE: Menampung status siaga personil driver secara real-time
+  // STATE: Menampung status siaga personil driver secara real-time
   const [driverStatusMap, setDriverStatusMap] = useState<Record<string, string>>({
     "Amal Setiawan": "Memuat...",
     "Muhammad Renaldy": "Memuat..."
@@ -141,10 +141,9 @@ export default function PortalSIBM() {
       setMobilStatus(Object.values(statusTerkini));
     });
 
-    // 💡 3. LIVE STREAM PERBAIKAN: Mengambil status siaga personel driver murni
+    // 3. Tarik status siaga personel driver murni
     const drvRef = collection(db, "driver_status_logs");
     const unsubDriver = onSnapshot(query(drvRef, orderBy("waktu_ubah", "desc")), (snapshot) => {
-      // Siapkan default map agar jika data kosong, tetap terbaca Standby
       const latestMap: Record<string, string> = {};
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as DriverStatusLog;
@@ -153,7 +152,6 @@ export default function PortalSIBM() {
         }
       });
       
-      // Jika Security belum pernah menekan tombol update hari ini, paksa default jadi Standby
       if (!latestMap["Amal Setiawan"]) latestMap["Amal Setiawan"] = "Standby";
       if (!latestMap["Muhammad Renaldy"]) latestMap["Muhammad Renaldy"] = "Standby";
       
@@ -166,48 +164,33 @@ export default function PortalSIBM() {
     };
     fetchEmp();
 
+    // 💡 4. PERBAIKAN LOGIKA SHIFT SECURITY (12 JAM)
     const fetchSecurity = async () => {
       try {
-        const metaSnap = await getDoc(doc(db, "security_schedules", "active_meta"));
-        if (metaSnap.exists()) {
-          const docId = metaSnap.data().current_doc_id;
-          const mSnap = await getDoc(doc(db, "security_monthly_schedules", docId));
+        const currentMonthId = todayISO.substring(0, 7); // Contoh: "2026-06"
+        const mSnap = await getDoc(doc(db, "security_monthly_schedules", currentMonthId));
+        
+        if (mSnap.exists()) {
+          const dataHari = ((mSnap.data().data_hari || {}) as Record<string, Record<string, string>>)[todayISO] || {};
+
+          const jamSekarang = new Date().getHours();
           
-          if (mSnap.exists()) {
-            const dataHari = ((mSnap.data().data_hari || {}) as Record<string, Record<string, string>>)[todayISO] || {};
+          const shift1 = Object.keys(dataHari).filter(k => dataHari[k]?.includes("Shift 1"));
+          const shift2 = Object.keys(dataHari).filter(k => dataHari[k]?.includes("Shift 2"));
 
-            const jamSekarang = new Date().getHours();
-            const dayOfWeek = new Date().getDay();
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6; 
-
-            if (isWeekend) {
-              const masuk = Object.keys(dataHari).filter(k => dataHari[k]?.toLowerCase() === "masuk");
-
-              if (jamSekarang >= 8 && jamSekarang < 20) {
-                setSecurityShift({ current: masuk, next: [], currentName: "Shift Masuk (08:00 - 20:00)", nextName: "Off Duty (20:00 - 08:00)" });
-              } else {
-                setSecurityShift({ current: [], next: masuk, currentName: "Off Duty (20:00 - 08:00)", nextName: "Shift Masuk (Besok 08:00)" });
-              }
-            } else {
-              const pagi = Object.keys(dataHari).filter(k => dataHari[k]?.toLowerCase() === "pagi");
-              const siang = Object.keys(dataHari).filter(k => dataHari[k]?.toLowerCase() === "siang");
-              const malam = Object.keys(dataHari).filter(k => dataHari[k]?.toLowerCase() === "malam");
-
-              if (jamSekarang >= 8 && jamSekarang < 14) {
-                setSecurityShift({ current: pagi, next: siang, currentName: "Shift Pagi (08:00 - 14:00)", nextName: "Shift Siang (14:00 - 22:00)" });
-              } else if (jamSekarang >= 14 && jamSekarang < 22) {
-                setSecurityShift({ current: siang, next: malam, currentName: "Shift Siang (14:00 - 22:00)", nextName: "Shift Malam (22:00 - 08:00)" });
-              } else {
-                setSecurityShift({ current: malam, next: pagi, currentName: "Shift Malam (22:00 - 08:00)", nextName: "Shift Pagi (Besok 08:00)" });
-              }
-            }
+          // Cek Jam: 08:00 - 19:59 (Shift 1), 20:00 - 07:59 (Shift 2)
+          if (jamSekarang >= 8 && jamSekarang < 20) {
+            setSecurityShift({ current: shift1, next: shift2, currentName: "Shift 1 (08:00 - 20:00)", nextName: "Shift 2 (20:00 - 08:00)" });
+          } else {
+            setSecurityShift({ current: shift2, next: shift1, currentName: "Shift 2 (20:00 - 08:00)", nextName: "Shift 1 (Besok 08:00)" });
           }
+        } else {
+          setSecurityShift({ current: [], next: [], currentName: "Belum Ada Jadwal", nextName: "Belum Ada Jadwal" });
         }
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Error Fetch Security:", e); }
     };
     fetchSecurity();
 
-    // Hentikan fungsi saat komponen dibongkar
     return () => { unsubPlot(); unsubVeh(); unsubDriver(); };
   }, [todayISO]);
 
@@ -370,7 +353,6 @@ export default function PortalSIBM() {
 
   const formatJam = (ts: Timestamp | null | undefined) => ts ? new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
 
-  // Shared Input Style untuk menyeragamkan desain dan mencegah form overflow ke samping
   const sharedInputStyle = {
     width: "100%",
     padding: "14px 16px",

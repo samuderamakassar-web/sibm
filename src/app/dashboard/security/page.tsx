@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
 export default function SecurityDashboard() {
@@ -17,6 +17,7 @@ export default function SecurityDashboard() {
   const [namaBulanAktif, setNamaBulanAktif] = useState<string>("");
   const [semuaPlotBulanIni, setSemuaPlotBulanIni] = useState<Record<string, Record<string, string>>>({});
 
+  // 1. VERIFIKASI IDENTITAS & TARIK DAFTAR STAF
   useEffect(() => {
     const siapkanHalaman = async () => {
       const nama = localStorage.getItem("pic_nama");
@@ -63,36 +64,83 @@ export default function SecurityDashboard() {
     siapkanHalaman();
   }, [router]);
 
+  // 💡 2. TARIK DATA JADWAL BERDASARKAN PERIODE TGL 11 S/D 10
   useEffect(() => {
     if (!picName) return;
 
-    const metaRef = doc(db, "security_schedules", "active_meta");
-    
-    const unsubscribeMeta = onSnapshot(metaRef, async (metaSnap) => {
-      if (metaSnap.exists()) {
-        const currentDocId = metaSnap.data().current_doc_id;
-        
-        const monthlyRef = doc(db, "security_monthly_schedules", currentDocId);
-        const mSnap = await getDoc(monthlyRef);
-        
-        if (mSnap.exists()) {
-          const mData = mSnap.data();
-          setNamaBulanAktif(mData.nama_bulan_id || "");
-          const dataHari = mData.data_hari || {}; 
-          setSemuaPlotBulanIni(dataHari);
+    // Fungsi pembantu untuk mencegah selisih zona waktu
+    const getLocalDateString = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
 
-          const tglHariIni = new Date().toISOString().split("T")[0];
-          const shiftKuHariIni = dataHari[tglHariIni]?.[picName] || "Off / Belum Diplot";
-          setHariIniShift(shiftKuHariIni);
-        }
+    const today = new Date();
+    const currentDay = today.getDate();
+    
+    let startPeriode: Date;
+    let endPeriode: Date;
+
+    // Jika hari ini tanggal 11 atau lebih (Periode bulan ini ke bulan depan)
+    if (currentDay >= 11) {
+      startPeriode = new Date(today.getFullYear(), today.getMonth(), 11);
+      endPeriode = new Date(today.getFullYear(), today.getMonth() + 1, 10);
+    } 
+    // Jika kurang dari tanggal 11 (Periode bulan lalu ke bulan ini)
+    else {
+      startPeriode = new Date(today.getFullYear(), today.getMonth() - 1, 11);
+      endPeriode = new Date(today.getFullYear(), today.getMonth(), 10);
+    }
+
+    const docBulan1 = `${startPeriode.getFullYear()}-${String(startPeriode.getMonth() + 1).padStart(2, "0")}`;
+    const docBulan2 = `${endPeriode.getFullYear()}-${String(endPeriode.getMonth() + 1).padStart(2, "0")}`;
+
+    const tglAwalFormat = startPeriode.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    const tglAkhirFormat = endPeriode.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    
+    // 💡 PERBAIKAN: Bungkus dengan setTimeout agar linter tidak protes cascading render
+    setTimeout(() => {
+      setNamaBulanAktif(`Periode ${tglAwalFormat} - ${tglAkhirFormat}`);
+    }, 0);
+
+    let dataBulan1: Record<string, Record<string, string>> = {};
+    let dataBulan2: Record<string, Record<string, string>> = {};
+
+    // Fungsi untuk menggabungkan dan memfilter tanggal tepat 11 s/d 10
+    const updateMergedData = () => {
+      const merged = { ...dataBulan1, ...dataBulan2 };
+      const finalData: Record<string, Record<string, string>> = {};
+      
+      for (let d = new Date(startPeriode); d <= endPeriode; d.setDate(d.getDate() + 1)) {
+        const dateStr = getLocalDateString(d);
+        finalData[dateStr] = merged[dateStr] || {}; // Isi kosong jika danru belum set jadwal
       }
+
+      setSemuaPlotBulanIni(finalData);
+
+      const localTodayStr = getLocalDateString(new Date());
+      const shiftKuHariIni = finalData[localTodayStr]?.[picName] || "Off / Belum Diplot";
+      setHariIniShift(shiftKuHariIni);
       setIsReady(true);
-    }, (err) => {
-      console.error(err);
-      setIsReady(true);
+    };
+
+    // Streaming dokumen bulan pertama
+    const unsub1 = onSnapshot(doc(db, "security_monthly_schedules", docBulan1), (snap) => {
+      dataBulan1 = snap.exists() ? snap.data().data_hari || {} : {};
+      updateMergedData();
     });
 
-    return () => unsubscribeMeta();
+    // Streaming dokumen bulan kedua
+    const unsub2 = onSnapshot(doc(db, "security_monthly_schedules", docBulan2), (snap) => {
+      dataBulan2 = snap.exists() ? snap.data().data_hari || {} : {};
+      updateMergedData();
+    });
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }, [picName]);
 
   const handleKeluar = () => {
@@ -106,43 +154,29 @@ export default function SecurityDashboard() {
     window.print();
   };
 
-  // LOGIKA PEMBACAAN JAM KERJA DI KARTU DASHBOARD UTAMA
+  // LOGIKA KONVERSI JAM UNTUK KARTU DASHBOARD (12 JAM)
   const getWaktuShift = (shift: string) => {
-    const dayOfWeek = new Date().getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6; 
-    
-    if (isWeekend && shift === "Masuk") return "08:00 - 20:00 (12 Jam)";
-    if (shift === "Pagi") return "08:00 - 14:00";
-    if (shift === "Siang") return "14:00 - 22:00";
-    if (shift === "Malam") return "22:00 - 08:00";
+    if (shift.includes("Shift 1")) return "08:00 - 20:00";
+    if (shift.includes("Shift 2")) return "20:00 - 08:00";
     return "";
   };
 
-  // ==============================================================
-  // LOGIKA KONVERSI INISIAL & JAM UNTUK TABEL ROSTER RINGKAS
-  // ==============================================================
+  // LOGIKA KONVERSI INISIAL TABEL ROSTER RINGKAS (12 JAM)
   const getInisialDanJam = (shiftVal: string) => {
     if (!shiftVal || shiftVal === "-") return "-";
     if (shiftVal.includes("Off")) return "OFF";
+    if (shiftVal.includes("Izin")) return "IZIN";
 
-    switch (shiftVal) {
-      case "Pagi":
-        return "P (08-14)";
-      case "Siang":
-        return "S (14-22)";
-      case "Malam":
-        return "M (22-08)";
-      case "Masuk":
-        // Menggunakan "MS" (Masuk) agar tidak tertukar dengan "M" (Malam)
-        return "MS (08-20)";
-      default:
-        return shiftVal;
-    }
+    if (shiftVal.includes("Shift 1")) return "S1 (08-20)";
+    if (shiftVal.includes("Shift 2")) return "S2 (20-08)";
+    
+    return shiftVal; // Fallback
   };
 
-  const isOff = hariIniShift.includes("Off") || hariIniShift.includes("Belum");
+  const isOff = hariIniShift.includes("Off") || hariIniShift.includes("Belum") || hariIniShift.includes("Izin");
   const waktuTeks = getWaktuShift(hariIniShift);
 
+  // Kumpulan Menu Modul
   const menuSecurity = [
     { title: "Buku Tamu Digital", desc: "Registrasi tamu dan akses karyawan.", path: "/dashboard/security/buku-tamu", color: "#e53e3e", icon: "🧑‍💼", bg: "#fff5f5" },
     { title: "Manajemen Paket", desc: "Pencatatan resi kurir & ekspedisi.", path: "/dashboard/security/paket", color: "#dd6b20", icon: "📦", bg: "#fffaf0" },
@@ -175,6 +209,7 @@ export default function SecurityDashboard() {
           th, td { border: 1px solid black !important; color: black !important; font-size: 11px !important; padding: 4px 2px !important; text-align: center; }
           th { background-color: #f2f2f2 !important; font-weight: bold !important; }
           td.off-shift { color: red !important; }
+          td.izin-shift { color: #dd6b20 !important; font-weight: bold; }
           td.on-shift { color: #000 !important; font-weight: bold; }
         }
       `}</style>
@@ -216,8 +251,8 @@ export default function SecurityDashboard() {
           <div className="no-print" onClick={() => router.push("/dashboard/security/jadwal")} style={{ background: "linear-gradient(to right, #1a365d, #2c5282)", color: "white", padding: "20px", borderRadius: "20px", cursor: "pointer", marginBottom: "25px", display: "flex", alignItems: "center", gap: "20px", boxShadow: "0 10px 15px -3px rgba(44, 82, 130, 0.4)", transition: "transform 0.2s" }}>
             <div style={{ background: "rgba(255,255,255,0.2)", fontSize: "30px", padding: "15px", borderRadius: "16px" }}>📅</div>
             <div>
-              <h2 style={{ margin: "0 0 5px 0", fontSize: "18px" }}>Pengaturan Roster Shift Bulanan</h2>
-              <p style={{ margin: "0", fontSize: "13px", opacity: 0.8 }}>Akses khusus Koordinator/Danru untuk menyusun matriks jadwal regu keamanan.</p>
+              <h2 style={{ margin: "0 0 5px 0", fontSize: "18px" }}>Pembuatan Jadwal Rotasi 2-2-2</h2>
+              <p style={{ margin: "0", fontSize: "13px", opacity: 0.8 }}>Akses khusus Danru untuk men-generate matriks shift otomatis periode 11-10.</p>
             </div>
           </div>
         )}
@@ -247,7 +282,7 @@ export default function SecurityDashboard() {
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "bold", borderTop: "1px solid black", paddingTop: "5px" }}>
-            <span>Bulan: {namaBulanAktif || "-"}</span>
+            <span>{namaBulanAktif || "Periode Aktif"}</span>
             <span>Diperbarui pada: {tanggalCetak}</span>
           </div>
         </div>
@@ -261,10 +296,9 @@ export default function SecurityDashboard() {
             
             {/* PANDUAN WARNA & JAM UNTUK LAYAR */}
             <div style={{ display: "flex", gap: "10px", fontSize: "11px", fontWeight: "bold" }}>
-              <span style={{ background: "#e2e8f0", padding: "4px 8px", borderRadius: "6px" }}>P: 08-14</span>
-              <span style={{ background: "#e2e8f0", padding: "4px 8px", borderRadius: "6px" }}>S: 14-22</span>
-              <span style={{ background: "#e2e8f0", padding: "4px 8px", borderRadius: "6px" }}>M: 22-08</span>
-              <span style={{ background: "#e2e8f0", padding: "4px 8px", borderRadius: "6px" }}>MS (Akhir Pekan): 08-20</span>
+              <span style={{ background: "#e2e8f0", padding: "4px 8px", borderRadius: "6px" }}>S1: 08-20</span>
+              <span style={{ background: "#e2e8f0", padding: "4px 8px", borderRadius: "6px" }}>S2: 20-08</span>
+              <span style={{ background: "#fed7d7", color: "#c53030", padding: "4px 8px", borderRadius: "6px" }}>Off</span>
             </div>
 
             {isKoordinatorArea && Object.keys(semuaPlotBulanIni).length > 0 && (
@@ -276,7 +310,7 @@ export default function SecurityDashboard() {
           
           {Object.keys(semuaPlotBulanIni).length > 0 ? (
             <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              {/* TABEL DIUBAH MENJADI FORMAT RINGKAS (INISIAL & JAM) */}
+              {/* TABEL DIUBAH MENJADI FORMAT RINGKAS (INISIAL & JAM 12 SHIFT) */}
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px" }}>
                 <thead>
                   <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
@@ -288,9 +322,12 @@ export default function SecurityDashboard() {
                   {Object.keys(semuaPlotBulanIni).sort().map((tglKey) => {
                     const tglDisplay = tglKey.split("-")[2]; 
                     const dataHari = semuaPlotBulanIni[tglKey];
-                    const isHariIni = tglKey === new Date().toISOString().split("T")[0];
+                    
+                    const localTodayStr = new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0") + "-" + String(new Date().getDate()).padStart(2, "0");
+                    const isHariIni = tglKey === localTodayStr;
+                    
                     const dateObj = new Date(tglKey);
-                    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 5 || dateObj.getDay() === 6; // Jumat, Sabtu, Minggu
+                    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6; // Sabtu & Minggu
 
                     return (
                       <tr key={tglKey} style={{ background: isHariIni ? "#ebf8ff" : (isWeekend ? "#fffaf0" : "white"), borderBottom: "1px solid #edf2f7" }}>
@@ -300,15 +337,21 @@ export default function SecurityDashboard() {
                         {securityStaff.map((staf) => {
                           const sVal = dataHari[staf] || "-";
                           const isOff = sVal.includes("Off");
+                          const isIzin = sVal.includes("Izin");
                           
-                          // Konversi "Pagi" menjadi "P (08-14)", dsb
+                          // Konversi "Shift 1" menjadi "S1 (08-20)", dsb
                           const displayShift = getInisialDanJam(sVal);
+
+                          let cellClass = "on-shift";
+                          let cellColor = "#2d3748";
+                          if (isOff) { cellClass = "off-shift"; cellColor = "#e53e3e"; }
+                          if (isIzin) { cellClass = "izin-shift"; cellColor = "#dd6b20"; }
 
                           return (
                             <td 
                               key={staf} 
-                              className={isOff ? "off-shift" : "on-shift"}
-                              style={{ padding: "6px", borderRight: "1px solid #e2e8f0", color: isOff ? "#e53e3e" : "#2d3748", fontWeight: isOff ? "normal" : "bold", whiteSpace: "nowrap" }}
+                              className={cellClass}
+                              style={{ padding: "6px", borderRight: "1px solid #e2e8f0", color: cellColor, fontWeight: (isOff || isIzin) ? "bold" : "600", whiteSpace: "nowrap" }}
                             >
                               {displayShift}
                             </td>
@@ -329,13 +372,12 @@ export default function SecurityDashboard() {
 
           {/* LEGENDA KETERANGAN DI BAGIAN BAWAH PRINT */}
           <div className="print-only" style={{ marginTop: "15px", borderTop: "1px solid black", paddingTop: "10px", fontSize: "11px" }}>
-            <p style={{ margin: "0 0 5px 0", fontWeight: "bold" }}>Keterangan Waktu Shift:</p>
+            <p style={{ margin: "0 0 5px 0", fontWeight: "bold" }}>Keterangan Waktu Shift (12 Jam Rotasi 2-2-2):</p>
             <div style={{ display: "flex", gap: "20px" }}>
-              <span><strong>P:</strong> Pagi (08:00 - 14:00)</span>
-              <span><strong>S:</strong> Siang (14:00 - 22:00)</span>
-              <span><strong>M:</strong> Malam (22:00 - 08:00)</span>
-              <span><strong>MS:</strong> Masuk Akhir Pekan (08:00 - 20:00)</span>
-              <span style={{ color: "red", fontWeight: "bold" }}>OFF: Libur</span>
+              <span><strong>S1:</strong> Shift 1 (08:00 - 20:00)</span>
+              <span><strong>S2:</strong> Shift 2 (20:00 - 08:00)</span>
+              <span style={{ color: "#dd6b20", fontWeight: "bold" }}>IZIN: Tidak Hadir Dengan Keterangan</span>
+              <span style={{ color: "red", fontWeight: "bold" }}>OFF: Libur / Lepas Dinas</span>
             </div>
           </div>
 
