@@ -34,6 +34,10 @@ export default function BukuTamuSecurity() {
   const [visitorLogs, setVisitorLogs] = useState<VisitorLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // State Pencarian Tabel
+  const [searchNamaTamu, setSearchNamaTamu] = useState("");
+  const [searchTanggalTamu, setSearchTanggalTamu] = useState("");
+
   // State untuk Autocomplete Karyawan
   const [karyawanDB, setKaryawanDB] = useState<EmployeeData[]>([]);
   const [searchKaryawan, setSearchKaryawan] = useState("");
@@ -119,7 +123,7 @@ export default function BukuTamuSecurity() {
   const bukaKamera = async () => {
     setIsCameraOpen(true);
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); // Diubah ke environment (Kamera belakang)
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); 
       streamRef.current = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -212,9 +216,87 @@ export default function BukuTamuSecurity() {
     return new Date(timestamp.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  const pengunjungAktif = visitorLogs.filter(log => log.status === "Di Dalam Area");
-  const riwayatPengunjung = visitorLogs.filter(log => log.status === "Selesai / Keluar");
+  const handleExportExcel = () => {
+    if (visitorLogs.length === 0) {
+      return alert("Data masih kosong, tidak ada yang bisa di-export.");
+    }
+
+    const headers = ["Kategori", "Nama Pengunjung", "Instansi/Dept", "Tujuan", "Bertemu Dengan", "Plat Kendaraan", "Status", "Waktu Masuk", "Waktu Keluar", "Petugas Gate"];
+    const rows = visitorLogs.map(log => {
+      const aman = (teks: string) => `"${teks ? teks.replace(/"/g, '""') : "-"}"`;
+      return [
+        aman(log.jenis), aman(log.nama), aman(log.instansi_dept), aman(log.tujuan),
+        aman(log.bertemu_dengan), aman(log.no_kendaraan), aman(log.status),
+        aman(formatJam(log.waktu_masuk)), aman(log.waktu_keluar ? formatJam(log.waktu_keluar) : "Belum Keluar"),
+        aman(log.pic_bertugas)
+      ].join(",");
+    });
+
+    const csvContent = "\uFEFF" + headers.join(",") + "\n" + rows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const namaFile = `Laporan_Gerbang_SIBM_${new Date().toISOString().split("T")[0]}.csv`;
+    link.setAttribute("download", namaFile);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // 💡 FUNGSI FILTER DATA TABEL
+  const getFilteredData = (status: "Di Dalam Area" | "Selesai / Keluar") => {
+    return visitorLogs.filter(log => {
+      if (log.status !== status) return false;
+      
+      const matchName = log.nama.toLowerCase().includes(searchNamaTamu.toLowerCase()) || 
+                        log.instansi_dept.toLowerCase().includes(searchNamaTamu.toLowerCase());
+      
+      let matchDate = true;
+      if (searchTanggalTamu && log.waktu_masuk) {
+        // Ambil string YYYY-MM-DD sesuai zona waktu lokal
+        const logDateObj = log.waktu_masuk.toDate();
+        const year = logDateObj.getFullYear();
+        const month = String(logDateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(logDateObj.getDate()).padStart(2, '0');
+        const logDateStr = `${year}-${month}-${day}`;
+        
+        matchDate = logDateStr === searchTanggalTamu;
+      }
+      
+      return matchName && matchDate;
+    });
+  };
+
+  const pengunjungAktif = getFilteredData("Di Dalam Area");
+  const riwayatPengunjung = getFilteredData("Selesai / Keluar");
   const filteredKaryawan = karyawanDB.filter(emp => emp.nama.toLowerCase().includes(searchKaryawan.toLowerCase()));
+
+  // 💡 KOMPONEN SEARCH BAR REUSABLE
+  const renderSearchBar = () => (
+    <div style={{ display: "flex", gap: "10px", marginBottom: "20px", flexWrap: "wrap", background: "#f8fafc", padding: "12px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+      <input 
+        type="text" 
+        placeholder="🔍 Cari nama atau instansi..." 
+        value={searchNamaTamu} 
+        onChange={(e) => setSearchNamaTamu(e.target.value)} 
+        style={{ padding: "10px 15px", borderRadius: "10px", border: "1px solid #cbd5e0", flex: 1, minWidth: "200px", outline: "none", fontSize: "14px" }} 
+      />
+      <input 
+        type="date" 
+        value={searchTanggalTamu} 
+        onChange={(e) => setSearchTanggalTamu(e.target.value)} 
+        style={{ padding: "10px 15px", borderRadius: "10px", border: "1px solid #cbd5e0", minWidth: "140px", outline: "none", fontSize: "14px", color: "#4a5568" }} 
+      />
+      <button 
+        onClick={() => { setSearchNamaTamu(""); setSearchTanggalTamu(""); }} 
+        style={{ padding: "10px 20px", borderRadius: "10px", border: "none", background: "#e2e8f0", color: "#4a5568", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
+      >
+        ✖ Reset
+      </button>
+    </div>
+  );
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
@@ -238,25 +320,36 @@ export default function BukuTamuSecurity() {
 
       <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         
-        {/* 🔹 NAVIGASI TAB MODERN */}
-        <div style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" }}>
+        {/* 🔹 NAVIGASI TAB MODERN + EXPORT EXCEL */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px", flexWrap: "wrap", gap: "10px" }}>
+          <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px", WebkitOverflowScrolling: "touch", flex: 1 }}>
+            <button 
+              onClick={() => { setActiveTab("input"); setSearchNamaTamu(""); setSearchTanggalTamu(""); }} 
+              style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "input" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "input" ? "#e53e3e" : "#718096", boxShadow: activeTab === "input" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "input" ? "3px solid #e53e3e" : "3px solid transparent" }}
+            >
+              ✏️ Input Kedatangan
+            </button>
+            <button 
+              onClick={() => { setActiveTab("aktif"); setSearchNamaTamu(""); setSearchTanggalTamu(""); }} 
+              style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "aktif" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "aktif" ? "#38a169" : "#718096", boxShadow: activeTab === "aktif" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "aktif" ? "3px solid #38a169" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
+            >
+              Di Dalam Area <span style={{ background: activeTab === "aktif" ? "#c6f6d5" : "#e2e8f0", color: activeTab === "aktif" ? "#22543d" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{visitorLogs.filter(l => l.status === "Di Dalam Area").length}</span>
+            </button>
+            <button 
+              onClick={() => { setActiveTab("riwayat"); setSearchNamaTamu(""); setSearchTanggalTamu(""); }} 
+              style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "riwayat" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "riwayat" ? "#dd6b20" : "#718096", boxShadow: activeTab === "riwayat" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "riwayat" ? "3px solid #dd6b20" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
+            >
+              Riwayat Keluar <span style={{ background: activeTab === "riwayat" ? "#feebc8" : "#e2e8f0", color: activeTab === "riwayat" ? "#9c4221" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{visitorLogs.filter(l => l.status === "Selesai / Keluar").length}</span>
+            </button>
+          </div>
+          
           <button 
-            onClick={() => setActiveTab("input")} 
-            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "input" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "input" ? "#e53e3e" : "#718096", boxShadow: activeTab === "input" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "input" ? "3px solid #e53e3e" : "3px solid transparent" }}
+            onClick={handleExportExcel}
+            style={{ background: "#2f855a", color: "white", padding: "12px 18px", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(47,133,90,0.2)", transition: "0.2s" }}
+            onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-2px)"} 
+            onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}
           >
-            ✏️ Input Kedatangan
-          </button>
-          <button 
-            onClick={() => setActiveTab("aktif")} 
-            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "aktif" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "aktif" ? "#38a169" : "#718096", boxShadow: activeTab === "aktif" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "aktif" ? "3px solid #38a169" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
-          >
-            Di Dalam Area <span style={{ background: activeTab === "aktif" ? "#c6f6d5" : "#e2e8f0", color: activeTab === "aktif" ? "#22543d" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{pengunjungAktif.length}</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab("riwayat")} 
-            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "riwayat" ? "white" : "rgba(255,255,255,0.7)", color: activeTab === "riwayat" ? "#dd6b20" : "#718096", boxShadow: activeTab === "riwayat" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "riwayat" ? "3px solid #dd6b20" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
-          >
-            Riwayat Keluar <span style={{ background: activeTab === "riwayat" ? "#feebc8" : "#e2e8f0", color: activeTab === "riwayat" ? "#9c4221" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{riwayatPengunjung.length}</span>
+            <span>📊</span> Export Excel
           </button>
         </div>
 
@@ -281,7 +374,7 @@ export default function BukuTamuSecurity() {
                 
                 {jenisPengunjung === "Karyawan" ? (
                   <div style={{ position: "relative" }}>
-                    <input type="text" value={searchKaryawan} onChange={(e) => { setSearchKaryawan(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} required placeholder="Ketik nama karyawan..." style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "2px solid #3182ce", fontSize: "15px", background: "#ebf8ff", color: "#2b6cb0", fontWeight: "bold" }} />
+                    <input type="text" value={searchKaryawan} onChange={(e) => { setSearchKaryawan(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} required placeholder="Ketik nama karyawan..." style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "2px solid #3182ce", fontSize: "15px", background: "#ebf8ff", color: "#2b6cb0", fontWeight: "bold", outline: "none" }} />
                     
                     {showDropdown && searchKaryawan && (
                       <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #e2e8f0", borderRadius: "12px", marginTop: "8px", zIndex: 50, maxHeight: "250px", overflowY: "auto", boxShadow: "0 10px 25px rgba(0,0,0,0.15)" }}>
@@ -297,7 +390,7 @@ export default function BukuTamuSecurity() {
                     )}
                   </div>
                 ) : (
-                  <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Budi Santoso" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
+                  <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Budi Santoso" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc", outline: "none" }} />
                 )}
               </div>
               
@@ -305,12 +398,12 @@ export default function BukuTamuSecurity() {
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>
                   {jenisPengunjung === "Karyawan" ? "Unit Bisnis / Departemen *" : "Asal Instansi / Perusahaan *"}
                 </label>
-                <input type="text" name="instansi_dept" value={formData.instansi_dept} onChange={handleInputChange} required readOnly={jenisPengunjung === "Karyawan"} placeholder={jenisPengunjung === "Karyawan" ? "Otomatis Terisi..." : "Contoh: PT. Maju Bersama"} style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: jenisPengunjung === "Karyawan" ? "#edf2f7" : "#f8fafc" }} />
+                <input type="text" name="instansi_dept" value={formData.instansi_dept} onChange={handleInputChange} required readOnly={jenisPengunjung === "Karyawan"} placeholder={jenisPengunjung === "Karyawan" ? "Otomatis Terisi..." : "Contoh: PT. Maju Bersama"} style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: jenisPengunjung === "Karyawan" ? "#edf2f7" : "#f8fafc", outline: "none" }} />
               </div>
 
               <div>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>No. Plat Kendaraan</label>
-                <input type="text" name="no_kendaraan" value={formData.no_kendaraan} onChange={handleInputChange} placeholder={jenisPengunjung === "Karyawan" ? "Opsional" : "Contoh: DD 1234 XY"} style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
+                <input type="text" name="no_kendaraan" value={formData.no_kendaraan} onChange={handleInputChange} placeholder={jenisPengunjung === "Karyawan" ? "Opsional" : "Contoh: DD 1234 XY"} style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc", outline: "none" }} />
               </div>
 
               {/* HANYA TAMPIL UNTUK TAMU EKSTERNAL */}
@@ -318,14 +411,14 @@ export default function BukuTamuSecurity() {
                 <>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Bertemu Dengan (Host) *</label>
-                    <input type="text" name="bertemu_dengan" value={formData.bertemu_dengan} onChange={handleInputChange} required placeholder="Contoh: Pak Anton (HRD)" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
+                    <input type="text" name="bertemu_dengan" value={formData.bertemu_dengan} onChange={handleInputChange} required placeholder="Contoh: Pak Anton (HRD)" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc", outline: "none" }} />
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", marginBottom: "8px", color: "#4a5568" }}>Tujuan Kunjungan *</label>
-                    <input type="text" name="tujuan" value={formData.tujuan} onChange={handleInputChange} required placeholder="Contoh: Meeting / Interview" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc" }} />
+                    <input type="text" name="tujuan" value={formData.tujuan} onChange={handleInputChange} required placeholder="Contoh: Meeting / Interview" style={{ width: "100%", padding: "15px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "15px", background: "#f8fafc", outline: "none" }} />
                   </div>
                   
-                  {/* AREA KAMERA (Dipercantik) */}
+                  {/* AREA KAMERA */}
                   <div style={{ gridColumn: "span 2", marginTop: "10px", background: "#f8fafc", padding: "20px", borderRadius: "16px", border: "2px dashed #cbd5e0", textAlign: "center" }}>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", marginBottom: "15px", color: "#4a5568" }}>📸 Wajib Foto Wajah / KTP Tamu</label>
                     {fotoBukti ? (
@@ -352,100 +445,167 @@ export default function BukuTamuSecurity() {
           </div>
         )}
 
-        {/* 🔹 TAB 2: PENGUNJUNG DI DALAM AREA */}
+        {/* 🔹 TAB 2: PENGUNJUNG DI DALAM AREA (TABLE VIEW) */}
         {activeTab === "aktif" && (
-          <div style={{ display: "grid", gap: "15px" }}>
-            {pengunjungAktif.length > 0 ? pengunjungAktif.map(visitor => (
-              <div key={visitor.id} style={{ background: "white", padding: "20px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", borderLeft: visitor.jenis === "Karyawan" ? "6px solid #3182ce" : "6px solid #e53e3e", borderTop: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
-                <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-                  
-                  {visitor.jenis === "Tamu Eksternal" ? (
-                    visitor.foto_bukti ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={visitor.foto_bukti} alt="Foto" style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }} />
-                    ) : (
-                      <div style={{ width: "80px", height: "80px", background: "#f8fafc", borderRadius: "12px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "30px", border: "1px solid #e2e8f0" }}>📸</div>
-                    )
-                  ) : (
-                    <div style={{ width: "80px", height: "80px", background: "#ebf8ff", color: "#3182ce", borderRadius: "12px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "30px", fontWeight: "900", border: "1px solid #bee3f8" }}>
-                      {visitor.nama.charAt(0).toUpperCase()}
-                    </div>
+          <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            
+            {renderSearchBar()}
+
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", width: "70px", textAlign: "center" }}>Foto</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Identitas</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Tujuan & Host</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Waktu Masuk</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pengunjungAktif.length > 0 ? pengunjungAktif.map(visitor => (
+                    <tr key={visitor.id} style={{ borderBottom: "1px solid #edf2f7", background: "white" }}>
+                      
+                      <td style={{ padding: "15px", textAlign: "center" }}>
+                        {visitor.jenis === "Tamu Eksternal" ? (
+                          visitor.foto_bukti ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={visitor.foto_bukti} alt="Foto" style={{ width: "45px", height: "45px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0" }} />
+                          ) : (
+                            <div style={{ width: "45px", height: "45px", background: "#f8fafc", borderRadius: "8px", display: "inline-flex", justifyContent: "center", alignItems: "center", fontSize: "20px", border: "1px solid #e2e8f0" }}>📸</div>
+                          )
+                        ) : (
+                          <div style={{ width: "45px", height: "45px", background: "#ebf8ff", color: "#3182ce", borderRadius: "8px", display: "inline-flex", justifyContent: "center", alignItems: "center", fontSize: "20px", fontWeight: "900", border: "1px solid #bee3f8" }}>
+                            {visitor.nama.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </td>
+
+                      <td style={{ padding: "15px" }}>
+                        <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          {visitor.nama}
+                          <span style={{ fontSize: "9px", background: visitor.jenis === "Karyawan" ? "#ebf8ff" : "#fff5f5", color: visitor.jenis === "Karyawan" ? "#2b6cb0" : "#c53030", padding: "2px 6px", borderRadius: "4px", textTransform: "uppercase" }}>{visitor.jenis}</span>
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#718096", marginTop: "4px" }}>🏢 {visitor.instansi_dept}</div>
+                        {visitor.no_kendaraan && <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "2px" }}>🚙 {visitor.no_kendaraan}</div>}
+                      </td>
+
+                      <td style={{ padding: "15px" }}>
+                        <div style={{ color: "#2d3748", fontSize: "13px", fontWeight: "500" }}>{visitor.tujuan}</div>
+                        {visitor.jenis === "Tamu Eksternal" && <div style={{ fontSize: "12px", color: "#718096", marginTop: "4px" }}>🤝 Bertemu: <b>{visitor.bertemu_dengan}</b></div>}
+                      </td>
+
+                      <td style={{ padding: "15px" }}>
+                        <div style={{ color: "#38a169", fontWeight: "bold", fontSize: "13px" }}>{formatJam(visitor.waktu_masuk)}</div>
+                        <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "4px" }}>Gate: {visitor.pic_bertugas.split(" ")[0]}</div>
+                      </td>
+
+                      <td style={{ padding: "15px", textAlign: "center" }}>
+                        <button 
+                          onClick={() => handleCheckOut(visitor.id, visitor.nama)} 
+                          style={{ padding: "8px 14px", background: "#e53e3e", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "11px", boxShadow: "0 2px 4px rgba(229, 62, 62, 0.2)", transition: "0.2s", whiteSpace: "nowrap" }}
+                        >
+                          Check-Out ➔
+                        </button>
+                      </td>
+
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", padding: "40px 20px", color: "#a0aec0" }}>
+                        <div style={{ fontSize: "30px", marginBottom: "10px" }}>🛡️</div>
+                        {searchNamaTamu || searchTanggalTamu ? "Pencarian tidak ditemukan." : "Area Clear. Tidak ada yang tertahan di dalam area saat ini."}
+                      </td>
+                    </tr>
                   )}
-
-                  <div>
-                    <h3 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
-                      {visitor.nama} 
-                      <span style={{ fontSize: "10px", background: visitor.jenis === "Karyawan" ? "#ebf8ff" : "#fff5f5", color: visitor.jenis === "Karyawan" ? "#2b6cb0" : "#c53030", padding: "4px 8px", borderRadius: "6px", textTransform: "uppercase" }}>
-                        {visitor.jenis}
-                      </span>
-                    </h3>
-                    
-                    {visitor.jenis === "Tamu Eksternal" ? (
-                      <>
-                        <div style={{ fontSize: "13px", color: "#4a5568", marginBottom: "3px" }}>🏢 Asal: <b>{visitor.instansi_dept}</b> | 🤝 Host: <b>{visitor.bertemu_dengan}</b></div>
-                        <div style={{ fontSize: "13px", color: "#4a5568" }}>🎯 {visitor.tujuan} | 🚙 {visitor.no_kendaraan || "Tanpa Kendaraan"}</div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: "13px", color: "#4a5568", marginBottom: "3px" }}>🏢 Unit Bisnis: <b>{visitor.instansi_dept}</b> | 🚙 Plat: {visitor.no_kendaraan || "Tidak ada"}</div>
-                    )}
-                    
-                    <div style={{ fontSize: "12px", color: "#38a169", marginTop: "10px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "5px" }}>
-                      <span style={{ display: "inline-block", width: "8px", height: "8px", background: "#38a169", borderRadius: "50%", boxShadow: "0 0 5px #38a169" }}></span>
-                      Masuk: {formatJam(visitor.waktu_masuk)}
-                    </div>
-                  </div>
-                </div>
-
-                <button onClick={() => handleCheckOut(visitor.id, visitor.nama)} style={{ padding: "12px 20px", background: "white", color: "#e53e3e", border: "2px solid #e53e3e", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }} onMouseOver={(e) => { e.currentTarget.style.background = "#e53e3e"; e.currentTarget.style.color = "white"; }} onMouseOut={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#e53e3e"; }}>
-                  Check-Out Area ➔
-                </button>
-              </div>
-            )) : (
-              <div style={{ textAlign: "center", padding: "60px 20px", background: "white", borderRadius: "20px", color: "#a0aec0", border: "1px dashed #cbd5e0" }}>
-                <div style={{ fontSize: "40px", marginBottom: "15px" }}>🛡️</div>
-                Area Clear. Tidak ada tamu atau staf yang tertahan di dalam area saat ini.
-              </div>
-            )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {/* 🔹 TAB 3: RIWAYAT KELUAR */}
+        {/* 🔹 TAB 3: RIWAYAT KELUAR (TABLE VIEW) */}
         {activeTab === "riwayat" && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-            {riwayatPengunjung.length > 0 ? riwayatPengunjung.map(visitor => (
-              <div key={visitor.id} style={{ background: "white", padding: "20px", borderRadius: "16px", borderTop: visitor.jenis === "Karyawan" ? "5px solid #3182ce" : "5px solid #e53e3e", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", display: "flex", gap: "15px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
-                
-                {visitor.foto_bukti ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={visitor.foto_bukti} alt="Foto" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
-                ) : (
-                  <div style={{ width: "60px", height: "60px", background: "#f8fafc", borderRadius: "10px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px", border: "1px solid #e2e8f0" }}>{visitor.jenis === "Karyawan" ? "🏢" : "👔"}</div>
-                )}
+          <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            
+            {renderSearchBar()}
 
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", alignItems: "flex-start" }}>
-                    <h4 style={{ margin: 0, color: "#2d3748", fontSize: "15px" }}>{visitor.nama}</h4>
-                    <span style={{ fontSize: "9px", background: "#edf2f7", color: "#4a5568", padding: "3px 6px", borderRadius: "4px", fontWeight: "bold", textTransform: "uppercase" }}>{visitor.jenis}</span>
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#718096", marginBottom: "10px" }}>{visitor.instansi_dept}</div>
-                  <div style={{ fontSize: "11px", color: "#4a5568", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px", background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #edf2f7" }}>
-                    <div><span style={{ color: "#38a169", fontWeight: "bold" }}>In:</span><br/>{formatJam(visitor.waktu_masuk)}</div>
-                    <div><span style={{ color: "#e53e3e", fontWeight: "bold" }}>Out:</span><br/>{formatJam(visitor.waktu_keluar)}</div>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 20px", background: "white", borderRadius: "20px", color: "#a0aec0", border: "1px dashed #cbd5e0" }}>
-                <div style={{ fontSize: "40px", marginBottom: "15px" }}>📜</div>
-                Belum ada riwayat pergerakan keluar yang terekam.
-              </div>
-            )}
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", width: "70px", textAlign: "center" }}>Foto</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Identitas</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Tujuan & Host</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Waktu Log</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {riwayatPengunjung.length > 0 ? riwayatPengunjung.map(visitor => (
+                    <tr key={visitor.id} style={{ borderBottom: "1px solid #edf2f7", background: "#f8fafc" }}>
+                      
+                      <td style={{ padding: "15px", textAlign: "center" }}>
+                        {visitor.jenis === "Tamu Eksternal" ? (
+                          visitor.foto_bukti ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={visitor.foto_bukti} alt="Foto" style={{ width: "45px", height: "45px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0", filter: "grayscale(50%)" }} />
+                          ) : (
+                            <div style={{ width: "45px", height: "45px", background: "white", borderRadius: "8px", display: "inline-flex", justifyContent: "center", alignItems: "center", fontSize: "20px", border: "1px solid #e2e8f0" }}>👔</div>
+                          )
+                        ) : (
+                          <div style={{ width: "45px", height: "45px", background: "white", color: "#3182ce", borderRadius: "8px", display: "inline-flex", justifyContent: "center", alignItems: "center", fontSize: "20px", border: "1px solid #bee3f8" }}>
+                            🏢
+                          </div>
+                        )}
+                      </td>
+
+                      <td style={{ padding: "15px" }}>
+                        <div style={{ fontWeight: "bold", color: "#4a5568", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          {visitor.nama}
+                          <span style={{ fontSize: "9px", background: "#edf2f7", color: "#718096", padding: "2px 6px", borderRadius: "4px", textTransform: "uppercase" }}>{visitor.jenis}</span>
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#718096", marginTop: "4px" }}>{visitor.instansi_dept}</div>
+                      </td>
+
+                      <td style={{ padding: "15px" }}>
+                        <div style={{ color: "#718096", fontSize: "13px" }}>{visitor.tujuan}</div>
+                        {visitor.jenis === "Tamu Eksternal" && <div style={{ fontSize: "12px", color: "#a0aec0", marginTop: "4px" }}>🤝 Bertemu: {visitor.bertemu_dengan}</div>}
+                      </td>
+
+                      <td style={{ padding: "15px" }}>
+                        <div style={{ fontSize: "11px", color: "#4a5568", display: "grid", gridTemplateColumns: "auto 1fr", gap: "x 8px", rowGap: "4px" }}>
+                          <span style={{ color: "#38a169", fontWeight: "bold" }}>In:</span>
+                          <span>{formatJam(visitor.waktu_masuk)}</span>
+                          <span style={{ color: "#e53e3e", fontWeight: "bold" }}>Out:</span>
+                          <span>{formatJam(visitor.waktu_keluar)}</span>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: "15px", textAlign: "center" }}>
+                        <span style={{ background: "#c6f6d5", color: "#22543d", padding: "6px 12px", borderRadius: "8px", fontSize: "10px", fontWeight: "bold", whiteSpace: "nowrap" }}>
+                          ✓ KELUAR
+                        </span>
+                      </td>
+
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", padding: "40px 20px", color: "#a0aec0" }}>
+                        <div style={{ fontSize: "30px", marginBottom: "10px" }}>📜</div>
+                        {searchNamaTamu || searchTanggalTamu ? "Pencarian tidak ditemukan." : "Belum ada riwayat pergerakan keluar yang terekam."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
       </div>
 
-      {/* 🔹 OVERLAY KAMERA (Dipercantik untuk Mobile) */}
+      {/* 🔹 OVERLAY KAMERA (Sama seperti sebelumnya) */}
       {isCameraOpen && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 100, display: "flex", flexDirection: "column", backdropFilter: "blur(10px)" }}>
           <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -457,7 +617,6 @@ export default function BukuTamuSecurity() {
             <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }}></video>
             <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
             
-            {/* Guide Box (Target area wajah/KTP) */}
             <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "80%", maxWidth: "350px", height: "50%", maxHeight: "350px", border: "3px dashed rgba(255,255,255,0.7)", borderRadius: "24px", boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)" }}></div>
           </div>
           
