@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs } from "firebase/firestore";
 // 💡 HAPUS firebase/storage KARENA KITA TIDAK PAKAI LAGI
 import { db } from "../../../../lib/firebase"; 
+import { kirimWA, template } from "../../../../lib/notify";
 
 interface TipePaket {
   id: string;
@@ -21,6 +22,8 @@ interface TipePaket {
 interface EmployeeData {
   nama: string;
   departemen: string;
+  no_wa?: string;
+  email?: string;
 }
 
 export default function PaketPage() {
@@ -99,7 +102,7 @@ export default function PaketPage() {
         const empSnap = await getDocs(empRef);
         const empList: EmployeeData[] = [];
         empSnap.forEach(doc => {
-          empList.push({ nama: doc.data().nama, departemen: doc.data().departemen });
+          empList.push({ nama: doc.data().nama, departemen: doc.data().departemen, no_wa: doc.data().no_wa, email: doc.data().email });
         });
         setKaryawanDB(empList);
       } catch (error) {
@@ -210,6 +213,9 @@ export default function PaketPage() {
         foto_bukti_url: previewUrl // Langsung menyimpan teks foto ke database teks!
       });
 
+      // Notifikasi WA ke karyawan penerima -- prioritas tertinggi, instan (best-effort, tidak memblokir alur kerja Security)
+      await kirimNotifikasiPaketDiterima(penerima, jenisBarang, kurir, keterangan);
+
       setPenerima("");
       setKurir("");
       setKeterangan("");
@@ -237,6 +243,30 @@ export default function PaketPage() {
     } catch (error) {
       console.error("Gagal update:", error);
     }
+  };
+
+  // Cari kontak (no_wa/email) karyawan berdasarkan nama penerima (cocok tanpa peduli besar/kecil huruf)
+  const cariKontakKaryawan = (nama: string): EmployeeData | undefined => {
+    const namaNormal = nama.trim().toLowerCase();
+    return karyawanDB.find(k => (k.nama || "").trim().toLowerCase() === namaNormal);
+  };
+
+  // Kirim notifikasi WA ke karyawan begitu paket dicatat masuk (prioritas tertinggi -- instan)
+  const kirimNotifikasiPaketDiterima = async (namaPenerima: string, jenis: string, kurirPengirim: string, ket: string) => {
+    const kontak = cariKontakKaryawan(namaPenerima);
+
+    if (!kontak || !kontak.no_wa) {
+      // Nama penerima tidak ketemu di Master Data Karyawan, atau belum punya no_wa.
+      // Tidak menghentikan alur kerja Security -- cukup dicatat agar bisa dicek manual.
+      console.warn(`[notify] No. WA untuk "${namaPenerima}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi paket dilewati.`);
+      return;
+    }
+
+    const keteranganGabungan = `${jenis} dari ${kurirPengirim}${ket ? ` (${ket})` : ""}`;
+    const pesan = template.paketDiterima(namaPenerima, keteranganGabungan);
+
+    const hasilWA = await kirimWA(kontak.no_wa, pesan);
+    if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA paket:", hasilWA.pesanError);
   };
 
   const formatWaktu = (timestamp: Timestamp | null) => {
@@ -358,7 +388,7 @@ export default function PaketPage() {
             </div>
 
             <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "16px", background: isLoading ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "15px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "10px", boxShadow: isLoading ? "none" : "0 10px 15px -3px rgba(229, 62, 62, 0.3)", transition: "0.2s" }}>
-              {isLoading ? "Mengunggah Data..." : "✔️ Simpan Log Paket"}
+              {isLoading ? "Menyimpan & Mengirim Notifikasi..." : "✔️ Simpan Log Paket"}
             </button>
           </form>
         </div>

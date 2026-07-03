@@ -120,10 +120,12 @@ export default function OBDashboard() {
   }, [picName, todayISO]);
 
   const handleKeluar = () => {
-    localStorage.removeItem("pic_nama");
-    localStorage.removeItem("pic_dept");
-    localStorage.removeItem("pic_role");
-    router.push("/shift-checkin");
+    if(window.confirm("Apakah Anda yakin ingin keluar/logout?")) {
+      localStorage.removeItem("pic_nama");
+      localStorage.removeItem("pic_dept");
+      localStorage.removeItem("pic_role");
+      router.push("/");
+    }
   };
 
   // 💡 MULTI-ROW OVERTIME LOGIC HANDLERS
@@ -188,22 +190,59 @@ export default function OBDashboard() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <div className="main-container" style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
       
+      {/* 💡 CSS RESPONSIVE MAGIC KHUSUS OB & CS */}
+      <style dangerouslySetInnerHTML={{__html: `
+        * { box-sizing: border-box; }
+        
+        .main-container { padding-bottom: 50px; }
+        .input-grid-mobile { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .mobile-nav { display: none; }
+
+        /* 📱 MEDIA QUERY UNTUK HP */
+        @media (max-width: 768px) {
+          .main-container { padding-bottom: 90px !important; }
+          .hide-mobile { display: none !important; }
+          
+          /* Merombak grid input form agar menyusun ke bawah di HP */
+          .input-grid-mobile { grid-template-columns: 1fr !important; gap: 10px !important; }
+          
+          /* Merombak baris Deep Cleaning */
+          .dc-row { flex-direction: column; align-items: flex-start !important; gap: 10px; }
+          
+          /* DESAIN BOTTOM NAV KHUSUS STAF LAPANGAN */
+          .mobile-nav {
+            display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-top: 1px solid #e2e8f0;
+            z-index: 90; padding: 12px 10px; justify-content: space-between; box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
+            overflow-x: auto; scroll-snap-type: x mandatory;
+          }
+          .mobile-nav::-webkit-scrollbar { display: none; }
+          .m-nav-item { 
+            display: flex; flex-direction: column; align-items: center; gap: 4px; color: #4a5568; 
+            font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; 
+            flex: 0 0 auto; min-width: 65px; scroll-snap-align: start; text-align: center;
+          }
+          .m-nav-icon { font-size: 22px; margin-bottom: 2px; }
+          .m-nav-item:active { transform: scale(0.9); }
+        }
+      `}} />
+
       {/* 🔹 TOP BAR NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50, width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" alt="Logo" style={{ height: "30px", filter: "invert(1) brightness(0.2)" }} />
           <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>OB & CS Desk</span>
         </div>
-        <button onClick={handleKeluar} style={{ background: "#edf2f7", color: "#4a5568", border: "none", padding: "8px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.background = "#e2e8f0"} onMouseOut={(e) => e.currentTarget.style.background = "#edf2f7"}>
+        <button className="hide-mobile" onClick={handleKeluar} style={{ background: "#edf2f7", color: "#4a5568", border: "none", padding: "8px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.background = "#e2e8f0"} onMouseOut={(e) => e.currentTarget.style.background = "#edf2f7"}>
           Keluar ➔
         </button>
       </div>
 
       {/* 🔹 HERO SECTION */}
-      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 80px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
+      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 80px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)", width: "100%" }}>
         <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>CLEANING CENTER</h1>
         <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Manajemen Kebersihan & Fasilitas Gedung</p>
         <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(5px)", padding: "8px 20px", borderRadius: "50px", fontSize: "13px", fontWeight: "bold", border: "1px solid rgba(255,255,255,0.3)" }}>
@@ -212,7 +251,7 @@ export default function OBDashboard() {
       </div>
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1100px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: "1100px", margin: "-40px auto 0", padding: "0 15px", position: "relative", zIndex: 10, width: "100%" }}>
         
         {/* 📢 KARTU PENGUMUMAN SHIFT */}
         <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", border: "1px solid #e2e8f0" }}>
@@ -222,7 +261,7 @@ export default function OBDashboard() {
               {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
             </h2>
           </div>
-          <div style={{ background: assignedFloors.length > 0 ? "#e6fffa" : "#fff5f5", color: assignedFloors.length > 0 ? "#234e52" : "#c53030", padding: "10px 20px", borderRadius: "12px", border: assignedFloors.length > 0 ? "1px solid #b2f5ea" : "1px solid #feb2b2", fontWeight: "900", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ background: assignedFloors.length > 0 ? "#e6fffa" : "#fff5f5", color: assignedFloors.length > 0 ? "#234e52" : "#c53030", padding: "10px 20px", borderRadius: "12px", border: assignedFloors.length > 0 ? "1px solid #b2f5ea" : "1px solid #feb2b2", fontWeight: "900", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px", width: "fit-content" }}>
             {assignedFloors.length > 0 ? `📍 AREA: ${assignedFloors.join(", ")}` : "⚠️ BELUM DIPLOT"}
           </div>
         </div>
@@ -275,7 +314,7 @@ export default function OBDashboard() {
         )}
 
         {/* 🔹 GRID MENU UTAMA OB */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px", marginBottom: "35px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "35px" }}>
           {menuOB.map((menu, index) => (
             <div 
               key={index} 
@@ -312,7 +351,7 @@ export default function OBDashboard() {
                 const isToday = tugas.tanggal === new Date().toISOString().split("T")[0];
 
                 return (
-                  <div key={tugas.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: tugas.status === "Selesai" ? "#f0fff4" : (isToday ? "#fffff0" : "#f8fafc"), borderRadius: "16px", border: isToday && tugas.status !== "Selesai" ? "1px solid #ecc94b" : "1px solid #e2e8f0" }}>
+                  <div key={tugas.id} className="dc-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: tugas.status === "Selesai" ? "#f0fff4" : (isToday ? "#fffff0" : "#f8fafc"), borderRadius: "16px", border: isToday && tugas.status !== "Selesai" ? "1px solid #ecc94b" : "1px solid #e2e8f0" }}>
                     <div>
                       <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "5px" }}>
                         <span style={{ fontSize: "10px", background: isToday ? "#ecc94b" : "#e2e8f0", color: isToday ? "#744210" : "#4a5568", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", textTransform: "uppercase" }}>
@@ -334,26 +373,54 @@ export default function OBDashboard() {
 
       </div>
 
+      {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) */}
+      <div className="mobile-nav">
+        <div className="m-nav-item" onClick={() => router.push("/")}>
+          <div className="m-nav-icon">🏠</div>
+          <span>Portal Utama</span>
+        </div>
+        <div className="m-nav-item" onClick={() => router.push("/dashboard/ob/checklist")}>
+          <div className="m-nav-icon" style={{color: "#319795"}}>✨</div>
+          <span>Checklist</span>
+        </div>
+        <div className="m-nav-item" onClick={() => router.push("/dashboard/ob/stok")}>
+          <div className="m-nav-icon" style={{color: "#dd6b20"}}>🧴</div>
+          <span>Stok Barang</span>
+        </div>
+        <div className="m-nav-item" onClick={() => setActiveModal("lembur")}>
+          <div className="m-nav-icon" style={{color: "#d69e2e"}}>⏱️</div>
+          <span>Lembur</span>
+        </div>
+        <div className="m-nav-item" onClick={() => router.push("/dashboard/ob/laporan")}>
+          <div className="m-nav-icon" style={{color: "#e53e3e"}}>🛠️</div>
+          <span>Lapor Rusak</span>
+        </div>
+        <div className="m-nav-item" onClick={handleKeluar}>
+          <div className="m-nav-icon" style={{color: "#e53e3e"}}>🚪</div>
+          <span style={{color: "#e53e3e"}}>Keluar</span>
+        </div>
+      </div>
+
       {/* ========================================== */}
       {/* 💡 MODAL PENGAJUAN LEMBUR MULTI-ROW BERDASARKAN PERIODE */}
       {/* ========================================== */}
       {activeModal === "lembur" && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
-          <div style={{ background: "white", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "30px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px" }}>
+          <div style={{ background: "white", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
             
-            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "20px", right: "20px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>✖</button>
+            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "15px", right: "15px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", zIndex: 10 }}>✖</button>
 
-            <div style={{ marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "20px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Klaim Overtime Kolektif
+            <div style={{ marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px", paddingRight: "30px" }}>
+              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "18px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Klaim Overtime
               </h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "13px" }}>Karyawan dapat memasukkan beberapa tanggal lembur sekaligus dalam satu siklus payroll.</p>
+              <p style={{ margin: 0, color: "#718096", fontSize: "12px", lineHeight: "1.4" }}>Karyawan dapat memasukkan beberapa tanggal lembur sekaligus dalam satu siklus payroll.</p>
             </div>
 
-            <form onSubmit={handleSubmitLemburKolektif} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <form onSubmit={handleSubmitLemburKolektif} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               
               {/* Pilihan Periode Cut-Off Gaji */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+              <div className="input-grid-mobile">
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Nama Pemohon</label>
                   <input type="text" readOnly value={picName} style={{...sharedInputStyle, background: "#e2e8f0"}} />
@@ -374,12 +441,12 @@ export default function OBDashboard() {
               {formLemburItems.map((item, index) => (
                 <div key={index} style={{ border: "1px solid #cbd5e0", padding: "20px 15px 15px", borderRadius: "16px", background: "#f8fafc", position: "relative" }}>
                   {index > 0 && (
-                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Hapus ✖</button>
+                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", zIndex: 5 }}>Hapus ✖</button>
                   )}
                   
                   <span style={{ position: "absolute", top: "10px", left: "15px", fontSize: "11px", fontWeight: "900", color: "#d69e2e", background: "#fffff0", padding: "2px 8px", borderRadius: "4px", border: "1px solid #fefcbf" }}>DATA KLAIM #{index + 1}</span>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "15px", marginBottom: "10px" }}>
+                  <div className="input-grid-mobile" style={{ marginTop: "15px", marginBottom: "10px" }}>
                     <div>
                       <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
                       <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
@@ -390,7 +457,7 @@ export default function OBDashboard() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
+                  <div className="input-grid-mobile" style={{ marginBottom: "10px" }}>
                     <div>
                       <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
                       <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />

@@ -4,6 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, addDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+
+interface KontakKaryawan {
+  nama: string;
+  no_wa?: string;
+  email?: string;
+}
 
 // ==========================================
 // INTERFACES
@@ -43,6 +50,8 @@ export default function AdminAtkPage() {
   const [newItemName, setNewItemName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
+  const [sedangUpdateId, setSedangUpdateId] = useState<string | null>(null);
 
   useEffect(() => {
     // 1. Verifikasi Auth
@@ -73,9 +82,16 @@ export default function AdminAtkPage() {
       setMasterAtkList(data);
     });
 
+    // 4. Tarik Master Data Karyawan (untuk lookup no_wa/email saat kirim notifikasi)
+    const unsubKontak = onSnapshot(collection(db, "employees_directory"), (snapshot) => {
+      const data = snapshot.docs.map(d => d.data() as KontakKaryawan);
+      setDaftarKontak(data);
+    });
+
     return () => {
       unsubRequest();
       unsubMaster();
+      unsubKontak();
     };
   }, [router]);
 
@@ -95,6 +111,48 @@ export default function AdminAtkPage() {
     } catch (error) {
       console.error(error);
       alert("Gagal mengupdate status.");
+      return;
+    }
+
+    // Notifikasi prioritas tinggi hanya dikirim saat barang benar-benar SIAP DIAMBIL
+    if (newStatus === "Selesai / Diambil") {
+      setSedangUpdateId(id);
+      try {
+        const req = atkRequests.find(r => r.id === id);
+        if (req) {
+          await kirimNotifikasiAtkSiap(req.nama_pemohon, req.resi);
+        }
+      } finally {
+        setSedangUpdateId(null);
+      }
+    }
+  };
+
+  // Cari kontak (no_wa/email) karyawan berdasarkan nama_pemohon (cocok tanpa peduli besar/kecil huruf)
+  const cariKontakKaryawan = (nama: string): KontakKaryawan | undefined => {
+    const namaNormal = nama.trim().toLowerCase();
+    return daftarKontak.find(k => (k.nama || "").trim().toLowerCase() === namaNormal);
+  };
+
+  // Kirim WA + Email ke pemohon saat ATK siap diambil
+  const kirimNotifikasiAtkSiap = async (namaPemohon: string, kodeResi: string) => {
+    const kontak = cariKontakKaryawan(namaPemohon);
+
+    if (!kontak || (!kontak.no_wa && !kontak.email)) {
+      console.warn(`[notify] Kontak untuk "${namaPemohon}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi ATK dilewati.`);
+      return;
+    }
+
+    const pesan = template.atkSiapDiambil(namaPemohon, kodeResi);
+
+    if (kontak.no_wa) {
+      const hasilWA = await kirimWA(kontak.no_wa, pesan);
+      if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA ATK:", hasilWA.pesanError);
+    }
+
+    if (kontak.email) {
+      const hasilEmail = await kirimEmail(kontak.email, `ATK Siap Diambil - Resi ${kodeResi}`, pesan, namaPemohon);
+      if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email ATK:", hasilEmail.pesanError);
     }
   };
 
@@ -267,9 +325,10 @@ export default function AdminAtkPage() {
                             {!isSelesai && (
                               <button 
                                 onClick={() => handleUpdateStatus(req.id, req.status)}
-                                style={{ padding: "6px 12px", background: isProses ? "#38a169" : "#3182ce", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+                                disabled={sedangUpdateId === req.id}
+                                style={{ padding: "6px 12px", background: sedangUpdateId === req.id ? "#a0aec0" : (isProses ? "#38a169" : "#3182ce"), color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: sedangUpdateId === req.id ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
                               >
-                                {isProses ? "Tandai Selesai ✓" : "Mulai Siapkan ➔"}
+                                {sedangUpdateId === req.id ? "Mengirim notifikasi..." : (isProses ? "Tandai Selesai ✓" : "Mulai Siapkan ➔")}
                               </button>
                             )}
                           </div>

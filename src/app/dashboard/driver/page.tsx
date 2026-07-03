@@ -42,17 +42,14 @@ const KENDARAAN_OPERASIONAL = [
   "B 1629 RKP - Mattias Hotma (PT Perusahaan Pelayaran Nusantara Panurjwan)"
 ];
 
-const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
-
 export default function DriverDashboardPage() {
   const router = useRouter();
   
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
   const [isReady, setIsReady] = useState<boolean>(false);
   
-  // 💡 STATE CHECK-IN (Identitas Spesifik)
+  // Identitas Spesifik dari Login Global
   const [activeDriver, setActiveDriver] = useState<string>("");
-  const [showCheckIn, setShowCheckIn] = useState<boolean>(true);
 
   // States Loading & Data
   const [isLoadingPersonel, setIsLoadingPersonel] = useState<boolean>(false);
@@ -68,7 +65,7 @@ export default function DriverDashboardPage() {
   // Riwayat Terakhir
   const [riwayatKu, setRiwayatKu] = useState<KendaraanLog[]>([]);
 
-  // 💡 STATE BARU: MODAL OVERTIME
+  // STATE MODAL OVERTIME
   const todayISO = new Date().toISOString().split("T")[0];
   const [activeModal, setActiveModal] = useState<"none" | "lembur">("none");
   const [isLemburLoading, setIsLemburLoading] = useState(false);
@@ -77,10 +74,11 @@ export default function DriverDashboardPage() {
     { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Perjalanan Dinas Luar Kota / Lembur", alasan: "Antar Jemput Manajemen" }
   ]);
 
-  // 1. Cek Login Otentikasi
+  // 1. Cek Login Otentikasi Langsung
   useEffect(() => {
     const role = localStorage.getItem("pic_role");
     const dept = localStorage.getItem("pic_dept");
+    const nama = localStorage.getItem("pic_nama");
 
     if (!role || dept !== "Driver") {
       alert("Akses Ditolak! Halaman ini khusus Tim Driver.");
@@ -88,19 +86,16 @@ export default function DriverDashboardPage() {
       return;
     }
     
-    // Cek apakah driver sudah memilih identitas di sesi ini
+    // Set Identitas langsung dari LocalStorage (Bypass Check-in)
     setTimeout(() => {
-      const savedDriver = localStorage.getItem("active_driver_name");
-      if (savedDriver) {
-        setActiveDriver(savedDriver);
-        setShowCheckIn(false);
-      }
+      setActiveDriver(nama || "Driver");
       setIsReady(true);
     }, 0);
 
     const timer = setInterval(() => {
       setWaktuSekarang(new Date().toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" }));
     }, 1000);
+    
     return () => clearInterval(timer);
   }, [router]);
 
@@ -139,22 +134,9 @@ export default function DriverDashboardPage() {
     return () => { unsubStatus(); unsubMobil(); };
   }, [activeDriver]);
 
-  // 💡 FUNGSI CHECK-IN DRIVER
-  const handlePilihIdentitas = (nama: string) => {
-    localStorage.setItem("active_driver_name", nama);
-    setActiveDriver(nama);
-    setShowCheckIn(false);
-  };
-
-  const handleLogoutPenuh = () => {
+  const handleLogout = () => {
     localStorage.clear();
     router.push("/");
-  };
-
-  const handleGantiIdentitas = () => {
-    localStorage.removeItem("active_driver_name");
-    setActiveDriver("");
-    setShowCheckIn(true);
   };
 
   // 3. Fungsi Update Status Personel Cepat (Jika keluar tanpa mobil kantor)
@@ -277,37 +259,6 @@ export default function DriverDashboardPage() {
 
   if (!isReady) return null;
 
-  // RENDER LAYAR MINI CHECK-IN
-  if (showCheckIn) {
-    return (
-      <div style={{ backgroundColor: "#1a365d", minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "20px", fontFamily: "'Inter', sans-serif" }}>
-        <div style={{ background: "white", width: "100%", maxWidth: "400px", padding: "40px 30px", borderRadius: "24px", textAlign: "center", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3)" }}>
-          <div style={{ fontSize: "50px", marginBottom: "15px" }}>🧑‍✈️</div>
-          <h2 style={{ margin: "0 0 5px 0", color: "#2d3748", fontSize: "22px", fontWeight: "900" }}>Pilih Identitas Driver</h2>
-          <p style={{ margin: "0 0 30px 0", color: "#718096", fontSize: "14px" }}>Siapa yang bertugas memegang alat ini?</p>
-          
-          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-            {DRIVER_ONLY.map(drv => (
-              <button 
-                key={drv} onClick={() => handlePilihIdentitas(drv)}
-                style={{ padding: "18px", borderRadius: "14px", border: "2px solid #e2e8f0", background: "#f8fafc", color: "#2b6cb0", fontSize: "16px", fontWeight: "bold", cursor: "pointer", transition: "0.2s", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}
-                onMouseOver={(e) => { e.currentTarget.style.background = "#ebf8ff"; e.currentTarget.style.borderColor = "#90cdf4"; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = "#f8fafc"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
-              >
-                {drv}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={handleLogoutPenuh} style={{ marginTop: "30px", background: "transparent", border: "none", color: "#e53e3e", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}>
-            ← Kembali ke Portal Utama
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // RENDER DASHBOARD DRIVER NORMAL
   return (
     <div style={{ backgroundColor: "#f1f5f9", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "100px" }}>
       
@@ -315,11 +266,8 @@ export default function DriverDashboardPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ fontWeight: "900", color: "#e53e3e", fontSize: "18px", letterSpacing: "1px" }}>SIBM <span style={{color:"#2d3748"}}>DRIVER</span></div>
         <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={handleGantiIdentitas} style={{ background: "#edf2f7", color: "#4a5568", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer" }}>
-            🔄 Ganti Akun
-          </button>
-          <button onClick={handleLogoutPenuh} style={{ background: "#fff5f5", color: "#e53e3e", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "1px solid #fed7d7", cursor: "pointer" }}>
-            Log Out
+          <button onClick={handleLogout} style={{ background: "#fff5f5", color: "#e53e3e", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "1px solid #fed7d7", cursor: "pointer" }}>
+            Keluar ➔
           </button>
         </div>
       </div>
