@@ -4,6 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+
+interface KontakKaryawan {
+  nama: string;
+  no_wa?: string;
+  email?: string;
+}
 
 interface HelpdeskTicket {
   id: string;
@@ -25,6 +32,7 @@ export default function AdminHelpdeskPage() {
   const [adminName, setAdminName] = useState("Admin GA");
   const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
   const [isReady, setIsReady] = useState(false);
+  const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
 
   // Modal State
   const [selectedTicket, setSelectedTicket] = useState<HelpdeskTicket | null>(null);
@@ -57,7 +65,16 @@ export default function AdminHelpdeskPage() {
       setIsReady(true);
     });
 
-    return () => unsubscribe();
+    // Tarik Master Data Karyawan (untuk lookup no_wa/email saat kirim notifikasi)
+    const unsubscribeKontak = onSnapshot(collection(db, "employees_directory"), (snapshot) => {
+      const data = snapshot.docs.map(d => d.data() as KontakKaryawan);
+      setDaftarKontak(data);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeKontak();
+    };
   }, [router]);
 
   const formatJam = (ts: Timestamp | null | undefined) => {
@@ -103,6 +120,8 @@ export default function AdminHelpdeskPage() {
       return alert("Untuk menutup tiket (Selesai), Anda WAJIB melampirkan Foto Hasil Perbaikan!");
     }
 
+    const statusBerubah = statusUbah !== selectedTicket.status;
+
     setIsUpdating(true);
     try {
       const ref = doc(db, "helpdesk_tickets", selectedTicket.id);
@@ -111,6 +130,11 @@ export default function AdminHelpdeskPage() {
         foto_proses: fotoHasil || null
       });
 
+      // Kirim notifikasi ke pelapor hanya jika status memang berganti (bukan sekadar simpan ulang foto)
+      if (statusBerubah) {
+        await kirimNotifikasiHelpdesk(selectedTicket.nama_pelapor, statusUbah, selectedTicket.id);
+      }
+
       alert("✅ Status tiket berhasil diperbarui!");
       setSelectedTicket(null);
     } catch (error) {
@@ -118,6 +142,35 @@ export default function AdminHelpdeskPage() {
       alert("Gagal memperbarui tiket.");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  // Cari kontak (no_wa/email) karyawan berdasarkan nama_pelapor (cocok tanpa peduli besar/kecil huruf)
+  const cariKontakKaryawan = (nama: string): KontakKaryawan | undefined => {
+    const namaNormal = nama.trim().toLowerCase();
+    return daftarKontak.find(k => (k.nama || "").trim().toLowerCase() === namaNormal);
+  };
+
+  // Kirim WA + Email ke pelapor helpdesk saat status tiket berubah
+  const kirimNotifikasiHelpdesk = async (namaPelapor: string, statusBaru: string, ticketId: string) => {
+    const kontak = cariKontakKaryawan(namaPelapor);
+
+    if (!kontak || (!kontak.no_wa && !kontak.email)) {
+      console.warn(`[notify] Kontak untuk "${namaPelapor}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi helpdesk dilewati.`);
+      return;
+    }
+
+    const kodeTiket = ticketId.slice(0, 8).toUpperCase();
+    const pesan = template.helpdeskUpdate(namaPelapor, statusBaru, kodeTiket);
+
+    if (kontak.no_wa) {
+      const hasilWA = await kirimWA(kontak.no_wa, pesan);
+      if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA helpdesk:", hasilWA.pesanError);
+    }
+
+    if (kontak.email) {
+      const hasilEmail = await kirimEmail(kontak.email, `Update Tiket Helpdesk ${kodeTiket}: ${statusBaru}`, pesan, namaPelapor);
+      if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email helpdesk:", hasilEmail.pesanError);
     }
   };
 
@@ -269,7 +322,7 @@ export default function AdminHelpdeskPage() {
                 )}
 
                 <button type="submit" disabled={isUpdating} style={{ width: "100%", padding: "16px", background: isUpdating ? "#a0aec0" : "#2d3748", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "15px", cursor: isUpdating ? "not-allowed" : "pointer", marginTop: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", transition: "0.2s" }}>
-                  {isUpdating ? "Menyimpan Perubahan..." : "💾 Simpan Pembaruan Tiket"}
+                  {isUpdating ? "Menyimpan & Mengirim Notifikasi..." : "💾 Simpan Pembaruan Tiket"}
                 </button>
               </form>
 

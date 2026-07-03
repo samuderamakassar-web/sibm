@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase"; 
+import { kirimWA, template } from "../lib/notify";
 
 // ==========================================
 // INTERFACES
@@ -14,6 +15,7 @@ interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: st
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
 interface ObStatusData { nama: string; status: string; lokasi: string[]; }
 interface Employee { id: string; nama: string; departemen: string; }
+interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
 interface MasterAtk { id: string; nama_barang: string; }
@@ -41,7 +43,7 @@ export default function PortalSIBM() {
   
   // STATE INFO PEMELIHARAAN GEDUNG
   const [maintenanceInfo, setMaintenanceInfo] = useState<string>("Memuat status operasional gedung...");
-  const [pengumumanGedung, setPengumumanGedung] = useState<string>(""); // 👈 TAMBAHKAN BARIS INI
+  const [pengumumanGedung, setPengumumanGedung] = useState<string>("");
 
   // STATE MODAL & SEARCH
   const [activeModal, setActiveModal] = useState<"none" | "login" | "tamu" | "paket" | "helpdesk" | "sbo" | "atk" | "overtime">("none");
@@ -53,6 +55,8 @@ export default function PortalSIBM() {
   const [password, setPassword] = useState("");
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [daftarAdminGA, setDaftarAdminGA] = useState<KontakAdmin[]>([]);
+  const [daftarQHSE, setDaftarQHSE] = useState<KontakAdmin[]>([]);
 
   // HELPDESK
   const [helpdeskTab, setHelpdeskTab] = useState<"LAPOR" | "LACAK">("LAPOR");
@@ -125,13 +129,10 @@ export default function PortalSIBM() {
       setOvertimeHariIni(otData);
     });
 
-    // 💡 5. Tarik Info Pemeliharaan Gedung (HANYA YANG SEDANG DIKERJAKAN)
+    // 5. Tarik Info Pemeliharaan Gedung
     const unsubMaintenance = onSnapshot(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(20)), (snapshot) => {
       const tickets = snapshot.docs.map(d => d.data() as HelpdeskTicket);
-      
-      // Filter super ketat: HANYA yang statusnya persis "Sedang Dikerjakan"
       const activeMaintenance = tickets.filter(t => t.status === "Sedang Dikerjakan").slice(0, 3);
-      
       if (activeMaintenance.length > 0) {
         const infos = activeMaintenance.map(t => `🛠️ SEDANG DIKERJAKAN: Perbaikan ${t.lokasi} (${t.deskripsi})`);
         setMaintenanceInfo(infos.join("   |   "));
@@ -141,6 +142,15 @@ export default function PortalSIBM() {
     });
 
     getDocs(collection(db, "employees_directory")).then(snap => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee))));
+
+    // Tarik kontak Admin GA & QHSE dari users_master (untuk notifikasi Tahap 3: request baru masuk & SBO baru)
+    getDocs(query(collection(db, "users_master"), where("departemen", "==", "Admin GA")))
+      .then(snap => setDaftarAdminGA(snap.docs.map(d => d.data() as KontakAdmin)))
+      .catch(err => console.error("[notify] Gagal memuat kontak Admin GA:", err));
+
+    getDocs(query(collection(db, "users_master"), where("departemen", "==", "QHSE")))
+      .then(snap => setDaftarQHSE(snap.docs.map(d => d.data() as KontakAdmin)))
+      .catch(err => console.error("[notify] Gagal memuat kontak QHSE:", err));
     getDocs(collection(db, "master_atk")).then(snap => setMasterAtkList(snap.docs.map(d => ({ id: d.id, ...d.data() } as MasterAtk))));
 
     // 6. Tarik Security Shift
@@ -168,17 +178,15 @@ export default function PortalSIBM() {
       if (docSnap.exists() && docSnap.data().is_active) {
         setPengumumanGedung(docSnap.data().teks);
       } else {
-        setPengumumanGedung(""); // Sembunyikan jika dimatikan Admin
+        setPengumumanGedung(""); 
       }
     });
 
-    // 👈 UBAH BARIS RETURN DI BAWAHNYA MENJADI SEPERTI INI (tambahkan unsubBroadcast):
     return () => { unsubPlot(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); };
   }, [todayISO]);
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
 
-  // HANDLERS AUTO-FILL (PENCARIAN NAMA)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleNameChangeGeneric = (val: string, setForm: React.Dispatch<React.SetStateAction<any>>) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,10 +235,37 @@ export default function PortalSIBM() {
     reader.readAsDataURL(file);
   };
 
-  // HANDLERS LAINNYA
   const handleAddAtkItem = () => setFormAtkItems([...formAtkItems, { nama_barang: "", jumlah: "", deskripsi: "" }]);
   const handleRemoveAtkItem = (index: number) => { const newItems = [...formAtkItems]; newItems.splice(index, 1); setFormAtkItems(newItems); };
   const handleAtkItemChange = (index: number, field: keyof AtkItemRequest, value: string) => { const newItems = [...formAtkItems]; newItems[index][field] = value; setFormAtkItems(newItems); };
+
+  // Broadcast notifikasi WA ke semua kontak Admin GA (dipakai saat ada request baru: ATK/Overtime/Helpdesk)
+  const kirimNotifikasiAdminGA = async (jenisRequest: string, namaPemohon: string, detail: string) => {
+    if (daftarAdminGA.length === 0) {
+      console.warn("[notify] Tidak ada kontak Admin GA (departemen 'Admin GA') di users_master. Notifikasi dilewati.");
+      return;
+    }
+    const pesan = template.requestBaruMasuk(jenisRequest, namaPemohon, detail);
+    for (const admin of daftarAdminGA) {
+      if (!admin.whatsapp) continue;
+      const hasil = await kirimWA(admin.whatsapp, pesan);
+      if (!hasil.sukses) console.error(`[notify] Gagal kirim WA ke Admin GA (${admin.nama}):`, hasil.pesanError);
+    }
+  };
+
+  // Broadcast notifikasi WA ke semua kontak QHSE (dipakai saat ada laporan SBO baru)
+  const kirimNotifikasiQHSE = async (namaPelapor: string, kategori: string, lokasi: string) => {
+    if (daftarQHSE.length === 0) {
+      console.warn("[notify] Tidak ada kontak QHSE (departemen 'QHSE') di users_master. Notifikasi dilewati.");
+      return;
+    }
+    const pesan = template.sboBaruMasuk(namaPelapor, kategori, lokasi);
+    for (const qhse of daftarQHSE) {
+      if (!qhse.whatsapp) continue;
+      const hasil = await kirimWA(qhse.whatsapp, pesan);
+      if (!hasil.sukses) console.error(`[notify] Gagal kirim WA ke QHSE (${qhse.nama}):`, hasil.pesanError);
+    }
+  };
 
   const handleSubmitAtk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,6 +274,10 @@ export default function PortalSIBM() {
     const newResi = generateResiCode();
     try {
       await addDoc(collection(db, "ga_atk_requests"), { resi: newResi, nama_pemohon: formAtkPemohon.nama, departemen: formAtkPemohon.dept, items: formAtkItems, status: "Menunggu Disiapkan", waktu_request: serverTimestamp() });
+      
+      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon)
+      kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, `Resi: ${newResi}, ${formAtkItems.length} item barang.`);
+
       alert(`✅ Request ATK berhasil!\n\nKODE RESI: ${newResi}\nSimpan kode ini untuk melacak barang Anda.`);
       setFormAtkPemohon({ nama: "", dept: "" }); setFormAtkItems([{ nama_barang: "", jumlah: "", deskripsi: "" }]); setSearchAtkResi(newResi); setAtkTab("LACAK"); handleCariAtk(newResi);
     } catch (error) { console.error(error); alert("Gagal mengirim request ATK."); } finally { setIsAtkLoading(false); }
@@ -260,7 +299,21 @@ export default function PortalSIBM() {
     e.preventDefault();
     setIsOvertimeLoading(true);
     try {
-      await addDoc(collection(db, "ga_overtime_requests"), { ...formOvertime, status: "Menunggu Approval GA", waktu_request: serverTimestamp() });
+      await addDoc(collection(db, "ga_overtime_requests"), { 
+        nama_pemohon: formOvertime.nama, 
+        departemen: formOvertime.dept, 
+        area_ruangan: formOvertime.area, 
+        tanggal: formOvertime.tanggal, 
+        jam_mulai: formOvertime.jam_mulai, 
+        jam_selesai: formOvertime.jam_selesai, 
+        alasan: formOvertime.alasan, 
+        status: "Menunggu Approval GA", 
+        waktu_request: serverTimestamp() 
+      });
+      
+      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon)
+      kirimNotifikasiAdminGA("Overtime Gedung", formOvertime.nama, `Tanggal: ${formOvertime.tanggal}, Area: ${formOvertime.area}, Jam: ${formOvertime.jam_mulai}-${formOvertime.jam_selesai}.`);
+
       alert("✅ Permohonan Overtime Gedung berhasil dikirim. Menunggu persetujuan Admin GA.");
       setFormOvertime({ nama: "", dept: "", area: "", tanggal: todayISO, jam_mulai: "", jam_selesai: "", alasan: "" }); setActiveModal("none");
     } catch (error) { console.error(error); alert("Gagal mengirim permohonan Overtime."); } finally { setIsOvertimeLoading(false); }
@@ -313,6 +366,10 @@ export default function PortalSIBM() {
         waktu_lapor: serverTimestamp(), 
         tanggal_closed: formSbo.status_temuan === "Close" ? todayISO : null 
       });
+      
+      // Notifikasi ke QHSE (best-effort, tidak memblokir alur pelapor)
+      kirimNotifikasiQHSE(formSbo.nama_pelapor || "Anonim / Visitor", formSbo.kategori_temuan, formSbo.lokasi);
+
       alert("✅ Laporan SBO berhasil disubmit!");
       setFormSbo({ nama_pelapor: "", tanggal_kejadian: todayISO, unit_bisnis: "", lokasi: "", detail_temuan: "", kategori_temuan: "Kondisi Tidak Aman (Unsafe Condition)", penyebab: "", action_taken: "", status_temuan: "Open", komitmen_pelaku: "", konsekuensi: "" }); 
       setFotoSbo(""); 
@@ -324,7 +381,19 @@ export default function PortalSIBM() {
     e.preventDefault();
     setIsHelpdeskLoading(true);
     try {
-      await addDoc(collection(db, "helpdesk_tickets"), { ...formHelpdesk, foto_awal: fotoAwal, status: "Menunggu", waktu_lapor: serverTimestamp() });
+      await addDoc(collection(db, "helpdesk_tickets"), { 
+        nama_pelapor: formHelpdesk.nama, 
+        departemen: formHelpdesk.dept, 
+        lokasi: formHelpdesk.lokasi, 
+        deskripsi: formHelpdesk.deskripsi, 
+        foto_awal: fotoAwal, 
+        status: "Menunggu", 
+        waktu_lapor: serverTimestamp() 
+      });
+      
+      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon)
+      kirimNotifikasiAdminGA("Tiket Helpdesk", formHelpdesk.nama, `Lokasi: ${formHelpdesk.lokasi}, Masalah: ${formHelpdesk.deskripsi}`);
+
       alert("✅ Tiket kerusakan terkirim!");
       setFormHelpdesk({ nama: "", dept: "", lokasi: "", deskripsi: "" }); setFotoAwal(""); setHelpdeskTab("LACAK"); 
     } catch (error) { console.error(error); } finally { setIsHelpdeskLoading(false); }
@@ -332,26 +401,41 @@ export default function PortalSIBM() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== "123456") return alert("❌ Password salah!");
     setIsLoginLoading(true);
     try {
       const snap = await getDocs(query(collection(db, "users_master"), where("email", "==", email.toLowerCase())));
       if (snap.empty) { alert("❌ Email tidak terdaftar."); setIsLoginLoading(false); return; }
+      
       const uData = snap.docs[0].data();
-      localStorage.setItem("pic_nama", uData.nama); localStorage.setItem("pic_dept", uData.departemen); localStorage.setItem("pic_role", uData.role);
+      
+      // Cek Password Asli dari Database
+      if (password !== uData.password) {
+        alert("❌ Password yang Anda masukkan salah!");
+        setIsLoginLoading(false);
+        return;
+      }
+
+      localStorage.setItem("pic_nama", uData.nama); 
+      localStorage.setItem("pic_dept", uData.departemen); 
+      localStorage.setItem("pic_role", uData.role);
+      
       if (uData.departemen === "Admin GA") router.push("/admin");
       else if (uData.departemen === "Management") router.push("/management");
-      else if (uData.departemen === "OB & CS" || uData.departemen === "Security") router.push("/shift-checkin");
+      else if (uData.departemen === "OB & CS") router.push("/dashboard/ob");
+      else if (uData.departemen === "Security") router.push("/dashboard/security");
       else if (uData.departemen === "Driver") router.push("/dashboard/driver");
       else if (uData.departemen === "QHSE") router.push("/dashboard/qhse");
       else alert(`Akses belum tersedia untuk ${uData.departemen}`);
-    } catch (error) { console.error(error); } finally { setIsLoginLoading(false); }
+    } catch (error) { 
+      console.error(error); 
+    } finally { 
+      setIsLoginLoading(false); 
+    }
   };
 
   const formatJam = (ts: Timestamp | null | undefined) => ts ? new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
   const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const, boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)", transition: "all 0.2s" };
 
-  // 💡 DATA UNTUK TEKS BERJALAN (TICKER)
   const getSecurityTicker = () => {
     const p = securityShift.current.length > 0 ? securityShift.current.join(", ") : "Belum diplot";
     const n = securityShift.next.length > 0 ? securityShift.next.join(", ") : "Belum diplot";
@@ -369,9 +453,9 @@ export default function PortalSIBM() {
   };
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <div className="main-container" style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
       
-      {/* 💡 CSS ANIMASI TICKER (MENGGUNAKAN 100vw AGAR BISA MENGULANG TERUS) */}
+      {/* 💡 CSS RESPONSIVE & MOBILE BOTTOM NAV */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes ticker-scroll {
           0% { transform: translateX(100vw); }
@@ -392,6 +476,40 @@ export default function PortalSIBM() {
         .ticker-content:hover { animation-play-state: paused; cursor: default; }
         .ticker-item { display: inline-flex; align-items: center; gap: 8px; margin-right: 50px; }
         .t-badge { background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+        
+        /* 📱 MEDIA QUERY UNTUK HP */
+        .mobile-nav { display: none; }
+        @media (max-width: 768px) {
+          .desktop-grid { display: none !important; }
+          .main-container { padding-bottom: 100px !important; }
+          .mobile-nav {
+            display: flex;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            border-top: 1px solid #e2e8f0;
+            z-index: 90;
+            padding: 12px 15px;
+            gap: 15px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
+          }
+          .mobile-nav::-webkit-scrollbar { display: none; }
+          .m-nav-item {
+            flex: 0 0 calc(100% / 4.8);
+            scroll-snap-align: start;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            color: #4a5568; font-size: 10px; font-weight: 800; text-align: center; cursor: pointer;
+          }
+          .m-nav-icon {
+            width: 48px; height: 48px; border-radius: 16px;
+            display: flex; justify-content: center; align-items: center; font-size: 22px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.2s;
+          }
+          .m-nav-item:active .m-nav-icon { transform: scale(0.9); }
+        }
       `}} />
 
       <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px 20px", background: "white", borderBottom: "1px solid #e2e8f0" }}>
@@ -408,15 +526,13 @@ export default function PortalSIBM() {
         <div style={{ display: "inline-block", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(5px)", padding: "8px 20px", borderRadius: "50px", fontSize: "13px", fontWeight: "bold", border: "1px solid rgba(255,255,255,0.3)" }}>📅 {formatTgl}</div>
       </div>
 
-      {/* 💡 BAGIAN TICKER YANG SUDAH DIPERBAIKI (TIDAK ADA LAGI DUMMY AC) */}
       <div className="ticker-wrap">
         <div className="ticker-label">LIVE INFO</div>
         <div className="ticker-content">
-          {/* 💡 Jika ada pengumuman, tampilkan di urutan pertama */}
           {pengumumanGedung && (
             <span className="ticker-item"><span className="t-badge" style={{color:"#fff", background:"rgba(229,62,62,0.9)"}}>📢 INFO GA</span> {pengumumanGedung}</span>
           )}
-          {/* <span className="ticker-item"><span className="t-badge" style={{color:"#fefcbf"}}>🛠️ MAINTENANCE</span> {maintenanceInfo}</span> */}
+          <span className="ticker-item"><span className="t-badge" style={{color:"#fefcbf"}}>🛠️ MAINTENANCE</span> {maintenanceInfo || "✅ Normal"}</span>
           <span className="ticker-item"><span className="t-badge" style={{color:"#bee3f8"}}>🛡️ SECURITY</span> {getSecurityTicker()}</span>
           <span className="ticker-item"><span className="t-badge" style={{color:"#fed7e2"}}>🧹 OB PLOT AREA</span> {getObTicker()}</span>
           <span className="ticker-item"><span className="t-badge" style={{color:"#c6f6d5"}}>🧑‍✈️ DRIVER</span> {getDriverTicker()}</span>
@@ -425,8 +541,8 @@ export default function PortalSIBM() {
 
       <div style={{ maxWidth: "1100px", margin: "40px auto 40px", padding: "0 20px", position: "relative", zIndex: 10 }}>
         
-        {/* GRID MENU OPERASIONAL */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px" }}>
+        {/* 💻 GRID MENU OPERASIONAL (HANYA MUNCUL DI DESKTOP/LAPTOP) */}
+        <div className="desktop-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px" }}>
           <div onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ background: "white", padding: "20px", borderRadius: "20px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.08)", cursor: "pointer", border: "1px solid #e2e8f0", transition: "0.2s" }}>
             <div style={{ background: "#fff5f5", color: "#e53e3e", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>🧑‍💼</div>
             <div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "16px" }}>Lacak Tamu</h2><p style={{ margin: "0", color: "#718096", fontSize: "12px" }}>Cek pengunjung gedung.</p></div>
@@ -453,7 +569,7 @@ export default function PortalSIBM() {
           </div>
         </div>
 
-        {/* 2 DEDICATED CARDS UTAMA */}
+        {/* 2 DEDICATED CARDS UTAMA (TETAP MUNCUL DI HP) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "25px", marginTop: "35px" }}>
           
           <div style={{ background: "white", borderRadius: "20px", padding: "25px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
@@ -507,6 +623,34 @@ export default function PortalSIBM() {
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* 📱 BOTTOM NAVIGATION (HANYA MUNCUL DI HP) */}
+      <div className="mobile-nav">
+        <div className="m-nav-item" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }}>
+          <div className="m-nav-icon" style={{ background: "#fff5f5", color: "#e53e3e" }}>🧑‍💼</div>
+          <span>Lacak Tamu</span>
+        </div>
+        <div className="m-nav-item" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }}>
+          <div className="m-nav-icon" style={{ background: "#fffaf0", color: "#dd6b20" }}>📦</div>
+          <span>Resi Paket</span>
+        </div>
+        <div className="m-nav-item" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
+          <div className="m-nav-icon" style={{ background: "#fdf4ff", color: "#d53f8c" }}>🖇️</div>
+          <span>Request ATK</span>
+        </div>
+        <div className="m-nav-item" onClick={() => setActiveModal("overtime")}>
+          <div className="m-nav-icon" style={{ background: "#fffff0", color: "#d69e2e" }}>⏱️</div>
+          <span>Lembur AC</span>
+        </div>
+        <div className="m-nav-item" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
+          <div className="m-nav-icon" style={{ background: "#ebf8ff", color: "#3182ce" }}>🛠️</div>
+          <span>Kerusakan</span>
+        </div>
+        <div className="m-nav-item" onClick={() => setActiveModal("sbo")}>
+          <div className="m-nav-icon" style={{ background: "#f0fff4", color: "#2f855a", border: "1px solid #9ae6b4" }}>🦺</div>
+          <span>Bahaya SBO</span>
         </div>
       </div>
 

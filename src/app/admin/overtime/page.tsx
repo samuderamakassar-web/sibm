@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { kirimWA, kirimEmail, template } from "../../../lib/notify";
 
 // ==========================================
 // INTERFACES (GABUNGAN GEDUNG & TIM)
@@ -35,6 +36,12 @@ interface OvertimeRequest {
   alasan?: string;
 }
 
+interface KontakKaryawan {
+  nama: string;
+  no_wa?: string;
+  email?: string;
+}
+
 export default function AdminOvertimePage() {
   const router = useRouter();
   const [adminName, setAdminName] = useState<string>("");
@@ -45,6 +52,8 @@ export default function AdminOvertimePage() {
 
   // States Data Database
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
+  const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
+  const [sedangKirimNotif, setSedangKirimNotif] = useState<string | null>(null); // id request yang sedang dikirimi notif
 
   // States Filter Universal
   const [filterStatus, setFilterStatus] = useState<string>("SEMUA");
@@ -75,18 +84,24 @@ export default function AdminOvertimePage() {
       setOvertimeRequests(data);
     });
 
-    return () => unsubscribe();
+    // 3. Tarik Master Data Karyawan (untuk lookup no_wa/email saat kirim notifikasi)
+    const unsubscribeKontak = onSnapshot(collection(db, "employees_directory"), (snapshot) => {
+      const data = snapshot.docs.map(d => d.data() as KontakKaryawan);
+      setDaftarKontak(data);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeKontak();
+    };
   }, [router]);
 
   // ==========================================
   // PEMISAHAN DATA (GEDUNG vs TIM)
   // ==========================================
-  // Lembur Gedung: Tidak memiliki field 'periode' atau 'items'
   const dataGedung = overtimeRequests.filter(req => !req.periode && !req.items);
-  // Lembur Tim: Memiliki field 'periode' dan array 'items'
   const dataTim = overtimeRequests.filter(req => req.periode && req.items);
 
-  // Mengambil daftar periode unik untuk dropdown filter
   const daftarPeriodeUnik = Array.from(new Set(dataTim.map(req => req.periode).filter(Boolean))) as string[];
 
   // ==========================================
@@ -100,6 +115,12 @@ export default function AdminOvertimePage() {
 
     if (!window.confirm(pesanKonfirmasi)) return;
 
+    // Alasan penolakan opsional, ikut dikirim di pesan notifikasi
+    let alasanTolak: string | undefined;
+    if (keputusan === "Rejected") {
+      alasanTolak = window.prompt("Alasan penolakan (opsional, boleh dikosongkan):") || undefined;
+    }
+
     try {
       await updateDoc(doc(db, "ga_overtime_requests", id), {
         status: keputusan
@@ -107,6 +128,52 @@ export default function AdminOvertimePage() {
     } catch (error) {
       console.error(error);
       alert("Gagal memperbarui status permohonan lembur.");
+      return; // Jangan lanjut kirim notifikasi jika update status saja sudah gagal
+    }
+
+    // Update status berhasil -> lanjut kirim notifikasi WA/Email ke pemohon (best-effort, tidak memblokir UI)
+    setSedangKirimNotif(id);
+    try {
+      const req = overtimeRequests.find(r => r.id === id);
+      const tanggalLembur = req?.tanggal || req?.items?.[0]?.tanggal || "-";
+      const tanggalFormat = tanggalLembur !== "-" ? new Date(tanggalLembur).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
+
+      await kirimNotifikasiOvertime(namaAman, keputusan, tanggalFormat, alasanTolak);
+    } finally {
+      setSedangKirimNotif(null);
+    }
+  };
+
+  // Cari kontak (no_wa/email) karyawan berdasarkan nama_pemohon (cocok tanpa peduli besar/kecil huruf)
+  const cariKontakKaryawan = (nama: string): KontakKaryawan | undefined => {
+    const namaNormal = nama.trim().toLowerCase();
+    return daftarKontak.find(k => (k.nama || "").trim().toLowerCase() === namaNormal);
+  };
+
+  // Kirim WA + Email ke pemohon overtime sesuai hasil keputusan
+  const kirimNotifikasiOvertime = async (nama: string, keputusan: "Approved" | "Rejected", tanggal: string, alasanTolak?: string) => {
+    const kontak = cariKontakKaryawan(nama);
+
+    if (!kontak || (!kontak.no_wa && !kontak.email)) {
+      // Nama pemohon tidak ketemu di Master Data Karyawan, atau belum punya no_wa/email.
+      // Tidak menghentikan alur approval -- cukup dicatat agar Admin GA tahu harus hubungi manual.
+      console.warn(`[notify] Kontak untuk "${nama}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi dilewati.`);
+      return;
+    }
+
+    const pesan = keputusan === "Approved"
+      ? template.overtimeDisetujui(nama, tanggal)
+      : template.overtimeDitolak(nama, tanggal, alasanTolak);
+
+    if (kontak.no_wa) {
+      const hasilWA = await kirimWA(kontak.no_wa, pesan);
+      if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA overtime:", hasilWA.pesanError);
+    }
+
+    if (kontak.email) {
+      const subjek = `Update Overtime Gedung: ${keputusan === "Approved" ? "Disetujui" : "Ditolak"}`;
+      const hasilEmail = await kirimEmail(kontak.email, subjek, pesan, nama);
+      if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email overtime:", hasilEmail.pesanError);
     }
   };
 
@@ -138,7 +205,6 @@ export default function AdminOvertimePage() {
 
     const aman = (text: string | undefined) => `"${(text || "-").replace(/"/g, '""')}"`;
 
-    // Memecah array items menjadi baris-baris di Excel
     filtered.forEach(req => {
       const id = aman(req.id);
       const periode = aman(req.periode);
@@ -186,14 +252,12 @@ export default function AdminOvertimePage() {
     const safeDept = (req.departemen || "").toLowerCase();
     const queryStr = searchQuery.toLowerCase();
     
-    // Pencarian Text
     let matchSearch = safeNama.includes(queryStr) || safeDept.includes(queryStr);
     if (!isTim) {
       const safeArea = (req.area_ruangan || "").toLowerCase();
       matchSearch = matchSearch || safeArea.includes(queryStr);
     }
 
-    // Filter Periode (Hanya untuk Tim)
     let matchPeriode = true;
     if (isTim && filterPeriode !== "SEMUA") {
       matchPeriode = req.periode === filterPeriode;
@@ -209,27 +273,66 @@ export default function AdminOvertimePage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
       
+      {/* 💡 CSS RESPONSIVE & ANTI-OVERFLOW MAGIC */}
+      <style dangerouslySetInnerHTML={{__html: `
+        * { box-sizing: border-box; }
+        
+        .overtime-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
+        .overtime-table th { padding: 15px; font-weight: bold; }
+        .overtime-table td { padding: 15px; vertical-align: top; border-bottom: 1px solid #edf2f7; transition: background 0.2s; word-wrap: break-word; }
+        .overtime-table tbody tr:hover td { filter: brightness(0.98); }
+        
+        .filter-wrapper { display: flex; justify-content: space-between; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+        .filter-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        /* 📱 MEDIA QUERY UNTUK HP */
+        @media (max-width: 768px) {
+          .hide-mobile { display: none !important; }
+          .filter-wrapper { flex-direction: column; align-items: stretch !important; }
+          .filter-controls { flex-direction: column; width: 100%; }
+          .filter-controls input, .filter-controls select, .filter-wrapper button { width: 100% !important; max-width: 100% !important; }
+          
+          /* Transformasi Tabel Menjadi Kartu */
+          .overtime-table, .overtime-table tbody { display: block; width: 100%; }
+          .overtime-table thead { display: none; }
+          .overtime-table tr { 
+            display: block; width: 100%; margin-bottom: 15px; 
+            border: 1px solid #e2e8f0; border-radius: 12px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden;
+          }
+          .overtime-table td { 
+            display: block; width: 100%; padding: 15px !important; 
+            border-bottom: 1px dashed #edf2f7 !important; 
+          }
+          .overtime-table td:last-child { border-bottom: none !important; }
+          
+          /* Tombol Approve/Reject Berjejer Kiri-Kanan di HP */
+          .action-btns { display: flex; flex-direction: row !important; width: 100%; gap: 10px; margin-top: 10px; }
+          .action-btns button { flex: 1; padding: 12px !important; font-size: 13px !important; }
+        }
+      `}} />
+
       {/* 🔹 TOP BAR NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50, width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Admin Desk</span>
+          <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>⬅️</button>
+          <span className="hide-mobile" style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Control Panel</span>
         </div>
         <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          👑 {adminName}
+          👑 <span className="hide-mobile">Admin:</span> {adminName}
         </div>
       </div>
 
       {/* 🔹 HERO SECTION */}
-      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
+      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)", width: "100%" }}>
         <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PERSETUJUAN OVERTIME</h1>
         <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Validasi kontrol lembur utilitas gedung tenant dan rekap lemburan tim operasional SIBM.</p>
       </div>
 
       {/* 🔹 MAIN CONTENT */}
-      <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 15px", position: "relative", zIndex: 10, width: "100%" }}>
         
         {/* NAVIGASI TAB */}
         <div style={{ display: "flex", gap: "10px", marginBottom: "20px", overflowX: "auto", paddingBottom: "5px" }}>
@@ -249,11 +352,11 @@ export default function AdminOvertimePage() {
           </button>
         </div>
 
-        <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+        <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", width: "100%" }}>
           
           {/* BAR FILTER KONTROL */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <div className="filter-wrapper">
+            <div className="filter-controls">
               <input 
                 type="text" 
                 placeholder={activeTab === "GEDUNG" ? "🔍 Cari Pemohon / Tenant / Ruangan..." : "🔍 Cari Nama Staf / Jabatan..."}
@@ -287,20 +390,20 @@ export default function AdminOvertimePage() {
 
             <button 
               onClick={activeTab === "GEDUNG" ? handleExportGedung : handleExportTim} 
-              style={{ background: "#2f855a", color: "white", padding: "12px 18px", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(47,133,90,0.2)" }}
+              style={{ background: "#2f855a", color: "white", padding: "12px 18px", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(47,133,90,0.2)" }}
             >
-              <span>📊</span> {activeTab === "GEDUNG" ? "Export Laporan Gedung" : "Export Rekap Lembur Tim"}
+              <span style={{margin: "0 auto", display: "flex", gap: "8px"}}>📊 {activeTab === "GEDUNG" ? "Export Laporan Gedung" : "Export Rekap Lembur Tim"}</span>
             </button>
           </div>
 
           {/* TABEL DATA OVERTIME */}
-          <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+          <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0", width: "100%" }}>
+            <table className="overtime-table">
               <thead style={{ background: activeTab === "GEDUNG" ? "#fffff0" : "#ebf8ff", color: activeTab === "GEDUNG" ? "#b7791f" : "#2b6cb0" }}>
                 <tr>
-                  <th style={{ padding: "15px", borderBottom: activeTab === "GEDUNG" ? "2px solid #fefcbf" : "2px solid #bee3f8" }}>Info Pemohon</th>
-                  <th style={{ padding: "15px", borderBottom: activeTab === "GEDUNG" ? "2px solid #fefcbf" : "2px solid #bee3f8", minWidth: "300px" }}>{activeTab === "GEDUNG" ? "Area & Waktu Pemakaian" : "Daftar Klaim Tanggal & Pekerjaan"}</th>
-                  <th style={{ padding: "15px", borderBottom: activeTab === "GEDUNG" ? "2px solid #fefcbf" : "2px solid #bee3f8", textAlign: "center", width: "180px" }}>Status Keputusan</th>
+                  <th style={{ width: "30%", borderBottom: activeTab === "GEDUNG" ? "2px solid #fefcbf" : "2px solid #bee3f8" }}>Info Pemohon</th>
+                  <th style={{ width: "45%", borderBottom: activeTab === "GEDUNG" ? "2px solid #fefcbf" : "2px solid #bee3f8" }}>{activeTab === "GEDUNG" ? "Area & Waktu Pemakaian" : "Daftar Klaim Tanggal & Pekerjaan"}</th>
+                  <th style={{ width: "25%", textAlign: "center", borderBottom: activeTab === "GEDUNG" ? "2px solid #fefcbf" : "2px solid #bee3f8" }}>Status Keputusan</th>
                 </tr>
               </thead>
               <tbody>
@@ -311,10 +414,10 @@ export default function AdminOvertimePage() {
                   const isPending = !isApproved && !isRejected;
 
                   return (
-                    <tr key={req.id} style={{ borderBottom: "1px solid #edf2f7", background: isPending ? "white" : "#f8fafc" }}>
+                    <tr key={req.id} style={{ background: isPending ? "white" : "#f8fafc" }}>
                       
                       {/* KOLOM PEMOHON */}
-                      <td style={{ padding: "15px", verticalAlign: "top" }}>
+                      <td>
                         <div style={{ fontWeight: "900", color: "#1a202c", fontSize: "15px" }}>{req.nama_pemohon || "-"}</div>
                         <div style={{ fontSize: "11px", color: activeTab === "GEDUNG" ? "#dd6b20" : "#3182ce", marginTop: "4px", background: activeTab === "GEDUNG" ? "#fffff0" : "#ebf8ff", padding: "4px 8px", borderRadius: "6px", display: "inline-block", fontWeight: "bold", border: `1px solid ${activeTab === "GEDUNG" ? "#fefcbf" : "#bee3f8"}` }}>
                           🏢 {req.departemen || "-"}
@@ -330,7 +433,7 @@ export default function AdminOvertimePage() {
                       </td>
 
                       {/* KOLOM DETAIL LEMBUR */}
-                      <td style={{ padding: "15px", verticalAlign: "top" }}>
+                      <td>
                         {/* Jika Data Kolektif (Tim) */}
                         {activeTab === "TIM" && req.items && req.items.length > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -365,25 +468,27 @@ export default function AdminOvertimePage() {
                       </td>
 
                       {/* KOLOM STATUS & AKSI */}
-                      <td style={{ padding: "15px", textAlign: "center", verticalAlign: "top" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center", marginTop: "10px" }}>
+                      <td style={{ textAlign: "center" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
                           <span style={{ fontSize: "11px", padding: "6px 12px", borderRadius: "8px", fontWeight: "900", background: isApproved ? "#c6f6d5" : isRejected ? "#fed7d7" : "#feebc8", color: isApproved ? "#22543d" : isRejected ? "#9b2c2c" : "#9c4221", whiteSpace: "nowrap", border: `1px solid ${isApproved ? "#9ae6b4" : isRejected ? "#feb2b2" : "#fbd38d"}` }}>
                             {isPending ? "MENUNGGU APPROVAL" : safeStatus.toUpperCase()}
                           </span>
                           
                           {isPending && (
-                            <div style={{ display: "flex", gap: "8px", marginTop: "5px" }}>
-                              <button 
-                                onClick={() => handleProcessDecision(req.id, req.nama_pemohon || "", "Rejected")}
-                                style={{ padding: "8px 12px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", transition: "0.2s" }}
-                              >
-                                Tolak ✖
-                              </button>
+                            <div className="action-btns" style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%", marginTop: "5px" }}>
                               <button 
                                 onClick={() => handleProcessDecision(req.id, req.nama_pemohon || "", "Approved")}
-                                style={{ padding: "8px 16px", background: "#38a169", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+                                disabled={sedangKirimNotif === req.id}
+                                style={{ padding: "8px 16px", background: sedangKirimNotif === req.id ? "#a0aec0" : "#38a169", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: sedangKirimNotif === req.id ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
                               >
-                                Setujui ✓
+                                {sedangKirimNotif === req.id ? "Mengirim notifikasi..." : "Setujui ✓"}
+                              </button>
+                              <button 
+                                onClick={() => handleProcessDecision(req.id, req.nama_pemohon || "", "Rejected")}
+                                disabled={sedangKirimNotif === req.id}
+                                style={{ padding: "8px 12px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: sedangKirimNotif === req.id ? "not-allowed" : "pointer", transition: "0.2s" }}
+                              >
+                                Tolak ✖
                               </button>
                             </div>
                           )}
