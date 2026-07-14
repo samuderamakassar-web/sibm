@@ -6,11 +6,6 @@
       "**/.*",
       "**/node_modules/**"
     ],
-    "rewrites": [
-      {
-        "source": "**",
-        "cleanUrls": true
-      }
-    ]
+    "cleanUrls": true
   }
 }
