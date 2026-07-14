@@ -23,20 +23,79 @@ Sejak laporan awal, implementasi **notifikasi Email & WhatsApp** (rekomendasi §
 | Modul helper notifikasi terpusat `src/lib/notify.ts` (`kirimWA()` via Fonnte, `kirimEmail()` via EmailJS, kumpulan `template.*` pesan) | ✅ Selesai | `src/lib/notify.ts` |
 | Registrasi akun **Fonnte** & **EmailJS** + konfigurasi token/key | ✅ Selesai (dikerjakan user) | `.env.local` (di sisi project, tidak di-commit) |
 
-### 🔄 Tahap 2 — Notifikasi Prioritas Tinggi (SEDANG BERJALAN — 4 dari 5 selesai)
+### ✅ Tahap 2 — Notifikasi Prioritas Tinggi (SELESAI — 4 dari 5 item, 1 item sengaja dilewati)
 | No | Event | Status | File Terdampak | Catatan |
 |---|---|---|---|---|
 | 4 | **Overtime disetujui/ditolak** → WA + Email ke pemohon | ✅ Selesai | `src/app/admin/overtime/page.tsx` | Lookup kontak berdasarkan `nama_pemohon` vs Master Data Karyawan (cocok nama, case-insensitive). Alasan penolakan opsional via prompt, ikut masuk ke pesan. |
 | 3 | **Tiket Helpdesk berubah status** → WA + Email ke pelapor | ✅ Selesai | `src/app/admin/helpdesk/page.tsx` | Notifikasi hanya terkirim kalau status **benar-benar berubah** (bukan re-save foto tanpa ganti status). |
 | 4 | **ATK siap diambil** → WA + Email ke pemohon | ✅ Selesai | `src/app/admin/atk/page.tsx` | Notifikasi hanya dikirim saat transisi ke status `"Selesai / Diambil"` (bukan saat `"Sedang Disiapkan"`), sesuai prioritas dampak. |
 | 1 | **Paket/dokumen baru diterima** → WA ke karyawan penerima | ✅ Selesai | `src/app/dashboard/security/paket/page.tsx` | Notifikasi dikirim otomatis begitu Security submit form input paket. Channel **WA saja** (bukan Email), sesuai prioritas "instan". Pesan gabungan jenis barang + kurir + keterangan/no resi. |
-| 5 | **Tamu check-in menemui karyawan** → WA ke karyawan dituju | ⬜ Belum dikerjakan | Portal publik (`page.tsx`) + dashboard Security (buku tamu) | Belum masuk antrian kerja — item terakhir Tahap 2. |
+| 5 | **Tamu check-in menemui karyawan** → WA ke karyawan dituju | 🚫 Sengaja dilewati (out of scope) | — | Diputuskan tidak diperlukan untuk saat ini. Fungsi `template.tamuCheckIn()` tetap tersedia di `src/lib/notify.ts` kalau suatu saat mau diaktifkan kembali. |
 
-### ⬜ Tahap 3 — Notifikasi ke Pengelola (BELUM DIMULAI)
-Request baru masuk ke Admin GA, SBO kritikal ke QHSE, Purchase Request ke koordinator OB — belum dikerjakan. Tahap ini akan butuh field email/no_wa juga di `users_master` (folder `src/app/admin/users/`, belum disentuh).
+### 🔄 Tahap 3 — Notifikasi ke Pengelola (SEDANG BERJALAN)
+Request baru masuk ke Admin GA, SBO kritikal ke QHSE, Purchase Request ke koordinator OB. Tahap ini butuh field email/no_wa juga di `users_master` (folder `src/app/admin/users/`).
 
-### ⬜ Tahap 4 — Otomasi Lanjutan (BELUM DIMULAI)
-Reminder shift, alert stok menipis, rekap terjadwal — belum dikerjakan, masih menunggu Tahap 2 & 3 selesai.
+---
+
+## 🔁 RINGKASAN UNTUK LANJUTAN DI CHAT BARU (Update 7 Juli 2026)
+
+> Kalau kamu mulai chat baru dan mau lanjutin kerjaan ini, tinggal upload file `analisis_project.md` ini + bilang "lanjutkan dari sini", Claude bisa langsung paham konteksnya.
+
+### Konteks Project
+Portal SIBM — Next.js + Firebase (Firestore), static export (`output: export`), di-hosting Firebase Hosting. Project **masih di plan Spark (gratis)** — Firebase Storage dan Cloud Functions belum bisa dipakai sampai upgrade ke plan Blaze. Project **tidak pakai Tailwind CSS** — seluruh styling pakai inline `style={{...}}` di setiap komponen (penting buat diingat kalau mau tambah komponen baru).
+
+### Urutan Prioritas Perbaikan (disepakati bareng)
+1. ✅ **Validasi nama pemohon di form publik** — kode sudah dikasih untuk `src/app/page.tsx` (4 fungsi `handleSubmit*`: ATK, Overtime, Helpdesk, SBO), **status: kode sudah diberikan, BELUM dikonfirmasi user sudah pasang/tes**.
+2. ⏸️ **Ganti password hardcoded `"123456"`** — ditunda, disepakati belum urgent.
+3. 🚧 **Migrasi foto base64 → Firebase Storage** — terblokir, butuh plan Blaze.
+4. 🚧 **Migrasi notifikasi ke Firebase Cloud Functions** — terblokir, butuh plan Blaze juga.
+5. 🔄 **Refactor inline style → komponen reusable** — SEDANG DIKERJAKAN, ini yang paling banyak progresnya, detail di bawah.
+
+### Progres Detail Refactor Komponen (Prioritas #5)
+
+**Komponen di `src/components/ui/`** (built dari nol, semua PAKAI INLINE STYLE, bukan Tailwind — sempat salah pakai Tailwind di percobaan pertama dan bikin tampilan berantakan total, sudah diperbaiki):
+- `Button.tsx` — variant: primary/danger/warning/success/secondary/ghost, ada state loading
+- `Card.tsx` — card putih rounded-shadow
+- `Input.tsx` — field teks dengan label, hint, dukungan datalist
+- `Select.tsx` — dropdown dengan label
+- `Textarea.tsx` — textarea dengan label
+- `Modal.tsx` — overlay + tombol close
+- `Badge.tsx` — pill status (success/warning/danger/info/neutral)
+- `Table.tsx` — primitif `Table`, `THead`, `TBody`, `Tr`, `Th`, `Td`
+
+**Halaman yang SUDAH direfactor pakai komponen di atas** (semua sudah di versi inline-style yang benar, siap dipasang & ditest ulang oleh user karena versi Tailwind sebelumnya gagal render):
+- `src/app/admin/karyawan/page.tsx` ✅
+- `src/app/admin/helpdesk/page.tsx` ✅
+- `src/app/dashboard/security/paket/page.tsx` ✅ (bagian dropdown autocomplete karyawan & overlay kamera full-screen sengaja TIDAK diseragamkan ke komponen, tetap custom karena polanya beda)
+- `src/app/dashboard/ob/deep-cleaning/page.tsx` ✅ (nama komponen asli `DeepCleaningManager`, cek path asli user kalau beda)
+
+**Status pengetesan oleh user:** Baru sempat tes `paket/page.tsx` dan `deep-cleaning/page.tsx` di versi Tailwind (SALAH, berantakan). **Belum ada konfirmasi hasil tes dari versi inline-style yang baru.** Chat baru harus mulai dengan menanyakan: apakah 4 halaman versi inline-style ini sudah dites dan tampilannya sudah benar?
+
+**Belum direfactor sama sekali:**
+- `src/app/page.tsx` — portal publik, paling besar, berisi banyak modal (ATK, Overtime, Helpdesk, SBO, Tamu, Paket lookup, Login) — ini juga file yang sama tempat validasi nama (prioritas #1) perlu dipasang
+- Halaman checklist kamera OB (`ChecklistKameraPage` / `src/app/dashboard/ob/checklist/...` — cek path asli)
+- Modal-modal lain yang belum ke-cover
+
+### Isu Teknis yang Pernah Muncul & Solusinya
+- **Error casing Windows**: `Already included file name 'Button.tsx' differs from 'button.tsx' only in casing` — solusi: hapus file duplikat casing lain, atau `git mv` dua langkah (rename ke nama sementara lalu balik) + restart TS Server di VS Code.
+- **Tampilan berantakan total (font default, no color/rounded)**: root cause-nya project TIDAK pakai Tailwind CSS, sementara versi awal komponen dibuat pakai className Tailwind. FIXED — semua komponen & halaman ditulis ulang pakai inline `style={{}}`.
+
+### Isu Belum Terselesaikan — Setup Notifikasi (Fonnte + EmailJS)
+User sudah isi `.env.local` sendiri (tidak diberi tahu caranya sebelumnya oleh Claude — ini gap yang perlu diperbaiki):
+```
+NEXT_PUBLIC_FONNTE_TOKEN=...
+NEXT_PUBLIC_EMAILJS_SERVICE_ID=...
+NEXT_PUBLIC_EMAILJS_TEMPLATE_ID=...
+NEXT_PUBLIC_EMAILJS_PUBLIC_KEY=...
+```
+tapi ada error yang **belum dijelaskan detail pesan errornya oleh user**. Sudah dikasih checklist troubleshooting umum (restart dev server, cek `npm install @emailjs/browser`, cek kecocokan nama variable template EmailJS dengan `to_email`/`to_name`/`subject`/`message` di `src/lib/notify.ts`, cek device Fonnte statusnya "Connected", cek nama file persis `.env.local`). **Chat baru perlu minta user kirim pesan error persis dari browser console (F12) untuk diagnosa pasti.**
+
+### Yang Perlu Ditanyakan/Dikerjakan di Chat Baru (urutan disarankan)
+1. Minta error message persis dari console soal Fonnte/EmailJS, diagnosa dan benerin.
+2. Konfirmasi apakah 4 halaman yang direfactor (karyawan, helpdesk, paket, deep-cleaning) sudah dites di versi inline-style dan tampilannya normal.
+3. Kalau sudah oke, lanjut refactor `src/app/page.tsx` (portal publik) — sekalian pasang validasi nama pemohon (prioritas #1) di 4 form-nya karena filenya sama.
+4. Lanjut checklist kamera OB dan halaman lain yang belum ke-cover.
+5. Tetap tunda password hardcode & migrasi Storage/Cloud Functions sampai plan Blaze aktif.
 
 ### 🧩 Pola Teknis yang Dipakai Konsisten di Semua Halaman
 Untuk menjaga konsistensi, setiap halaman admin yang sudah diintegrasikan notifikasi mengikuti pola yang sama:
@@ -46,6 +105,46 @@ Untuk menjaga konsistensi, setiap halaman admin yang sudah diintegrasikan notifi
 4. Indikator UI ("Mengirim notifikasi...") pada tombol aksi saat proses pengiriman berjalan.
 
 > ⚠️ **Keterbatasan yang perlu diperhatikan:** Pencocokan kontak saat ini mengandalkan **kecocokan nama persis** antara nama yang diketik pemohon di form publik dan `nama` di Master Data Karyawan. Jika ada perbedaan penulisan nama (typo, singkatan, dsb), notifikasi akan gagal terkirim secara senyap. **Rekomendasi perbaikan jangka panjang:** ubah form pengajuan publik (Overtime, Helpdesk, ATK) agar nama dipilih dari dropdown `employees_directory`, bukan diketik bebas — ini akan menghilangkan celah mismatch nama sekaligus mempermudah validasi data pemohon.
+
+### 🐛 Bug Fix Tambahan (ditemukan saat kerjakan Tahap 3)
+Ditemukan mismatch nama field antara form publik dan halaman Admin, sudah diperbaiki di `src/app/page.tsx`:
+- **Overtime**: field disimpan sebelumnya `nama`/`dept`/`area`, sudah dibetulkan jadi `nama_pemohon`/`departemen`/`area_ruangan` sesuai yang dibaca Admin. Efek samping: ticker "Overtime Hari Ini" di beranda publik yang sebelumnya ikut kena bug ini, sekarang ikut kebenar.
+- **Helpdesk**: field disimpan sebelumnya `nama`/`dept`, sudah dibetulkan jadi `nama_pelapor`/`departemen`.
+
+### 🔄 Tahap Tambahan — Toast/Confirm Notification (SEDANG BERJALAN)
+Mengganti `alert()` & `window.confirm()` bawaan browser dengan komponen custom yang lebih modern (§5.2.A). Progres:
+
+| File | Status |
+|---|---|
+| `src/components/ui/ToastProvider.tsx` (baru) | ✅ Selesai |
+| `src/components/ui/ConfirmProvider.tsx` (baru) | ✅ Selesai |
+| `src/app/layout.tsx` (pasang provider global) | ✅ Selesai |
+| `src/app/admin/karyawan/page.tsx` | ✅ Selesai |
+| `src/app/admin/overtime/page.tsx` | ✅ Selesai |
+| `src/app/admin/helpdesk/page.tsx` | ✅ Selesai |
+| `src/app/admin/atk/page.tsx` | ✅ Selesai |
+| `src/app/dashboard/security/paket/page.tsx` | ⬜ Belum |
+| `src/app/admin/users/page.tsx` | ⬜ Belum |
+| `src/app/page.tsx` (portal publik — paling banyak titik alert/confirm) | ⬜ Belum |
+
+---
+
+## 📌 Roadmap Perbaikan Berkelanjutan (dimulai 6 Juli 2026)
+
+Setelah Tahap 1 & 2 notifikasi selesai, disepakati urutan perbaikan lanjutan sebagai berikut:
+
+| No | Perbaikan | Status | Catatan |
+|---|---|---|---|
+| 1 | Validasi nama pemohon di form publik (cegah mismatch notifikasi) | 🔄 Kode sudah diberikan, menunggu konfirmasi terpasang | Kode disiapkan untuk `src/app/page.tsx` — validasi nama harus cocok persis dengan `employees_directory` sebelum submit (ATK, Overtime, Helpdesk, SBO) |
+| 2 | Ganti password login hardcoded `"123456"` | ⏸️ Ditunda (disepakati belum urgent) | — |
+| 3 | Migrasi foto base64 → Firebase Storage | 🚧 Terblokir billing | Project masih di plan **Spark** (gratis). Firebase Storage butuh plan **Blaze** (pay-as-you-go) supaya bucket bisa dipakai & rules bisa di-deploy — bukan soal kode, tapi soal upgrade plan di Firebase Console dulu. |
+| 4 | Migrasi pengiriman notifikasi ke Firebase Cloud Functions | 🚧 Terblokir billing | Sama seperti di atas — Cloud Functions juga wajib plan Blaze. Ditunda sampai plan di-upgrade. |
+| 5 | Refactor inline style → komponen reusable | 🔄 Sedang dikerjakan | Library komponen di `src/components/ui/`: `Button`, `Card`, `Input`, `Select`, `Textarea`, `Modal`, `Badge`, `Table`. Halaman yang sudah direfactor pakai komponen ini: `admin/karyawan`, `admin/helpdesk`, `dashboard/security/paket`, `dashboard/ob/deep-cleaning` (semua di-cross-check logikanya sama persis dengan versi lama, cuma render-nya dirapikan). Sempat ada error casing filename Windows (`Button.tsx` vs `button.tsx`) — sudah dikasih langkah perbaikan (rename dua langkah via git + restart TS server). Belum dikerjakan: halaman portal publik (`app/page.tsx`), checklist kamera OB, dan modal-modal lain di dalamnya. |
+
+### Detail Item #1 — Validasi Nama Pemohon
+Sebelumnya form ATK/Overtime/Helpdesk/SBO pakai `<input list="...">` (datalist) yang cuma **menyarankan** nama, tapi tetap menerima ketikan bebas — kalau nama tidak persis cocok dengan `employees_directory`, notifikasi WA/Email gagal terkirim secara senyap.
+
+Perbaikan: tambah pengecekan `employees.some(emp => emp.nama === namaInput)` di setiap fungsi `handleSubmit*` sebelum data disimpan ke Firestore. Kalau nama tidak ketemu persis di direktori, submit diblok dan user diminta memilih dari daftar saran yang muncul saat mengetik.
 
 ---
 
@@ -260,4 +359,4 @@ Selain notifikasi, ada peluang peningkatan pada **keamanan login** (hapus passwo
 
 ---
 
-*Laporan ini bersifat analisis & rekomendasi. Update 3 Juli 2026: Tahap 1 (fondasi field kontak + helper notifikasi) sudah selesai; Tahap 2 (notifikasi prioritas tinggi) hampir selesai — Overtime, Helpdesk, ATK, dan Paket Diterima sudah terintegrasi, tersisa notifikasi Tamu Check-in. Lihat bagian "Status Implementasi Terkini" di atas untuk detail lengkap per file.*
+*Laporan ini bersifat analisis & rekomendasi. Update 3 Juli 2026: Tahap 1 & Tahap 2 (fondasi + notifikasi prioritas tinggi) sudah selesai — Overtime, Helpdesk, ATK, dan Paket Diterima terintegrasi; item Tamu Check-in sengaja dilewati (out of scope). Tahap 3 (notifikasi ke pengelola: Admin GA, QHSE, koordinator OB) baru dimulai. Lihat bagian "Status Implementasi Terkini" di atas untuk detail lengkap per file.*

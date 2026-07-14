@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, addDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+import { useToast } from "../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../components/ui/ConfirmProvider";
 
 interface KontakKaryawan {
   nama: string;
@@ -38,6 +40,8 @@ interface MasterAtk {
 
 export default function AdminAtkPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
   const [adminName, setAdminName] = useState<string>("");
   const [isReady, setIsReady] = useState(false);
 
@@ -104,13 +108,14 @@ export default function AdminAtkPage() {
     else if (currentStatus === "Sedang Disiapkan") newStatus = "Selesai / Diambil";
     else return; // Jika sudah selesai, tidak bisa diklik lagi
 
-    if (!window.confirm(`Ubah status pesanan ini menjadi "${newStatus}"?`)) return;
+    const yakin = await confirm(`Ubah status pesanan ini menjadi "${newStatus}"?`);
+    if (!yakin) return;
 
     try {
       await updateDoc(doc(db, "ga_atk_requests", id), { status: newStatus });
     } catch (error) {
       console.error(error);
-      alert("Gagal mengupdate status.");
+      showToast("Gagal mengupdate status.", "error");
       return;
     }
 
@@ -157,7 +162,7 @@ export default function AdminAtkPage() {
   };
 
   const handleExportExcel = () => {
-    if (atkRequests.length === 0) return alert("Data kosong!");
+    if (atkRequests.length === 0) return showToast("Data kosong!", "warning");
 
     const headers = ["Resi", "Tanggal", "Pemohon", "Departemen", "Detail Barang", "Status"];
     const rows = atkRequests.map(req => {
@@ -195,22 +200,29 @@ export default function AdminAtkPage() {
     try {
       await addDoc(collection(db, "master_atk"), { nama_barang: newItemName.trim().toUpperCase() });
       setNewItemName("");
-      alert("Barang berhasil ditambahkan ke database Master ATK!");
+      showToast("Barang berhasil ditambahkan ke database Master ATK!", "success");
     } catch (error) {
       console.error(error);
-      alert("Gagal menambahkan barang.");
+      showToast("Gagal menambahkan barang.", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteMasterItem = async (id: string, nama: string) => {
-    if (!window.confirm(`Yakin ingin menghapus "${nama}" dari Master Data? Barang ini tidak akan muncul lagi di pilihan pencarian form depan.`)) return;
+    const yakin = await confirm({
+      title: "Hapus Master Barang ATK",
+      message: `Yakin ingin menghapus "${nama}" dari Master Data? Barang ini tidak akan muncul lagi di pilihan pencarian form depan.`,
+      confirmText: "Ya, Hapus",
+      variant: "danger"
+    });
+    if (!yakin) return;
     try {
       await deleteDoc(doc(db, "master_atk", id));
+      showToast(`"${nama}" berhasil dihapus dari Master Data.`, "success");
     } catch (error) {
       console.error(error);
-      alert("Gagal menghapus barang.");
+      showToast("Gagal menghapus barang.", "error");
     }
   };
 

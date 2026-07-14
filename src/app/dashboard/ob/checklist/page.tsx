@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 
@@ -31,29 +31,23 @@ const TUGAS_STANDAR = [
 
 export default function ChecklistKameraPage() {
   const router = useRouter();
-  
+
   // Identitas & Navigasi Utama
   const [picName, setPicName] = useState("");
   const [activeTab, setActiveTab] = useState<"form" | "history">("form");
   const [assignedAreas, setAssignedAreas] = useState<string[]>([]);
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedArea, setSelectedArea] = useState("");
-  
+
   // State Data Riwayat
   const [riwayatKerja, setRiwayatKerja] = useState<ChecklistLog[]>([]);
-  
+
   // Loading States
   const [isLoading, setIsLoading] = useState(false);
   const [isPageLoading, setIsPageLoading] = useState(true);
 
-  // State Kamera & Foto
+  // State Foto (upload, bukan live-camera)
   const [photos, setPhotos] = useState<Record<string, { before?: string, after?: string }>>({});
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [activeTaskConfig, setActiveTaskConfig] = useState<{ taskId: string, type: "before" | "after" } | null>(null);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   // ==========================================
   // EFEK 1: Ambil Identitas & Data Ploting
@@ -62,7 +56,7 @@ export default function ChecklistKameraPage() {
     const muatDataAwal = async () => {
       const nama = localStorage.getItem("pic_nama") || "";
       const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
-      
+
       if (!nama || !dept.includes("ob & cs")) {
         alert("Akses Ditolak! Halaman ini khusus staf OB & CS.");
         router.push("/shift-checkin");
@@ -80,9 +74,9 @@ export default function ChecklistKameraPage() {
           const lantaiKu = Object.keys(plots).filter(
             (lantai) => plots[lantai] === nama || plots[lantai] === "Semua / All"
           );
-          
+
           setAssignedAreas(lantaiKu);
-          if (lantaiKu.length > 0) setSelectedArea(lantaiKu[0]); 
+          if (lantaiKu.length > 0) setSelectedArea(lantaiKu[0]);
         }
       } catch (error) {
         console.error("Gagal memuat data plotting:", error);
@@ -92,10 +86,6 @@ export default function ChecklistKameraPage() {
     };
 
     muatDataAwal();
-
-    return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-    };
   }, [router]);
 
   // ==========================================
@@ -106,7 +96,7 @@ export default function ChecklistKameraPage() {
 
     const checklistRef = collection(db, "ob_checklists");
     const q = query(checklistRef, where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"));
-    
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const logs: ChecklistLog[] = [];
       snapshot.forEach(docSnap => {
@@ -119,57 +109,43 @@ export default function ChecklistKameraPage() {
   }, [picName]);
 
   // ==========================================
-  // KENDALI KAMERA & FOTO
+  // UPLOAD FOTO (menggantikan live-camera)
   // ==========================================
-  const bukaKamera = async (taskId: string, type: "before" | "after") => {
-    setActiveTaskConfig({ taskId, type });
-    setIsCameraOpen(true);
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      streamRef.current = mediaStream;
-      if (videoRef.current) videoRef.current.srcObject = mediaStream;
-    } catch (error) {
-      console.error(error);
-      alert("Gagal mengakses kamera ponsel Anda. Pastikan izin kamera telah diberikan di browser.");
-      setIsCameraOpen(false);
-    }
-  };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, taskId: string, type: "before" | "after") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const matikanKamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setIsCameraOpen(false);
-    setActiveTaskConfig(null);
-  };
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        // Menggunakan resolusi HD (kompromi ukuran file & ketajaman) — sama seperti sebelumnya
+        const MAX_WIDTH = 720;
+        const scale = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scale;
 
-  const ambilFoto = () => {
-    if (!videoRef.current || !canvasRef.current || !activeTaskConfig) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    // Menggunakan resolusi HD (kompromi ukuran file & ketajaman)
-    const MAX_WIDTH = 720;
-    const scale = MAX_WIDTH / video.videoWidth;
-    canvas.width = MAX_WIDTH;
-    canvas.height = video.videoHeight * scale;
-    
-    const context = canvas.getContext("2d");
-    if (context) {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const photoBase64 = canvas.toDataURL("image/jpeg", 0.7); // 70% Quality
-      
-      setPhotos(prev => ({
-        ...prev,
-        [activeTaskConfig.taskId]: {
-          ...prev[activeTaskConfig.taskId],
-          [activeTaskConfig.type]: photoBase64
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const photoBase64 = canvas.toDataURL("image/jpeg", 0.7); // 70% Quality
+
+          setPhotos(prev => ({
+            ...prev,
+            [taskId]: {
+              ...prev[taskId],
+              [type]: photoBase64
+            }
+          }));
         }
-      }));
-    }
-    matikanKamera();
+      };
+      if (typeof ev.target?.result === "string") img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    // Reset value supaya user bisa pilih file yang sama lagi kalau mau ganti foto
+    e.target.value = "";
   };
 
   const hapusFoto = (taskId: string, type: "before" | "after") => {
@@ -205,7 +181,7 @@ export default function ChecklistKameraPage() {
       alert("Laporan Kebersihan berhasil dikirim! Riwayat visual Anda telah terekam di sistem.");
       setPhotos({});
       setStep(1);
-      setActiveTab("history"); 
+      setActiveTab("history");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error(error);
@@ -231,11 +207,11 @@ export default function ChecklistKameraPage() {
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      
+
       {/* 🔹 TOP BAR NAVBAR */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 10 }}>
         <button onClick={() => router.push("/dashboard/ob")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>⬅️</button>
-        
+
         {/* TAB SWITCHER */}
         <div style={{ background: "#edf2f7", padding: "4px", borderRadius: "10px", display: "flex", gap: "5px" }}>
           <button onClick={() => setActiveTab("form")} style={{ border: "none", padding: "8px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "form" ? "white" : "transparent", color: activeTab === "form" ? "#319795" : "#718096", transition: "all 0.2s", boxShadow: activeTab === "form" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>
@@ -248,9 +224,9 @@ export default function ChecklistKameraPage() {
       </div>
 
       <div style={{ maxWidth: "600px", margin: "30px auto 0", padding: "0 20px" }}>
-        
+
         {/* ========================================================================================= */}
-        {/* TAB 1: FORMULIR INPUT CHEKLIST & KAMERA */}
+        {/* TAB 1: FORMULIR INPUT CHEKLIST & UPLOAD FOTO */}
         {/* ========================================================================================= */}
         {activeTab === "form" && (
           <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
@@ -261,21 +237,21 @@ export default function ChecklistKameraPage() {
                     <div style={{ fontSize: "60px", marginBottom: "15px" }}>📍</div>
                     <h2 style={{ margin: "0 0 10px 0", color: "#2d3748", fontSize: "22px" }}>Mulai Shift Kebersihan</h2>
                     <p style={{ color: "#718096", marginBottom: "30px", fontSize: "14px", lineHeight: "1.5" }}>Pilih salah satu lokasi penugasan Anda hari ini untuk mulai merekam progres pekerjaan.</p>
-                    
-                    <select 
+
+                    <select
                       value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)}
                       style={{ width: "100%", padding: "18px", borderRadius: "12px", border: "2px solid #319795", fontSize: "16px", fontWeight: "bold", color: "#234e52", marginBottom: "30px", cursor: "pointer", background: "#e6fffa", outline: "none", appearance: "none", textAlign: "center" }}
                     >
                       {assignedAreas.map(area => <option key={area} value={area}>{area}</option>)}
                     </select>
 
-                    <button 
+                    <button
                       onClick={() => setStep(2)}
                       style={{ width: "100%", padding: "18px", background: "#319795", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(49, 151, 149, 0.3)", transition: "transform 0.2s" }}
                       onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-3px)"}
                       onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}
                     >
-                      📸 Buka Kamera Laporan ➔
+                      📸 Lanjut Upload Bukti Foto ➔
                     </button>
                   </>
                 ) : (
@@ -292,7 +268,7 @@ export default function ChecklistKameraPage() {
 
             {step === 2 && (
               <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-                
+
                 {/* HEAD CARD AREA */}
                 <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #e2e8f0", borderLeft: "6px solid #319795" }}>
                   <div>
@@ -308,7 +284,7 @@ export default function ChecklistKameraPage() {
                       <h3 style={{ margin: "0 0 20px 0", color: "#2d3748", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
                         <span>{tugas.icon}</span> {tugas.nama}
                       </h3>
-                      
+
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
                         {/* KOTAK BEFORE */}
                         <div style={{ background: "#fff5f5", padding: "10px", borderRadius: "16px", border: "1px dashed #feb2b2" }}>
@@ -320,10 +296,11 @@ export default function ChecklistKameraPage() {
                               <button onClick={() => hapusFoto(tugas.id, "before")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                             </div>
                           ) : (
-                            <button onClick={() => bukaKamera(tugas.id, "before")} style={{ width: "100%", aspectRatio: "3/4", background: "white", border: "none", borderRadius: "12px", color: "#e53e3e", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", transition: "0.2s" }}>
-                              <span style={{ fontSize: "28px" }}>📷</span>
-                              <span style={{ fontSize: "12px", fontWeight: "bold" }}>Ambil Foto</span>
-                            </button>
+                            <label style={{ width: "100%", aspectRatio: "3/4", background: "white", border: "none", borderRadius: "12px", color: "#e53e3e", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", transition: "0.2s" }}>
+                              <span style={{ fontSize: "28px" }}>📁</span>
+                              <span style={{ fontSize: "12px", fontWeight: "bold" }}>Upload Foto</span>
+                              <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, tugas.id, "before")} style={{ display: "none" }} />
+                            </label>
                           )}
                         </div>
 
@@ -337,10 +314,11 @@ export default function ChecklistKameraPage() {
                               <button onClick={() => hapusFoto(tugas.id, "after")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#38a169", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                             </div>
                           ) : (
-                            <button onClick={() => bukaKamera(tugas.id, "after")} style={{ width: "100%", aspectRatio: "3/4", background: "white", border: "none", borderRadius: "12px", color: "#38a169", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", transition: "0.2s" }}>
-                              <span style={{ fontSize: "28px" }}>📸</span>
-                              <span style={{ fontSize: "12px", fontWeight: "bold" }}>Ambil Foto</span>
-                            </button>
+                            <label style={{ width: "100%", aspectRatio: "3/4", background: "white", border: "none", borderRadius: "12px", color: "#38a169", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", transition: "0.2s" }}>
+                              <span style={{ fontSize: "28px" }}>📁</span>
+                              <span style={{ fontSize: "12px", fontWeight: "bold" }}>Upload Foto</span>
+                              <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, tugas.id, "after")} style={{ display: "none" }} />
+                            </label>
                           )}
                         </div>
                       </div>
@@ -348,7 +326,7 @@ export default function ChecklistKameraPage() {
                   ))}
                 </div>
 
-                <button 
+                <button
                   onClick={handleKirimLaporan} disabled={isLoading}
                   style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "#234e52", color: "white", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "40px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(35, 78, 82, 0.4)", transition: "all 0.3s" }}
                 >
@@ -366,7 +344,7 @@ export default function ChecklistKameraPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: "25px", animation: "fadeIn 0.3s ease-in-out" }}>
             {riwayatKerja.length > 0 ? riwayatKerja.map((log) => (
               <div key={log.id} style={{ background: "white", borderRadius: "20px", padding: "25px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
-                
+
                 {/* Header Riwayat */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                   <div>
@@ -383,14 +361,14 @@ export default function ChecklistKameraPage() {
                   {log.detail_tugas.map((sub, sIdx) => {
                     const bgStatus = sub.status.includes("Sempurna") ? "#f0fff4" : (sub.status.includes("Sebagian") ? "#fffff0" : "#fff5f5");
                     const icon = sub.nama_tugas.includes("Wastafel") ? "🚰" : (sub.nama_tugas.includes("Sampah") ? "🗑️" : "🧹");
-                    
+
                     return (
                       <div key={sIdx} style={{ background: bgStatus, padding: "15px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
                         <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "14px", marginBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span>{icon}</span> {sub.nama_tugas}</span>
                           <span style={{ fontSize: "10px", padding: "4px 8px", background: "white", borderRadius: "8px", color: sub.status.includes("Sempurna") ? "#38a169" : "#d69e2e", border: "1px solid #e2e8f0" }}>{sub.status}</span>
                         </div>
-                        
+
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                           <div style={{ background: "white", padding: "8px", borderRadius: "12px", border: "1px solid #fed7d7" }}>
                             <div style={{ fontSize: "10px", color: "#e53e3e", fontWeight: "900", marginBottom: "8px", textAlign: "center" }}>BEFORE</div>
@@ -430,34 +408,6 @@ export default function ChecklistKameraPage() {
         )}
 
       </div>
-
-      {/* 🌑 OVERLAY MODAL KAMERA (LAYAR PENUH) */}
-      {isCameraOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000", zIndex: 100, display: "flex", flexDirection: "column", animation: "fadeIn 0.2s ease-in" }}>
-          
-          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)", position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
-            <span style={{ fontWeight: "bold", fontSize: "14px", letterSpacing: "1px", textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>
-              {activeTaskConfig?.type === "before" ? "🔴 FOTOKAN KONDISI AWAL" : "🟢 FOTOKAN HASIL BERSIH"}
-            </span>
-            <button onClick={matikanKamera} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✖</button>
-          </div>
-          
-          <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", background: "#111" }}>
-            <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }}></video>
-            <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
-            
-            {/* Guide Grid Kamera */}
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "80%", height: "60%", border: "2px dashed rgba(255,255,255,0.5)", borderRadius: "20px", pointerEvents: "none" }}>
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "40px", height: "40px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "50%" }}></div>
-            </div>
-          </div>
-          
-          <div style={{ padding: "40px", display: "flex", justifyContent: "center", background: "linear-gradient(to top, rgba(0,0,0,1), transparent)", position: "absolute", bottom: 0, left: 0, right: 0 }}>
-            <button onClick={ambilFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: activeTaskConfig?.type === "before" ? "#fed7d7" : "#c6f6d5", border: "6px solid white", cursor: "pointer", boxShadow: "0 0 20px rgba(255,255,255,0.5)", transition: "transform 0.1s" }} onTouchStart={(e) => e.currentTarget.style.transform = "scale(0.9)"} onTouchEnd={(e) => e.currentTarget.style.transform = "scale(1)"}></button>
-          </div>
-
-        </div>
-      )}
 
     </div>
   );
