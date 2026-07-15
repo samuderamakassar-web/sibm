@@ -67,7 +67,7 @@ export default function StockOpnamePage() {
 
       if (!isAuthorized || !nama) {
         alert("Akses Ditolak! Halaman ini khusus tim operasional OB & CS.");
-        router.push("/shift-checkin");
+        router.push("/dashboard/ob");
         return;
       }
 

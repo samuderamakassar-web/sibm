@@ -198,7 +198,7 @@ export default function PatroliSecurityPage() {
   // ==========================================
   useEffect(() => {
     const nama = localStorage.getItem("pic_nama");
-    if (!nama) return router.push("/shift-checkin");
+    if (!nama) return router.push("/dashboard/security");
     
     setTimeout(() => { 
       setPicName(nama); 

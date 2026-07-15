@@ -67,7 +67,7 @@ export default function DeepCleaningManager() {
 
       if (!isAuthorized) {
         alert("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.");
-        router.push("/shift-checkin");
+        router.push("/dashboard/ob");
         return;
       }
       setPicName(nama);
