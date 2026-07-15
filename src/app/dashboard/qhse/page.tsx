@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { useToast } from "../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../components/ui/ConfirmProvider";
 
 interface ReportSBO {
   id: string;
@@ -40,13 +42,17 @@ export default function DashboardQHSE() {
   const [fotoAfter, setFotoAfter] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const showToast = useToast();
+  const confirm = useConfirm();
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
+
   useEffect(() => {
     const role = localStorage.getItem("pic_role");
     const nama = localStorage.getItem("pic_nama");
     const dept = localStorage.getItem("pic_dept");
     
     if (!role || dept !== "QHSE") {
-      alert("Akses Ditolak! Halaman ini khusus divisi QHSE.");
+      showToast("Akses Ditolak! Halaman ini khusus divisi QHSE.", "error");
       router.push("/");
       return;
     }
@@ -61,7 +67,23 @@ export default function DashboardQHSE() {
 
   // ===============================================
   // FUNGSI KOMPRESI FOTO AFTER
-  // ===============================================
+  // ==============================================
+
+  async function uploadToCloudinary(blob: Blob): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", blob);
+    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+    formData.append("folder", "sibm/qhse-sbo");
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: "POST", body: formData }
+    );
+    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+    const data = await res.json();
+    return data.secure_url as string;
+  }
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -71,15 +93,27 @@ export default function DashboardQHSE() {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 600; 
+        const MAX_WIDTH = 600;
         const scaleSize = MAX_WIDTH / img.width;
         canvas.width = MAX_WIDTH;
         canvas.height = img.height * scaleSize;
         const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          setFotoAfter(canvas.toDataURL("image/jpeg", 0.6));
-        }
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          setIsUploadingFoto(true);
+          try {
+            const url = await uploadToCloudinary(blob);
+            setFotoAfter(url);
+          } catch (err) {
+            console.error(err);
+            showToast("Gagal upload foto, coba lagi.", "error");
+          } finally {
+            setIsUploadingFoto(false);
+          }
+        }, "image/jpeg", 0.6);
       };
       if (typeof ev.target?.result === 'string') img.src = ev.target.result;
     };
@@ -95,7 +129,7 @@ export default function DashboardQHSE() {
     if (endDate) filtered = filtered.filter(r => r.tanggal_kejadian <= endDate);
     if (filterStatus !== "Semua") filtered = filtered.filter(r => r.status_temuan === filterStatus);
 
-    if (filtered.length === 0) return alert("Tidak ada data di rentang waktu/status tersebut untuk diexport.");
+    if (filtered.length === 0) return showToast("Tidak ada data di rentang waktu/status tersebut untuk diexport.", "warning");
 
     const headers = ["ID Laporan", "Tanggal Kejadian", "Pelapor", "Lokasi", "Kategori", "Detail Issue", "Penyebab", "Tindakan Awal (Action Taken)", "Status", "Tanggal Selesai (Closed)"];
     
@@ -130,26 +164,37 @@ export default function DashboardQHSE() {
   // FUNGSI UPDATE TIKET MENJADI CLOSED
   // ===============================================
   const handleCloseTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedReport) return;
-    setIsUpdating(true);
+  e.preventDefault();
+  if (!selectedReport) return;
+  if (isUploadingFoto) return showToast("Tunggu foto selesai diunggah dulu.", "warning");
 
-    try {
-      const reportRef = doc(db, "qhse_sbo_reports", selectedReport.id);
-      await updateDoc(reportRef, {
-        status_temuan: "Close",
-        tanggal_closed: new Date().toISOString().split("T")[0],
-        foto_after: fotoAfter || null
-      });
+  const yakin = await confirm({
+    title: "Tutup Laporan SBO",
+    message: "Laporan yang sudah ditutup tidak bisa dibuka kembali. Lanjutkan?",
+    confirmText: "Ya, Tutup Laporan",
+    variant: "danger"
+  });
+  if (!yakin) return;
 
-      alert("Laporan berhasil ditutup!");
-      setSelectedReport(null);
-      setFotoAfter("");
-    } catch (error) {
-      console.error(error);
-      alert("Gagal memperbarui status.");
-    } finally { setIsUpdating(false); }
-  };
+  setIsUpdating(true);
+  try {
+    const reportRef = doc(db, "qhse_sbo_reports", selectedReport.id);
+    await updateDoc(reportRef, {
+      status_temuan: "Close",
+      tanggal_closed: new Date().toISOString().split("T")[0],
+      foto_after: fotoAfter || null
+    });
+
+    showToast("Laporan berhasil ditutup!", "success");
+    setSelectedReport(null);
+    setFotoAfter("");
+  } catch (error) {
+    console.error(error);
+    showToast("Gagal memperbarui status.", "error");
+  } finally {
+    setIsUpdating(false);
+  }
+};
 
   // FILTERING LOGIC
   const displayedReports = reports.filter(r => filterStatus === "Semua" || r.status_temuan === filterStatus);
@@ -318,8 +363,9 @@ export default function DashboardQHSE() {
                   
                   <div style={{ marginBottom: "15px" }}>
                     <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "5px", display: "block" }}>Unggah Foto Kondisi Terkini (After) *</label>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} required style={{ padding: "10px", border: "1px solid #cbd5e0", borderRadius: "8px", width: "100%", fontSize: "12px" }} />
-                    {fotoAfter && <div style={{ fontSize: "11px", color: "#38a169", marginTop: "5px", fontWeight: "bold" }}>✓ Foto siap diunggah</div>}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploadingFoto} required style={{ padding: "10px", border: "1px solid #cbd5e0", borderRadius: "8px", width: "100%", fontSize: "12px" }} />
+                    {isUploadingFoto && <div style={{ fontSize: "11px", color: "#d69e2e", marginTop: "5px", fontWeight: "bold" }}>⏳ Sedang mengunggah foto...</div>}
+                    {fotoAfter && !isUploadingFoto && <div style={{ fontSize: "11px", color: "#38a169", marginTop: "5px", fontWeight: "bold" }}>✓ Foto siap diunggah</div>}
                   </div>
 
                   <button type="submit" disabled={isUpdating} style={{ width: "100%", padding: "15px", background: isUpdating ? "#a0aec0" : "#2f855a", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isUpdating ? "not-allowed" : "pointer" }}>

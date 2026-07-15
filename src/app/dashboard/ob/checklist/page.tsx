@@ -23,11 +23,21 @@ interface ChecklistLog {
   detail_tugas: TugasDetail[];
 }
 
-const TUGAS_STANDAR = [
+const TUGAS_KEBERSIHAN = [
   { id: "t1", nama: "Wastafel / Kaca / Meja", icon: "🚰" },
   { id: "t2", nama: "Tempat Sampah", icon: "🗑️" },
-  { id: "t3", nama: "Lantai (Sapu & Pel)", icon: "🧹" }
+  { id: "t3", nama: "Lantai (Sapu & Pel)", icon: "🧹" },
 ];
+
+const TUGAS_PELAYANAN = [
+  { id: "p1", nama: "Belanja / Beli Makan", icon: "🛒" },
+  { id: "p2", nama: "Bersihkan Meja", icon: "🧽" },
+  { id: "p3", nama: "Cuci Piring", icon: "🍽️" },
+];
+
+function getTugasUntukArea(area: string) {
+  return area.toLowerCase().includes("pelayanan") ? TUGAS_PELAYANAN : TUGAS_KEBERSIHAN;
+}
 
 export default function ChecklistKameraPage() {
   const router = useRouter();
@@ -111,42 +121,63 @@ export default function ChecklistKameraPage() {
   // ==========================================
   // UPLOAD FOTO (menggantikan live-camera)
   // ==========================================
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, taskId: string, type: "before" | "after") => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [uploadingTask, setUploadingTask] = useState<string | null>(null);
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        // Menggunakan resolusi HD (kompromi ukuran file & ketajaman) — sama seperti sebelumnya
-        const MAX_WIDTH = 720;
-        const scale = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scale;
+async function uploadToCloudinary(blob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", blob);
+  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+  formData.append("folder", "sibm/checklist-ob");
 
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const photoBase64 = canvas.toDataURL("image/jpeg", 0.7); // 70% Quality
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+  const data = await res.json();
+  return data.secure_url as string;
+}
 
+const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, taskId: string, type: "before" | "after") => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = async () => {
+      const canvas = document.createElement("canvas");
+      const MAX_WIDTH = 720;
+      const scale = MAX_WIDTH / img.width;
+      canvas.width = MAX_WIDTH;
+      canvas.height = img.height * scale;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        setUploadingTask(`${taskId}-${type}`);
+        try {
+          const url = await uploadToCloudinary(blob);
           setPhotos(prev => ({
             ...prev,
-            [taskId]: {
-              ...prev[taskId],
-              [type]: photoBase64
-            }
+            [taskId]: { ...prev[taskId], [type]: url }
           }));
+        } catch (err) {
+          console.error(err);
+          alert("Gagal upload foto, coba lagi.");
+        } finally {
+          setUploadingTask(null);
         }
-      };
-      if (typeof ev.target?.result === "string") img.src = ev.target.result;
+      }, "image/jpeg", 0.7);
     };
-    reader.readAsDataURL(file);
-
-    // Reset value supaya user bisa pilih file yang sama lagi kalau mau ganti foto
-    e.target.value = "";
+    if (typeof ev.target?.result === "string") img.src = ev.target.result;
   };
+  reader.readAsDataURL(file);
+  e.target.value = "";
+};
 
   const hapusFoto = (taskId: string, type: "before" | "after") => {
     setPhotos(prev => {
@@ -164,7 +195,7 @@ export default function ChecklistKameraPage() {
 
     setIsLoading(true);
     try {
-      const detailTugas = TUGAS_STANDAR.map(tugas => ({
+      const detailTugas = getTugasUntukArea(selectedArea).map(tugas => ({
         nama_tugas: tugas.nama,
         foto_before: photos[tugas.id]?.before || null,
         foto_after: photos[tugas.id]?.after || null,
@@ -279,7 +310,7 @@ export default function ChecklistKameraPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
-                  {TUGAS_STANDAR.map((tugas) => (
+                  {getTugasUntukArea(selectedArea).map((tugas) => (
                     <div key={tugas.id} style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
                       <h3 style={{ margin: "0 0 20px 0", color: "#2d3748", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
                         <span>{tugas.icon}</span> {tugas.nama}

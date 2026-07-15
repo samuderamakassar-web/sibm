@@ -5,6 +5,8 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase"; // Sesuaikan path jika berbeda
 import { Html5QrcodeScanner } from "html5-qrcode";
+import { useToast } from "../../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../../components/ui/ConfirmProvider";
 
 // ==========================================
 // 1. DATA TITIK PATROLI
@@ -77,6 +79,9 @@ interface PatroliLog {
 
 export default function PatroliSecurityPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
   
   const [picName, setPicName] = useState<string>("");
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -115,7 +120,7 @@ export default function PatroliSecurityPage() {
       }
     } catch (error) {
       console.error(error);
-      alert("Gagal mengakses kamera. Pastikan izin kamera diberikan di browser Anda.");
+      showToast("Gagal mengakses kamera. Pastikan izin kamera diberikan di browser Anda.", "error");
       setPhotoTarget(null);
     }
   }, []);
@@ -128,9 +133,24 @@ export default function PatroliSecurityPage() {
     setPhotoTarget(null);
   };
 
+  async function uploadToCloudinary(blob: Blob): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", blob);
+    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+    formData.append("folder", "sibm/patroli-security");
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: "POST", body: formData }
+    );
+    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+    const data = await res.json();
+    return data.secure_url as string;
+  }
+
   const ambilFotoWatermark = () => {
     if (!videoRef.current || !canvasRef.current || !photoTarget) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
@@ -139,7 +159,7 @@ export default function PatroliSecurityPage() {
     canvas.width = 720;
     canvas.height = (video.videoHeight / video.videoWidth) * 720;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
     ctx.fillRect(0, canvas.height - 90, canvas.width, 90);
 
@@ -148,17 +168,29 @@ export default function PatroliSecurityPage() {
     ctx.fillText(`📍 ${photoTarget.nama}`, 20, canvas.height - 55);
     ctx.font = "18px Arial";
     ctx.fillText(`🕒 ${currentTime}`, 20, canvas.height - 25);
-    
-    ctx.fillStyle = kondisiTitik === "Aman Terkendali" ? "#86efac" : "#fca5a5"; 
+
+    ctx.fillStyle = kondisiTitik === "Aman Terkendali" ? "#86efac" : "#fca5a5";
     ctx.font = "bold 20px Arial";
     ctx.textAlign = "right";
     ctx.fillText(`Status: ${kondisiTitik}`, canvas.width - 20, canvas.height - 35);
 
-    const base64Photo = canvas.toDataURL("image/jpeg", 0.7);
+    const targetSaatIni = photoTarget;
     const jamSekarang = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-    
-    setScannedItems(prev => [...prev, { id: photoTarget.id, waktu_patroli: jamSekarang, kondisi: kondisiTitik, foto: base64Photo }]);
     matikanKamera();
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      setIsUploadingFoto(true);
+      try {
+        const url = await uploadToCloudinary(blob);
+        setScannedItems(prev => [...prev, { id: targetSaatIni.id, waktu_patroli: jamSekarang, kondisi: kondisiTitik, foto: url }]);
+      } catch (err) {
+        console.error(err);
+        showToast(`Gagal upload foto untuk ${targetSaatIni.nama}. Titik ini belum tercatat, coba ulangi.`, "error");
+      } finally {
+        setIsUploadingFoto(false);
+      }
+    }, "image/jpeg", 0.7);
   };
 
   // ==========================================
@@ -208,7 +240,7 @@ export default function PatroliSecurityPage() {
           setScanTarget(null); 
           bukaKamera(scanTarget, targetNama); 
         } else {
-          alert(`❌ QR Code Salah! Anda tidak berada di titik ${scanTarget.split("::")[1]}`);
+          showToast(`❌ QR Code Salah! Anda tidak berada di titik ${scanTarget.split("::")[1]}`, "warning");
         }
       }, () => {});
 
@@ -241,7 +273,7 @@ export default function PatroliSecurityPage() {
       }, 2000);
     } catch (error) {
       console.error(error);
-      alert("Gagal mengirim laporan patroli.");
+      showToast("Gagal mengirim laporan patroli.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -511,7 +543,7 @@ export default function PatroliSecurityPage() {
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "120px", background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)", pointerEvents: "none" }}></div>
           </div>
           <div style={{ padding: "30px", display: "flex", justifyContent: "center", background: "#000" }}>
-            <button onClick={ambilFotoWatermark} style={{ width: "80px", height: "80px", borderRadius: "50%", background: "white", border: "6px solid #e2e8f0", cursor: "pointer", boxShadow: "0 0 15px rgba(255,255,255,0.4)" }}></button>
+            <button onClick={ambilFotoWatermark} disabled={isUploadingFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: isUploadingFoto ? "#a0aec0" : "white", border: "6px solid #e2e8f0", cursor: isUploadingFoto ? "not-allowed" : "pointer", boxShadow: "0 0 15px rgba(255,255,255,0.4)" }}></button>
           </div>
         </div>
       )}
