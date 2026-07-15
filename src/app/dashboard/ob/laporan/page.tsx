@@ -13,6 +13,8 @@ export default function LaporanKerusakanPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
+
   // State Form Laporan
   const [lokasi, setLokasi] = useState("");
   const [deskripsi, setDeskripsi] = useState("");
@@ -35,30 +37,56 @@ export default function LaporanKerusakanPage() {
     siapkanHalaman();
   }, [router]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadToCloudinary(blob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", blob);
+  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+  formData.append("folder", "sibm/laporan-kerusakan");
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 600; 
-        const scaleSize = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scaleSize;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const base64 = canvas.toDataURL("image/jpeg", 0.6); 
-          setFotoAwal(base64);
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+  const data = await res.json();
+  return data.secure_url as string;
+}
+
+const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX_WIDTH = 600;
+      const scaleSize = MAX_WIDTH / img.width;
+      canvas.width = MAX_WIDTH;
+      canvas.height = img.height * scaleSize;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        setIsUploadingFoto(true);
+        try {
+          const url = await uploadToCloudinary(blob);
+          setFotoAwal(url);
+        } catch (err) {
+          console.error(err);
+          alert("Gagal upload foto, coba lagi.");
+        } finally {
+          setIsUploadingFoto(false);
         }
-      };
-      if (typeof ev.target?.result === 'string') img.src = ev.target.result;
+      }, "image/jpeg", 0.6);
     };
-    reader.readAsDataURL(file);
+    if (typeof ev.target?.result === 'string') img.src = ev.target.result;
   };
+  reader.readAsDataURL(file);
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,9 +214,9 @@ export default function LaporanKerusakanPage() {
                 <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
                   <span style={{ fontSize: "30px" }}>📸</span>
                   <span style={{ fontSize: "13px", fontWeight: "bold", color: fotoAwal ? "#38a169" : "#4a5568" }}>
-                    {fotoAwal ? "Foto siap dilampirkan! Klik untuk mengganti." : "Sentuh di sini untuk mengambil foto bukti"}
+                    {isUploadingFoto ? "⏳ Mengunggah foto..." : fotoAwal ? "Foto siap dilampirkan! Klik untuk mengganti." : "Sentuh di sini untuk mengambil foto bukti"}
                   </span>
-                  <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} style={{ display: "none" }} />
+                  <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} disabled={isUploadingFoto} style={{ display: "none" }} />
                 </label>
                 {fotoAwal && (
                   <div style={{ marginTop: "15px", position: "relative", display: "inline-block" }}>

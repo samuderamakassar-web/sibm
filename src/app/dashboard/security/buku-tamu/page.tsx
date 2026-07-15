@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { collection, addDoc, serverTimestamp, updateDoc, doc, onSnapshot, query, orderBy, Timestamp, getDocs } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
+import { useToast } from "../../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../../components/ui/ConfirmProvider";
 
 interface VisitorLog {
   id: string;
@@ -28,6 +30,9 @@ interface EmployeeData {
 
 export default function BukuTamuSecurity() {
   const router = useRouter();
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
+  const showToast = useToast();
+  const confirm = useConfirm();
 
   const [picName, setPicName] = useState("");
   const [activeTab, setActiveTab] = useState<"input" | "aktif" | "riwayat">("input");
@@ -130,7 +135,7 @@ export default function BukuTamuSecurity() {
       }
     } catch (error) {
       console.error(error);
-      alert("Gagal mengakses kamera. Pastikan izin kamera telah diberikan.");
+      showToast("Gagal mengakses kamera. Pastikan izin kamera telah diberikan.", "error");
       setIsCameraOpen(false);
     }
   };
@@ -143,29 +148,58 @@ export default function BukuTamuSecurity() {
     setIsCameraOpen(false);
   };
 
+  async function uploadToCloudinary(blob: Blob): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", blob);
+    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+    formData.append("folder", "sibm/buku-tamu");
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: "POST", body: formData }
+    );
+    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+    const data = await res.json();
+    return data.secure_url as string;
+  }
+
   const ambilFoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const MAX_WIDTH = 600;
     const scale = MAX_WIDTH / video.videoWidth;
     canvas.width = MAX_WIDTH;
     canvas.height = video.videoHeight * scale;
-    
+
     const context = canvas.getContext("2d");
-    if (context) {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const photoBase64 = canvas.toDataURL("image/jpeg", 0.7); 
-      setFotoBukti(photoBase64);
-    }
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
     matikanKamera();
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      setIsUploadingFoto(true);
+      try {
+        const url = await uploadToCloudinary(blob);
+        setFotoBukti(url);
+      } catch (err) {
+        console.error(err);
+        showToast("Gagal upload foto, coba lagi.", "error");
+      } finally {
+        setIsUploadingFoto(false);
+      }
+    }, "image/jpeg", 0.7);
   };
 
   const hapusFoto = () => setFotoBukti(null);
 
   const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (jenisPengunjung === "Tamu Eksternal" && isUploadingFoto) {
+      return showToast("Tunggu foto selesai diunggah dulu.", "warning");
+    }
     setIsLoading(true);
     
     try {
@@ -183,7 +217,7 @@ export default function BukuTamuSecurity() {
         pic_bertugas: picName
       });
 
-      alert(`${jenisPengunjung} berhasil didaftarkan (Check-In)!`);
+      showToast(`${jenisPengunjung} berhasil didaftarkan (Check-In)!`, "success");
       
       setFormData({ nama: "", instansi_dept: "", tujuan: "", bertemu_dengan: "", no_kendaraan: "" });
       setSearchKaryawan("");
@@ -191,23 +225,30 @@ export default function BukuTamuSecurity() {
       setActiveTab("aktif");
     } catch (error) {
       console.error("Gagal Check-In:", error);
-      alert("Terjadi kesalahan sistem.");
+      showToast("Terjadi kesalahan sistem.", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleCheckOut = async (id: string, namaPengunjung: string) => {
-    if (!window.confirm(`Konfirmasi: Apakah ${namaPengunjung} sudah meninggalkan area SIBM?`)) return;
+    const yakin = await confirm({
+      title: "Konfirmasi Check-Out",
+      message: `Apakah ${namaPengunjung} sudah meninggalkan area SIBM?`,
+      confirmText: "Ya, Check-Out",
+      variant: "danger"
+    });
+    if (!yakin) return;
 
     try {
       await updateDoc(doc(db, "security_visitor_logs", id), {
         status: "Selesai / Keluar",
         waktu_keluar: serverTimestamp()
       });
+      showToast(`${namaPengunjung} berhasil di-check-out.`, "success");
     } catch (error) {
       console.error("Gagal Check-Out:", error);
-      alert("Gagal memproses check-out pengunjung.");
+      showToast("Gagal memproses check-out pengunjung.", "error");
     }
   };
 
@@ -218,7 +259,7 @@ export default function BukuTamuSecurity() {
 
   const handleExportExcel = () => {
     if (visitorLogs.length === 0) {
-      return alert("Data masih kosong, tidak ada yang bisa di-export.");
+      return showToast("Data masih kosong, tidak ada yang bisa di-export.", "warning");
     }
 
     const headers = ["Kategori", "Nama Pengunjung", "Instansi/Dept", "Tujuan", "Bertemu Dengan", "Plat Kendaraan", "Status", "Waktu Masuk", "Waktu Keluar", "Petugas Gate"];
@@ -421,7 +462,11 @@ export default function BukuTamuSecurity() {
                   {/* AREA KAMERA */}
                   <div style={{ gridColumn: "span 2", marginTop: "10px", background: "#f8fafc", padding: "20px", borderRadius: "16px", border: "2px dashed #cbd5e0", textAlign: "center" }}>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", marginBottom: "15px", color: "#4a5568" }}>📸 Wajib Foto Wajah / KTP Tamu</label>
-                    {fotoBukti ? (
+                    {isUploadingFoto ? (
+                      <div style={{ padding: "20px", color: "#718096", fontWeight: "bold", fontSize: "14px" }}>
+                        ⏳ Mengunggah foto...
+                      </div>
+                    ) : fotoBukti ? (
                       <div style={{ position: "relative", display: "inline-block" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={fotoBukti} alt="Bukti Kedatangan" style={{ height: "150px", borderRadius: "12px", border: "3px solid #e53e3e", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }} />

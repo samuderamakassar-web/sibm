@@ -99,6 +99,7 @@ export default function PortalSIBM() {
   const [isOvertimeLoading, setIsOvertimeLoading] = useState(false);
 
   const formatTgl = new Date().toLocaleDateString("id-ID", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
 
   useEffect(() => {
     // 1. Tarik Data OB
@@ -226,23 +227,54 @@ export default function PortalSIBM() {
     }));
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState: React.Dispatch<React.SetStateAction<string>>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const scale = 600 / img.width;
-        canvas.width = 600; canvas.height = img.height * scale;
-        const ctx = canvas.getContext("2d");
-        if (ctx) { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); setFotoState(canvas.toDataURL("image/jpeg", 0.6)); }
-      };
-      if (typeof ev.target?.result === 'string') img.src = ev.target.result;
+  async function uploadToCloudinary(blob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", blob);
+  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+  formData.append("folder", "sibm/portal-publik");
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+  const data = await res.json();
+  return data.secure_url as string;
+}
+
+const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState: React.Dispatch<React.SetStateAction<string>>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const scale = 600 / img.width;
+      canvas.width = 600;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        setIsUploadingFoto(true);
+        try {
+          const url = await uploadToCloudinary(blob);
+          setFotoState(url);
+        } catch (err) {
+          console.error(err);
+          showToast("Gagal upload foto, coba lagi.", "error");
+        } finally {
+          setIsUploadingFoto(false);
+        }
+      }, "image/jpeg", 0.6);
     };
-    reader.readAsDataURL(file);
+    if (typeof ev.target?.result === 'string') img.src = ev.target.result;
   };
+  reader.readAsDataURL(file);
+};
 
   const handleAddAtkItem = () => setFormAtkItems([...formAtkItems, { nama_barang: "", jumlah: "", deskripsi: "" }]);
   const handleRemoveAtkItem = (index: number) => { const newItems = [...formAtkItems]; newItems.splice(index, 1); setFormAtkItems(newItems); };
@@ -394,6 +426,7 @@ export default function PortalSIBM() {
   const handleSubmitSbo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fotoSbo) {
+      if (isUploadingFoto) return showToast("Tunggu foto selesai diunggah dulu.", "warning");
       showToast("Wajib melampirkan foto!", "warning");
       return;
     }
@@ -995,7 +1028,9 @@ export default function PortalSIBM() {
                 <div style={{ fontSize: "14px", fontWeight: "bold", color: fotoSbo ? "#22543d" : "#4a5568" }}>{fotoSbo ? "Foto Temuan Terlampir ✓" : "Unggah Bukti Foto Temuan (Wajib) *"}</div>
                 <input type="file" accept="image/*" capture="environment" onChange={(e) => handleImageUpload(e, setFotoSbo)} style={{ display: "none" }} required={!fotoSbo} />
               </label>
-              {fotoSbo && (
+              {isUploadingFoto ? (
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: "#d69e2e" }}>⏳ Mengunggah foto...</div>
+              ) : fotoSbo && (
                 <div style={{marginTop: "15px", position: "relative", display: "inline-block"}}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={fotoSbo} alt="Bukti Bahaya" style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "10px", border: "1px solid #c6f6d5", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />
@@ -1034,11 +1069,15 @@ export default function PortalSIBM() {
                 <Textarea label="Deskripsi Masalah *" required value={formHelpdesk.deskripsi} onChange={(e) => setFormHelpdesk({ ...formHelpdesk, deskripsi: e.target.value })} style={{ minHeight: "60px" }} />
                 <div style={{ background: fotoAwal ? "#ebf8ff" : "#f8fafc", border: fotoAwal ? "2px solid #90cdf4" : "2px dashed #cbd5e0", padding: "20px", borderRadius: "16px", textAlign: "center" }}>
                   <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}><span style={{ fontSize: "35px" }}>📸</span><div style={{ fontSize: "14px", fontWeight: "bold", color: "#4a5568" }}>Unggah Foto Kerusakan *</div><input type="file" accept="image/*" capture="environment" onChange={(e) => handleImageUpload(e, setFotoAwal)} style={{ display: "none" }} required={!fotoAwal} /></label>
-                  {fotoAwal && <div style={{marginTop: "15px"}}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={fotoAwal} alt="Awal" style={{ width: "100%", maxHeight: "150px", objectFit: "cover", borderRadius: "10px" }} />
-                    <button type="button" onClick={() => setFotoAwal("")} style={{background: "#e53e3e", color: "white", padding: "5px", borderRadius: "50%", marginTop: "5px"}}>✖</button>
-                  </div>}
+                  {isUploadingFoto ? (
+                    <div style={{ fontSize: "13px", fontWeight: "bold", color: "#d69e2e", marginTop: "10px" }}>⏳ Mengunggah foto...</div>
+                  ) : fotoAwal && (
+                    <div style={{marginTop: "15px"}}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={fotoAwal} alt="Awal" style={{ width: "100%", maxHeight: "150px", objectFit: "cover", borderRadius: "10px" }} />
+                      <button type="button" onClick={() => setFotoAwal("")} style={{background: "#e53e3e", color: "white", padding: "5px", borderRadius: "50%", marginTop: "5px"}}>✖</button>
+                    </div>
+                  )}
                 </div>
                 <Button type="submit" loading={isHelpdeskLoading} loadingText="Mengunggah...">Kirim Laporan</Button>
               </form>
