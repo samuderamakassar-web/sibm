@@ -67,7 +67,7 @@ export default function BukuTamuSecurity() {
   useEffect(() => {
     const nama = localStorage.getItem("pic_nama");
     if (!nama) {
-      router.push("/shift-checkin");
+      router.push("/dashboard/security");
       return;
     }
     setTimeout(() => setPicName(nama), 0);

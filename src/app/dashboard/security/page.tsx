@@ -45,7 +45,7 @@ export default function SecurityDashboard() {
       const dept = localStorage.getItem("pic_dept") || ""; 
 
       if (!nama || (dept !== "Security" && !dept.includes("Admin"))) {
-        router.push("/shift-checkin");
+        router.push("/dashboard");
         return;
       }
       
@@ -156,7 +156,7 @@ export default function SecurityDashboard() {
     localStorage.removeItem("pic_nama");
     localStorage.removeItem("pic_dept");
     localStorage.removeItem("pic_role");
-    router.push("/shift-checkin");
+    router.push("/dashboard");
   };
 
   const handlePrint = () => window.print();

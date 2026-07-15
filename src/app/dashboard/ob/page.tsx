@@ -57,7 +57,7 @@ export default function OBDashboard() {
     const siapkanIdentitas = async () => {
       const nama = localStorage.getItem("pic_nama");
       if (!nama) {
-        router.push("/shift-checkin");
+        router.push("/dashboard");
       } else {
         setPicName(nama);
       }

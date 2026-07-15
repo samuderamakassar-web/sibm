@@ -28,7 +28,7 @@ export default function LaporanKerusakanPage() {
       
       if (!nama || !dept.includes("ob & cs")) {
         alert("Akses Ditolak! Halaman ini khusus staf OB & CS.");
-        router.push("/shift-checkin");
+        router.push("/dashboard/ob");
         return;
       }
       setPicName(nama);
