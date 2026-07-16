@@ -1,0 +1,31 @@
+name: Reminder Checklist OB & CS
+
+on:
+  schedule:
+    # Semua jam di bawah dalam UTC. WITA = UTC+8, jam kerja 08:00-17:00 WITA.
+    - cron: "0 2 * * *" # 10:00 WITA
+    - cron: "0 4 * * *" # 12:00 WITA
+    - cron: "0 6 * * *" # 14:00 WITA
+    - cron: "0 8 * * *" # 16:00 WITA
+  workflow_dispatch:
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Jalankan reminder checklist OB
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          FONNTE_TOKEN: ${{ secrets.FONNTE_TOKEN }}
+        run: node scripts/checklist-reminder.mjs
