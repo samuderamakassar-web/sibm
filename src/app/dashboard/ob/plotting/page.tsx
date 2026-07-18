@@ -92,7 +92,8 @@ export default function PlottingOBPage() {
     const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
     const nama = localStorage.getItem("pic_nama") || "";
 
-    const bolehAkses = (role.includes("Koordinator") || role.includes("Administrator")) && dept.includes("ob & cs");
+    const bolehAkses =
+      role.includes("Administrator") || (role.includes("Koordinator") && dept.includes("ob & cs"));
 
     if (!bolehAkses) {
       showToast("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.", "error");

@@ -91,6 +91,7 @@ export default function PatroliSecurityPage() {
 
   const [scannedItems, setScannedItems] = useState<TitikAman[]>([]);
   const [catatanUmum, setCatatanUmum] = useState<string>("");
+  const [alasanTerlewat, setAlasanTerlewat] = useState<Record<string, string>>({});
   const [riwayatSaya, setRiwayatSaya] = useState<PatroliLog[]>([]); // DATA RIWAYAT BARU
   
   const [scanTarget, setScanTarget] = useState<string | null>(null);
@@ -106,6 +107,12 @@ export default function PatroliSecurityPage() {
 
   const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), []);
   const progressPersen = (scannedItems.length / totalTitikKeseluruhan) * 100;
+  const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), []);
+  const titikTerlewat = useMemo(
+    () => semuaTitikPatroli.filter((t) => !scannedItems.some((s) => s.id === t.id)),
+    [scannedItems, semuaTitikPatroli]
+  );
+  const belumLengkapAlasan = titikTerlewat.some((t) => !(alasanTerlewat[t.id] || "").trim());
 
   // ==========================================
   // FUNGSI KAMERA
@@ -248,6 +255,10 @@ export default function PatroliSecurityPage() {
     }
   }, [scanTarget, kondisiTitik, bukaKamera]);
 
+  const handleUbahAlasan = (id: string, alasan: string) => {
+    setAlasanTerlewat((prev) => ({ ...prev, [id]: alasan }));
+  };
+
   // ==========================================
   // HANDLERS
   // ==========================================
@@ -258,6 +269,7 @@ export default function PatroliSecurityPage() {
         petugas: picName,
         waktu_laporan: serverTimestamp(),
         titik_patroli: scannedItems,
+        area_terlewat: titikTerlewat.map((t) => ({ id: t.id, nama: t.nama, alasan: alasanTerlewat[t.id] || "" })),
         catatan_shift: catatanUmum,
         status: scannedItems.length === totalTitikKeseluruhan ? "Selesai Sempurna" : "Selesai Sebagian"
       });
@@ -267,6 +279,7 @@ export default function PatroliSecurityPage() {
         setIsSuccess(false); 
         setShowReview(false);
         setScannedItems([]);
+        setAlasanTerlewat({});
         setCatatanUmum("");
         setActiveTab("HISTORY"); // PERBAIKAN: Arahkan ke Tab Riwayat setelah submit
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -432,9 +445,35 @@ export default function PatroliSecurityPage() {
 
                 <div style={{ display: "flex", gap: "15px" }}>
                   <button onClick={() => setShowReview(false)} style={{ flex: 1, padding: "15px", background: "#edf2f7", color: "#4a5568", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer" }}>⬅️ Cek Area Lain</button>
-                  <button onClick={handleSubmitFinal} disabled={isLoading} style={{ flex: 2, padding: "15px", background: "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: isLoading ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(229, 62, 62, 0.3)" }}>
-                    {isLoading ? "Mengunggah..." : "🚀 Kunci & Kirim Laporan"}
+                  <button
+                    onClick={handleSubmitFinal}
+                    disabled={isLoading || belumLengkapAlasan}
+                    style={{ flex: 2, padding: "15px", background: (isLoading || belumLengkapAlasan) ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: (isLoading || belumLengkapAlasan) ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(229, 62, 62, 0.3)" }}
+                  >
+                    {isLoading ? "Mengunggah..." : belumLengkapAlasan ? "⚠️ Isi Alasan Dulu" : "🚀 Kunci & Kirim Laporan"}
                   </button>
+                </div>
+              </div>
+            )}
+            {titikTerlewat.length > 0 && (
+              <div style={{ background: "#fffaf0", border: "1px solid #fbd38d", borderRadius: "12px", padding: "20px", marginBottom: "25px" }}>
+                <h3 style={{ margin: "0 0 5px 0", color: "#9c4221", fontSize: "15px" }}>⚠️ {titikTerlewat.length} Titik Belum Terpantau</h3>
+                <p style={{ margin: "0 0 15px 0", color: "#7b341e", fontSize: "12px" }}>Wajib isi alasan kenapa titik ini belum sempat difoto sebelum laporan bisa dikirim.</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {titikTerlewat.map((t) => (
+                    <div key={t.id}>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#2d3748", marginBottom: "4px" }}>
+                        {t.id.split("::")[0]} — {t.nama}
+                      </label>
+                      <input
+                        type="text"
+                        value={alasanTerlewat[t.id] || ""}
+                        onChange={(e) => handleUbahAlasan(t.id, e.target.value)}
+                        placeholder="Alasan tidak sempat difoto..."
+                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #fbd38d", fontSize: "13px" }}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

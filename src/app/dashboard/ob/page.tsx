@@ -35,8 +35,9 @@ interface OvertimeItemRequest {
 export default function OBDashboard() {
   const router = useRouter();
   const todayISO = new Date().toISOString().split("T")[0];
-  
+  const [picRole, setPicRole] = useState<string>("");
   const [picName, setPicName] = useState<string>("");
+
   const [isReady, setIsReady] = useState<boolean>(false);
   const [assignedFloors, setAssignedFloors] = useState<string[]>([]);
 
@@ -54,16 +55,18 @@ export default function OBDashboard() {
 
   // EFEK 1: Ambil Identitas
   useEffect(() => {
-    const siapkanIdentitas = async () => {
-      const nama = localStorage.getItem("pic_nama");
-      if (!nama) {
-        router.push("/dashboard");
-      } else {
-        setPicName(nama);
-      }
-    };
-    siapkanIdentitas();
-  }, [router]);
+  const siapkanIdentitas = async () => {
+    const nama = localStorage.getItem("pic_nama");
+    const role = localStorage.getItem("pic_role") || "";
+    if (!nama) {
+      router.push("/dashboard");
+    } else {
+      setPicName(nama);
+      setPicRole(role);
+    }
+  };
+  siapkanIdentitas();
+}, [router]);
 
   // EFEK 2: Listener Data Real-time (Plotting, Stok, Deep Cleaning)
   useEffect(() => {
@@ -284,7 +287,7 @@ export default function OBDashboard() {
         )}
 
         {/* 👑 PANEL KHUSUS KOORDINATOR (HILAL) */}
-        {picName.toLowerCase().includes("hilal") && (
+        {(picRole.includes("Koordinator") || picRole.includes("Administrator")) && (
           <div style={{ display: "flex", gap: "20px", marginBottom: "30px", flexWrap: "wrap" }}>
             <div 
               onClick={() => router.push("/dashboard/ob/plotting")}
