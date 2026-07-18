@@ -13,6 +13,12 @@ interface TitikPatroli {
   foto?: string;
 }
 
+interface AreaTerlewat {
+  id: string;
+  nama: string;
+  alasan: string;
+}
+
 interface PatroliLog {
   id: string;
   petugas: string;
@@ -20,6 +26,7 @@ interface PatroliLog {
   status: string;
   catatan_shift: string;
   titik_patroli: TitikPatroli[];
+  area_terlewat?: AreaTerlewat[];
 }
 
 interface VisitorLog {
@@ -91,21 +98,36 @@ export default function MonitorSecurityPage() {
 
     const fetchRoster = async () => {
       try {
-        const metaSnap = await getDoc(doc(db, "security_schedules", "active_meta"));
-        if (metaSnap.exists()) {
-          const docId = metaSnap.data().current_doc_id;
-          const mSnap = await getDoc(doc(db, "security_monthly_schedules", docId));
-          if (mSnap.exists()) {
-            const data = mSnap.data();
-            setRosterBulan(data.nama_bulan_id || "");
-            const dataHari = (data.data_hari || {}) as Record<string, Record<string, string>>;
-            setRosterData(dataHari);
-            
-            const staff = new Set<string>();
-            Object.values(dataHari).forEach(d => Object.keys(d).forEach(n => staff.add(n)));
-            setTimSecurity(Array.from(staff).sort());
-          }
+        const today = new Date();
+        let bulanAwal = today.getMonth() + 1; // 1-12
+        let tahunAwal = today.getFullYear();
+        if (today.getDate() < 11) {
+          bulanAwal -= 1;
+          if (bulanAwal === 0) { bulanAwal = 12; tahunAwal -= 1; }
         }
+
+        const docBulan1 = `${tahunAwal}-${String(bulanAwal).padStart(2, "0")}`;
+        const tglSelesai = new Date(tahunAwal, bulanAwal, 10);
+        const docBulan2 = `${tglSelesai.getFullYear()}-${String(tglSelesai.getMonth() + 1).padStart(2, "0")}`;
+
+        const dataSaves: Record<string, Record<string, string>> = {};
+
+        const snap1 = await getDoc(doc(db, "security_monthly_schedules", docBulan1));
+        if (snap1.exists()) Object.assign(dataSaves, snap1.data().data_hari || {});
+
+        const snap2 = await getDoc(doc(db, "security_monthly_schedules", docBulan2));
+        if (snap2.exists()) Object.assign(dataSaves, snap2.data().data_hari || {});
+
+        setRosterData(dataSaves);
+
+        const tglMulai = new Date(tahunAwal, bulanAwal - 1, 11);
+        const labelAwal = tglMulai.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+        const labelAkhir = tglSelesai.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+        setRosterBulan(`${labelAwal} - ${labelAkhir}`);
+
+        const staff = new Set<string>();
+        Object.values(dataSaves).forEach(d => Object.keys(d).forEach(n => staff.add(n)));
+        setTimSecurity(Array.from(staff).sort());
       } catch (e) { console.error(e); }
     };
     fetchRoster();
@@ -241,6 +263,7 @@ export default function MonitorSecurityPage() {
                     <th style={{ width: "20%" }}>Waktu Laporan</th>
                     <th style={{ width: "25%" }}>Petugas Patroli</th>
                     <th style={{ width: "20%" }}>Total Titik Di-Scan</th>
+                    <th style={{ width: "20%" }}>Lantai Dipatroli</th>
                     <th style={{ width: "20%", textAlign: "center" }}>Status Keliling</th>
                     <th style={{ width: "15%", textAlign: "center" }}>Aksi</th>
                   </tr>
@@ -255,8 +278,16 @@ export default function MonitorSecurityPage() {
                       <td>
                         <div style={{ fontWeight: "bold", color: "#2d3748" }}>{p.titik_patroli?.length || 0} Titik Terpantau</div>
                       </td>
+                      <td>
+                        <div style={{ fontSize: "12px", color: "#2d3748" }}>
+                          {Array.from(new Set((p.titik_patroli || []).map((t) => t.id.split("::")[0]))).join(", ") || "-"}
+                        </div>
+                      </td>
                       <td style={{ textAlign: "center" }}>
                         <span style={{ background: p.status.includes("Sempurna") ? "#c6f6d5" : "#feebc8", color: p.status.includes("Sempurna") ? "#22543d" : "#9c4221", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", display: "inline-block" }}>{p.status}</span>
+                        {p.area_terlewat && p.area_terlewat.length > 0 && (
+                          <div style={{ fontSize: "10px", color: "#c53030", marginTop: "4px" }}>{p.area_terlewat.length} area terlewat</div>
+                        )}
                       </td>
                       <td style={{ textAlign: "center" }}>
                         <button onClick={() => setDetailPatroli(p)} style={{ background: "#ebf8ff", color: "#3182ce", border: "1px solid #bee3f8", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", width: "100%" }}>
@@ -264,7 +295,7 @@ export default function MonitorSecurityPage() {
                         </button>
                       </td>
                     </tr>
-                  )) : <tr><td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "#a0aec0" }}>Belum ada log patroli yang cocok dengan pencarian.</td></tr>}
+                  )) : <tr><td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "#a0aec0" }}>Belum ada log patroli yang cocok dengan pencarian.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -426,6 +457,19 @@ export default function MonitorSecurityPage() {
                     </div>
                   );
                 })}
+                {detailPatroli.area_terlewat && detailPatroli.area_terlewat.length > 0 && (
+                  <div style={{ marginTop: "20px", background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: "12px", padding: "15px" }}>
+                    <h3 style={{ margin: "0 0 10px 0", color: "#9b2c2c", fontSize: "14px" }}>⚠️ {detailPatroli.area_terlewat.length} Area Tidak Difoto</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {detailPatroli.area_terlewat.map((a, i) => (
+                        <div key={i} style={{ background: "white", borderRadius: "8px", padding: "10px 12px", border: "1px solid #feb2b2" }}>
+                          <div style={{ fontSize: "11px", color: "#742a2a", fontWeight: "bold" }}>{a.id.split("::")[0]} — {a.nama}</div>
+                          <div style={{ fontSize: "12px", color: "#4a5568", marginTop: "4px" }}><i>&quot;{a.alasan || "Tidak ada alasan dicantumkan"}&quot;</i></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>

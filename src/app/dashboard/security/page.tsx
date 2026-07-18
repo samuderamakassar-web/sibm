@@ -153,10 +153,12 @@ export default function SecurityDashboard() {
   }, [picName]);
 
   const handleKeluar = () => {
-    localStorage.removeItem("pic_nama");
-    localStorage.removeItem("pic_dept");
-    localStorage.removeItem("pic_role");
-    router.push("/dashboard");
+    if(window.confirm("Apakah Anda yakin ingin keluar/logout?")) {
+      localStorage.removeItem("pic_nama");
+      localStorage.removeItem("pic_dept");
+      localStorage.removeItem("pic_role");
+      router.push("/");
+    }
   };
 
   const handlePrint = () => window.print();
