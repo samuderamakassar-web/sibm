@@ -18,31 +18,46 @@ const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makass
 const jamMenit = now.getHours() * 60 + now.getMinutes();
 const toWaktu = (h, m) => h * 60 + m;
 
-function dekatDenganToleransi(target, toleransiMenit = 10) {
+// GitHub Actions cron sering telat 30-90+ menit dari jadwal (terutama di menit :00/:30
+// yang padat), jadi toleransi dilebarkan jauh dari versi awal (10 menit -> 45 menit).
+const TOLERANSI_MENIT = 45;
+
+function selisihMenit(target) {
   let selisih = Math.abs(jamMenit - target);
-  selisih = Math.min(selisih, 1440 - selisih); // handle wrap tengah malam (misal target 0, jam 23:55)
-  return selisih <= toleransiMenit;
+  return Math.min(selisih, 1440 - selisih); // handle wrap tengah malam
 }
 
 const SLOTS = [
-  { target: toWaktu(11, 0), jenis: "reminder", shift: "pagi" },
-  { target: toWaktu(14, 0), jenis: "reminder", shift: "pagi" },
-  { target: toWaktu(17, 0), jenis: "reminder", shift: "pagi" },
-  { target: toWaktu(19, 30), jenis: "pre-shift", shift: "pagi" },
-  { target: toWaktu(20, 0), jenis: "shift-start", shift: "malam" },
-  { target: toWaktu(23, 0), jenis: "reminder", shift: "malam" },
-  { target: toWaktu(2, 0), jenis: "reminder", shift: "malam" },
-  { target: toWaktu(5, 0), jenis: "reminder", shift: "malam" },
-  { target: toWaktu(7, 30), jenis: "pre-shift", shift: "malam" },
-  { target: toWaktu(8, 0), jenis: "shift-start", shift: "pagi" },
+  { id: "reminder-11", target: toWaktu(11, 0), jenis: "reminder", shift: "pagi" },
+  { id: "reminder-14", target: toWaktu(14, 0), jenis: "reminder", shift: "pagi" },
+  { id: "reminder-17", target: toWaktu(17, 0), jenis: "reminder", shift: "pagi" },
+  { id: "preshift-1930", target: toWaktu(19, 30), jenis: "pre-shift", shift: "pagi" },
+  { id: "shiftstart-2000", target: toWaktu(20, 0), jenis: "shift-start", shift: "malam" },
+  { id: "reminder-23", target: toWaktu(23, 0), jenis: "reminder", shift: "malam" },
+  { id: "reminder-02", target: toWaktu(2, 0), jenis: "reminder", shift: "malam" },
+  { id: "reminder-05", target: toWaktu(5, 0), jenis: "reminder", shift: "malam" },
+  { id: "preshift-0730", target: toWaktu(7, 30), jenis: "pre-shift", shift: "malam" },
+  { id: "shiftstart-0800", target: toWaktu(8, 0), jenis: "shift-start", shift: "pagi" },
 ];
 
-const slotAktif = SLOTS.find(s => dekatDenganToleransi(s.target));
+// Pilih slot TERDEKAT yang masih dalam toleransi (bukan sekadar yang pertama cocok),
+// supaya kalau toleransi lebar bikin 2 slot berdekatan sama-sama "masuk" (mis. 19:30 & 20:00
+// cuma beda 30 menit), yang kepilih tetap yang paling pas.
+let slotAktif = null;
+let selisihTerkecil = Infinity;
+for (const s of SLOTS) {
+  const selisih = selisihMenit(s.target);
+  if (selisih <= TOLERANSI_MENIT && selisih < selisihTerkecil) {
+    selisihTerkecil = selisih;
+    slotAktif = s;
+  }
+}
+
 if (!slotAktif) {
   console.log(`Jam ${now.getHours()}:${now.getMinutes()} WITA bukan waktu reminder, skip.`);
   process.exit(0);
 }
-console.log("Slot aktif:", slotAktif);
+console.log("Slot aktif:", slotAktif, `(selisih ${selisihTerkecil} menit dari target)`);
 
 // ==========================================
 // HELPER TANGGAL
@@ -56,6 +71,25 @@ function formatTanggal(d) {
 
 const hariIni = formatTanggal(now);
 const kemarin = formatTanggal(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+
+// Tanggal mulai shift malam yang SEDANG AKTIF sekarang: kalau jam sekarang masih di
+// atas jam 12 siang (before midnight), shift malam yang aktif dimulai HARI INI (20:00 hari ini).
+// Kalau sudah lewat tengah malam (dini hari), shift malam yang aktif dimulai KEMARIN (20:00 kemarin).
+// (Bug lama: reminder 23:00 selalu pakai "kemarin" padahal seharusnya "hari ini".)
+const tanggalShiftMalamAktif = now.getHours() >= 12 ? hariIni : kemarin;
+
+// Guard anti-double-kirim: kalau workflow ke-trigger dua kali dan sama-sama nyangkut ke
+// slot yang sama di hari yang sama, jangan kirim WA dua kali ke orang yang sama.
+const idLogHariIni = `${hariIni}_${slotAktif.id}`;
+
+// Fonnte butuh format 62xxx, bukan 08xxx atau +62xxx — data di users_master kadang
+// disimpan mentah dari input form, jadi dinormalisasi dulu di sini sebagai jaring pengaman.
+function normalisasiNomor(nomor) {
+  if (!nomor) return nomor;
+  let n = String(nomor).replace(/[^0-9]/g, "");
+  if (n.startsWith("0")) n = "62" + n.slice(1);
+  return n;
+}
 
 // ==========================================
 // AMBIL PIC YANG TERJADWAL DI SHIFT TERTENTU
@@ -75,7 +109,7 @@ async function ambilPicShift(tanggalStr, shiftLabel) {
   return namaTerjadwal
     .map(nama => semuaStaf.find(u => u.nama === nama))
     .filter(u => u && u.whatsapp)
-    .map(u => ({ nama: u.nama, whatsapp: u.whatsapp }));
+    .map(u => ({ nama: u.nama, whatsapp: normalisasiNomor(u.whatsapp) }));
 }
 
 // ==========================================
@@ -87,7 +121,12 @@ async function kirimWA(nomor, pesan) {
     headers: { Authorization: FONNTE_TOKEN, "Content-Type": "application/json" },
     body: JSON.stringify({ target: nomor, message: pesan }),
   });
-  if (!res.ok) console.error(`Gagal kirim WA ke ${nomor}:`, await res.text());
+  const teks = await res.text();
+  if (!res.ok) {
+    console.error(`Gagal kirim WA ke ${nomor} (HTTP ${res.status}):`, teks);
+  } else {
+    console.log(`Respon Fonnte untuk ${nomor}:`, teks);
+  }
 }
 
 async function tulisNotifApp(namaPic, pesan, jenis) {
@@ -115,11 +154,23 @@ async function kirimKeSemua(picList, pesan, jenis) {
 // EKSEKUSI SESUAI JENIS SLOT
 // ==========================================
 async function jalankan() {
+  // Guard anti-double-kirim: cek dulu apakah slot ini sudah pernah diproses hari ini.
+  const logRef = db.collection("reminder_patroli_log").doc(idLogHariIni);
+  const logSnap = await logRef.get();
+  if (logSnap.exists) {
+    console.log(`Slot "${slotAktif.id}" hari ini sudah pernah diproses, skip (anti-double-kirim).`);
+    return;
+  }
+  await logRef.set({
+    slot: slotAktif.id,
+    diproses_pada: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
   if (slotAktif.jenis === "reminder") {
     const list =
       slotAktif.shift === "pagi"
         ? await ambilPicShift(hariIni, "Shift 1")
-        : await ambilPicShift(kemarin, "Shift 2"); // shift malam kemarin masih berjalan lewat tengah malam
+        : await ambilPicShift(tanggalShiftMalamAktif, "Shift 2");
     await kirimKeSemua(
       list,
       "⏰ Reminder: waktunya patroli keliling. Jangan lupa scan & catat semua titik ya.",

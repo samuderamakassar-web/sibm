@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, getDoc, doc, Timestamp, updateDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
@@ -57,7 +57,7 @@ interface PurchaseRequest {
 
 export default function MonitorOBPage() {
   const router = useRouter();
-  
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminName, setAdminName] = useState("Admin");
   const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "PLOT" | "RESTOCK">("CHECKLIST");
   
@@ -237,153 +237,85 @@ export default function MonitorOBPage() {
                   <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
                     <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Waktu Laporan</th>
                     <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Petugas OB</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Lokasi / Area</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Area</th>
                     <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Status Kebersihan</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Foto</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredChecklists.map((item) => {
+                  {filteredChecklists.length > 0 ? filteredChecklists.map((item) => {
                     const statusRingkas = getStatusRingkas(item.detail_tugas);
+                    const isOpen = expandedId === item.id;
                     return (
-                      <tr key={item.id} style={{ borderBottom: "1px solid #edf2f7" }}>
-                        <td style={{ padding: "12px 15px", color: "#718096" }}>{formatWaktu(item.waktu_selesai)}</td>
-                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2c5282" }}>{item.pic_bertugas}</td>
-                        <td style={{ padding: "12px 15px", color: "#4a5568" }}>{item.area}</td>
-                        <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                          <span style={{
-                            background: statusRingkas === "Bersih Sempurna" ? "#c6f6d5" : statusRingkas === "Belum Lengkap" ? "#fed7d7" : "#feebc8",
-                            color: statusRingkas === "Bersih Sempurna" ? "#22543d" : statusRingkas === "Belum Lengkap" ? "#9b2c2c" : "#9c4221",
-                            padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold"
-                          }}>
-                            {statusRingkas}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* ============================== TAB 2: STOCK OPNAME ============================== */}
-          {activeTab === "STOCK" && (
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Nama Barang</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Sisa Stok (Qty)</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Batas Minimum</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Diupdate Oleh</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Terakhir Diupdate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStocks.length > 0 ? filteredStocks.map((item) => {
-                    const isLowStock = item.qty <= item.batas_minimum;
-                    return (
-                      <tr key={item.id} style={{ borderBottom: "1px solid #edf2f7", background: isLowStock ? "#fff5f5" : "white" }}>
-                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2d3748" }}>{item.nama_barang}</td>
-                        <td style={{ padding: "12px 15px", textAlign: "center", fontWeight: "900", color: isLowStock ? "#e53e3e" : "#38a169", fontSize: "14px" }}>
-                          {item.qty}
-                          {isLowStock && <div style={{ fontSize: "9px", color: "#e53e3e", marginTop: "4px", background: "#fed7d7", padding: "2px 6px", borderRadius: "4px", display: "inline-block" }}>LOW STOCK</div>}
-                        </td>
-                        <td style={{ padding: "12px 15px", textAlign: "center", color: "#718096", fontWeight: "bold" }}>{item.batas_minimum}</td>
-                        <td style={{ padding: "12px 15px", color: "#4a5568" }}>
-                          <span style={{ background: "#edf2f7", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span>
-                        </td>
-                        <td style={{ padding: "12px 15px", color: "#a0aec0", fontSize: "11px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
-                      </tr>
-                    );
-                  }) : (
-                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada data barang di inventori.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* ============================== TAB 3: RESTOCK PENGAJUAN BARANG ============================== */}
-          {activeTab === "RESTOCK" && (
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Waktu Pengajuan</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Barang Diminta</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Stok Saat Diminta</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Pemohon</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Status & Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPR.length > 0 ? filteredPR.map((pr) => {
-                    const isPending = pr.status === "Menunggu Approval";
-                    return (
-                      <tr key={pr.id} style={{ borderBottom: "1px solid #edf2f7", background: isPending ? "#fffaf0" : "white" }}>
-                        <td style={{ padding: "12px 15px", color: "#718096" }}>{formatWaktu(pr.waktu_pengajuan)}</td>
-                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2d3748", fontSize: "14px" }}>{pr.nama_barang}</td>
-                        <td style={{ padding: "12px 15px" }}>
-                          <span style={{ background: "#fed7d7", color: "#c53030", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>Sisa: {pr.sisa_stok}</span>
-                        </td>
-                        <td style={{ padding: "12px 15px", color: "#4a5568" }}>{pr.diajukan_oleh}</td>
-                        <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                          {isPending ? (
-                            <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
-                              <button onClick={() => handleUpdatePR(pr.id, "Disetujui / Proses Beli")} style={{ background: "#38a169", color: "white", border: "none", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>✔️ Setujui</button>
-                              <button onClick={() => handleUpdatePR(pr.id, "Ditolak / Ditunda")} style={{ background: "#e53e3e", color: "white", border: "none", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>❌ Tolak</button>
-                            </div>
-                          ) : (
-                            <span style={{ 
-                              background: pr.status.includes("Disetujui") ? "#c6f6d5" : "#fed7d7", 
-                              color: pr.status.includes("Disetujui") ? "#22543d" : "#9b2c2c", 
-                              padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" 
+                      <Fragment key={item.id}>
+                        <tr style={{ borderBottom: "1px solid #edf2f7" }}>
+                          <td style={{ padding: "12px 15px", color: "#718096" }}>{formatWaktu(item.waktu_selesai)}</td>
+                          <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2c5282" }}>{item.pic_bertugas}</td>
+                          <td style={{ padding: "12px 15px", color: "#4a5568" }}>{item.area}</td>
+                          <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                            <span style={{
+                              background: statusRingkas === "Bersih Sempurna" ? "#c6f6d5" : statusRingkas === "Belum Lengkap" ? "#fed7d7" : "#feebc8",
+                              color: statusRingkas === "Bersih Sempurna" ? "#22543d" : statusRingkas === "Belum Lengkap" ? "#9b2c2c" : "#9c4221",
+                              padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold"
                             }}>
-                              {pr.status}
+                              {statusRingkas}
                             </span>
-                          )}
-                        </td>
-                      </tr>
+                          </td>
+                          <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                            <button
+                              onClick={() => setExpandedId(isOpen ? null : item.id)}
+                              style={{ background: isOpen ? "#319795" : "#edf2f7", color: isOpen ? "white" : "#4a5568", border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+                            >
+                              {isOpen ? "Tutup ▲" : "Lihat Foto ▼"}
+                            </button>
+                          </td>
+                        </tr>
+          
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={5} style={{ padding: "0", background: "#f8fafc" }}>
+                              <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "15px" }}>
+                                {item.detail_tugas && item.detail_tugas.length > 0 ? item.detail_tugas.map((sub, sIdx) => (
+                                  <div key={sIdx} style={{ background: "white", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                                    <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "13px", marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
+                                      <span>{sub.nama_tugas}</span>
+                                      <span style={{ fontSize: "10px", padding: "3px 8px", background: "#edf2f7", borderRadius: "6px", color: "#4a5568" }}>{sub.status}</span>
+                                    </div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", maxWidth: "400px" }}>
+                                      <div>
+                                        <div style={{ fontSize: "10px", color: "#e53e3e", fontWeight: "900", marginBottom: "6px", textAlign: "center" }}>SEBELUM</div>
+                                        {sub.foto_before ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={sub.foto_before} alt="Sebelum" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid #fed7d7", cursor: "pointer" }} onClick={() => window.open(sub.foto_before!, "_blank")} />
+                                        ) : (
+                                          <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", borderRadius: "8px", color: "#a0aec0", fontSize: "11px", fontStyle: "italic" }}>Tidak ada foto</div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: "10px", color: "#38a169", fontWeight: "900", marginBottom: "6px", textAlign: "center" }}>SESUDAH</div>
+                                        {sub.foto_after ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={sub.foto_after} alt="Sesudah" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid #c6f6d5", cursor: "pointer" }} onClick={() => window.open(sub.foto_after!, "_blank")} />
+                                        ) : (
+                                          <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", borderRadius: "8px", color: "#a0aec0", fontSize: "11px", fontStyle: "italic" }}>Tidak ada foto</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )) : (
+                                  <div style={{ textAlign: "center", color: "#a0aec0", fontSize: "12px" }}>Tidak ada rincian tugas untuk laporan ini.</div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   }) : (
-                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada pengajuan pembelian barang dari OB.</td></tr>
+                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada log laporan kebersihan.</td></tr>
                   )}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {/* ============================== TAB 4: PLOT PENEMPATAN ============================== */}
-          {activeTab === "PLOT" && (
-            <div>
-              {dailyPlots.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                  {dailyPlots.map((plot) => (
-                    <div key={plot.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden" }}>
-                      <div style={{ background: "#f8fafc", padding: "15px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between" }}>
-                        <div><h3 style={{ margin: 0, color: "#3182ce", fontSize: "16px" }}>{formatDateOnly(plot.tanggal)}</h3><p style={{ margin: "4px 0 0", fontSize: "12px", color: "#718096" }}>Oleh: {plot.dibuat_oleh}</p></div>
-                        <span style={{ fontSize: "11px", background: "#e2e8f0", color: "#4a5568", padding: "4px 10px", borderRadius: "20px", fontWeight: "bold", height: "fit-content" }}>Diupdate: {formatWaktu(plot.waktu_update)}</span>
-                      </div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                          <thead>
-                            <tr>{kolomLantai.map(l => <th key={l} style={{ padding: "12px", borderBottom: "1px solid #edf2f7", borderRight: "1px solid #edf2f7", color: "#4a5568", minWidth: "120px" }}>{l}</th>)}</tr>
-                          </thead>
-                          <tbody>
-                            <tr>{kolomLantai.map(l => {
-                              const petugas = plot.plot_lantai?.[l] || "Belum diplot";
-                              return <td key={l} style={{ padding: "12px", borderRight: "1px solid #edf2f7", color: petugas === "Belum diplot" ? "#a0aec0" : "#2d3748", fontWeight: petugas === "Belum diplot" ? "normal" : "bold" }}>{petugas}</td>;
-                            })}</tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ padding: "40px", textAlign: "center", color: "#a0aec0", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>Belum ada catatan pembagian tugas OB.</div>
-              )}
             </div>
           )}
 
