@@ -2,17 +2,17 @@ name: Patroli Reminder
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # 11:00 WITA
-    - cron: '0 6 * * *'   # 14:00 WITA
-    - cron: '0 9 * * *'   # 17:00 WITA
-    - cron: '30 11 * * *' # 19:30 WITA (pre-shift)
-    - cron: '0 12 * * *'  # 20:00 WITA (ganti shift malam)
-    - cron: '0 15 * * *'  # 23:00 WITA
-    - cron: '0 18 * * *'  # 02:00 WITA
-    - cron: '0 21 * * *'  # 05:00 WITA
-    - cron: '30 23 * * *' # 07:30 WITA (pre-shift)
-    - cron: '0 0 * * *'   # 08:00 WITA (ganti shift pagi)
-  workflow_dispatch: {}    # buat testing manual dari tab Actions di GitHub
+    - cron: "7 2 * * *" # ~11:00 WITA
+    - cron: "7 5 * * *" # ~14:00 WITA
+    - cron: "7 8 * * *" # ~17:00 WITA
+    - cron: "37 10 * * *" # ~19:30 WITA (pre-shift)
+    - cron: "7 11 * * *" # ~20:00 WITA (ganti shift malam)
+    - cron: "7 14 * * *" # ~23:00 WITA
+    - cron: "7 17 * * *" # ~02:00 WITA
+    - cron: "7 20 * * *" # ~05:00 WITA
+    - cron: "37 22 * * *" # ~07:30 WITA (pre-shift)
+    - cron: "7 23 * * *" # ~08:00 WITA (ganti shift pagi)
+  workflow_dispatch: {}
 
 jobs:
   reminder:
