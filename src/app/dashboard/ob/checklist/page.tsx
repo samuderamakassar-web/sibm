@@ -24,15 +24,20 @@ interface ChecklistLog {
 }
 
 const TUGAS_KEBERSIHAN = [
-  { id: "t1", nama: "Wastafel / Kaca / Meja", icon: "🚰" },
-  { id: "t2", nama: "Tempat Sampah", icon: "🗑️" },
-  { id: "t3", nama: "Lantai (Sapu & Pel)", icon: "🧹" },
+  { id: "t1", nama: "Wastafel dan Urinoir Cowok", icon: "🚰" },
+  { id: "t2", nama: "Wastafel Cewek", icon: "🚰" },
+  { id: "t3", nama: "Tempat Sampah", icon: "🗑️" },
+  { id: "t4", nama: "Lantai (Sapu & Pel)", icon: "🧹" },
+  { id: "t5", nama: "Closet Cowok", icon: "🚰" },
+  { id: "t6", nama: "Closet Cewek", icon: "🚰" },
+  { id: "t7", nama: "Cermin / Kaca", icon: "🚰" },
 ];
 
 const TUGAS_PELAYANAN = [
   { id: "p1", nama: "Belanja / Beli Makan", icon: "🛒" },
   { id: "p2", nama: "Bersihkan Meja", icon: "🧽" },
   { id: "p3", nama: "Cuci Piring", icon: "🍽️" },
+  { id: "p4", nama: "Menyajikan Minum", icon: "🍽️" },
 ];
 
 function getTugasUntukArea(area: string) {
