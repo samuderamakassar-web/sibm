@@ -6,16 +6,27 @@ import { collection, onSnapshot, query, orderBy, getDoc, doc, Timestamp, updateD
 import { db } from "../../../lib/firebase";
 
 // --- INTERFACES ---
+interface TugasDetail {
+  nama_tugas: string;
+  foto_before: string | null;
+  foto_after: string | null;
+  status: string;
+}
+
 interface ChecklistOB {
   id: string;
-  waktu: Timestamp | null;
-  petugas: string;
-  lantai: string;
+  waktu_selesai: Timestamp | null;
+  pic_bertugas: string;
   area: string;
-  status: string;
-  foto_bukti?: string;
-  catatan?: string;
+  detail_tugas: TugasDetail[];
 }
+
+const getStatusRingkas = (detail: TugasDetail[]) => {
+  if (!detail || detail.length === 0) return "Belum Ada Data";
+  if (detail.every(t => t.status === "Selesai Sempurna")) return "Bersih Sempurna";
+  if (detail.some(t => t.status === "Dilewati")) return "Belum Lengkap";
+  return "Sebagian Selesai";
+};
 
 interface StockOB {
   id: string;
@@ -71,7 +82,7 @@ export default function MonitorOBPage() {
     setTimeout(() => setAdminName(nama || "Admin"), 0);
 
     // 2. Fetch Laporan Checklist OB
-    const qChecklist = query(collection(db, "ob_checklists"), orderBy("waktu", "desc"));
+    const qChecklist = query(collection(db, "ob_checklists"), orderBy("waktu_selesai", "desc"));
     const unsubChecklist = onSnapshot(qChecklist, (snap) => {
       setChecklists(snap.docs.map(d => ({ id: d.id, ...d.data() })) as ChecklistOB[]);
     });
@@ -132,7 +143,10 @@ export default function MonitorOBPage() {
   };
 
   // Filter Data
-  const filteredChecklists = checklists.filter(c => c.petugas?.toLowerCase().includes(searchQuery.toLowerCase()) || c.area?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredChecklists = checklists.filter(c =>
+    c.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.area?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
   const filteredStocks = stocks.filter(i => i.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredPR = purchaseRequests.filter(pr => pr.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()) || pr.diajukan_oleh?.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -228,23 +242,25 @@ export default function MonitorOBPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredChecklists.length > 0 ? filteredChecklists.map((item) => (
-                    <tr key={item.id} style={{ borderBottom: "1px solid #edf2f7" }}>
-                      <td style={{ padding: "12px 15px", color: "#718096" }}>{formatWaktu(item.waktu)}</td>
-                      <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2c5282" }}>{item.petugas}</td>
-                      <td style={{ padding: "12px 15px", color: "#4a5568" }}>
-                        <span style={{ fontWeight: "bold" }}>{item.lantai}</span><br/>
-                        <span style={{ fontSize: "11px", color: "#a0aec0" }}>{item.area}</span>
-                      </td>
-                      <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                        <span style={{ background: item.status?.includes("Bersih") ? "#c6f6d5" : "#feebc8", color: item.status?.includes("Bersih") ? "#22543d" : "#9c4221", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" }}>
-                          {item.status || "Selesai"}
-                        </span>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr><td colSpan={4} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada log laporan kebersihan.</td></tr>
-                  )}
+                  {filteredChecklists.map((item) => {
+                    const statusRingkas = getStatusRingkas(item.detail_tugas);
+                    return (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #edf2f7" }}>
+                        <td style={{ padding: "12px 15px", color: "#718096" }}>{formatWaktu(item.waktu_selesai)}</td>
+                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2c5282" }}>{item.pic_bertugas}</td>
+                        <td style={{ padding: "12px 15px", color: "#4a5568" }}>{item.area}</td>
+                        <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                          <span style={{
+                            background: statusRingkas === "Bersih Sempurna" ? "#c6f6d5" : statusRingkas === "Belum Lengkap" ? "#fed7d7" : "#feebc8",
+                            color: statusRingkas === "Bersih Sempurna" ? "#22543d" : statusRingkas === "Belum Lengkap" ? "#9b2c2c" : "#9c4221",
+                            padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold"
+                          }}>
+                            {statusRingkas}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
