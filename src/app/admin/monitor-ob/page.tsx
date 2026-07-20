@@ -319,6 +319,127 @@ export default function MonitorOBPage() {
             </div>
           )}
 
+          {/* ============================== TAB 2: STOCK OPNAME ============================== */}
+          {activeTab === "STOCK" && (
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Nama Barang</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Sisa Stok (Qty)</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Batas Minimum</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Diupdate Oleh</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Terakhir Diupdate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStocks.length > 0 ? filteredStocks.map((item) => {
+                    const isLowStock = item.qty <= item.batas_minimum;
+                    return (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #edf2f7", background: isLowStock ? "#fff5f5" : "white" }}>
+                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2d3748" }}>{item.nama_barang}</td>
+                        <td style={{ padding: "12px 15px", textAlign: "center", fontWeight: "900", color: isLowStock ? "#e53e3e" : "#38a169", fontSize: "14px" }}>
+                          {item.qty}
+                          {isLowStock && <div style={{ fontSize: "9px", color: "#e53e3e", marginTop: "4px", background: "#fed7d7", padding: "2px 6px", borderRadius: "4px", display: "inline-block" }}>LOW STOCK</div>}
+                        </td>
+                        <td style={{ padding: "12px 15px", textAlign: "center", color: "#718096", fontWeight: "bold" }}>{item.batas_minimum}</td>
+                        <td style={{ padding: "12px 15px", color: "#4a5568" }}>
+                          <span style={{ background: "#edf2f7", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span>
+                        </td>
+                        <td style={{ padding: "12px 15px", color: "#a0aec0", fontSize: "11px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada data barang di inventori.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ============================== TAB 3: RESTOCK PENGAJUAN BARANG ============================== */}
+          {activeTab === "RESTOCK" && (
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Waktu Pengajuan</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Barang Diminta</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Stok Saat Diminta</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Pemohon</th>
+                    <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Status & Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPR.length > 0 ? filteredPR.map((pr) => {
+                    const isPending = pr.status === "Menunggu Approval";
+                    return (
+                      <tr key={pr.id} style={{ borderBottom: "1px solid #edf2f7", background: isPending ? "#fffaf0" : "white" }}>
+                        <td style={{ padding: "12px 15px", color: "#718096" }}>{formatWaktu(pr.waktu_pengajuan)}</td>
+                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "#2d3748", fontSize: "14px" }}>{pr.nama_barang}</td>
+                        <td style={{ padding: "12px 15px" }}>
+                          <span style={{ background: "#fed7d7", color: "#c53030", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>Sisa: {pr.sisa_stok}</span>
+                        </td>
+                        <td style={{ padding: "12px 15px", color: "#4a5568" }}>{pr.diajukan_oleh}</td>
+                        <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                          {isPending ? (
+                            <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
+                              <button onClick={() => handleUpdatePR(pr.id, "Disetujui / Proses Beli")} style={{ background: "#38a169", color: "white", border: "none", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>✔️ Setujui</button>
+                              <button onClick={() => handleUpdatePR(pr.id, "Ditolak / Ditunda")} style={{ background: "#e53e3e", color: "white", border: "none", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>❌ Tolak</button>
+                            </div>
+                          ) : (
+                            <span style={{ 
+                              background: pr.status.includes("Disetujui") ? "#c6f6d5" : "#fed7d7", 
+                              color: pr.status.includes("Disetujui") ? "#22543d" : "#9b2c2c", 
+                              padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" 
+                            }}>
+                              {pr.status}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "#a0aec0" }}>Belum ada pengajuan pembelian barang dari OB.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ============================== TAB 4: PLOT PENEMPATAN ============================== */}
+          {activeTab === "PLOT" && (
+            <div>
+              {dailyPlots.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                  {dailyPlots.map((plot) => (
+                    <div key={plot.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden" }}>
+                      <div style={{ background: "#f8fafc", padding: "15px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between" }}>
+                        <div><h3 style={{ margin: 0, color: "#3182ce", fontSize: "16px" }}>{formatDateOnly(plot.tanggal)}</h3><p style={{ margin: "4px 0 0", fontSize: "12px", color: "#718096" }}>Oleh: {plot.dibuat_oleh}</p></div>
+                        <span style={{ fontSize: "11px", background: "#e2e8f0", color: "#4a5568", padding: "4px 10px", borderRadius: "20px", fontWeight: "bold", height: "fit-content" }}>Diupdate: {formatWaktu(plot.waktu_update)}</span>
+                      </div>
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                          <thead>
+                            <tr>{kolomLantai.map(l => <th key={l} style={{ padding: "12px", borderBottom: "1px solid #edf2f7", borderRight: "1px solid #edf2f7", color: "#4a5568", minWidth: "120px" }}>{l}</th>)}</tr>
+                          </thead>
+                          <tbody>
+                            <tr>{kolomLantai.map(l => {
+                              const petugas = plot.plot_lantai?.[l] || "Belum diplot";
+                              return <td key={l} style={{ padding: "12px", borderRight: "1px solid #edf2f7", color: petugas === "Belum diplot" ? "#a0aec0" : "#2d3748", fontWeight: petugas === "Belum diplot" ? "normal" : "bold" }}>{petugas}</td>;
+                            })}</tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: "40px", textAlign: "center", color: "#a0aec0", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>Belum ada catatan pembagian tugas OB.</div>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>
