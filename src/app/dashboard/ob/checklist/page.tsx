@@ -389,7 +389,7 @@ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, taskId: string
 
                 {/* Grid Bukti Foto */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                  {log.detail_tugas.map((sub, sIdx) => {
+                  {log.detail_tugas.map((sub: TugasDetail, sIdx: number) => {
                     const bgStatus = sub.status.includes("Sempurna") ? "#f0fff4" : (sub.status.includes("Sebagian") ? "#fffff0" : "#fff5f5");
                     const icon = sub.nama_tugas.includes("Wastafel") ? "🚰" : (sub.nama_tugas.includes("Sampah") ? "🗑️" : "🧹");
 
