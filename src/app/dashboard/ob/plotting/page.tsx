@@ -47,16 +47,17 @@ function shuffle<T>(arr: T[]): T[] {
 
 // ==========================================
 // ATURAN GRUP TUGAS (area padat karyawan tidak boleh dipegang 1 orang yang sama)
-// - Basement & Lantai 1 selalu satu paket (1 orang yang sama kerjakan keduanya)
-// - Lantai 2 berdiri sendiri (orang yang beda dari paket Basement+Lantai 1, dan tidak dirangkap area lain)
-// - Lantai 3 & 4 dirotasi biasa ke staff yang tersisa
-// - Lantai 5 dikerjakan bersama-sama, tidak masuk rotasi individu (lihat AREA_BERSAMA di bawah)
+// - Basement & Lantai 1: satu paket, 1 orang kerjakan keduanya (area tidak terlalu banyak)
+// - Lantai 2: berdiri sendiri, khusus 1 orang, tidak dirangkap area lain (area padat karyawan)
+// - Lantai 3 & Lantai 4: satu paket juga, 1 orang kerjakan keduanya (area tidak terlalu banyak)
+// - Lantai 5: dikerjakan bersama oleh semua staff pas jam kosong, tidak masuk rotasi individu (lihat AREA_BERSAMA di bawah)
+// Total 3 paket tugas cleaning (Basement+L1, L2, L3+L4) — pas untuk 3 staff cleaning;
+// kalau staff cleaning lebih/kurang dari 3, sisa/kekurangan dibagi rata via idx % staffAcak.length
 // ==========================================
 const GRUP_TUGAS: string[][] = [
   ["Basement", "Lantai 1"],
   ["Lantai 2"],
-  ["Lantai 3"],
-  ["Lantai 4"],
+  ["Lantai 3", "Lantai 4"],
 ];
 const AREA_BERSAMA = "Lantai 5";
 const NILAI_BERSAMA = "Semua / All";
