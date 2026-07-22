@@ -45,18 +45,38 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// Bagi rata daftar lantai ke staff cleaning yang tersedia, urutan diacak
+// ==========================================
+// ATURAN GRUP TUGAS (area padat karyawan tidak boleh dipegang 1 orang yang sama)
+// - Basement & Lantai 1 selalu satu paket (1 orang yang sama kerjakan keduanya)
+// - Lantai 2 berdiri sendiri (orang yang beda dari paket Basement+Lantai 1, dan tidak dirangkap area lain)
+// - Lantai 3 & 4 dirotasi biasa ke staff yang tersisa
+// - Lantai 5 dikerjakan bersama-sama, tidak masuk rotasi individu (lihat AREA_BERSAMA di bawah)
+// ==========================================
+const GRUP_TUGAS: string[][] = [
+  ["Basement", "Lantai 1"],
+  ["Lantai 2"],
+  ["Lantai 3"],
+  ["Lantai 4"],
+];
+const AREA_BERSAMA = "Lantai 5";
+const NILAI_BERSAMA = "Semua / All";
+
+// Bagi grup tugas ke staff cleaning yang tersedia, urutan staff diacak tiap kali dipanggil
 function buatRotasiCleaning(cleaningStaff: string[]): Record<string, string> {
   const hasil: Record<string, string> = {};
   if (cleaningStaff.length === 0) return hasil;
-  const lantaiAcak = shuffle(DAFTAR_LANTAI);
-  const perOrang = Math.ceil(lantaiAcak.length / cleaningStaff.length);
-  cleaningStaff.forEach((nama, idx) => {
-    const bagian = lantaiAcak.slice(idx * perOrang, (idx + 1) * perOrang);
-    bagian.forEach((lantai) => {
-      hasil[lantai] = nama;
+
+  const staffAcak = shuffle(cleaningStaff);
+  GRUP_TUGAS.forEach((grup, idx) => {
+    const orang = staffAcak[idx % staffAcak.length];
+    grup.forEach((lantai) => {
+      hasil[lantai] = orang;
     });
   });
+
+  // Lantai 5 selalu dikerjakan bersama, bukan ditugaskan ke 1 orang
+  hasil[AREA_BERSAMA] = NILAI_BERSAMA;
+
   return hasil;
 }
 
