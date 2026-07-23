@@ -32,9 +32,24 @@ interface OvertimeItemRequest {
   alasan: string;
 }
 
+// ==========================================
+// FIX TIMEZONE: "hari ini" harus dihitung berdasarkan WITA (Asia/Makassar, UTC+8),
+// bukan new Date().toISOString() yang formatnya UTC. Kalau pakai toISOString(),
+// tanggal baru "ganti" jam 00:00 UTC = jam 08:00 WITA — jadi dari jam 00:00-07:59 WITA
+// data yang muncul masih plotting hari SEBELUMNYA.
+// ==========================================
+function getTodayISOLocal(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export default function OBDashboard() {
   const router = useRouter();
-  const todayISO = new Date().toISOString().split("T")[0];
+  const todayISO = getTodayISOLocal();
   const [picRole, setPicRole] = useState<string>("");
   const [picName, setPicName] = useState<string>("");
 
@@ -351,7 +366,7 @@ export default function OBDashboard() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {tugasDeepCleaning.map((tugas) => {
-                const isToday = tugas.tanggal === new Date().toISOString().split("T")[0];
+                const isToday = tugas.tanggal === getTodayISOLocal();
 
                 return (
                   <div key={tugas.id} className="dc-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: tugas.status === "Selesai" ? "#f0fff4" : (isToday ? "#fffff0" : "#f8fafc"), borderRadius: "16px", border: isToday && tugas.status !== "Selesai" ? "1px solid #ecc94b" : "1px solid #e2e8f0" }}>
