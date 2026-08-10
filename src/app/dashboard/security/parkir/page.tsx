@@ -33,13 +33,14 @@ interface DriverStatusLog {
 const KENDARAAN_OPERASIONAL = [
   "BB 1164 XBC - Muhammad Yusuf (PT Makassar Jaya Samudera)",
   "B 2306 PZQ - Bernard Hutagaol (PT Makassar Jaya Samudera)",
-  "B 2737 POJ - Agussalim (PT Samudera Agencies Indonesia)",
+  "B 2137 PZA - Joko Susilo (PT Makassar Jaya Samudera)",
+  "B 2737 PIW - Agussalim (PT Samudera Agencies Indonesia)",
   "DD 1591 XBG - Saipul Mirah (PT SILkargo Indonesia)",
   "DD 1278 XCS - SML Operational (PT Samudera Makassar Logistik)",
   "DD 1412 XBO - Marketing/UMUM (PT Makassar Jaya Samudera)",
   "DD 1273 XBO - Wahyu Hermawan (PT Makassar Jaya Samudera)",
   "B 5597 KDB - Agusri (PT Samudera Makassar Logistik)",
-  "B 2756 POI - Mildawaty (PT Samudera Perdana)",
+  "B 1828 DYKI - Mildawaty (PT Samudera Perdana)",
   "DD 1384 XBN - PPNP OPS (PT Perusahaan Pelayaran Nusantara Panurjwan)",
   "B 1629 RKP - Mattias Hotma (PT Perusahaan Pelayaran Nusantara Panurjwan)"
 ];
@@ -48,7 +49,7 @@ const DAFTAR_DRIVER = [
   "Penanggung Jawab Kendaraan (PIC)",
   "Amal Setiawan",
   "Muhammad Renaldy",
-  "Karyawan / Pimpinan Lainnya"
+  "Karyawan / PIC Kendaraan"
 ];
 
 // Daftar Driver Murni untuk Card Manajemen Absensi Driver
