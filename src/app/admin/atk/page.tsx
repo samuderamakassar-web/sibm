@@ -36,6 +36,7 @@ interface AtkRequest {
 interface MasterAtk {
   id: string;
   nama_barang: string;
+  foto_url?: string;
 }
 
 export default function AdminAtkPage() {
@@ -49,9 +50,11 @@ export default function AdminAtkPage() {
   const [activeTab, setActiveTab] = useState<"REQUEST" | "MASTER">("REQUEST");
   const [atkRequests, setAtkRequests] = useState<AtkRequest[]>([]);
   const [masterAtkList, setMasterAtkList] = useState<MasterAtk[]>([]);
-  
+
   // States Form Master ATK
   const [newItemName, setNewItemName] = useState("");
+  const [newItemFoto, setNewItemFoto] = useState<string>("");
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
@@ -66,7 +69,7 @@ export default function AdminAtkPage() {
       router.push("/shift-checkin");
       return;
     }
-    
+
     setTimeout(() => {
       setAdminName(nama);
       setIsReady(true);
@@ -193,13 +196,66 @@ export default function AdminAtkPage() {
   // ==========================================
   // HANDLERS MASTER DATA ATK
   // ==========================================
+  async function uploadToCloudinary(blob: Blob): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", blob);
+    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+    formData.append("folder", "sibm/master-atk");
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: "POST", body: formData }
+    );
+    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+    const data = await res.json();
+    return data.secure_url as string;
+  }
+
+  const handleFotoBarangUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scale = 500 / img.width;
+        canvas.width = 500;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          setIsUploadingFoto(true);
+          try {
+            const url = await uploadToCloudinary(blob);
+            setNewItemFoto(url);
+          } catch (err) {
+            console.error(err);
+            showToast("Gagal upload foto barang, coba lagi.", "error");
+          } finally {
+            setIsUploadingFoto(false);
+          }
+        }, "image/jpeg", 0.7);
+      };
+      if (typeof ev.target?.result === 'string') img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleAddMasterItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim()) return;
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "master_atk"), { nama_barang: newItemName.trim().toUpperCase() });
+      await addDoc(collection(db, "master_atk"), {
+        nama_barang: newItemName.trim().toUpperCase(),
+        foto_url: newItemFoto || null,
+      });
       setNewItemName("");
+      setNewItemFoto("");
       showToast("Barang berhasil ditambahkan ke database Master ATK!", "success");
     } catch (error) {
       console.error(error);
@@ -235,7 +291,7 @@ export default function AdminAtkPage() {
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      
+
       {/* 🔹 TOP BAR NAVBAR */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -254,23 +310,23 @@ export default function AdminAtkPage() {
       </div>
 
       <div style={{ maxWidth: "1100px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
-        
+
         {/* NAVIGASI TAB MODERN */}
         <div style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "5px" }}>
-          <button 
-            onClick={() => setActiveTab("REQUEST")} 
+          <button
+            onClick={() => setActiveTab("REQUEST")}
             style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "REQUEST" ? "white" : "rgba(255,255,255,0.8)", color: activeTab === "REQUEST" ? "#d53f8c" : "#718096", boxShadow: activeTab === "REQUEST" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "REQUEST" ? "3px solid #d53f8c" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
           >
-            📋 Pesanan Masuk 
+            📋 Pesanan Masuk
             <span style={{ background: activeTab === "REQUEST" ? "#fdf4ff" : "#e2e8f0", color: activeTab === "REQUEST" ? "#97266d" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>
               {atkRequests.filter(r => r.status !== "Selesai / Diambil").length}
             </span>
           </button>
-          <button 
-            onClick={() => setActiveTab("MASTER")} 
+          <button
+            onClick={() => setActiveTab("MASTER")}
             style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "MASTER" ? "white" : "rgba(255,255,255,0.8)", color: activeTab === "MASTER" ? "#3182ce" : "#718096", boxShadow: activeTab === "MASTER" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "MASTER" ? "3px solid #3182ce" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
           >
-            📦 Master Data Barang 
+            📦 Master Data Barang
             <span style={{ background: activeTab === "MASTER" ? "#ebf8ff" : "#e2e8f0", color: activeTab === "MASTER" ? "#2b6cb0" : "#4a5568", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>
               {masterAtkList.length} Item
             </span>
@@ -282,11 +338,11 @@ export default function AdminAtkPage() {
         {/* ========================================================= */}
         {activeTab === "REQUEST" && (
           <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
-            
+
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-              <input 
-                type="text" 
-                placeholder="🔍 Cari Resi / Nama Pemohon..." 
+              <input
+                type="text"
+                placeholder="🔍 Cari Resi / Nama Pemohon..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ padding: "12px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", width: "100%", maxWidth: "300px", fontSize: "14px", background: "#f8fafc", outline: "none" }}
@@ -335,7 +391,7 @@ export default function AdminAtkPage() {
                               {req.status.toUpperCase()}
                             </span>
                             {!isSelesai && (
-                              <button 
+                              <button
                                 onClick={() => handleUpdateStatus(req.id, req.status)}
                                 disabled={sedangUpdateId === req.id}
                                 style={{ padding: "6px 12px", background: sedangUpdateId === req.id ? "#a0aec0" : (isProses ? "#38a169" : "#3182ce"), color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: sedangUpdateId === req.id ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
@@ -366,7 +422,7 @@ export default function AdminAtkPage() {
         {/* ========================================================= */}
         {activeTab === "MASTER" && (
           <div style={{ display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
-            
+
             {/* Form Tambah Item */}
             <div style={{ flex: "1 1 300px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", position: "sticky", top: "80px" }}>
               <h2 style={{ margin: "0 0 20px 0", color: "#1a202c", fontSize: "18px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -375,16 +431,35 @@ export default function AdminAtkPage() {
               <form onSubmit={handleAddMasterItem} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Nama Barang Lengkap *</label>
-                  <input 
-                    type="text" 
-                    required 
-                    placeholder="Cth: KERTAS HVS A4 80GSM SINAR DUNIA" 
-                    value={newItemName} 
-                    onChange={(e) => setNewItemName(e.target.value)} 
-                    style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", textTransform: "uppercase" }} 
+                  <input
+                    type="text"
+                    required
+                    placeholder="Cth: KERTAS HVS A4 80GSM SINAR DUNIA"
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", textTransform: "uppercase" }}
                   />
                   <p style={{ margin: "8px 0 0 0", fontSize: "11px", color: "#a0aec0", lineHeight: "1.4" }}>Tuliskan nama beserta merknya agar memudahkan Karyawan saat melakukan pencarian di form utama.</p>
                 </div>
+
+                {/* UPLOAD FOTO BARANG */}
+                <div style={{ background: newItemFoto ? "#f0fff4" : "#f8fafc", border: newItemFoto ? "2px solid #9ae6b4" : "2px dashed #cbd5e0", padding: "15px", borderRadius: "12px", textAlign: "center" }}>
+                  <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "24px" }}>📷</span>
+                    <div style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568" }}>{newItemFoto ? "Foto Terlampir ✓" : "Unggah Foto Barang (Opsional)"}</div>
+                    <input type="file" accept="image/*" onChange={handleFotoBarangUpload} style={{ display: "none" }} />
+                  </label>
+                  {isUploadingFoto ? (
+                    <div style={{ fontSize: "12px", color: "#d69e2e", marginTop: "8px" }}>⏳ Mengunggah...</div>
+                  ) : newItemFoto && (
+                    <div style={{ marginTop: "10px", position: "relative", display: "inline-block" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={newItemFoto} alt="Preview" style={{ width: "100px", height: "100px", objectFit: "cover", borderRadius: "8px" }} />
+                      <button type="button" onClick={() => setNewItemFoto("")} style={{ position: "absolute", top: "-8px", right: "-8px", background: "#e53e3e", color: "white", border: "none", width: "22px", height: "22px", borderRadius: "50%", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>✖</button>
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "14px", background: isLoading ? "#a0aec0" : "#3182ce", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "5px", boxShadow: isLoading ? "none" : "0 4px 6px rgba(49, 130, 206, 0.3)" }}>
                   {isLoading ? "Menambahkan..." : "Simpan Barang"}
                 </button>
@@ -394,12 +469,20 @@ export default function AdminAtkPage() {
             {/* Tabel Master Data */}
             <div style={{ flex: "2 1 500px", background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
               <h2 style={{ margin: "0 0 20px 0", color: "#1a202c", fontSize: "18px", fontWeight: "bold" }}>Daftar Master ATK SIBM</h2>
-              
+
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "15px" }}>
                 {masterAtkList.length > 0 ? masterAtkList.map((item) => (
                   <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #edf2f7" }}>
-                    <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "13px" }}>{item.nama_barang}</span>
-                    <button 
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      {item.foto_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.foto_url} alt={item.nama_barang} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "6px" }} />
+                      ) : (
+                        <div style={{ width: "36px", height: "36px", borderRadius: "6px", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>🖇️</div>
+                      )}
+                      <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "13px" }}>{item.nama_barang}</span>
+                    </div>
+                    <button
                       onClick={() => handleDeleteMasterItem(item.id, item.nama_barang)}
                       style={{ background: "#fff5f5", color: "#e53e3e", border: "1px solid #fed7d7", width: "28px", height: "28px", borderRadius: "6px", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "12px", fontWeight: "bold" }}
                       title="Hapus Barang"

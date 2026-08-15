@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { kirimWA, template } from "../lib/notify";
+import { kirimWA, kirimEmail, template } from "../lib/notify";
 import { useToast } from "../components/ui/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -26,7 +26,7 @@ interface Employee { id: string; nama: string; departemen: string; }
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
-interface MasterAtk { id: string; nama_barang: string; }
+interface MasterAtk { id: string; nama_barang: string; foto_url?: string; }
 interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; }
 interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; }
 interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; jam_mulai: string; jam_selesai: string; status: string; }
@@ -89,7 +89,8 @@ export default function PortalSIBM() {
   const [masterAtkList, setMasterAtkList] = useState<MasterAtk[]>([]);
   const [atkTab, setAtkTab] = useState<"REQUEST" | "LACAK">("REQUEST");
   const [formAtkPemohon, setFormAtkPemohon] = useState({ nama: "", dept: "" });
-  const [formAtkItems, setFormAtkItems] = useState<AtkItemRequest[]>([{ nama_barang: "", jumlah: "", deskripsi: "" }]);
+  const [formAtkItems, setFormAtkItems] = useState<AtkItemRequest[]>([]);
+  const [searchAtkProduk, setSearchAtkProduk] = useState("");
   const [isAtkLoading, setIsAtkLoading] = useState(false);
   const [searchAtkResi, setSearchAtkResi] = useState("");
   const [hasilAtk, setHasilAtk] = useState<AtkRequest | null>(null);
@@ -161,7 +162,9 @@ export default function PortalSIBM() {
     getDocs(query(collection(db, "users_master"), where("departemen", "==", "QHSE")))
       .then(snap => setDaftarQHSE(snap.docs.map(d => d.data() as KontakAdmin)))
       .catch(err => console.error("[notify] Gagal memuat kontak QHSE:", err));
-    getDocs(collection(db, "master_atk")).then(snap => setMasterAtkList(snap.docs.map(d => ({ id: d.id, ...d.data() } as MasterAtk))));
+    const unsubMasterAtk = onSnapshot(collection(db, "master_atk"), (snap) => {
+      setMasterAtkList(snap.docs.map(d => ({ id: d.id, ...d.data() } as MasterAtk)));
+    });
 
     // 6. Tarik Security Shift
     const fetchSecurity = async () => {
@@ -192,7 +195,7 @@ export default function PortalSIBM() {
       }
     });
 
-    return () => { unsubPlot(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); };
+    return () => { unsubPlot(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubMasterAtk(); };
   }, [todayISO]);
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
@@ -276,21 +279,42 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   reader.readAsDataURL(file);
 };
 
-  const handleAddAtkItem = () => setFormAtkItems([...formAtkItems, { nama_barang: "", jumlah: "", deskripsi: "" }]);
+  const handleTambahKeKeranjang = (produk: MasterAtk) => {
+    setFormAtkItems(prev => {
+      const idx = prev.findIndex(i => i.nama_barang === produk.nama_barang);
+      if (idx >= 0) {
+        const updated = [...prev];
+        const jumlahLama = parseInt(updated[idx].jumlah) || 0;
+        updated[idx] = { ...updated[idx], jumlah: String(jumlahLama + 1) };
+        return updated;
+      }
+      return [...prev, { nama_barang: produk.nama_barang, jumlah: "1", deskripsi: "" }];
+    });
+    showToast(`${produk.nama_barang} ditambahkan ke keranjang`, "success");
+  };
   const handleRemoveAtkItem = (index: number) => { const newItems = [...formAtkItems]; newItems.splice(index, 1); setFormAtkItems(newItems); };
   const handleAtkItemChange = (index: number, field: keyof AtkItemRequest, value: string) => { const newItems = [...formAtkItems]; newItems[index][field] = value; setFormAtkItems(newItems); };
 
-  // Broadcast notifikasi WA ke semua kontak Admin GA (dipakai saat ada request baru: ATK/Overtime/Helpdesk)
+  // Ubah format pesan gaya WhatsApp (\n baris baru, *teks* bold) jadi HTML yang aman ditampilkan di email
+  const formatPesanUntukEmail = (pesanWA: string): string => {
+    return pesanWA
+      .replace(/\*(.+?)\*/g, "<b>$1</b>")
+      .replace(/\n/g, "<br>");
+  };
+
+  // Broadcast notifikasi Email ke semua kontak Admin GA (dipakai saat ada request baru: ATK/Overtime/Helpdesk)
   const kirimNotifikasiAdminGA = async (jenisRequest: string, namaPemohon: string, detail: string) => {
     if (daftarAdminGA.length === 0) {
       console.warn("[notify] Tidak ada kontak Admin GA (departemen 'Admin GA') di users_master. Notifikasi dilewati.");
       return;
     }
-    const pesan = template.requestBaruMasuk(jenisRequest, namaPemohon, detail);
+    const pesanWA = template.requestBaruMasuk(jenisRequest, namaPemohon, detail);
+    const pesanEmail = formatPesanUntukEmail(pesanWA);
     for (const admin of daftarAdminGA) {
-      if (!admin.whatsapp) continue;
-      const hasil = await kirimWA(admin.whatsapp, pesan);
-      if (!hasil.sukses) console.error(`[notify] Gagal kirim WA ke Admin GA (${admin.nama}):`, hasil.pesanError);
+      if (admin.email) {
+        const hasilEmail = await kirimEmail(admin.email, `Request Baru Masuk: ${jenisRequest}`, pesanEmail, admin.nama);
+        if (!hasilEmail.sukses) console.error(`[notify] Gagal kirim Email ke Admin GA (${admin.nama}):`, hasilEmail.pesanError);
+      }
     }
   };
 
@@ -311,6 +335,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const handleSubmitAtk = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (formAtkItems.length === 0) {
+      showToast("Keranjang masih kosong, pilih barang dulu.", "warning");
+      return;
+    }
     if (formAtkItems.some(i => !i.nama_barang || !i.jumlah)) {
       showToast("Pastikan nama barang dan jumlah telah diisi!", "warning");
       return;
@@ -325,11 +353,14 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     try {
       await addDoc(collection(db, "ga_atk_requests"), { resi: newResi, nama_pemohon: formAtkPemohon.nama, departemen: formAtkPemohon.dept, items: formAtkItems, status: "Menunggu Disiapkan", waktu_request: serverTimestamp() });
 
-      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon)
-      kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, `Resi: ${newResi}, ${formAtkItems.length} item barang.`);
+      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — rincian per barang, bukan cuma jumlah
+      const daftarBarangText = formAtkItems
+        .map((it, idx) => `${idx + 1}. ${it.nama_barang} — ${it.jumlah}${it.deskripsi ? ` (${it.deskripsi})` : ""}`)
+        .join("\n");
+      kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, `Resi: ${newResi}\nDepartemen: ${formAtkPemohon.dept}\n\nDaftar Barang:\n${daftarBarangText}`);
 
       showToast(`Request ATK berhasil! Kode Resi: ${newResi} — simpan untuk melacak barang Anda.`, "success");
-      setFormAtkPemohon({ nama: "", dept: "" }); setFormAtkItems([{ nama_barang: "", jumlah: "", deskripsi: "" }]); setSearchAtkResi(newResi); setAtkTab("LACAK"); handleCariAtk(newResi);
+      setFormAtkPemohon({ nama: "", dept: "" }); setFormAtkItems([]); setSearchAtkResi(newResi); setAtkTab("LACAK"); handleCariAtk(newResi);
     } catch (error) {
       console.error(error);
       showToast("Gagal mengirim request ATK.", "error");
@@ -794,50 +825,96 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             </div>
 
             {atkTab === "REQUEST" ? (
-              <form onSubmit={handleSubmitAtk} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                  <Input
-                    label="Nama Pemohon *"
-                    type="text" required placeholder="Ketik nama..."
-                    value={formAtkPemohon.nama}
-                    onChange={(e) => handleNameChangeAtk(e.target.value)}
-                    datalistId="emp-list-atk"
-                    datalistOptions={employees.map(emp => emp.nama)}
-                  />
-                  <Input label="Departemen" type="text" required readOnly value={formAtkPemohon.dept} style={{ background: "#e2e8f0" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+                {/* PENCARIAN PRODUK */}
+                <Input
+                  type="text"
+                  placeholder="🔍 Cari alat tulis kantor..."
+                  value={searchAtkProduk}
+                  onChange={(e) => setSearchAtkProduk(e.target.value)}
+                />
+
+                {/* KATALOG PRODUK (GRID ALA TOKO ONLINE) */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px", maxHeight: "280px", overflowY: "auto", padding: "4px" }}>
+                  {masterAtkList
+                    .filter(p => p.nama_barang.toLowerCase().includes(searchAtkProduk.toLowerCase()))
+                    .map((produk) => (
+                      <div key={produk.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden", background: "white", display: "flex", flexDirection: "column" }}>
+                        <div style={{ width: "100%", aspectRatio: "1", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {produk.foto_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={produk.foto_url} alt={produk.nama_barang} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            <span style={{ fontSize: "28px", opacity: 0.3 }}>🖇️</span>
+                          )}
+                        </div>
+                        <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
+                          <span style={{ fontSize: "11px", fontWeight: "bold", color: "#2d3748", lineHeight: "1.3" }}>{produk.nama_barang}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleTambahKeKeranjang(produk)}
+                            style={{ marginTop: "auto", background: "#d53f8c", color: "white", border: "none", borderRadius: "8px", padding: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+                          >
+                            + Keranjang
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  {masterAtkList.filter(p => p.nama_barang.toLowerCase().includes(searchAtkProduk.toLowerCase())).length === 0 && (
+                    <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px" }}>Barang tidak ditemukan.</div>
+                  )}
                 </div>
 
-                {formAtkItems.map((item, index) => (
-                  <div key={index} style={{ border: "1px solid #cbd5e0", padding: "15px", borderRadius: "12px", background: "#f8fafc", position: "relative" }}>
-                    {index > 0 && (
-                      <button type="button" onClick={() => handleRemoveAtkItem(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>Hapus ✖</button>
-                    )}
-                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px", marginBottom: "10px" }}>
-                      <Input
-                        label={`Pilih Barang ${index + 1} *`}
-                        type="text" required placeholder="Cari ATK..."
-                        value={item.nama_barang}
-                        onChange={(e) => handleAtkItemChange(index, "nama_barang", e.target.value)}
-                        datalistId="atk-master"
-                        datalistOptions={masterAtkList.map(atk => atk.nama_barang)}
-                      />
-                      <Input label="Jumlah *" type="text" required placeholder="Cth: 2 Rim" value={item.jumlah} onChange={(e) => handleAtkItemChange(index, "jumlah", e.target.value)} />
-                    </div>
-                    <Input
-                      label="Deskripsi / Detail Spesifik (Opsional)"
-                      type="text" placeholder="Misal: Warna hitam, merk Joyko, untuk divisi HR"
-                      value={item.deskripsi}
-                      onChange={(e) => handleAtkItemChange(index, "deskripsi", e.target.value)}
-                      style={{ background: "white" }}
-                    />
+                {/* KERANJANG */}
+                <div style={{ borderTop: "2px solid #edf2f7", paddingTop: "15px" }}>
+                  <div style={{ fontWeight: "800", fontSize: "14px", color: "#1a202c", marginBottom: "10px" }}>
+                    🛒 Keranjang ({formAtkItems.length} item)
                   </div>
-                ))}
+                  {formAtkItems.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>
+                      Keranjang masih kosong. Pilih barang di atas.
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSubmitAtk} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {formAtkItems.map((item, index) => (
+                        <div key={index} style={{ display: "flex", alignItems: "center", gap: "8px", border: "1px solid #e2e8f0", padding: "8px 10px", borderRadius: "10px", background: "#f8fafc" }}>
+                          <span style={{ flex: "1 1 35%", fontSize: "12px", fontWeight: "bold", color: "#2d3748", lineHeight: "1.3" }}>{item.nama_barang}</span>
+                          <input
+                            type="text" required placeholder="Jml"
+                            value={item.jumlah}
+                            onChange={(e) => handleAtkItemChange(index, "jumlah", e.target.value)}
+                            style={{ width: "44px", padding: "7px 4px", borderRadius: "7px", border: "1px solid #cbd5e0", fontSize: "12px", textAlign: "center", background: "white", outline: "none" }}
+                          />
+                          <input
+                            type="text" placeholder="Catatan (opsional)"
+                            value={item.deskripsi}
+                            onChange={(e) => handleAtkItemChange(index, "deskripsi", e.target.value)}
+                            style={{ flex: "1 1 40%", padding: "7px 8px", borderRadius: "7px", border: "1px solid #cbd5e0", fontSize: "12px", background: "white", outline: "none" }}
+                          />
+                          <button type="button" onClick={() => handleRemoveAtkItem(index)} style={{ flexShrink: 0, background: "none", border: "none", color: "#e53e3e", fontSize: "16px", cursor: "pointer", padding: "2px 4px" }}>✖</button>
+                        </div>
+                      ))}
 
-                <Button type="button" variant="secondary" onClick={handleAddAtkItem}>+ Tambah Barang Lain</Button>
-                <Button type="submit" variant="primary" loading={isAtkLoading} loadingText="Memproses..." style={{ background: isAtkLoading ? undefined : "#d53f8c", boxShadow: isAtkLoading ? undefined : "0 10px 15px -3px rgba(213,63,140,0.3)" }}>
-                  Kirim Request ATK
-                </Button>
-              </form>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginTop: "5px" }}>
+                        <Input
+                          label="Nama Pemohon *"
+                          type="text" required placeholder="Ketik nama..."
+                          value={formAtkPemohon.nama}
+                          onChange={(e) => handleNameChangeAtk(e.target.value)}
+                          datalistId="emp-list-atk"
+                          datalistOptions={employees.map(emp => emp.nama)}
+                        />
+                        <Input label="Departemen" type="text" required readOnly value={formAtkPemohon.dept} style={{ background: "#e2e8f0" }} />
+                      </div>
+
+                      <Button type="submit" variant="primary" loading={isAtkLoading} loadingText="Memproses..." style={{ background: isAtkLoading ? undefined : "#d53f8c", boxShadow: isAtkLoading ? undefined : "0 10px 15px -3px rgba(213,63,140,0.3)" }}>
+                        Kirim Request ({formAtkItems.length} item)
+                      </Button>
+                    </form>
+                  )}
+                </div>
+              </div>
             ) : (
               <div>
                 <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
