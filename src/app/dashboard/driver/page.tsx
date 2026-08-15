@@ -17,6 +17,17 @@ interface KendaraanLog {
   waktu_catat: Timestamp | null;
 }
 
+interface KendaraanMaster {
+  id: string;
+  kendaraan: string;
+  foto_url?: string;
+}
+
+interface InspeksiTerakhir {
+  tanggal: string;
+  minggu_of: string;
+}
+
 interface OvertimeItemRequest {
   tanggal: string;
   jam_mulai: string;
@@ -26,22 +37,49 @@ interface OvertimeItemRequest {
 }
 
 // ==========================================
-// MASTER DATA ARMADA
+// CHECKLIST INSPEKSI MINGGUAN
 // ==========================================
-const KENDARAAN_OPERASIONAL = [
-  "BB 1164 XBC - Muhammad Yusuf (PT Makassar Jaya Samudera)",
-  "B 2306 PZQ - Bernard Hutagaol (PT Makassar Jaya Samudera)",
-  "B 2137 PZA - Joko Susilo (PT Makassar Jaya Samudera)",
-  "B 2737 PIW - Agussalim (PT Samudera Agencies Indonesia)",
-  "DD 1591 XBG - Saipul Mirah (PT SILkargo Indonesia)",
-  "DD 1278 XCS - SML Operational (PT Samudera Makassar Logistik)",
-  "DD 1412 XBO - Marketing/UMUM (PT Makassar Jaya Samudera)",
-  "DD 1273 XBO - Wahyu Hermawan (PT Makassar Jaya Samudera)",
-  "B 5597 KDB - Agusri (PT Samudera Makassar Logistik)",
-  "B 1828 DYKI - Mildawaty (PT Samudera Perdana)",
-  "DD 1384 XBN - PPNP OPS (PT Perusahaan Pelayaran Nusantara Panurjwan)",
-  "B 1629 RKP - Mattias Hotma (PT Perusahaan Pelayaran Nusantara Panurjwan)"
+const CHECKLIST_ITEMS: { key: string; label: string }[] = [
+  { key: "ban", label: "Ban & Tekanan Angin" },
+  { key: "rem", label: "Rem" },
+  { key: "lampu", label: "Lampu (Depan/Belakang/Sein)" },
+  { key: "oli", label: "Oli Mesin" },
+  { key: "air_radiator_aki", label: "Air Radiator & Aki" },
+  { key: "wiper_kaca", label: "Wiper & Kaca" },
+  { key: "ac", label: "AC" },
+  { key: "kebersihan", label: "Kebersihan Interior/Eksterior" },
 ];
+
+const STATUS_OPSI = ["Baik", "Perlu Perhatian", "Rusak"];
+
+function getMondayOfWeek(d: Date = new Date()): string {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  date.setDate(diff);
+  return date.toISOString().split("T")[0];
+}
+
+function checklistDefault(): Record<string, string> {
+  const obj: Record<string, string> = {};
+  CHECKLIST_ITEMS.forEach((item) => { obj[item.key] = "Baik"; });
+  return obj;
+}
+
+async function uploadFotoToCloudinary(blob: Blob, folder: string): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", blob);
+  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+  formData.append("folder", folder);
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+  const data = await res.json();
+  return data.secure_url as string;
+}
 
 export default function DriverDashboardPage() {
   const router = useRouter();
@@ -57,14 +95,25 @@ export default function DriverDashboardPage() {
   const [isLoadingMobil, setIsLoadingMobil] = useState<boolean>(false);
   const [statusTerkini, setStatusTerkini] = useState<string>("Memuat...");
 
+  // Master Kendaraan (ditarik live dari admin/kendaraan, bukan hardcode lagi)
+  const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
+  const [kendaraanId, setKendaraanId] = useState<string>("");
+
   // State Form Mobil
-  const [kendaraan, setKendaraan] = useState<string>(KENDARAAN_OPERASIONAL[0]);
   const [statusMobil, setStatusMobil] = useState<string>("Keluar Beroperasi");
   const [tujuan, setTujuan] = useState<string>("");
   const [kilometer, setKilometer] = useState<string>("");
 
   // Riwayat Terakhir
   const [riwayatKu, setRiwayatKu] = useState<KendaraanLog[]>([]);
+
+  // STATE INSPEKSI MINGGUAN
+  const [inspeksiChecklist, setInspeksiChecklist] = useState<Record<string, string>>(checklistDefault());
+  const [catatanInspeksi, setCatatanInspeksi] = useState("");
+  const [fotoInspeksi, setFotoInspeksi] = useState("");
+  const [isUploadingFotoInspeksi, setIsUploadingFotoInspeksi] = useState(false);
+  const [isSavingInspeksi, setIsSavingInspeksi] = useState(false);
+  const [inspeksiTerakhir, setInspeksiTerakhir] = useState<InspeksiTerakhir | null>(null);
 
   // STATE MODAL OVERTIME
   const todayISO = new Date().toISOString().split("T")[0];
@@ -135,12 +184,50 @@ export default function DriverDashboardPage() {
     return () => { unsubStatus(); unsubMobil(); };
   }, [activeDriver]);
 
+  // 3. Tarik Master Data Kendaraan (live dari admin, gantikan array hardcode lama)
+  useEffect(() => {
+    const q = query(collection(db, "master_kendaraan"), orderBy("kendaraan", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const list: KendaraanMaster[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as KendaraanMaster));
+      setKendaraanMaster(list);
+    });
+    return () => unsub();
+  }, []);
+
+  // Set default kendaraan terpilih begitu master data kebaca
+  useEffect(() => {
+    if (kendaraanMaster.length === 0) return;
+    if (!kendaraanId || !kendaraanMaster.some((k) => k.id === kendaraanId)) {
+      setTimeout(() => setKendaraanId(kendaraanMaster[0].id), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kendaraanMaster]);
+
+  // 4. Tarik inspeksi terakhir untuk kendaraan yang sedang dipilih (cek sudah inspeksi minggu ini atau belum)
+  useEffect(() => {
+    if (!kendaraanId) return;
+    const q = query(collection(db, "kendaraan_inspeksi_logs"), where("kendaraan_id", "==", kendaraanId), orderBy("tanggal", "desc"), limit(1));
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        const data = snap.docs[0].data();
+        setInspeksiTerakhir({ tanggal: data.tanggal, minggu_of: data.minggu_of });
+      } else {
+        setInspeksiTerakhir(null);
+      }
+    });
+    return () => unsub();
+  }, [kendaraanId]);
+
+  const kendaraanTerpilih = kendaraanMaster.find((k) => k.id === kendaraanId);
+  const kendaraan = kendaraanTerpilih?.kendaraan || "";
+  const sudahInspeksiMingguIni = inspeksiTerakhir?.minggu_of === getMondayOfWeek();
+
   const handleLogout = () => {
     localStorage.clear();
     router.push("/");
   };
 
-  // 3. Fungsi Update Status Personel Cepat (Jika keluar tanpa mobil kantor)
+  // 5. Fungsi Update Status Personel Cepat (Jika keluar tanpa mobil kantor)
   const handleUpdateStatusPersonel = async (statusBaru: string) => {
     setIsLoadingPersonel(true);
     try {
@@ -159,9 +246,12 @@ export default function DriverDashboardPage() {
     }
   };
 
-  // 4. Fungsi Submit Log Mobil (Sistem Auto-Sync)
+  // 6. Fungsi Submit Log Mobil (Sistem Auto-Sync)
   const handleSubmitMobil = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!kendaraan) {
+      return alert("Belum ada kendaraan terdaftar. Hubungi Admin untuk menambahkan data kendaraan.");
+    }
     if (statusMobil === "Keluar Beroperasi" && !tujuan.trim()) {
       return alert("Tujuan/Keperluan wajib diisi jika membawa mobil keluar!");
     }
@@ -200,6 +290,74 @@ export default function DriverDashboardPage() {
       alert("Gagal menyimpan data kendaraan.");
     } finally {
       setIsLoadingMobil(false);
+    }
+  };
+
+  // 7. Upload Foto Inspeksi
+  const handleFotoInspeksiUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 600 / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          setIsUploadingFotoInspeksi(true);
+          try {
+            const url = await uploadFotoToCloudinary(blob, "sibm/inspeksi");
+            setFotoInspeksi(url);
+          } catch (err) {
+            console.error(err);
+            alert("Gagal upload foto inspeksi, coba lagi.");
+          } finally {
+            setIsUploadingFotoInspeksi(false);
+          }
+        }, "image/jpeg", 0.8);
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 8. Submit Inspeksi Mingguan
+  const handleSubmitInspeksi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kendaraanId) {
+      return alert("Pilih kendaraan dulu di form Bawa Armada di atas.");
+    }
+    if (isUploadingFotoInspeksi) {
+      return alert("Tunggu foto selesai diunggah dulu.");
+    }
+    setIsSavingInspeksi(true);
+    try {
+      await addDoc(collection(db, "kendaraan_inspeksi_logs"), {
+        kendaraan_id: kendaraanId,
+        kendaraan: kendaraan,
+        driver: activeDriver,
+        tanggal: todayISO,
+        minggu_of: getMondayOfWeek(),
+        checklist: inspeksiChecklist,
+        catatan: catatanInspeksi.trim(),
+        foto_url: fotoInspeksi || "",
+        waktu_catat: serverTimestamp(),
+      });
+      alert("✅ Inspeksi mingguan berhasil disimpan!");
+      setInspeksiChecklist(checklistDefault());
+      setCatatanInspeksi("");
+      setFotoInspeksi("");
+    } catch (error) {
+      console.error(error);
+      alert("Gagal menyimpan inspeksi.");
+    } finally {
+      setIsSavingInspeksi(false);
     }
   };
 
@@ -312,41 +470,118 @@ export default function DriverDashboardPage() {
             <span style={{background: "#ebf8ff", padding: "6px", borderRadius: "8px"}}>🚙</span> Form Bawa Armada
           </h3>
 
-          <form onSubmit={handleSubmitMobil} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div>
-              <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>PILIH MOBIL OPERASIONAL *</label>
-              <select value={kendaraan} onChange={(e) => setKendaraan(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold", border: "2px solid #cbd5e0"}}>
-                {KENDARAAN_OPERASIONAL.map(mobil => <option key={mobil} value={mobil}>{mobil}</option>)}
-              </select>
+          {kendaraanMaster.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e0" }}>
+              Belum ada data kendaraan. Hubungi Admin untuk menambahkan kendaraan di Master Data.
             </div>
+          ) : (
+            <form onSubmit={handleSubmitMobil} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>PILIH MOBIL OPERASIONAL *</label>
+                <select value={kendaraanId} onChange={(e) => setKendaraanId(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold", border: "2px solid #cbd5e0"}}>
+                  {kendaraanMaster.map(mobil => <option key={mobil.id} value={mobil.id}>{mobil.kendaraan}</option>)}
+                </select>
+              </div>
 
-            <div>
-              <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>AKTIVITAS *</label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                <div onClick={() => setStatusMobil("Keluar Beroperasi")} style={{ padding: "12px", borderRadius: "12px", cursor: "pointer", textAlign: "center", fontWeight: "bold", fontSize: "13px", border: statusMobil === "Keluar Beroperasi" ? "2px solid #fc8181" : "1px solid #e2e8f0", background: statusMobil === "Keluar Beroperasi" ? "#fff5f5" : "#f8fafc", color: statusMobil === "Keluar Beroperasi" ? "#c53030" : "#718096" }}>
-                  🛫 Keluar Pool
-                </div>
-                <div onClick={() => setStatusMobil("Tiba di Kantor (Standby)")} style={{ padding: "12px", borderRadius: "12px", cursor: "pointer", textAlign: "center", fontWeight: "bold", fontSize: "13px", border: statusMobil === "Tiba di Kantor (Standby)" ? "2px solid #68d391" : "1px solid #e2e8f0", background: statusMobil === "Tiba di Kantor (Standby)" ? "#f0fff4" : "#f8fafc", color: statusMobil === "Tiba di Kantor (Standby)" ? "#22543d" : "#718096" }}>
-                  🛬 Tiba (Selesai)
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>AKTIVITAS *</label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div onClick={() => setStatusMobil("Keluar Beroperasi")} style={{ padding: "12px", borderRadius: "12px", cursor: "pointer", textAlign: "center", fontWeight: "bold", fontSize: "13px", border: statusMobil === "Keluar Beroperasi" ? "2px solid #fc8181" : "1px solid #e2e8f0", background: statusMobil === "Keluar Beroperasi" ? "#fff5f5" : "#f8fafc", color: statusMobil === "Keluar Beroperasi" ? "#c53030" : "#718096" }}>
+                    🛫 Keluar Pool
+                  </div>
+                  <div onClick={() => setStatusMobil("Tiba di Kantor (Standby)")} style={{ padding: "12px", borderRadius: "12px", cursor: "pointer", textAlign: "center", fontWeight: "bold", fontSize: "13px", border: statusMobil === "Tiba di Kantor (Standby)" ? "2px solid #68d391" : "1px solid #e2e8f0", background: statusMobil === "Tiba di Kantor (Standby)" ? "#f0fff4" : "#f8fafc", color: statusMobil === "Tiba di Kantor (Standby)" ? "#22543d" : "#718096" }}>
+                    🛬 Tiba (Selesai)
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>TUJUAN PERJALANAN</label>
-              <textarea placeholder={statusMobil === "Keluar Beroperasi" ? "Wajib diisi..." : "Contoh: Selesai antar manajemen..."} value={tujuan} onChange={(e) => setTujuan(e.target.value)} style={{ ...sharedInputStyle, height: "70px", resize: "none" }} />
-            </div>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>TUJUAN PERJALANAN</label>
+                <textarea placeholder={statusMobil === "Keluar Beroperasi" ? "Wajib diisi..." : "Contoh: Selesai antar manajemen..."} value={tujuan} onChange={(e) => setTujuan(e.target.value)} style={{ ...sharedInputStyle, height: "70px", resize: "none" }} />
+              </div>
 
-            <div>
-              <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>ANGKA SPEEDOMETER (KM) AWAL/AKHIR</label>
-              <input type="number" placeholder="Contoh: 45200" value={kilometer} onChange={(e) => setKilometer(e.target.value)} style={{...sharedInputStyle, fontSize: "18px", fontWeight: "bold"}} />
-            </div>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>ANGKA SPEEDOMETER (KM) AWAL/AKHIR</label>
+                <input type="number" placeholder="Contoh: 45200" value={kilometer} onChange={(e) => setKilometer(e.target.value)} style={{...sharedInputStyle, fontSize: "18px", fontWeight: "bold"}} />
+              </div>
 
-            <button type="submit" disabled={isLoadingMobil} style={{ width: "100%", padding: "18px", background: "#2b6cb0", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "15px", cursor: isLoadingMobil ? "not-allowed" : "pointer", marginTop: "5px", boxShadow: "0 4px 15px rgba(43, 108, 176, 0.3)" }}>
-              {isLoadingMobil ? "Menyimpan Data..." : "💾 Kirim Laporan Armada"}
-            </button>
-          </form>
+              <button type="submit" disabled={isLoadingMobil} style={{ width: "100%", padding: "18px", background: "#2b6cb0", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "15px", cursor: isLoadingMobil ? "not-allowed" : "pointer", marginTop: "5px", boxShadow: "0 4px 15px rgba(43, 108, 176, 0.3)" }}>
+                {isLoadingMobil ? "Menyimpan Data..." : "💾 Kirim Laporan Armada"}
+              </button>
+            </form>
+          )}
         </div>
+
+        {/* 🔹 CARD BARU: INSPEKSI MINGGUAN KENDARAAN */}
+        {kendaraanId && (
+          <div style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", marginBottom: "15px" }}>
+              <h3 style={{ margin: 0, color: "#2d3748", fontSize: "16px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{background: "#f0fff4", padding: "6px", borderRadius: "8px"}}>🔍</span> Inspeksi Mingguan
+              </h3>
+              <span style={{ fontSize: "10px", fontWeight: "bold", padding: "5px 10px", borderRadius: "8px", background: sudahInspeksiMingguIni ? "#c6f6d5" : "#feebc8", color: sudahInspeksiMingguIni ? "#22543d" : "#9c4221" }}>
+                {sudahInspeksiMingguIni ? "✅ SUDAH MINGGU INI" : "⚠️ BELUM MINGGU INI"}
+              </span>
+            </div>
+
+            <p style={{ fontSize: "12px", color: "#718096", marginBottom: "15px" }}>
+              Untuk kendaraan: <b style={{ color: "#2d3748" }}>{kendaraan}</b>
+            </p>
+
+            <form onSubmit={handleSubmitInspeksi} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {CHECKLIST_ITEMS.map((item) => (
+                <div key={item.key}>
+                  <label style={{ display: "block", fontWeight: "700", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>{item.label}</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                    {STATUS_OPSI.map((opsi) => {
+                      const dipilih = inspeksiChecklist[item.key] === opsi;
+                      const warna = opsi === "Baik" ? "#38a169" : opsi === "Perlu Perhatian" ? "#d69e2e" : "#e53e3e";
+                      return (
+                        <button
+                          type="button"
+                          key={opsi}
+                          onClick={() => setInspeksiChecklist((prev) => ({ ...prev, [item.key]: opsi }))}
+                          style={{
+                            padding: "8px 4px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer",
+                            border: dipilih ? `2px solid ${warna}` : "1px solid #e2e8f0",
+                            background: dipilih ? `${warna}1a` : "#f8fafc",
+                            color: dipilih ? warna : "#a0aec0",
+                          }}
+                        >
+                          {opsi}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>CATATAN TAMBAHAN</label>
+                <textarea placeholder="Opsional — jelaskan kalau ada item Perlu Perhatian/Rusak" value={catatanInspeksi} onChange={(e) => setCatatanInspeksi(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none", fontSize: "13px" }} />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "12px", padding: "12px" }}>
+                {fotoInspeksi ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={fotoInspeksi} alt="Foto inspeksi" style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                ) : (
+                  <span style={{ fontSize: "22px" }}>📸</span>
+                )}
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "inline-block", padding: "8px 14px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+                    {isUploadingFotoInspeksi ? "⏳ Mengunggah..." : (fotoInspeksi ? "Ganti Foto" : "Upload Foto (opsional)")}
+                    <input type="file" accept="image/*" capture="environment" onChange={handleFotoInspeksiUpload} disabled={isUploadingFotoInspeksi} style={{ display: "none" }} />
+                  </label>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isSavingInspeksi || isUploadingFotoInspeksi} style={{ width: "100%", padding: "16px", background: isSavingInspeksi ? "#a0aec0" : "#38a169", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingInspeksi ? "not-allowed" : "pointer", boxShadow: isSavingInspeksi ? "none" : "0 4px 15px rgba(56, 161, 105, 0.3)" }}>
+                {isSavingInspeksi ? "Menyimpan..." : "✅ Kirim Inspeksi Mingguan"}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* 🔹 CARD 3: RIWAYAT SAYA HARI INI */}
         <div style={{ background: "white", padding: "20px", borderRadius: "24px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
