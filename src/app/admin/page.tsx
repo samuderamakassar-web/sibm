@@ -52,6 +52,14 @@ export default function AdminDashboardPage() {
       icon: "🏢"
     },
     {
+      title: "Master Data Kendaraan",
+      desc: "Kelola foto, PIC, odometer, dan riwayat servis armada.",
+      path: "/admin/kendaraan",
+      color: "#38a169",
+      bg: "#f0fff4",
+      icon: "🚗"
+    },
+    {
       title: "Pengumuman Gedung",
       desc: "Update teks berjalan (Info GA) di halaman utama Portal SIBM.",
       path: "/admin/broadcast",

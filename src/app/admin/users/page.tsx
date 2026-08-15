@@ -15,6 +15,22 @@ interface UserData {
   role: string;
   whatsapp?: string;
   password?: string;
+  foto_url?: string;
+}
+
+async function uploadFotoToCloudinary(blob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", blob);
+  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+  formData.append("folder", "sibm/staf");
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+  const data = await res.json();
+  return data.secure_url as string;
 }
 
 export default function UserManagementPage() {
@@ -29,6 +45,7 @@ export default function UserManagementPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
 
   const [formData, setFormData] = useState({
     nama: "",
@@ -36,7 +53,8 @@ export default function UserManagementPage() {
     departemen: "OB & CS",
     role: "Staff",
     whatsapp: "",
-    password: ""
+    password: "",
+    foto_url: ""
   });
 
   // 1. Verifikasi Admin & Set Nama
@@ -73,10 +91,49 @@ export default function UserManagementPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Upload foto profil: resize ke max-width 400px sebelum kirim ke Cloudinary,
+  // sama seperti pola compress yang sudah dipakai di halaman lain (helpdesk/SBO)
+  const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 400 / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          setIsUploadingFoto(true);
+          try {
+            const url = await uploadFotoToCloudinary(blob);
+            setFormData((prev) => ({ ...prev, foto_url: url }));
+          } catch (err) {
+            console.error(err);
+            showToast("Gagal upload foto, coba lagi.", "error");
+          } finally {
+            setIsUploadingFoto(false);
+          }
+        }, "image/jpeg", 0.8);
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nama.trim() || !formData.email.trim() || !formData.password.trim()) {
       showToast("Nama, Email, dan Password wajib diisi!", "warning");
+      return;
+    }
+    if (isUploadingFoto) {
+      showToast("Tunggu foto selesai diunggah dulu.", "warning");
       return;
     }
 
@@ -88,7 +145,8 @@ export default function UserManagementPage() {
         departemen: formData.departemen,
         role: formData.role,
         whatsapp: formData.whatsapp,
-        password: formData.password
+        password: formData.password,
+        foto_url: formData.foto_url || ""
       };
 
       if (isEditMode && editId) {
@@ -100,7 +158,7 @@ export default function UserManagementPage() {
         showToast("Pengguna baru berhasil ditambahkan!", "success");
       }
 
-      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "" });
+      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "" });
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
@@ -120,7 +178,8 @@ export default function UserManagementPage() {
       departemen: user.departemen,
       role: user.role,
       whatsapp: user.whatsapp || "",
-      password: user.password || ""
+      password: user.password || "",
+      foto_url: user.foto_url || ""
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -150,7 +209,7 @@ export default function UserManagementPage() {
     user.departemen.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Helper untuk membuat Inisial Avatar
+  // Helper untuk membuat Inisial Avatar (fallback kalau belum ada foto)
   const getInitials = (name: string) => {
     const parts = name.split(" ");
     if (parts.length > 1) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -237,6 +296,30 @@ export default function UserManagementPage() {
             </h2>
 
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px", width: "100%" }}>
+
+              {/* UPLOAD FOTO PROFIL */}
+              <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                <div style={{ width: "70px", height: "70px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid #e2e8f0" }}>
+                  {formData.foto_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={formData.foto_url} alt="Foto profil" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <span style={{ fontSize: "24px", color: "#a0aec0" }}>👤</span>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "inline-block", padding: "8px 14px", background: "#edf2f7", border: "1px dashed #a0aec0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+                    {isUploadingFoto ? "⏳ Mengunggah..." : (formData.foto_url ? "📸 Ganti Foto" : "📸 Upload Foto")}
+                    <input type="file" accept="image/*" capture="environment" onChange={handleFotoUpload} disabled={isUploadingFoto} style={{ display: "none" }} />
+                  </label>
+                  {formData.foto_url && !isUploadingFoto && (
+                    <button type="button" onClick={() => setFormData((prev) => ({ ...prev, foto_url: "" }))} style={{ marginLeft: "8px", background: "none", border: "none", color: "#e53e3e", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+                      Hapus
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "#4a5568" }}>Nama Lengkap Asli *</label>
                 <input type="text" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Hilal Akbar" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", background: "#f8fafc", fontSize: "14px", outline: "none" }} />
@@ -283,11 +366,11 @@ export default function UserManagementPage() {
               </div>
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "#d69e2e" : "#3182ce"), color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isLoading ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 4px 6px ${isEditMode ? "rgba(214,158,46,0.3)" : "rgba(49,130,206,0.3)"}`, transition: "0.2s" }}>
+                <button type="submit" disabled={isLoading || isUploadingFoto} style={{ flex: 1, padding: "15px", background: (isLoading || isUploadingFoto) ? "#a0aec0" : (isEditMode ? "#d69e2e" : "#3182ce"), color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: (isLoading || isUploadingFoto) ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 4px 6px ${isEditMode ? "rgba(214,158,46,0.3)" : "rgba(49,130,206,0.3)"}`, transition: "0.2s" }}>
                   {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Daftarkan Akun")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "" }); }} style={{ padding: "15px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "" }); }} style={{ padding: "15px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
                     Batal
                   </button>
                 )}
@@ -338,9 +421,14 @@ export default function UserManagementPage() {
                         {/* Kolom 1: Profil */}
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <div style={{ width: "45px", height: "45px", borderRadius: "50%", background: deptColor, color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: "900", fontSize: "15px", flexShrink: 0 }}>
-                              {getInitials(user.nama)}
-                            </div>
+                            {user.foto_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={user.foto_url} alt={user.nama} style={{ width: "45px", height: "45px", borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `2px solid ${deptColor}` }} />
+                            ) : (
+                              <div style={{ width: "45px", height: "45px", borderRadius: "50%", background: deptColor, color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: "900", fontSize: "15px", flexShrink: 0 }}>
+                                {getInitials(user.nama)}
+                              </div>
+                            )}
                             <div style={{ overflow: "hidden" }}>
                               <div style={{ fontWeight: "900", color: "#1a202c", fontSize: "14px", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{user.nama}</div>
                               <div style={{ color: "#718096", fontSize: "12px", marginTop: "2px", wordBreak: "break-all" }}>{user.email}</div>
