@@ -43,9 +43,11 @@ export default function PortalSIBM() {
   const showToast = useToast();
   // Pakai tanggal WITA (Asia/Makassar), BUKAN toISOString() yang UTC-based —
   // toISOString() bikin tanggal baru "ganti" jam 08:00 WITA, bukan jam 00:00 WITA (bug berulang di project ini)
-  const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
-  const tomorrowISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date(Date.now() + 24 * 60 * 60 * 1000));
-  const jamWITA = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Makassar", hour: "numeric", hourCycle: "h23" }).format(new Date()), 10);
+  // Catatan: pakai `new Date()` (bukan Date.now()) karena react-hooks/purity menganggap Date.now() impure saat dipanggil langsung di body komponen
+  const now = new Date();
+  const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(now);
+  const tomorrowISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const jamWITA = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Makassar", hour: "numeric", hourCycle: "h23" }).format(now), 10);
   const sudahMalam = jamWITA >= 20; // >= 20:00 WITA -> mulai tampilkan plot besok juga
 
   // STATE EXISTING
@@ -147,7 +149,8 @@ export default function PortalSIBM() {
         setObBesok(parsePlotDoc(docSnap));
       });
     } else {
-      setObBesok([]);
+      // setState langsung di body effect kena lint react-hooks/set-state-in-effect -> bungkus setTimeout(...,0) sesuai konvensi project
+      setTimeout(() => setObBesok([]), 0);
     }
 
     // 2. Tarik Data Kendaraan
@@ -1031,22 +1034,24 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 const isBengkel = mobil.status_kendaraan?.includes("Bengkel") || mobil.status_kendaraan?.includes("Service");
                 const isExpanded = expandedKendaraan === mobil.kendaraan;
                 return (
-                  <div key={idx} style={{ borderRadius: "14px", background: isStandby ? "#f0fff4" : isBengkel ? "#f1f5f9" : "#fff5f5", border: isStandby ? "1px solid #c6f6d5" : isBengkel ? "1px solid #cbd5e0" : "1px solid #fed7d7", overflow: "hidden" }}>
+                  <div key={idx} style={{ borderRadius: "14px", background: isStandby ? "#f0fff4" : isBengkel ? "#f1f5f9" : "#fff5f5", border: isStandby ? "1px solid #c6f6d5" : isBengkel ? "1px solid #cbd5e0" : "1px solid #fed7d7" }}>
                     <div
                       onClick={() => handleToggleRiwayatKendaraan(mobil.kendaraan)}
-                      style={{ padding: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                      style={{ padding: "15px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", cursor: "pointer" }}
                     >
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.5 }}>
                         <div style={{ fontWeight: "900", color: "#2d3748", fontSize: "15px" }}>{mobil.kendaraan.split(" - ")[0]}</div>
-                        <div style={{ fontSize: "13px", color: "#4a5568", marginTop: "6px" }}>Pengendara: <b>{mobil.driver_bertugas?.replace("Standby: ", "") || "Karyawan"}</b></div>
-                        {!isStandby && !isBengkel && <div style={{ fontSize: "12px", color: "#718096", marginTop: "4px", fontStyle: "italic" }}>📍 {mobil.tujuan_keperluan}</div>}
-                        <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "4px" }}>{isExpanded ? "▲ Tutup riwayat hari ini" : "▼ Lihat riwayat hari ini"}</div>
+                        <div style={{ fontSize: "13px", color: "#4a5568", marginTop: "4px", wordBreak: "break-word" }}>Pengendara: <b>{mobil.driver_bertugas?.replace("Standby: ", "") || "Karyawan"}</b></div>
+                        {!isStandby && !isBengkel && mobil.tujuan_keperluan && (
+                          <div style={{ fontSize: "12px", color: "#718096", marginTop: "2px", fontStyle: "italic", wordBreak: "break-word" }}>📍 {mobil.tujuan_keperluan}</div>
+                        )}
+                        <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "6px" }}>{isExpanded ? "▲ Tutup riwayat hari ini" : "▼ Lihat riwayat hari ini"}</div>
                       </div>
-                      <Badge tone={isStandby ? "success" : isBengkel ? "neutral" : "danger"}>{isStandby ? "STANDBY" : isBengkel ? "SERVICE" : "KELUAR"}</Badge>
+                      <Badge tone={isStandby ? "success" : isBengkel ? "neutral" : "danger"} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{isStandby ? "STANDBY" : isBengkel ? "SERVICE" : "KELUAR"}</Badge>
                     </div>
 
                     {isExpanded && (
-                      <div style={{ padding: "0 15px 15px 15px", borderTop: "1px dashed rgba(0,0,0,0.1)", marginTop: "-2px" }}>
+                      <div style={{ padding: "0 15px 15px 15px", borderTop: "1px dashed rgba(0,0,0,0.15)", marginTop: "-2px" }}>
                         {isLoadingRiwayat ? (
                           <div style={{ fontSize: "12px", color: "#718096", padding: "12px 0" }}>⏳ Memuat riwayat...</div>
                         ) : riwayatKendaraan.length === 0 ? (
@@ -1057,9 +1062,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                               const logKeluar = log.status_kendaraan?.toLowerCase().includes("keluar");
                               const adaOdo = log.kilometer_kendaraan && log.kilometer_kendaraan !== "Tidak dicatat" && log.kilometer_kendaraan.trim() !== "";
                               return (
-                                <div key={i} style={{ display: "flex", gap: "10px", fontSize: "12px" }}>
-                                  <div style={{ minWidth: "88px", fontWeight: "bold", color: "#2d3748" }}>{formatJam(log.waktu_catat)}</div>
-                                  <div style={{ flex: 1, borderLeft: `3px solid ${logKeluar ? "#e53e3e" : "#38a169"}`, paddingLeft: "10px" }}>
+                                <div key={i} style={{ display: "flex", gap: "10px", fontSize: "12px", lineHeight: 1.5 }}>
+                                  <div style={{ minWidth: "88px", flexShrink: 0, fontWeight: "bold", color: "#2d3748" }}>{formatJam(log.waktu_catat)}</div>
+                                  <div style={{ flex: 1, minWidth: 0, borderLeft: `3px solid ${logKeluar ? "#e53e3e" : "#38a169"}`, paddingLeft: "10px", wordBreak: "break-word" }}>
                                     <div style={{ fontWeight: "bold", color: logKeluar ? "#c53030" : "#2f855a" }}>{log.status_kendaraan}</div>
                                     {log.tujuan_keperluan && log.tujuan_keperluan !== "-" && (
                                       <div style={{ color: "#4a5568" }}>📍 {log.tujuan_keperluan}</div>

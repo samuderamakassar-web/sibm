@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, limit, Timestamp, where } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { useAuthGuard, logout } from "../../../hooks/useAuthGuard";
 
 // ==========================================
 // INTERFACES
@@ -57,7 +58,8 @@ function getMondayOfWeek(d: Date = new Date()): string {
   const day = date.getDay();
   const diff = date.getDate() - day + (day === 0 ? -6 : 1);
   date.setDate(diff);
-  return date.toISOString().split("T")[0];
+  // Format pakai timezone WITA (Asia/Makassar), bukan toISOString() yang UTC-based — bug berulang di project ini
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(date);
 }
 
 function checklistDefault(): Record<string, string> {
@@ -83,13 +85,18 @@ async function uploadFotoToCloudinary(blob: Blob, folder: string): Promise<strin
 
 export default function DriverDashboardPage() {
   const router = useRouter();
-  
-  const [waktuSekarang, setWaktuSekarang] = useState<string>("");
-  const [isReady, setIsReady] = useState<boolean>(false);
-  
-  // Identitas Spesifik dari Login Global
-  const [activeDriver, setActiveDriver] = useState<string>("");
 
+  // Akses & sesi login sekarang dari hook terpusat (menggantikan blok localStorage manual)
+  const { session, isReady } = useAuthGuard({
+    depts: ["Driver"],
+    adminBypass: false, // halaman ini memang khusus dept Driver saja, Admin tidak otomatis lolos (sesuai perilaku lama)
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Tim Driver.",
+  });
+  const activeDriver = session?.nama || "Driver";
+
+  const [waktuSekarang, setWaktuSekarang] = useState<string>("");
+  
   // States Loading & Data
   const [isLoadingPersonel, setIsLoadingPersonel] = useState<boolean>(false);
   const [isLoadingMobil, setIsLoadingMobil] = useState<boolean>(false);
@@ -115,8 +122,21 @@ export default function DriverDashboardPage() {
   const [isSavingInspeksi, setIsSavingInspeksi] = useState(false);
   const [inspeksiTerakhir, setInspeksiTerakhir] = useState<InspeksiTerakhir | null>(null);
 
-  // STATE MODAL OVERTIME
-  const todayISO = new Date().toISOString().split("T")[0];
+  // STATE SERVIS & UJI EMISI (baru — sebelumnya cuma bisa diinput Admin, sekarang Driver bisa lapor langsung)
+  const [servisJenis, setServisJenis] = useState("");
+  const [servisDeskripsi, setServisDeskripsi] = useState("");
+  const [servisBiaya, setServisBiaya] = useState("");
+  const [fotoEmisi, setFotoEmisi] = useState("");
+  const [isUploadingFotoEmisi, setIsUploadingFotoEmisi] = useState(false);
+  const [isSavingServis, setIsSavingServis] = useState(false);
+
+  // STATE CATAT ODOMETER CEPAT (baru — riwayat odometer periodik, terpisah dari KM per-perjalanan)
+  const [odometerInput, setOdometerInput] = useState("");
+  const [isSavingOdometer, setIsSavingOdometer] = useState(false);
+
+  // STATE MODAL OVERTIME — pakai tanggal WITA (Asia/Makassar), BUKAN toISOString() yang UTC-based
+  // (bug berulang di project ini: tanggal baru "ganti" jam 08:00 WITA, bukan jam 00:00 WITA)
+  const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
   const [activeModal, setActiveModal] = useState<"none" | "lembur">("none");
   const [isLemburLoading, setIsLemburLoading] = useState(false);
   const [periodeLembur, setPeriodeLembur] = useState("11 Juni - 10 Juli 2026");
@@ -124,30 +144,13 @@ export default function DriverDashboardPage() {
     { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Perjalanan Dinas Luar Kota / Lembur", alasan: "Antar Jemput Manajemen" }
   ]);
 
-  // 1. Cek Login Otentikasi Langsung
+  // 1. Jam berjalan di header — auth sudah ditangani useAuthGuard di atas
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const dept = localStorage.getItem("pic_dept");
-    const nama = localStorage.getItem("pic_nama");
-
-    if (!role || dept !== "Driver") {
-      alert("Akses Ditolak! Halaman ini khusus Tim Driver.");
-      router.push("/");
-      return;
-    }
-    
-    // Set Identitas langsung dari LocalStorage (Bypass Check-in)
-    setTimeout(() => {
-      setActiveDriver(nama || "Driver");
-      setIsReady(true);
-    }, 0);
-
     const timer = setInterval(() => {
       setWaktuSekarang(new Date().toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" }));
     }, 1000);
-    
     return () => clearInterval(timer);
-  }, [router]);
+  }, []);
 
   // 2. Tarik Riwayat Real-time Khusus Driver yang Sedang Aktif
   useEffect(() => {
@@ -222,10 +225,7 @@ export default function DriverDashboardPage() {
   const kendaraan = kendaraanTerpilih?.kendaraan || "";
   const sudahInspeksiMingguIni = inspeksiTerakhir?.minggu_of === getMondayOfWeek();
 
-  const handleLogout = () => {
-    localStorage.clear();
-    router.push("/");
-  };
+  const handleLogout = () => logout(router, "/");
 
   // 5. Fungsi Update Status Personel Cepat (Jika keluar tanpa mobil kantor)
   const handleUpdateStatusPersonel = async (statusBaru: string) => {
@@ -358,6 +358,107 @@ export default function DriverDashboardPage() {
       alert("Gagal menyimpan inspeksi.");
     } finally {
       setIsSavingInspeksi(false);
+    }
+  };
+
+  // 9. Upload Foto Bukti Uji Emisi (pola sama seperti upload foto inspeksi)
+  const handleFotoEmisiUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 600 / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          setIsUploadingFotoEmisi(true);
+          try {
+            const url = await uploadFotoToCloudinary(blob, "sibm/emisi");
+            setFotoEmisi(url);
+          } catch (err) {
+            console.error(err);
+            alert("Gagal upload foto uji emisi, coba lagi.");
+          } finally {
+            setIsUploadingFotoEmisi(false);
+          }
+        }, "image/jpeg", 0.8);
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 10. Submit Laporan Servis & Uji Emisi (sebelumnya cuma bisa diinput Admin di admin/kendaraan, sekarang Driver bisa lapor langsung)
+  const handleSubmitServis = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kendaraanId) {
+      return alert("Pilih kendaraan dulu di form Bawa Armada di atas.");
+    }
+    if (!servisJenis.trim()) {
+      return alert("Jenis servis wajib diisi (misal: Ganti Oli, Uji Emisi, Servis Berkala).");
+    }
+    if (isUploadingFotoEmisi) {
+      return alert("Tunggu foto selesai diunggah dulu.");
+    }
+    setIsSavingServis(true);
+    try {
+      await addDoc(collection(db, "kendaraan_service_logs"), {
+        kendaraan_id: kendaraanId,
+        kendaraan: kendaraan,
+        tanggal: todayISO,
+        jenis_service: servisJenis.trim(),
+        deskripsi: servisDeskripsi.trim() || "-",
+        biaya: servisBiaya.trim() || "-",
+        foto_emisi_url: fotoEmisi || "",
+        dicatat_oleh: activeDriver,
+        waktu_catat: serverTimestamp(),
+      });
+      alert("✅ Laporan servis/uji emisi berhasil disimpan! Bisa dicek Admin di Riwayat Kendaraan.");
+      setServisJenis("");
+      setServisDeskripsi("");
+      setServisBiaya("");
+      setFotoEmisi("");
+    } catch (error) {
+      console.error(error);
+      alert("Gagal menyimpan laporan servis.");
+    } finally {
+      setIsSavingServis(false);
+    }
+  };
+
+  // 11. Catat Odometer Cepat (riwayat odometer periodik, terpisah dari KM per-perjalanan di Form Bawa Armada)
+  const handleSubmitOdometer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kendaraanId) {
+      return alert("Pilih kendaraan dulu di form Bawa Armada di atas.");
+    }
+    if (!odometerInput.trim()) {
+      return alert("Isi angka odometer dulu.");
+    }
+    setIsSavingOdometer(true);
+    try {
+      await addDoc(collection(db, "kendaraan_odometer_logs"), {
+        kendaraan_id: kendaraanId,
+        kendaraan: kendaraan,
+        odometer: odometerInput.trim(),
+        tanggal: todayISO,
+        dicatat_oleh: activeDriver,
+        waktu_catat: serverTimestamp(),
+      });
+      alert("✅ Odometer berhasil dicatat!");
+      setOdometerInput("");
+    } catch (error) {
+      console.error(error);
+      alert("Gagal mencatat odometer.");
+    } finally {
+      setIsSavingOdometer(false);
     }
   };
 
@@ -578,6 +679,76 @@ export default function DriverDashboardPage() {
 
               <button type="submit" disabled={isSavingInspeksi || isUploadingFotoInspeksi} style={{ width: "100%", padding: "16px", background: isSavingInspeksi ? "#a0aec0" : "#38a169", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingInspeksi ? "not-allowed" : "pointer", boxShadow: isSavingInspeksi ? "none" : "0 4px 15px rgba(56, 161, 105, 0.3)" }}>
                 {isSavingInspeksi ? "Menyimpan..." : "✅ Kirim Inspeksi Mingguan"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* 🔹 CARD BARU: SERVIS, UJI EMISI & CATAT ODOMETER — biar Driver bisa lapor langsung, gak semua beban nyatet ke Security */}
+        {kendaraanId && (
+          <div style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+            <h3 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "16px", fontWeight: "900", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ background: "#ebf8ff", padding: "6px", borderRadius: "8px" }}>🛠️</span> Servis, Uji Emisi &amp; Odometer
+            </h3>
+            <p style={{ fontSize: "12px", color: "#718096", marginBottom: "15px" }}>
+              Untuk kendaraan: <b style={{ color: "#2d3748" }}>{kendaraan}</b> — laporan ini langsung masuk Riwayat Kendaraan yang bisa dicek Admin.
+            </p>
+
+            {/* Catat Odometer Cepat */}
+            <form onSubmit={handleSubmitOdometer} style={{ display: "flex", gap: "10px", marginBottom: "20px", paddingBottom: "20px", borderBottom: "1px dashed #e2e8f0" }}>
+              <input
+                type="number" placeholder="Catat odometer terkini (km)" value={odometerInput}
+                onChange={(e) => setOdometerInput(e.target.value)}
+                style={{ ...sharedInputStyle, flex: 1 }}
+              />
+              <button type="submit" disabled={isSavingOdometer} style={{ padding: "0 20px", background: isSavingOdometer ? "#a0aec0" : "#2b6cb0", color: "white", border: "none", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: isSavingOdometer ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                {isSavingOdometer ? "..." : "📟 Catat"}
+              </button>
+            </form>
+
+            {/* Laporan Servis / Uji Emisi */}
+            <form onSubmit={handleSubmitServis} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>JENIS SERVIS *</label>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {["Ganti Oli", "Uji Emisi", "Servis Berkala", "Ban", "Rem", "Lainnya"].map(j => (
+                    <button
+                      key={j} type="button" onClick={() => setServisJenis(j)}
+                      style={{ padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: servisJenis === j ? "2px solid #3182ce" : "1px solid #e2e8f0", background: servisJenis === j ? "#ebf8ff" : "#f8fafc", color: servisJenis === j ? "#2b6cb0" : "#718096" }}
+                    >
+                      {j}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>DESKRIPSI</label>
+                <textarea placeholder="Contoh: Ganti oli mesin + filter di bengkel resmi" value={servisDeskripsi} onChange={(e) => setServisDeskripsi(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none", fontSize: "13px" }} />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>BIAYA (OPSIONAL)</label>
+                <input type="text" placeholder="Contoh: 350000" value={servisBiaya} onChange={(e) => setServisBiaya(e.target.value)} style={sharedInputStyle} />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "12px", padding: "12px" }}>
+                {fotoEmisi ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={fotoEmisi} alt="Foto bukti uji emisi" style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                ) : (
+                  <span style={{ fontSize: "22px" }}>📸</span>
+                )}
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "inline-block", padding: "8px 14px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+                    {isUploadingFotoEmisi ? "⏳ Mengunggah..." : (fotoEmisi ? "Ganti Foto Bukti" : "Upload Bukti Servis/Emisi (opsional)")}
+                    <input type="file" accept="image/*" capture="environment" onChange={handleFotoEmisiUpload} disabled={isUploadingFotoEmisi} style={{ display: "none" }} />
+                  </label>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isSavingServis || isUploadingFotoEmisi} style={{ width: "100%", padding: "16px", background: isSavingServis ? "#a0aec0" : "#dd6b20", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingServis ? "not-allowed" : "pointer", boxShadow: isSavingServis ? "none" : "0 4px 15px rgba(221, 107, 32, 0.3)" }}>
+                {isSavingServis ? "Menyimpan..." : "✅ Kirim Laporan Servis"}
               </button>
             </form>
           </div>
