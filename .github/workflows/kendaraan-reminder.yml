@@ -1,0 +1,31 @@
+name: Reminder Kendaraan Lupa Update
+
+on:
+  schedule:
+    # Jam WITA: 08:47, 10:47, 12:47, 14:47, 16:47, 18:47 (UTC+8)
+    # Menit 47 sengaja dipakai (bukan :00/:30) karena GitHub Actions sering telat 30-90 menit
+    # kalau jadwalnya pas di menit-menit padat itu — pelajaran dari bug reminder patroli sebelumnya.
+    - cron: "47 0,2,4,6,8,10 * * *"
+  workflow_dispatch: {} # biar bisa di-trigger manual buat testing dari tab Actions
+
+jobs:
+  reminder-kendaraan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Jalankan reminder kendaraan
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          FONNTE_TOKEN: ${{ secrets.FONNTE_TOKEN }}
+          AMBANG_JAM_KELUAR: "6"
+        run: node scripts/kendaraan-reminder.mjs
