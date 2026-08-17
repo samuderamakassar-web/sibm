@@ -17,7 +17,7 @@ import { Table, THead, TBody, Tr, Th, Td } from "../components/ui/Table";
 // ==========================================
 // INTERFACES
 // ==========================================
-interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; }
+interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; _riwayatTerakhir?: KendaraanLog; }
 interface DriverStatusLog { nama_driver: string; status: string; waktu_ubah?: Timestamp | null; }
 interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: string; waktu_masuk?: Timestamp | null; waktu_keluar?: Timestamp | null; }
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
@@ -29,7 +29,14 @@ interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; des
 interface MasterAtk { id: string; nama_barang: string; foto_url?: string; }
 interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; }
 interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; }
-interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; jam_mulai: string; jam_selesai: string; status: string; }
+interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; tanggal: string; jam_mulai: string; jam_selesai: string; status: string; }
+
+// Geser tanggal ISO (YYYY-MM-DD) sejumlah n hari, lewat komponen Y/M/D langsung (aman dari isu timezone)
+const geserTanggalISO = (iso: string, n: number) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+};
 
 // FUNGSI GENERATE RESI
 const generateResiCode = () => {
@@ -50,13 +57,20 @@ export default function PortalSIBM() {
   const jamWITA = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Makassar", hour: "numeric", hourCycle: "h23" }).format(now), 10);
   const sudahMalam = jamWITA >= 20; // >= 20:00 WITA -> mulai tampilkan plot besok juga
 
+  // Rentang Senin-Minggu (WITA) untuk widget "Overtime Gedung (Minggu Ini)" — dulu cuma tampilkan hari ini
+  // Ambil angka hari dari tanggal WITA yang sudah benar (todayISO), bukan dari Date lokal browser
+  const [thnW, blnW, tglW] = todayISO.split("-").map(Number);
+  const hariWITA = new Date(thnW, blnW - 1, tglW).getDay(); // 0=Minggu..6=Sabtu (pemetaan tanggal->hari tidak bergantung timezone)
+  const seninMingguIni = geserTanggalISO(todayISO, hariWITA === 0 ? -6 : 1 - hariWITA);
+  const mingguMingguIni = geserTanggalISO(todayISO, hariWITA === 0 ? 0 : 7 - hariWITA);
+
   // STATE EXISTING
   const [obBertugas, setObBertugas] = useState<ObStatusData[]>([]);
   const [obBesok, setObBesok] = useState<ObStatusData[]>([]);
-  const [mobilStatus, setMobilStatus] = useState<KendaraanLog[]>([]);
+  const [logKendaraanMentah, setLogKendaraanMentah] = useState<KendaraanLog[]>([]);
   const [securityShift, setSecurityShift] = useState<SecurityShift>({ current: [], next: [], currentName: "Memuat...", nextName: "Memuat..." });
   const [driverStatusMap, setDriverStatusMap] = useState<Record<string, string>>({ "Amal Setiawan": "Memuat...", "Muhammad Renaldy": "Memuat..." });
-  const [overtimeHariIni, setOvertimeHariIni] = useState<OvertimeLog[]>([]);
+  const [overtimeMingguIni, setOvertimeMingguIni] = useState<OvertimeLog[]>([]);
 
   // STATE INFO PEMELIHARAAN GEDUNG
   const [maintenanceInfo, setMaintenanceInfo] = useState<string>("Memuat status operasional gedung...");
@@ -65,6 +79,7 @@ export default function PortalSIBM() {
   // STATE HERO SLIDESHOW
   const [staffFotoMap, setStaffFotoMap] = useState<Record<string, string>>({});
   const [kendaraanFotoMap, setKendaraanFotoMap] = useState<Record<string, string>>({});
+  const [daftarSemuaKendaraan, setDaftarSemuaKendaraan] = useState<string[]>([]);
   const [heroSlide, setHeroSlide] = useState(0);
 
   // STATE RIWAYAT ARMADA (expand per kendaraan di card "Status Armada Operasional")
@@ -153,12 +168,9 @@ export default function PortalSIBM() {
       setTimeout(() => setObBesok([]), 0);
     }
 
-    // 2. Tarik Data Kendaraan
+    // 2. Tarik Data Kendaraan (mentah — status per kendaraan + prioritas Standby dihitung di useMemo `mobilStatus` di bawah)
     const unsubVeh = onSnapshot(query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"), limit(30)), (snapshot) => {
-      const logs = snapshot.docs.map(d => d.data() as KendaraanLog);
-      const statusTerkini: Record<string, KendaraanLog> = {};
-      logs.forEach(log => { if (!statusTerkini[log.kendaraan]) statusTerkini[log.kendaraan] = log; });
-      setMobilStatus(Object.values(statusTerkini));
+      setLogKendaraanMentah(snapshot.docs.map(d => d.data() as KendaraanLog));
     });
 
     // 3. Tarik Status Driver
@@ -173,11 +185,15 @@ export default function PortalSIBM() {
       setDriverStatusMap(latestMap);
     });
 
-    // 4. Tarik Overtime Hari Ini
-    const unsubOvertime = onSnapshot(query(collection(db, "ga_overtime_requests"), where("tanggal", "==", todayISO)), (snapshot) => {
-      const otData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeLog));
-      setOvertimeHariIni(otData);
-    });
+    // 4. Tarik Overtime Minggu Ini (Senin-Minggu WITA) — dulu cuma hari ini, sekarang direkap 1 minggu sekaligus
+    const unsubOvertime = onSnapshot(
+      query(collection(db, "ga_overtime_requests"), where("tanggal", ">=", seninMingguIni), where("tanggal", "<=", mingguMingguIni)),
+      (snapshot) => {
+        const otData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeLog))
+          .sort((a, b) => a.tanggal === b.tanggal ? a.jam_mulai.localeCompare(b.jam_mulai) : a.tanggal.localeCompare(b.tanggal));
+        setOvertimeMingguIni(otData);
+      }
+    );
 
     // 5. Tarik Info Pemeliharaan Gedung
     const unsubMaintenance = onSnapshot(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(20)), (snapshot) => {
@@ -205,11 +221,16 @@ export default function PortalSIBM() {
 
     getDocs(collection(db, "master_kendaraan")).then(snap => {
       const map: Record<string, string> = {};
+      const semuaId: string[] = [];
       snap.docs.forEach(d => {
         const data = d.data();
-        if (data.kendaraan && data.foto_url) map[data.kendaraan] = data.foto_url;
+        if (data.kendaraan) {
+          semuaId.push(data.kendaraan);
+          if (data.foto_url) map[data.kendaraan] = data.foto_url;
+        }
       });
       setKendaraanFotoMap(map);
+      setDaftarSemuaKendaraan(semuaId);
     }).catch(err => console.error("[hero] Gagal memuat foto kendaraan:", err));
 
     // Tarik kontak Admin GA & QHSE dari users_master (untuk notifikasi Tahap 3: request baru masuk & SBO baru)
@@ -254,7 +275,7 @@ export default function PortalSIBM() {
     });
 
     return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubMasterAtk(); };
-  }, [todayISO, tomorrowISO, sudahMalam]);
+  }, [todayISO, tomorrowISO, sudahMalam, seninMingguIni, mingguMingguIni]);
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
 
@@ -450,14 +471,14 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         jam_mulai: formOvertime.jam_mulai,
         jam_selesai: formOvertime.jam_selesai,
         alasan: formOvertime.alasan,
-        status: "Menunggu Approval GA",
+        status: "Tercatat", // Tidak lagi butuh approval GA — tanggal & jam sudah jelas, langsung tercatat untuk direkap jadi tagihan
         waktu_request: serverTimestamp()
       });
 
-      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon)
+      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — sekarang sifatnya info, bukan permintaan approval
       kirimNotifikasiAdminGA("Overtime Gedung", formOvertime.nama, `Tanggal: ${formOvertime.tanggal}, Area: ${formOvertime.area}, Jam: ${formOvertime.jam_mulai}-${formOvertime.jam_selesai}.`);
 
-      showToast("Permohonan Overtime Gedung berhasil dikirim. Menunggu persetujuan Admin GA.", "success");
+      showToast("Overtime Gedung berhasil dicatat. Akan masuk rekap tagihan.", "success");
       setFormOvertime({ nama: "", dept: "", area: "", tanggal: todayISO, jam_mulai: "", jam_selesai: "", alasan: "" }); setActiveModal("none");
     } catch (error) {
       console.error(error);
@@ -634,6 +655,44 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   };
 
   const getInitials = (nama: string) => nama.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+
+  // Status armada final yang dipakai di UI: gabungan status terkini per kendaraan (dari 30 log terakhir) +
+  // kendaraan master yang TIDAK muncul di 30 log terakhir tetap dianggap Standby (bukan hilang dari daftar) +
+  // kendaraan Standby diprioritaskan ke atas + kendaraan Standby dikasih info trip terakhirnya (kalau kepantau di window log yang sama)
+  const isStandbyLabel = (s?: string) => !!s && (s.includes("Standby") || s.includes("Tiba"));
+  const mobilStatus = useMemo(() => {
+    const statusTerkini: Record<string, KendaraanLog> = {};
+    logKendaraanMentah.forEach(log => { if (!statusTerkini[log.kendaraan]) statusTerkini[log.kendaraan] = log; });
+
+    // Kendaraan yang ada di master_kendaraan tapi tidak muncul sama sekali di 30 log terakhir -> tidak ada aktivitas
+    // baru-baru ini, jadi dianggap Standby di parkiran (bukan malah hilang dari tampilan)
+    daftarSemuaKendaraan.forEach(id => {
+      if (!statusTerkini[id]) {
+        statusTerkini[id] = { kendaraan: id, status_kendaraan: "Standby (Parkiran)", driver_bertugas: "-", tujuan_keperluan: "-" };
+      }
+    });
+
+    // Cari trip "Keluar" TERAKHIR per kendaraan dari log yang sudah ditarik, buat ditempel ke kendaraan yang lagi Standby
+    // sebagai "riwayat pakai terakhir" (best-effort — hanya sejauh yang kecover di 30 log terbaru)
+    const tripTerakhirMap: Record<string, KendaraanLog> = {};
+    logKendaraanMentah.forEach(log => {
+      if (log.status_kendaraan?.toLowerCase().includes("keluar") && !tripTerakhirMap[log.kendaraan]) {
+        tripTerakhirMap[log.kendaraan] = log;
+      }
+    });
+
+    const daftar = Object.values(statusTerkini).map(v =>
+      isStandbyLabel(v.status_kendaraan) ? { ...v, _riwayatTerakhir: tripTerakhirMap[v.kendaraan] } : v
+    );
+
+    // Standby selalu di atas; dalam grup yang sama diurut alfabet plat biar posisinya stabil (tidak lompat-lompat)
+    return daftar.sort((a, b) => {
+      const aStandby = isStandbyLabel(a.status_kendaraan) ? 0 : 1;
+      const bStandby = isStandbyLabel(b.status_kendaraan) ? 0 : 1;
+      if (aStandby !== bStandby) return aStandby - bStandby;
+      return a.kendaraan.localeCompare(b.kendaraan);
+    });
+  }, [logKendaraanMentah, daftarSemuaKendaraan]);
 
   // Slide "brand" selalu tampil; slide OB & Armada hanya muncul kalau ada datanya
   const heroSlides = useMemo(() => {
@@ -876,10 +935,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               {slide === "armada" && (
                 <>
                   <h2 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "900" }}>🚗 Status Armada Operasional</h2>
-                  <p style={{ margin: "0 0 14px 0", fontSize: "12px", opacity: 0.85 }}>{mobilStatus.length} kendaraan tercatat hari ini</p>
+                  <p style={{ margin: "0 0 14px 0", fontSize: "12px", opacity: 0.85 }}>{mobilStatus.filter(m => isStandbyLabel(m.status_kendaraan)).length} standby di parkiran · {mobilStatus.length} kendaraan total</p>
                   <div className="hero-armada-row">
                     {ringkasArmada.map((k) => {
-                      const keluar = k.status_kendaraan?.toLowerCase().includes("keluar");
+                      const standby = isStandbyLabel(k.status_kendaraan);
+                      const terakhir = k._riwayatTerakhir;
                       return (
                         <div className="hero-armada-item" key={k.kendaraan}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
@@ -891,10 +951,16 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                             )}
                             <div style={{ overflow: "hidden" }}>
                               <div style={{ fontWeight: "bold", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{k.kendaraan}</div>
-                              <div style={{ opacity: 0.8, fontSize: "11px" }}>{k.driver_bertugas || "-"}</div>
+                              {standby ? (
+                                <div style={{ opacity: 0.8, fontSize: "11px", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
+                                  {terakhir ? `Terakhir: ${terakhir.driver_bertugas?.replace("Standby: ", "") || "-"} → ${terakhir.tujuan_keperluan || "-"}` : "Belum ada riwayat pakai terbaru"}
+                                </div>
+                              ) : (
+                                <div style={{ opacity: 0.8, fontSize: "11px" }}>{k.driver_bertugas || "-"}</div>
+                              )}
                             </div>
                           </div>
-                          <span className="hero-status-pill" style={{ background: keluar ? "#fed7d7" : "#c6f6d5", color: keluar ? "#822727" : "#22543d" }}>{k.status_kendaraan}</span>
+                          <span className="hero-status-pill" style={{ background: standby ? "#c6f6d5" : "#fed7d7", color: standby ? "#22543d" : "#822727" }}>{standby ? "STANDBY" : k.status_kendaraan}</span>
                         </div>
                       );
                     })}
@@ -1090,16 +1156,19 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           <Card>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "12px" }}>
               <div style={{ background: "#fffff0", padding: "10px", borderRadius: "12px", fontSize: "20px" }}>⏱️</div>
-              <h3 style={{ margin: 0, color: "#2d3748", fontSize: "18px", fontWeight: "900" }}>Overtime Gedung (Hari Ini)</h3>
+              <div>
+                <h3 style={{ margin: 0, color: "#2d3748", fontSize: "18px", fontWeight: "900" }}>Overtime Gedung (Minggu Ini)</h3>
+                <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#a0aec0" }}>{seninMingguIni.split("-").reverse().join("/")} - {mingguMingguIni.split("-").reverse().join("/")} — langsung tercatat, tinggal direkap untuk tagihan</p>
+              </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "350px", overflowY: "auto", paddingRight: "5px" }}>
-              {overtimeHariIni.length > 0 ? overtimeHariIni.map((ot, idx) => {
-                const isApproved = ot.status === "Approved" || ot.status === "Disetujui";
+              {overtimeMingguIni.length > 0 ? overtimeMingguIni.map((ot, idx) => {
+                const isHariIni = ot.tanggal === todayISO;
                 return (
-                  <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "15px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #edf2f7", borderLeft: isApproved ? "4px solid #38a169" : "4px solid #d69e2e" }}>
+                  <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "15px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #edf2f7", borderLeft: isHariIni ? "4px solid #d69e2e" : "4px solid #cbd5e0" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <span style={{ fontWeight: "900", color: "#2d3748", fontSize: "14px", flex: 1 }}>{ot.area_ruangan}</span>
-                      <Badge tone={isApproved ? "success" : "warning"} style={{ marginLeft: "10px" }}>{ot.status}</Badge>
+                      <Badge tone={isHariIni ? "warning" : "neutral"} style={{ marginLeft: "10px" }}>{isHariIni ? "Hari Ini" : ot.tanggal.split("-").reverse().join("/")}</Badge>
                     </div>
                     <div style={{ fontSize: "13px", color: "#4a5568" }}>👤 {ot.nama_pemohon} ({ot.departemen})</div>
                     <div style={{ fontSize: "13px", color: "#d69e2e", fontWeight: "bold", background: "#fffff0", padding: "6px 10px", borderRadius: "6px", display: "inline-block", width: "fit-content" }}>🕒 {ot.jam_mulai} s/d {ot.jam_selesai}</div>
@@ -1109,7 +1178,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "#a0aec0", background: "#f8fafc", borderRadius: "16px", border: "1px dashed #cbd5e0" }}>
                   <div style={{ fontSize: "35px", marginBottom: "10px" }}>🏢</div>
                   <div style={{ fontSize: "14px", fontWeight: "bold", color: "#718096" }}>Tidak Ada Lembur</div>
-                  <div style={{ fontSize: "12px", marginTop: "5px" }}>Jadwal gedung beroperasi normal hari ini.</div>
+                  <div style={{ fontSize: "12px", marginTop: "5px" }}>Belum ada overtime tercatat minggu ini.</div>
                 </div>
               )}
             </div>
@@ -1328,7 +1397,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 <Input label="Jam Selesai *" type="time" required value={formOvertime.jam_selesai} onChange={(e) => setFormOvertime({ ...formOvertime, jam_selesai: e.target.value })} />
               </div>
               <Textarea label="Keperluan *" required placeholder="Jelaskan alasan lembur..." value={formOvertime.alasan} onChange={(e) => setFormOvertime({ ...formOvertime, alasan: e.target.value })} style={{ minHeight: "60px" }} />
-              <div style={{ fontSize: "11px", color: "#d69e2e", background: "#fffff0", padding: "10px", borderRadius: "8px", border: "1px solid #fefcbf", marginTop: "5px" }}><b>Perhatian:</b> Permintaan overtime akan masuk ke *billing* tagihan departemen/tenant sesuai tarif yang berlaku setelah di-approve GA.</div>
+              <div style={{ fontSize: "11px", color: "#d69e2e", background: "#fffff0", padding: "10px", borderRadius: "8px", border: "1px solid #fefcbf", marginTop: "5px" }}><b>Perhatian:</b> Data ini langsung tercatat (tanpa approval) dan akan masuk rekap tagihan departemen/tenant sesuai tarif yang berlaku — pastikan tanggal dan jam sudah benar.</div>
               <Button type="submit" loading={isOvertimeLoading} loadingText="Mengirim..." style={{ background: isOvertimeLoading ? undefined : "#d69e2e", boxShadow: isOvertimeLoading ? undefined : "0 10px 15px -3px rgba(214,158,46,0.3)", marginTop: "10px" }}>
                 Submit Permintaan Overtime
               </Button>
