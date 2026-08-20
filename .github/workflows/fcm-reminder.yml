@@ -1,0 +1,32 @@
+name: FCM Reminder OB & CS
+
+on:
+  schedule:
+    # Cron pakai UTC. WITA = UTC+8.
+    # 08:30 WITA -> 00:33 UTC
+    - cron: "33 0 * * 1-5"
+    # 13:00 WITA -> 05:07 UTC
+    - cron: "7 5 * * 1-5"
+    # 16:00 WITA -> 08:41 UTC
+    - cron: "41 8 * * 1-5"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Kirim FCM reminder
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+        run: node scripts/fcm-reminder.mjs
