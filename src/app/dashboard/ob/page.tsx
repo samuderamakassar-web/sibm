@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, query, where, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { useFcmSetup } from "@/hooks/useFcmSetup";
 
 // ==========================================
 // INTERFACES
@@ -82,6 +83,9 @@ export default function OBDashboard() {
   };
   siapkanIdentitas();
 }, [router]);
+
+// 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari localStorage
+  useFcmSetup(picName, !!picName);
 
   // EFEK 2: Listener Data Real-time (Plotting, Stok, Deep Cleaning)
   useEffect(() => {

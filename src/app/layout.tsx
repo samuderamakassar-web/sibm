@@ -4,6 +4,7 @@ import "./globals.css";
 import { ToastProvider } from "../components/ui/ToastProvider";
 import { ConfirmProvider } from "../components/ui/ConfirmProvider";
 import NotifikasiPatroliListener from "../components/NotifikasiPatroliListener";
+import InstallPrompt from "../components/InstallPrompt";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -47,6 +48,7 @@ export default function RootLayout({
           <ConfirmProvider>
             <NotifikasiPatroliListener />
             {children}
+            <InstallPrompt />
           </ConfirmProvider>
         </ToastProvider>
       </body>
