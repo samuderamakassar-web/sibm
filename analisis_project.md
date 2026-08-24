@@ -1,6 +1,6 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 20 Agustus 2026
+Update terakhir: 24 Agustus 2026
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
@@ -11,16 +11,16 @@ Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API 
 - Checklist OB: segment-based (Basement, Lantai 1-5, Pelayanan), foto before/after multi-pasang, Cloudinary buat upload foto (bukan Firebase Storage — Blaze diblokir masalah kartu).
 - PWA: `manifest.json`, `InstallPrompt.tsx`, ikon masih placeholder (belum ada file asli).
 - Sistem reminder terjadwal (semua via GitHub Actions cron, gak butuh Blaze, reuse secret `FIREBASE_SERVICE_ACCOUNT_BASE64`):
-  - `patroli-reminder.yml` + `scripts/patroli-reminder.mjs` — WA reminder patroli security tiap 3 jam + 30 menit sebelum & pas shift ganti. Sempat 0 pesan terkirim karena delay GitHub Actions cron `:00`/`:30`, sudah diperbaiki (tolerance 45 menit, idempotency guard, dll).
+  - `patroli-reminder.yml` + `scripts/patroli-reminder.mjs` — WA reminder patroli security tiap 3 jam + 30 menit sebelum & pas shift ganti.
   - `checklist-reminder.yml` + `scripts/checklist-reminder.mjs` — WA reminder checklist OB tiap 2 jam kalau belum submit.
-  - `fcm-reminder.yml` + `scripts/fcm-reminder.mjs` — push notif browser jam 08:30/13:00/16:00 WITA hari kerja ke semua token di `fcm_tokens`. **Baru dibuat sesi ini**, belum di-deploy/test.
-  - `kendaraan-reminder.yml` + `scripts/kendaraan-reminder.mjs` — **sudah ada di repo tapi belum pernah dibahas di chat**, isi/tujuannya perlu dikonfirmasi ulang kalau mau disentuh.
-- FCM setup: `src/hooks/useFcmSetup.ts` sudah dipindah ke lokasi yang benar, VAPID key sudah diisi. Cara pakainya: panggil `useFcmSetup(picName, !!picName)` di level komponen halaman (sudah dikasih contoh utk `dashboard/ob/page.tsx`, taruh setelah efek baca `pic_nama` dari localStorage) — **belum dikonfirmasi user udah nempel kodenya atau belum**.
+  - `fcm-reminder.yml` + `scripts/fcm-reminder.mjs` — push notif browser jam 08:30/13:00/16:00 WITA hari kerja. Belum di-deploy/test.
+  - `kendaraan-reminder.yml` + `scripts/kendaraan-reminder.mjs` — sudah ada di repo tapi belum pernah dibahas, isi/tujuannya perlu dikonfirmasi ulang kalau mau disentuh.
+- FCM setup: `src/hooks/useFcmSetup.ts` sudah di lokasi benar, dipanggil via `useFcmSetup(picName, !!picName)`.
 - Banyak bugfix arsitektur & fitur (login, plotting OB, jadwal security, kendaraan, dsb) — lihat riwayat chat/memory untuk detail lengkap kalau perlu.
 
 ---
 
-## 2. STRUKTUR FOLDER SAAT INI (per screenshot 20 Agustus 2026)
+## 2. STRUKTUR FOLDER SAAT INI
 
 ```
 sibm-app/
@@ -41,7 +41,7 @@ sibm-app/
         broadcast/          ← isi belum diperiksa
         helpdesk/            ← isi belum diperiksa
         karyawan/            ← isi belum diperiksa
-        kendaraan/            ← isi belum diperiksa
+        kendaraan/page.tsx    ← DIROMBAK sesi ini (lihat §3)
         monitor-ob/            ← isi belum diperiksa
         monitor-security/            ← isi belum diperiksa
         overtime/            ← isi belum diperiksa
@@ -52,23 +52,26 @@ sibm-app/
       dashboard/
         driver/page.tsx (+ subroutes?)
         ob/
-          checklist/page.tsx
+          checklist/page.tsx   ← sudah migrasi ke components/pages/ (#1)
           deep-cleaning/       ← isi belum diperiksa
           laporan/       ← isi belum diperiksa
           plotting/       ← isi belum diperiksa
           stok/       ← isi belum diperiksa
-          page.tsx
+          page.tsx              ← sudah migrasi ke components/pages/ (#2)
         qhse/       ← isi belum diperiksa
         security/       ← isi belum diperiksa (kemungkinan ada jadwal/, patroli/, buku-tamu/, paket/)
       layout.tsx
-      page.tsx                ← portal publik utama, 1600+ baris
+      page.tsx                ← portal publik utama, DIUPDATE sesi ini (lihat §3), belum dipecah ke components/pages/
     components/
+      VehicleIcon3D.tsx        ← BARU sesi ini, shared component (lihat §3)
       ui/                     ← library komponen (Button, Card, Input, dll) — JANGAN diubah
       InstallPrompt.tsx
       NotifikasiChecklistListener.tsx
       NotifikasiKendaraanListener.tsx
       NotifikasiPatroliListener.tsx
-      pages/                  ← ⚠️ BELUM ADA — ini yang mau dibuat
+      pages/
+        ChecklistOBPage.tsx     ← migrasi #1
+        DashboardOBPage.tsx     ← migrasi #2
     hooks/
       useAuthGuard.ts
       useFcmSetup.ts
@@ -78,51 +81,79 @@ sibm-app/
       notify.ts
 ```
 
-**Catatan penting:** rencana lama yang bilang `ChecklistOBPage.tsx` sudah jadi contoh di `components/pages/` — ternyata **belum benar-benar dibuat**. Folder `components/pages/` belum ada sama sekali. Jadi restrukturisasi di bawah ini mulai dari nol, termasuk checklist OB.
+**Catatan:** restrukturisasi folder (Fin-Samudera style, `components/pages/` per halaman) masih di tahap #2 dari 6 — lihat §4. Sesi ini sempat loncat ke portal utama & admin/kendaraan buat kerjain fitur baru duluan (bukan urutan migrasi foldernya), jadi `page.tsx` portal & `admin/kendaraan/page.tsx` **masih dalam bentuk lama** (belum dipecah ke `components/pages/`), isinya aja yang diupdate.
 
 ---
 
-## 3. RENCANA BARU: Restrukturisasi folder mengikuti pola project **Fin-Samudera**
+## 3. FITUR BARU SESI 24 AGUSTUS 2026: Icon 3D Kendaraan + Overhaul Admin Kendaraan
 
-Reza punya project lain (Fin-Samudera, React + react-router-dom) dengan struktur yang dia anggap jauh lebih enak: `src/pages/` (satu file per halaman/route) + `src/components/` (komponen reusable — form, modal, tabel, chart, dst).
+### Komponen shared baru: `src/components/VehicleIcon3D.tsx`
+- Icon kendaraan isometric-style SVG, 5 kategori: Sedan, SUV/MPV, Pickup, Truck, Motor.
+- Warna dinamis dari field `warna` (nama warna Indonesia umum — Putih/Hitam/Silver/Merah/Biru/dst — atau hex langsung), pakai shading 3-tone (light/base/dark) buat kesan 3D.
+- Export: `VehicleIcon3D` (komponen), `KATEGORI_KENDARAAN` (array 5 kategori), `WARNA_KENDARAAN` (array {label, hex}), `warnaToHex`, `shadeHex`.
+- Dipakai di portal (`page.tsx`) dan admin (`admin/kendaraan/page.tsx`) — satu sumber kebenaran, gak digandakan.
 
-SIBM pakai Next.js App Router, yang **mengharuskan routing berbasis folder** (`app/dashboard/ob/page.tsx` otomatis jadi route `/dashboard/ob`) — jadi gak bisa 100% diratakan jadi satu folder `pages/` flat kayak Fin-Samudera. Solusi yang disepakati:
+### Portal utama (`page.tsx`)
+- **Slideshow manual saja**: auto-geser 6 detik dihapus total. Sekarang geser (swipe touch) atau klik arrow/dots.
+- **Icon 3D kendaraan** dipasang di slide hero armada + card "Status Armada Operasional" lengkap, gantiin foto/emoji sebagai identitas visual utama. Ambil `kategori`+`warna` dari `master_kendaraan` (fallback "Sedan"/"Putih" kalau kosong, gak error di kendaraan lama).
+- State `kendaraanFotoMap` (buat foto kendaraan di slideshow) dihapus karena udah gak dipakai — foto asli kendaraan sekarang cuma dokumentasi di admin, bukan identitas visual di portal.
 
-- `page.tsx` di tiap folder route **tetap wajib ada** (aturan framework), tapi dibikin **setipis mungkin** — cuma import + render.
-- Isi lengkap tiap halaman (state, effect, JSX, semua logic) pindah ke `components/pages/XxxPage.tsx`, satu file per halaman — ini yang jadi analog dari `src/pages/` di Fin-Samudera.
-- Komponen reusable (form, modal, listener, dll) tetap di `components/` biasa — sudah sesuai pola, gak perlu diubah.
+### Admin Kendaraan (`admin/kendaraan/page.tsx`) — dirombak
+- **Field baru** di `master_kendaraan`: `kategori` (dropdown 5 pilihan, nentuin bentuk icon), `warna` (dropdown 12 pilihan, nentuin warna icon), `no_rangka`, `no_mesin`, `tanggal_pajak` (tanggal STNK/pajak berlaku sampai).
+- **Penting — konflik nama field dihindari**: field `jenis` yang lama (teks bebas, cth "Toyota Avanza") TETAP ADA apa adanya, terpisah dari `kategori` yang baru (buat icon). Jangan disatukan.
+- **Preview icon 3D live** di form — update langsung pas pilih kategori/warna.
+- **PIC Kendaraan pakai autocomplete**: input teks dengan datalist dari `employees_directory` (master karyawan), tapi tetap bisa isi manual kalau nama gak ada di direktori.
+- **Foto dokumentasi** (upload asli ke Cloudinary) tetap ada di form sebagai field opsional terpisah — bukan lagi identitas visual utama.
+- **Tabel daftar kendaraan**: icon 3D di kolom Kendaraan (gantiin foto/emoji), kolom baru "Pajak/STNK" dengan badge status (Aktif/Segera Habis ≤30 hari/Kadaluarsa/Belum diisi) dari `getPajakStatus()`, no. rangka & no. mesin ditampilkan ringkas di bawah nama kendaraan kalau diisi.
+- **Riwayat maintenance** (modal 4 tab: Odometer/Servis/Pemakaian/Inspeksi) — TIDAK diubah, tetap jalan seperti sebelumnya. Tab **Pemakaian** (dari `operational_vehicle_logs`) sudah berfungsi sebagai riwayat perjalanan dasar (keluar/tiba, tujuan, driver, odometer).
+- **Riwayat perjalanan lebih detail** (rute/peta, jarak tempuh, analitik) — **sengaja belum dikerjakan**, permintaan user eksplisit "mungkin kedepan" (nanti-nanti, bukan sekarang).
 
-**Status: disetujui Reza, siap jalan.**
+### Bug yang sempat muncul & sudah difix
+- TypeScript error di `page.tsx` (`kategori` does not exist in type `{jenis, warna}`) — penyebab: ada 2 tempat yang define tipe `kendaraanMetaMap`/`metaMap` sebagai `{jenis, warna}`, cuma satu yang ke-rename ke `{kategori, warna}` waktu edit pertama. Sudah disamakan semua ke `kategori`.
+- ESLint unused var `kendaraanFotoMap` — state itu emang udah gak dipakai lagi setelah icon 3D gantiin foto sebagai identitas visual; dihapus.
+- Status: **user sudah konfirmasi baik/gak ada error lagi** per sesi ini.
 
-### Urutan migrasi yang disarankan
-Migrasi satu halaman per sesi/chat, biar gampang di-review dan gak numpuk risiko paste-error (bug pola lama di project ini: fungsi/kurung kurawal ke-duplikat atau salah taruh pas paste manual — selalu cek ulang lewat daftar TypeScript error kalau ada gejala aneh).
+---
 
-1. `dashboard/ob/checklist/page.tsx` → `components/pages/ChecklistOBPage.tsx` (paling sering disentuh, jadi contoh pola)
-2. `dashboard/ob/page.tsx` → `components/pages/DashboardOBPage.tsx`
-3. Sisa route di bawah `dashboard/ob/` (deep-cleaning, laporan, plotting, stok)
-4. `dashboard/driver`, `dashboard/qhse`, `dashboard/security` + subroute-nya
-5. Semua route di bawah `admin/`
-6. Portal publik `app/page.tsx` (1600+ baris) — paling besar & berisiko, dikerjakan terakhir
+## 4. RENCANA RESTRUKTURISASI FOLDER (Fin-Samudera style) — masih jalan, terpisah dari §3
 
-### Cara kerja per halaman
+Reza punya project lain (Fin-Samudera, React + react-router-dom) dengan struktur `src/pages/` (satu file per halaman) + `src/components/`. SIBM pakai Next.js App Router (routing berbasis folder wajib), solusi yang disepakati: `page.tsx` tiap folder route tetap ada tapi setipis mungkin (cuma import + render), isi lengkap pindah ke `components/pages/XxxPage.tsx`.
+
+### Progress migrasi
+- [x] 1. `dashboard/ob/checklist/page.tsx` → `components/pages/ChecklistOBPage.tsx` — selesai, sekalian fix bug timezone `todayISO`.
+- [x] 2. `dashboard/ob/page.tsx` → `components/pages/DashboardOBPage.tsx` — selesai, tidak ada bug tambahan yang perlu difix.
+- [ ] 3. Sisa route di bawah `dashboard/ob/` (deep-cleaning, laporan, plotting, stok) — **NEXT UP kalau lanjut migrasi**
+- [ ] 4. `dashboard/driver`, `dashboard/qhse`, `dashboard/security` + subroute-nya
+- [ ] 5. Semua route di bawah `admin/` (termasuk `admin/kendaraan` yang isinya baru saja diupdate di §3 — migrasi struktur foldernya masih menyusul, terpisah dari update fitur)
+- [ ] 6. Portal publik `app/page.tsx` (paling besar & berisiko, dikerjakan terakhir — isinya baru saja diupdate di §3, migrasi struktur foldernya masih menyusul)
+
+### Cara kerja per halaman (sudah terbukti di langkah 1 & 2)
 User paste isi `page.tsx` yang mau dipindah → dibalikin 2 file:
 - `components/pages/XxxPage.tsx` — isi lengkap, nama komponen disesuaikan
 - `page.tsx` versi tipis — tinggal import & render
 
+Kalau nemu bug lama di tengah jalan, sekalian dibenerin pas migrasi biar gak nambah kerjaan misah lagi nanti — selalu disebutkan eksplisit kalau ada perubahan behavior, bukan cuma pindah lokasi.
+
 ---
 
-## 4. OPEN QUESTIONS
+## 5. NEXT STEP (mulai chat baru dari sini)
+
+Belum ditentukan lanjut ke mana — dua opsi terbuka:
+- **Lanjut migrasi folder #3**: `dashboard/ob/` sisa (deep-cleaning, laporan, plotting, stok)
+- **Fitur baru lain** kalau ada yang lebih prioritas (tanya Reza dulu di awal chat baru)
+
+## 6. OPEN QUESTIONS
 
 - `kendaraan-reminder.yml`/`scripts/kendaraan-reminder.mjs` — sudah ada di repo, isi & tujuannya belum pernah dibahas, perlu dikonfirmasi Reza kalau mau disentuh/didokumentasikan.
 - `fcm-reminder` (workflow + script) — sudah dibuat, belum di-deploy & belum di-test manual (`workflow_dispatch`).
-- Pemanggilan `useFcmSetup(picName, !!picName)` di `dashboard/ob/page.tsx` — sudah dikasih instruksinya, belum dikonfirmasi sudah ditempel atau belum.
 - Icon PWA asli (192x192, 512x512, maskable 512x512) masih belum ada, `manifest.json` masih pakai placeholder.
+- Kendaraan lama (sebelum sesi ini) belum punya field `kategori`/`warna`/`no_rangka`/`no_mesin`/`tanggal_pajak` terisi — perlu diisi manual satu-satu lewat form edit admin kalau mau datanya lengkap (fallback default aman, gak error, cuma tampil "Sedan"/"Putih"/kosong).
 
 ---
 
-## 5. KONTEKS PROJECT (biar chat baru langsung nyambung)
+## 7. KONTEKS PROJECT (biar chat baru langsung nyambung)
 
 - Reza — kerja di IT, General Affairs (GA), dan Building Management di perusahaan Makassar yang menaungi ~10 anak perusahaan. Bikin aplikasi internal buat streamline kerja staf, terutama GA.
-- Project lain milik Reza: **Fin-Samudera** (reimbursement/LPJ/Bon Sementara, React + react-router-dom + Firebase) — struktur foldernya (`src/pages/` + `src/components/`) jadi acuan buat restrukturisasi SIBM di atas.
+- Project lain milik Reza: **Fin-Samudera** (reimbursement/LPJ/Bon Sementara, React + react-router-dom + Firebase) — struktur foldernya (`src/pages/` + `src/components/`) jadi acuan buat restrukturisasi SIBM (§4).
 - Gaya komunikasi Reza: santai, to the point, tidak suka bullet points kecuali perlu (dokumen ini pakai tabel/list karena sifatnya rekap teknis, bukan chat biasa).
 - **Kalau buka chat baru: cukup upload file ini di awal chat, gak perlu jelasin ulang dari nol.**

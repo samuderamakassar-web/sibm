@@ -13,15 +13,28 @@ import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import Input from "../../../components/ui/Input";
 import Modal from "../../../components/ui/Modal";
+import Badge from "../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../components/ui/Table";
+import VehicleIcon3D, { KATEGORI_KENDARAAN, WARNA_KENDARAAN } from "../../../components/VehicleIcon3D";
+
+interface Employee {
+  id: string;
+  nama: string;
+  departemen?: string;
+}
 
 interface Kendaraan {
   id: string;
   kendaraan: string; // Nama identifier - HARUS SAMA PERSIS dengan yang dipilih driver di form lapor status
   plat_nomor: string;
-  jenis: string;
+  jenis: string; // merk/tipe bebas, cth: "Toyota Avanza" — BEDA dari `kategori` (dipakai buat pilih bentuk icon 3D)
+  kategori: string; // Sedan/SUV-MPV/Pickup/Truck/Motor — nentuin bentuk icon 3D
+  warna: string; // nentuin warna icon 3D
   pic_kendaraan: string;
   unit_bisnis: string;
+  no_rangka?: string;
+  no_mesin?: string;
+  tanggal_pajak?: string; // tanggal STNK/pajak berlaku sampai (YYYY-MM-DD)
   foto_url?: string;
 }
 
@@ -130,6 +143,17 @@ async function uploadFotoToCloudinary(blob: Blob, folder: string = "sibm/kendara
 
 const todayISO = () => new Date().toISOString().split("T")[0];
 
+// Status pajak/STNK dari tanggal berlaku (YYYY-MM-DD): Kadaluarsa / Segera Habis (<=30 hari) / Aktif
+function getPajakStatus(tanggal?: string): { label: string; tone: "danger" | "warning" | "success" | "neutral" } {
+  if (!tanggal) return { label: "Belum diisi", tone: "neutral" };
+  const target = new Date(tanggal);
+  const now = new Date();
+  const diffHari = Math.floor((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffHari < 0) return { label: "Kadaluarsa", tone: "danger" };
+  if (diffHari <= 30) return { label: `${diffHari} hari lagi`, tone: "warning" };
+  return { label: "Aktif", tone: "success" };
+}
+
 export default function ManajemenKendaraanPage() {
   const router = useRouter();
   const showToast = useToast();
@@ -137,6 +161,7 @@ export default function ManajemenKendaraanPage() {
 
   const [adminName, setAdminName] = useState("");
   const [kendaraanList, setKendaraanList] = useState<Kendaraan[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadingFoto, setIsUploadingFoto] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -145,8 +170,13 @@ export default function ManajemenKendaraanPage() {
   const [formData, setFormData] = useState({
     plat_nomor: "",
     jenis: "",
+    kategori: "Sedan",
+    warna: "Putih",
     pic_kendaraan: "",
     unit_bisnis: "",
+    no_rangka: "",
+    no_mesin: "",
+    tanggal_pajak: "",
     foto_url: "",
   });
   const [isMigrating, setIsMigrating] = useState(false);
@@ -187,7 +217,14 @@ export default function ManajemenKendaraanPage() {
       setKendaraanList(list);
     });
 
-    return () => unsubscribe();
+    // Daftar karyawan master (buat autocomplete PIC Kendaraan)
+    const unsubEmployees = onSnapshot(collection(db, "employees_directory"), (snapshot) => {
+      const list: Employee[] = [];
+      snapshot.forEach((docSnap) => list.push({ id: docSnap.id, ...docSnap.data() } as Employee));
+      setEmployees(list);
+    });
+
+    return () => { unsubscribe(); unsubEmployees(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -273,8 +310,13 @@ export default function ManajemenKendaraanPage() {
       kendaraan: kendaraanId,
       plat_nomor: formData.plat_nomor.trim(),
       jenis: formData.jenis.trim(),
+      kategori: formData.kategori,
+      warna: formData.warna,
       pic_kendaraan: formData.pic_kendaraan.trim(),
       unit_bisnis: formData.unit_bisnis.trim(),
+      no_rangka: formData.no_rangka.trim(),
+      no_mesin: formData.no_mesin.trim(),
+      tanggal_pajak: formData.tanggal_pajak,
       foto_url: formData.foto_url || "",
     };
 
@@ -297,7 +339,7 @@ export default function ManajemenKendaraanPage() {
         showToast(`${dataToSave.kendaraan} berhasil ditambahkan.`, "success");
       }
 
-      setFormData({ plat_nomor: "", jenis: "", pic_kendaraan: "", unit_bisnis: "", foto_url: "" });
+      setFormData({ plat_nomor: "", jenis: "", kategori: "Sedan", warna: "Putih", pic_kendaraan: "", unit_bisnis: "", no_rangka: "", no_mesin: "", tanggal_pajak: "", foto_url: "" });
     } catch (error) {
       console.error("Error menyimpan kendaraan:", error);
       showToast("Gagal menyimpan data.", "error");
@@ -326,8 +368,13 @@ export default function ManajemenKendaraanPage() {
           kendaraan: kendaraanId,
           plat_nomor: parsed.plat_nomor,
           jenis: "",
+          kategori: "Sedan",
+          warna: "Putih",
           pic_kendaraan: parsed.pic_kendaraan,
           unit_bisnis: parsed.unit_bisnis,
+          no_rangka: "",
+          no_mesin: "",
+          tanggal_pajak: "",
           foto_url: "",
         });
         sukses++;
@@ -346,8 +393,13 @@ export default function ManajemenKendaraanPage() {
     setFormData({
       plat_nomor: k.plat_nomor || "",
       jenis: k.jenis || "",
+      kategori: k.kategori || "Sedan",
+      warna: k.warna || "Putih",
       pic_kendaraan: k.pic_kendaraan || "",
       unit_bisnis: k.unit_bisnis || "",
+      no_rangka: k.no_rangka || "",
+      no_mesin: k.no_mesin || "",
+      tanggal_pajak: k.tanggal_pajak || "",
       foto_url: k.foto_url || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -355,7 +407,7 @@ export default function ManajemenKendaraanPage() {
 
   const handleBatalEdit = () => {
     setEditingId(null);
-    setFormData({ plat_nomor: "", jenis: "", pic_kendaraan: "", unit_bisnis: "", foto_url: "" });
+    setFormData({ plat_nomor: "", jenis: "", kategori: "Sedan", warna: "Putih", pic_kendaraan: "", unit_bisnis: "", no_rangka: "", no_mesin: "", tanggal_pajak: "", foto_url: "" });
   };
 
   const handleHapusKendaraan = async (id: string, nama: string) => {
@@ -517,19 +569,48 @@ export default function ManajemenKendaraanPage() {
 
               <form onSubmit={handleSubmitKendaraan} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
 
-                {/* UPLOAD FOTO */}
+                {/* PREVIEW ICON 3D + PILIHAN KATEGORI & WARNA */}
+                <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                  <div style={{ width: "80px", height: "70px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid #e2e8f0" }}>
+                    <VehicleIcon3D jenis={formData.kategori} warna={formData.warna} size={56} />
+                  </div>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Kategori Kendaraan</label>
+                      <select
+                        value={formData.kategori}
+                        onChange={(e) => setFormData({ ...formData, kategori: e.target.value })}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", background: "white", cursor: "pointer" }}
+                      >
+                        {KATEGORI_KENDARAAN.map((k) => <option key={k} value={k}>{k}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Warna</label>
+                      <select
+                        value={formData.warna}
+                        onChange={(e) => setFormData({ ...formData, warna: e.target.value })}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", background: "white", cursor: "pointer" }}
+                      >
+                        {WARNA_KENDARAAN.map((w) => <option key={w.label} value={w.label}>{w.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* UPLOAD FOTO DOKUMENTASI (opsional — bukan icon utama, cuma buat referensi/arsip) */}
                 <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
                   <div style={{ width: "80px", height: "60px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid #e2e8f0" }}>
                     {formData.foto_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={formData.foto_url} alt="Foto kendaraan" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <span style={{ fontSize: "22px", color: "#a0aec0" }}>🚗</span>
+                      <span style={{ fontSize: "22px", color: "#a0aec0" }}>📷</span>
                     )}
                   </div>
                   <div style={{ flex: 1 }}>
                     <label style={{ display: "inline-block", padding: "8px 14px", background: "#edf2f7", border: "1px dashed #a0aec0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
-                      {isUploadingFoto ? "⏳ Mengunggah..." : (formData.foto_url ? "📸 Ganti Foto" : "📸 Upload Foto")}
+                      {isUploadingFoto ? "⏳ Mengunggah..." : (formData.foto_url ? "📸 Ganti Foto Dokumentasi" : "📸 Upload Foto Dokumentasi (opsional)")}
                       <input type="file" accept="image/*" onChange={handleFotoUpload} disabled={isUploadingFoto} style={{ display: "none" }} />
                     </label>
                     {formData.foto_url && !isUploadingFoto && (
@@ -541,9 +622,24 @@ export default function ManajemenKendaraanPage() {
                 </div>
 
                 <Input label="Plat Nomor *" name="plat_nomor" value={formData.plat_nomor} onChange={handleInputChange} required placeholder="Contoh: DD 1234 AB" />
-                <Input label="PIC Kendaraan *" name="pic_kendaraan" value={formData.pic_kendaraan} onChange={handleInputChange} required placeholder="Penanggung jawab / pemegang kendaraan ini" />
+                <Input
+                  label="PIC Kendaraan *"
+                  name="pic_kendaraan"
+                  value={formData.pic_kendaraan}
+                  onChange={handleInputChange}
+                  required
+                  placeholder="Ketik nama — bisa pilih dari master karyawan"
+                  datalistId="pic-kendaraan-list"
+                  datalistOptions={employees.map((emp) => emp.nama)}
+                />
                 <Input label="Unit Bisnis" name="unit_bisnis" value={formData.unit_bisnis} onChange={handleInputChange} placeholder="Contoh: PT Samudera Makassar Logistik" />
                 <Input label="Jenis / Tipe" name="jenis" value={formData.jenis} onChange={handleInputChange} placeholder="Contoh: Toyota Avanza, Motor, dll (opsional)" />
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <Input containerStyle={{ flex: 1 }} label="No. Rangka" name="no_rangka" value={formData.no_rangka} onChange={handleInputChange} placeholder="Nomor rangka (opsional)" />
+                  <Input containerStyle={{ flex: 1 }} label="No. Mesin" name="no_mesin" value={formData.no_mesin} onChange={handleInputChange} placeholder="Nomor mesin (opsional)" />
+                </div>
+                <Input label="Pajak/STNK Berlaku Sampai" name="tanggal_pajak" type="date" value={formData.tanggal_pajak} onChange={handleInputChange} />
 
                 {(formData.plat_nomor || formData.pic_kendaraan) && (
                   <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "10px", padding: "10px 14px" }}>
@@ -602,30 +698,39 @@ export default function ManajemenKendaraanPage() {
                 <Tr>
                   <Th>Kendaraan</Th>
                   <Th>PIC / Unit Bisnis</Th>
+                  <Th>Pajak/STNK</Th>
                   <Th style={{ textAlign: "center" }}>Aksi</Th>
                 </Tr>
               </THead>
               <TBody>
                 {filteredKendaraan.length > 0 ? (
-                  filteredKendaraan.map((k) => (
+                  filteredKendaraan.map((k) => {
+                    const pajak = getPajakStatus(k.tanggal_pajak);
+                    return (
                     <Tr key={k.id}>
                       <Td>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          {k.foto_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={k.foto_url} alt={k.kendaraan} style={{ width: "48px", height: "36px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
-                          ) : (
-                            <div style={{ width: "48px", height: "36px", borderRadius: "8px", background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "16px", flexShrink: 0 }}>🚗</div>
-                          )}
+                          <div style={{ width: "48px", height: "40px", borderRadius: "8px", background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", flexShrink: 0 }}>
+                            <VehicleIcon3D jenis={k.kategori} warna={k.warna} size={36} />
+                          </div>
                           <div>
                             <div style={{ fontWeight: "bold", color: "#2c5282" }}>{k.kendaraan}</div>
                             <div style={{ fontSize: "12px", color: "#a0aec0" }}>{k.plat_nomor || "-"} {k.jenis ? `• ${k.jenis}` : ""}</div>
+                            {(k.no_rangka || k.no_mesin) && (
+                              <div style={{ fontSize: "11px", color: "#a0aec0" }}>
+                                {k.no_rangka ? `Rangka: ${k.no_rangka}` : ""}{k.no_rangka && k.no_mesin ? " • " : ""}{k.no_mesin ? `Mesin: ${k.no_mesin}` : ""}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </Td>
                       <Td style={{ color: "#718096", fontSize: "13px" }}>
                         <div>{k.pic_kendaraan || <span style={{ opacity: 0.5 }}>PIC belum diisi</span>}</div>
                         <div style={{ fontSize: "12px", color: "#a0aec0" }}>{k.unit_bisnis || "-"}</div>
+                      </Td>
+                      <Td style={{ fontSize: "12px" }}>
+                        <Badge tone={pajak.tone}>{pajak.label}</Badge>
+                        {k.tanggal_pajak && <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "4px" }}>{k.tanggal_pajak.split("-").reverse().join("/")}</div>}
                       </Td>
                       <Td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                         <button
@@ -648,10 +753,11 @@ export default function ManajemenKendaraanPage() {
                         </button>
                       </Td>
                     </Tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <Tr>
-                    <Td colSpan={3} style={{ padding: "50px 20px", textAlign: "center", color: "#a0aec0" }}>
+                    <Td colSpan={4} style={{ padding: "50px 20px", textAlign: "center", color: "#a0aec0" }}>
                       <div style={{ fontSize: "30px", marginBottom: "10px" }}>🚗</div>
                       Belum ada kendaraan terdaftar.
                     </Td>
