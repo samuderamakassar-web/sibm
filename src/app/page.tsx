@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type TouchEvent as ReactTouchEvent } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../lib/notify";
@@ -13,6 +13,7 @@ import Textarea from "../components/ui/Textarea";
 import Modal from "../components/ui/Modal";
 import Badge from "../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../components/ui/Table";
+import VehicleIcon3D from "../components/VehicleIcon3D";
 
 // ==========================================
 // INTERFACES
@@ -37,6 +38,11 @@ const geserTanggalISO = (iso: string, n: number) => {
   const dt = new Date(y, m - 1, d + n);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 };
+
+// Ambil plat nomor murni dari field `kendaraan` — field ini di Firestore kadang berupa
+// "PLAT - NAMA DRIVER (PERUSAHAAN)" bukan cuma plat, jadi tanpa ini 1 unit fisik bisa
+// kehitung dobel/lebih kalau pernah dicatat pakai driver yang beda-beda.
+const getPlat = (kendaraan?: string) => (kendaraan || "").split(" - ")[0].trim();
 
 // FUNGSI GENERATE RESI
 const generateResiCode = () => {
@@ -78,14 +84,9 @@ export default function PortalSIBM() {
 
   // STATE HERO SLIDESHOW
   const [staffFotoMap, setStaffFotoMap] = useState<Record<string, string>>({});
-  const [kendaraanFotoMap, setKendaraanFotoMap] = useState<Record<string, string>>({});
+  const [kendaraanMetaMap, setKendaraanMetaMap] = useState<Record<string, { kategori: string; warna: string }>>({});
   const [daftarSemuaKendaraan, setDaftarSemuaKendaraan] = useState<string[]>([]);
   const [heroSlide, setHeroSlide] = useState(0);
-
-  // STATE RIWAYAT ARMADA (expand per kendaraan di card "Status Armada Operasional")
-  const [expandedKendaraan, setExpandedKendaraan] = useState<string | null>(null);
-  const [riwayatKendaraan, setRiwayatKendaraan] = useState<KendaraanLog[]>([]);
-  const [isLoadingRiwayat, setIsLoadingRiwayat] = useState(false);
 
   // STATE MODAL & SEARCH
   const [activeModal, setActiveModal] = useState<"none" | "login" | "tamu" | "paket" | "helpdesk" | "sbo" | "atk" | "overtime">("none");
@@ -220,18 +221,21 @@ export default function PortalSIBM() {
     }).catch(err => console.error("[hero] Gagal memuat foto staf:", err));
 
     getDocs(collection(db, "master_kendaraan")).then(snap => {
-      const map: Record<string, string> = {};
+      const metaMap: Record<string, { kategori: string; warna: string }> = {};
       const semuaId: string[] = [];
       snap.docs.forEach(d => {
         const data = d.data();
         if (data.kendaraan) {
-          semuaId.push(data.kendaraan);
-          if (data.foto_url) map[data.kendaraan] = data.foto_url;
+          // Dedup pakai plat nomor murni — dokumen master yang secara plat sama (cuma beda
+          // nama driver/PIC yang tercatat) dianggap 1 unit fisik yang sama, bukan 2 unit.
+          const plat = getPlat(data.kendaraan);
+          if (!semuaId.includes(plat)) semuaId.push(plat);
+          if (!metaMap[plat]) metaMap[plat] = { kategori: data.kategori || "Sedan", warna: data.warna || "Putih" };
         }
       });
-      setKendaraanFotoMap(map);
+      setKendaraanMetaMap(metaMap);
       setDaftarSemuaKendaraan(semuaId);
-    }).catch(err => console.error("[hero] Gagal memuat foto kendaraan:", err));
+    }).catch(err => console.error("[hero] Gagal memuat data kendaraan:", err));
 
     // Tarik kontak Admin GA & QHSE dari users_master (untuk notifikasi Tahap 3: request baru masuk & SBO baru)
     getDocs(query(collection(db, "users_master"), where("departemen", "==", "Admin GA")))
@@ -627,31 +631,16 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
   const formatJam = (ts: Timestamp | null | undefined) => ts ? new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
 
-  // Buka/tutup riwayat lengkap 1 kendaraan untuk hari ini (semua siklus keluar/tiba + odometer kalau dicatat)
-  const handleToggleRiwayatKendaraan = async (kendaraan: string) => {
-    if (expandedKendaraan === kendaraan) { setExpandedKendaraan(null); return; }
-    setExpandedKendaraan(kendaraan);
-    setIsLoadingRiwayat(true);
-    setRiwayatKendaraan([]);
-    try {
-      // Pakai batas "hari ini" versi WITA (Asia/Makassar), bukan toISOString() yang UTC-based,
-      // supaya log dini hari (00:00-07:59 WITA) tidak salah masuk ke tanggal kemarin
-      const todayLocalStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
-      const startOfDay = Timestamp.fromDate(new Date(`${todayLocalStr}T00:00:00+08:00`));
-      const q = query(
-        collection(db, "operational_vehicle_logs"),
-        where("kendaraan", "==", kendaraan),
-        where("waktu_catat", ">=", startOfDay),
-        orderBy("waktu_catat", "asc")
-      );
-      const snap = await getDocs(q);
-      setRiwayatKendaraan(snap.docs.map(d => d.data() as KendaraanLog));
-    } catch (err) {
-      console.error("[armada] Gagal memuat riwayat kendaraan:", err);
-      showToast("Gagal memuat riwayat kendaraan. Kalau ini pertama kali dibuka, mungkin Firestore perlu index baru — cek console (F12) untuk link pembuatan index.", "error");
-    } finally {
-      setIsLoadingRiwayat(false);
-    }
+  // Ubah 1 baris log kendaraan jadi kalimat history biasa (bukan card per-kendaraan lagi) — dipakai di card "Status Armada Operasional"
+  const buatKalimatRiwayat = (log: KendaraanLog) => {
+    const plat = log.kendaraan?.split(" - ")[0] || log.kendaraan;
+    const driver = log.driver_bertugas?.replace("Standby: ", "") || "Karyawan";
+    const status = log.status_kendaraan?.toLowerCase() || "";
+    const tujuan = log.tujuan_keperluan && log.tujuan_keperluan !== "-" ? ` menuju ${log.tujuan_keperluan}` : "";
+    if (status.includes("keluar")) return `${plat} keluar${tujuan} — driver ${driver}`;
+    if (status.includes("tiba")) return `${plat} tiba kembali — driver ${driver}`;
+    if (status.includes("bengkel") || status.includes("service")) return `${plat} masuk servis/bengkel`;
+    return `${plat} — ${log.status_kendaraan} — driver ${driver}`;
   };
 
   const getInitials = (nama: string) => nama.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -661,23 +650,31 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   // kendaraan Standby diprioritaskan ke atas + kendaraan Standby dikasih info trip terakhirnya (kalau kepantau di window log yang sama)
   const isStandbyLabel = (s?: string) => !!s && (s.includes("Standby") || s.includes("Tiba"));
   const mobilStatus = useMemo(() => {
+    // Grouping pakai plat nomor murni (getPlat), BUKAN field `kendaraan` mentah — field itu kadang
+    // berisi "PLAT - DRIVER (PERUSAHAAN)", jadi 1 plat fisik yang pernah dicatat dengan driver beda-beda
+    // harus tetap kehitung 1 unit, bukan beberapa baris terpisah.
     const statusTerkini: Record<string, KendaraanLog> = {};
-    logKendaraanMentah.forEach(log => { if (!statusTerkini[log.kendaraan]) statusTerkini[log.kendaraan] = log; });
+    logKendaraanMentah.forEach(log => {
+      const plat = getPlat(log.kendaraan);
+      if (!statusTerkini[plat]) statusTerkini[plat] = { ...log, kendaraan: plat };
+    });
 
     // Kendaraan yang ada di master_kendaraan tapi tidak muncul sama sekali di 30 log terakhir -> tidak ada aktivitas
     // baru-baru ini, jadi dianggap Standby di parkiran (bukan malah hilang dari tampilan)
-    daftarSemuaKendaraan.forEach(id => {
-      if (!statusTerkini[id]) {
-        statusTerkini[id] = { kendaraan: id, status_kendaraan: "Standby (Parkiran)", driver_bertugas: "-", tujuan_keperluan: "-" };
+    // (daftarSemuaKendaraan sudah berisi plat murni & sudah dedup, lihat efek master_kendaraan di atas)
+    daftarSemuaKendaraan.forEach(plat => {
+      if (!statusTerkini[plat]) {
+        statusTerkini[plat] = { kendaraan: plat, status_kendaraan: "Standby (Parkiran)", driver_bertugas: "-", tujuan_keperluan: "-" };
       }
     });
 
-    // Cari trip "Keluar" TERAKHIR per kendaraan dari log yang sudah ditarik, buat ditempel ke kendaraan yang lagi Standby
+    // Cari trip "Keluar" TERAKHIR per plat dari log yang sudah ditarik, buat ditempel ke kendaraan yang lagi Standby
     // sebagai "riwayat pakai terakhir" (best-effort — hanya sejauh yang kecover di 30 log terbaru)
     const tripTerakhirMap: Record<string, KendaraanLog> = {};
     logKendaraanMentah.forEach(log => {
-      if (log.status_kendaraan?.toLowerCase().includes("keluar") && !tripTerakhirMap[log.kendaraan]) {
-        tripTerakhirMap[log.kendaraan] = log;
+      const plat = getPlat(log.kendaraan);
+      if (log.status_kendaraan?.toLowerCase().includes("keluar") && !tripTerakhirMap[plat]) {
+        tripTerakhirMap[plat] = log;
       }
     });
 
@@ -703,19 +700,26 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     return slides;
   }, [obBertugas, obBesok, mobilStatus]);
 
-  // Auto-geser tiap 6 detik
-  useEffect(() => {
-    if (heroSlides.length <= 1) return;
-    const timer = setInterval(() => setHeroSlide(prev => (prev + 1) % heroSlides.length), 6000);
-    return () => clearInterval(timer);
-  }, [heroSlides.length]);
+  // Slideshow manual saja — user geser (swipe) atau klik arrow, tidak ada auto-advance
+  const [heroDragStartX, setHeroDragStartX] = useState<number | null>(null);
+  const handleHeroTouchStart = (e: ReactTouchEvent) => setHeroDragStartX(e.touches[0].clientX);
+  const handleHeroTouchEnd = (e: ReactTouchEvent) => {
+    if (heroDragStartX === null) return;
+    const deltaX = e.changedTouches[0].clientX - heroDragStartX;
+    const SWIPE_THRESHOLD = 40;
+    if (deltaX > SWIPE_THRESHOLD) {
+      setHeroSlide(p => (p - 1 + heroSlides.length) % heroSlides.length); // geser ke kanan -> slide sebelumnya
+    } else if (deltaX < -SWIPE_THRESHOLD) {
+      setHeroSlide(p => (p + 1) % heroSlides.length); // geser ke kiri -> slide berikutnya
+    }
+    setHeroDragStartX(null);
+  };
 
   // Index aman untuk dirender — dihitung langsung saat render, bukan lewat setState di useEffect,
   // supaya tidak melanggar react-hooks/set-state-in-effect kalau daftar slide tiba-tiba lebih pendek
   const safeHeroSlide = heroSlide >= heroSlides.length ? 0 : heroSlide;
 
   const hadirOB = obBertugas.filter(o => o.status.includes("Hadir"));
-  const ringkasArmada = mobilStatus.slice(0, 4);
   const driverEntries = Object.entries(driverStatusMap);
 
   return (
@@ -792,6 +796,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           padding: 8px 14px; border-radius: 10px; font-size: 12px; text-align: left;
         }
         .hero-status-pill { padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+        .hero-fleet-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; width: 100%; max-width: 560px; }
+        .hero-fleet-circle { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 66px; }
+        .hero-fleet-badge {
+          width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
+          background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+        }
+        .hero-fleet-plate { font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 66px; }
+        .hero-fleet-status { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
 
         /* 📱 MEDIA QUERY UNTUK HP */
         .mobile-nav { display: none; }
@@ -851,7 +864,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
       )}
 
-      {/* 🎞️ HERO SLIDESHOW — geser otomatis tiap 6 detik antar slide: Brand, OB Bertugas, Armada, Security */}
+      {/* 🎞️ HERO SLIDESHOW — manual saja: geser (swipe) atau klik arrow. Slide: Brand, OB Bertugas, Armada, Security */}
       <div className="hero-slideshow">
         {heroSlides.length > 1 && (
           <>
@@ -860,7 +873,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </>
         )}
 
-        <div className="hero-slide-track" style={{ transform: `translateX(-${safeHeroSlide * 100}%)` }}>
+        <div
+          className="hero-slide-track"
+          style={{ transform: `translateX(-${safeHeroSlide * 100}%)` }}
+          onTouchStart={handleHeroTouchStart}
+          onTouchEnd={handleHeroTouchEnd}
+        >
           {heroSlides.map((slide, idx) => (
             <div className="hero-slide" key={idx}>
 
@@ -936,37 +954,23 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 <>
                   <h2 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "900" }}>🚗 Status Armada Operasional</h2>
                   <p style={{ margin: "0 0 14px 0", fontSize: "12px", opacity: 0.85 }}>{mobilStatus.filter(m => isStandbyLabel(m.status_kendaraan)).length} standby di parkiran · {mobilStatus.length} kendaraan total</p>
-                  <div className="hero-armada-row">
-                    {ringkasArmada.map((k) => {
-                      const standby = isStandbyLabel(k.status_kendaraan);
-                      const terakhir = k._riwayatTerakhir;
+                  <div className="hero-fleet-grid">
+                    {mobilStatus.map((k) => {
+                      const isBengkel = k.status_kendaraan?.includes("Bengkel") || k.status_kendaraan?.includes("Service");
+                      const standby = !isBengkel && isStandbyLabel(k.status_kendaraan);
+                      const statusColor = isBengkel ? "#cbd5e0" : standby ? "#68d391" : "#fc8181";
+                      const statusLabel = isBengkel ? "Service" : standby ? "Standby" : "Keluar";
+                      const plat = k.kendaraan.split(" - ")[0];
                       return (
-                        <div className="hero-armada-item" key={k.kendaraan}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
-                            {kendaraanFotoMap[k.kendaraan] ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={kendaraanFotoMap[k.kendaraan]} alt={k.kendaraan} style={{ width: "34px", height: "34px", borderRadius: "8px", objectFit: "cover", flexShrink: 0 }} />
-                            ) : (
-                              <span style={{ fontSize: "16px" }}>🚙</span>
-                            )}
-                            <div style={{ overflow: "hidden" }}>
-                              <div style={{ fontWeight: "bold", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{k.kendaraan}</div>
-                              {standby ? (
-                                <div style={{ opacity: 0.8, fontSize: "11px", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
-                                  {terakhir ? `Terakhir: ${terakhir.driver_bertugas?.replace("Standby: ", "") || "-"} → ${terakhir.tujuan_keperluan || "-"}` : "Belum ada riwayat pakai terbaru"}
-                                </div>
-                              ) : (
-                                <div style={{ opacity: 0.8, fontSize: "11px" }}>{k.driver_bertugas || "-"}</div>
-                              )}
-                            </div>
+                        <div className="hero-fleet-circle" key={k.kendaraan} title={`${plat} — ${statusLabel}`}>
+                          <div className="hero-fleet-badge" style={{ borderColor: statusColor }}>
+                            <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={28} />
                           </div>
-                          <span className="hero-status-pill" style={{ background: standby ? "#c6f6d5" : "#fed7d7", color: standby ? "#22543d" : "#822727" }}>{standby ? "STANDBY" : k.status_kendaraan}</span>
+                          <div className="hero-fleet-plate">{plat}</div>
+                          <div className="hero-fleet-status" style={{ color: statusColor }}>{statusLabel}</div>
                         </div>
                       );
                     })}
-                    {mobilStatus.length > ringkasArmada.length && (
-                      <div style={{ fontSize: "11px", opacity: 0.8 }}>+{mobilStatus.length - ringkasArmada.length} kendaraan lainnya di bawah</div>
-                    )}
                   </div>
                 </>
               )}
@@ -1094,62 +1098,16 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               <div style={{ background: "#fff5f5", padding: "10px", borderRadius: "12px", fontSize: "20px" }}>🚗</div>
               <h3 style={{ margin: 0, color: "#2d3748", fontSize: "18px", fontWeight: "900" }}>Status Armada Operasional</h3>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "450px", overflowY: "auto", paddingRight: "5px" }}>
-              {mobilStatus.length > 0 ? mobilStatus.map((mobil, idx) => {
-                const isStandby = mobil.status_kendaraan?.includes("Standby");
-                const isBengkel = mobil.status_kendaraan?.includes("Bengkel") || mobil.status_kendaraan?.includes("Service");
-                const isExpanded = expandedKendaraan === mobil.kendaraan;
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "450px", overflowY: "auto", paddingRight: "5px" }}>
+              {logKendaraanMentah.length > 0 ? logKendaraanMentah.map((log, idx) => {
+                const keluar = log.status_kendaraan?.toLowerCase().includes("keluar");
                 return (
-                  <div key={idx} style={{ borderRadius: "14px", background: isStandby ? "#f0fff4" : isBengkel ? "#f1f5f9" : "#fff5f5", border: isStandby ? "1px solid #c6f6d5" : isBengkel ? "1px solid #cbd5e0" : "1px solid #fed7d7" }}>
-                    <div
-                      onClick={() => handleToggleRiwayatKendaraan(mobil.kendaraan)}
-                      style={{ padding: "15px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", cursor: "pointer" }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.5 }}>
-                        <div style={{ fontWeight: "900", color: "#2d3748", fontSize: "15px" }}>{mobil.kendaraan.split(" - ")[0]}</div>
-                        <div style={{ fontSize: "13px", color: "#4a5568", marginTop: "4px", wordBreak: "break-word" }}>Pengendara: <b>{mobil.driver_bertugas?.replace("Standby: ", "") || "Karyawan"}</b></div>
-                        {!isStandby && !isBengkel && mobil.tujuan_keperluan && (
-                          <div style={{ fontSize: "12px", color: "#718096", marginTop: "2px", fontStyle: "italic", wordBreak: "break-word" }}>📍 {mobil.tujuan_keperluan}</div>
-                        )}
-                        <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "6px" }}>{isExpanded ? "▲ Tutup riwayat hari ini" : "▼ Lihat riwayat hari ini"}</div>
-                      </div>
-                      <Badge tone={isStandby ? "success" : isBengkel ? "neutral" : "danger"} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{isStandby ? "STANDBY" : isBengkel ? "SERVICE" : "KELUAR"}</Badge>
-                    </div>
-
-                    {isExpanded && (
-                      <div style={{ padding: "0 15px 15px 15px", borderTop: "1px dashed rgba(0,0,0,0.15)", marginTop: "-2px" }}>
-                        {isLoadingRiwayat ? (
-                          <div style={{ fontSize: "12px", color: "#718096", padding: "12px 0" }}>⏳ Memuat riwayat...</div>
-                        ) : riwayatKendaraan.length === 0 ? (
-                          <div style={{ fontSize: "12px", color: "#a0aec0", padding: "12px 0" }}>Belum ada log tercatat untuk kendaraan ini hari ini.</div>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
-                            {riwayatKendaraan.map((log, i) => {
-                              const logKeluar = log.status_kendaraan?.toLowerCase().includes("keluar");
-                              const adaOdo = log.kilometer_kendaraan && log.kilometer_kendaraan !== "Tidak dicatat" && log.kilometer_kendaraan.trim() !== "";
-                              return (
-                                <div key={i} style={{ display: "flex", gap: "10px", fontSize: "12px", lineHeight: 1.5 }}>
-                                  <div style={{ minWidth: "88px", flexShrink: 0, fontWeight: "bold", color: "#2d3748" }}>{formatJam(log.waktu_catat)}</div>
-                                  <div style={{ flex: 1, minWidth: 0, borderLeft: `3px solid ${logKeluar ? "#e53e3e" : "#38a169"}`, paddingLeft: "10px", wordBreak: "break-word" }}>
-                                    <div style={{ fontWeight: "bold", color: logKeluar ? "#c53030" : "#2f855a" }}>{log.status_kendaraan}</div>
-                                    {log.tujuan_keperluan && log.tujuan_keperluan !== "-" && (
-                                      <div style={{ color: "#4a5568" }}>📍 {log.tujuan_keperluan}</div>
-                                    )}
-                                    <div style={{ color: "#718096" }}>👤 {log.driver_bertugas?.replace("Standby: ", "") || "-"}</div>
-                                    {adaOdo && (
-                                      <div style={{ color: "#2b6cb0", fontWeight: "bold", marginTop: "2px" }}>🔢 Odometer: {log.kilometer_kendaraan} km</div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <div key={idx} style={{ display: "flex", gap: "10px", padding: "12px 14px", borderRadius: "12px", background: keluar ? "#fff5f5" : "#f0fff4", borderLeft: `3px solid ${keluar ? "#e53e3e" : "#38a169"}` }}>
+                    <div style={{ minWidth: "70px", flexShrink: 0, fontWeight: "bold", color: "#2d3748", fontSize: "12px" }}>{formatJam(log.waktu_catat)}</div>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: "13px", color: "#2d3748", wordBreak: "break-word" }}>{buatKalimatRiwayat(log)}</div>
                   </div>
                 );
-              }) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "14px", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>Belum ada data armada operasional.</div>}
+              }) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "14px", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>Belum ada riwayat kendaraan tercatat.</div>}
             </div>
           </Card>
 
