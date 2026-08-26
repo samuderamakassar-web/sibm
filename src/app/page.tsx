@@ -650,12 +650,22 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   // kendaraan Standby diprioritaskan ke atas + kendaraan Standby dikasih info trip terakhirnya (kalau kepantau di window log yang sama)
   const isStandbyLabel = (s?: string) => !!s && (s.includes("Standby") || s.includes("Tiba"));
   const mobilStatus = useMemo(() => {
-    // Grouping pakai plat nomor murni (getPlat), BUKAN field `kendaraan` mentah — field itu kadang
-    // berisi "PLAT - DRIVER (PERUSAHAAN)", jadi 1 plat fisik yang pernah dicatat dengan driver beda-beda
-    // harus tetap kehitung 1 unit, bukan beberapa baris terpisah.
+    // Peta kunci plat ternormalisasi (huruf besar + tanpa spasi) -> plat asli dari master_kendaraan.
+    // Perlu ini karena field `kendaraan` di log riwayat kadang ditulis beda tipis dari master
+    // (spasi ganda, huruf kecil, dst) — tanpa normalisasi, 1 unit fisik yang sama bisa kehitung
+    // sebagai "kendaraan baru" di slideshow (jumlah nambah sendiri, gak sinkron sama Firestore).
+    const normalizeKey = (s: string) => s.toUpperCase().replace(/\s+/g, "");
+    const canonicalByKey: Record<string, string> = {};
+    daftarSemuaKendaraan.forEach(plat => { canonicalByKey[normalizeKey(plat)] = plat; });
+
+    // master_kendaraan adalah sumber kebenaran daftar unit fisik. Log riwayat cuma dipakai buat
+    // nentuin status (keluar/standby) salah satu dari plat yang sudah ada di master — kalau plat
+    // di log gak ketemu padanannya di master (typo lama / kendaraan sudah dihapus dari master),
+    // log itu diabaikan, BUKAN ditambahin jadi unit baru.
     const statusTerkini: Record<string, KendaraanLog> = {};
     logKendaraanMentah.forEach(log => {
-      const plat = getPlat(log.kendaraan);
+      const plat = canonicalByKey[normalizeKey(getPlat(log.kendaraan))];
+      if (!plat) return;
       if (!statusTerkini[plat]) statusTerkini[plat] = { ...log, kendaraan: plat };
     });
 
@@ -672,7 +682,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     // sebagai "riwayat pakai terakhir" (best-effort — hanya sejauh yang kecover di 30 log terbaru)
     const tripTerakhirMap: Record<string, KendaraanLog> = {};
     logKendaraanMentah.forEach(log => {
-      const plat = getPlat(log.kendaraan);
+      const plat = canonicalByKey[normalizeKey(getPlat(log.kendaraan))];
+      if (!plat) return;
       if (log.status_kendaraan?.toLowerCase().includes("keluar") && !tripTerakhirMap[plat]) {
         tripTerakhirMap[plat] = log;
       }
@@ -723,20 +734,27 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const driverEntries = Object.entries(driverStatusMap);
 
   return (
-    <div className="main-container" style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <div className="main-container" style={{ backgroundColor: "#f7f6f5", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* 💡 CSS RESPONSIVE & MOBILE BOTTOM NAV */}
+      {/* 💡 DESIGN TOKENS + CSS RESPONSIVE & MOBILE BOTTOM NAV — redesign landing, palet merah dipertahankan sbg brand color, motif blueprint-grid sbg signature (relevan ke "Building Management") */}
       <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --shadow-card: 0 1px 2px rgba(24,24,27,0.04), 0 10px 24px -14px rgba(24,24,27,0.16);
+          --shadow-card-hover: 0 1px 2px rgba(24,24,27,0.05), 0 18px 34px -14px rgba(220,38,38,0.28);
+        }
         @keyframes ticker-scroll {
           0% { transform: translateX(100vw); }
           100% { transform: translateX(-100%); }
         }
         .ticker-wrap {
-          width: 100%; overflow: hidden; background-color: #1a202c; color: white; padding: 10px 0; border-bottom: 2px solid #e53e3e;
+          width: 100%; overflow: hidden; background-color: var(--ink); color: white; padding: 10px 0; border-bottom: 2px solid var(--red-600);
           display: flex; align-items: center; position: relative; z-index: 20; box-sizing: border-box;
         }
         .ticker-label {
-          background: #e53e3e; color: white; padding: 10px 20px; font-weight: 900; font-size: 12px; position: absolute;
+          background: var(--red-600); color: white; padding: 10px 20px; font-weight: 900; font-size: 12px; position: absolute;
           left: 0; top: 0; bottom: 0; z-index: 21; display: flex; align-items: center; letter-spacing: 1px; box-shadow: 2px 0 5px rgba(0,0,0,0.5);
         }
         .ticker-content {
@@ -747,22 +765,56 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .ticker-item { display: inline-flex; align-items: center; gap: 8px; margin-right: 50px; }
         .t-badge { background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
 
-        /* 🎞️ HERO SLIDESHOW */
+        /* 🧭 HEADER */
+        .site-header {
+          position: sticky; top: 0; z-index: 30;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .brand-mark { display: flex; align-items: center; gap: 10px; }
+        .brand-logo-fallback {
+          width: 34px; height: 34px; border-radius: 9px; background: var(--red-600);
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+          box-shadow: 0 4px 10px -3px rgba(220,38,38,0.5);
+        }
+        .brand-name { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: 0.2px; line-height: 1.1; }
+        .brand-sub { font-size: 10.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.3px; }
+        .header-date-pill {
+          font-size: 11.5px; font-weight: 700; color: var(--ink-soft); background: var(--bg);
+          border: 1px solid var(--line); padding: 6px 12px; border-radius: 20px;
+        }
+
+        /* 🎞️ HERO SLIDESHOW — gradient merah + motif blueprint-grid tipis (nuansa "building/floor plan") */
         .hero-slideshow {
           position: relative; overflow: hidden;
-          background: linear-gradient(135deg, #8b0000 0%, #e53e3e 100%);
+          background:
+            radial-gradient(circle at 15% -10%, rgba(255,255,255,0.14), transparent 45%),
+            linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+        }
+        .hero-slideshow::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+          background-size: 34px 34px;
+          mask-image: linear-gradient(180deg, black, transparent 92%);
+        }
+        .hero-eyebrow {
+          font-size: 10.5px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase;
+          color: rgba(255,255,255,0.75); margin: 0 0 8px 0;
         }
         .hero-slide-track {
-          display: flex; transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+          display: flex; transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1); position: relative; z-index: 1;
         }
         .hero-slide {
           flex: 0 0 100%; width: 100%; box-sizing: border-box;
-          min-height: 280px; padding: 30px 20px 46px 20px; color: white;
+          min-height: 290px; padding: 34px 20px 48px 20px; color: white;
           display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
         }
-        @media (max-width: 768px) { .hero-slide { min-height: 250px; padding: 24px 16px 42px 16px; } }
+        @media (max-width: 768px) { .hero-slide { min-height: 255px; padding: 26px 16px 44px 16px; } }
         .hero-dots {
-          position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; gap: 8px; z-index: 5;
+          position: absolute; left: 0; right: 0; bottom: 16px; display: flex; justify-content: center; gap: 8px; z-index: 5;
         }
         .hero-dot {
           width: 8px; height: 8px; border-radius: 50%; border: none; background: rgba(255,255,255,0.4);
@@ -781,76 +833,105 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .hero-avatar-row { display: flex; gap: 18px; overflow-x: auto; padding: 6px 6px 12px; max-width: 100%; scrollbar-width: thin; justify-content: center; flex-wrap: wrap; }
         .hero-avatar-card { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 108px; }
         .hero-avatar-photo {
-          width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.8);
-          background: rgba(255,255,255,0.15); box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+          width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.85);
+          background: rgba(255,255,255,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.22);
         }
         .hero-avatar-fallback {
-          width: 84px; height: 84px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8);
-          background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;
-          font-weight: 800; font-size: 22px; box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+          width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.85);
+          background: rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center;
+          font-weight: 800; font-size: 21px; box-shadow: 0 4px 12px rgba(0,0,0,0.22);
         }
         .hero-armada-row { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 480px; }
         .hero-armada-item {
           display: flex; align-items: center; justify-content: space-between; gap: 10px;
-          background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
-          padding: 8px 14px; border-radius: 10px; font-size: 12px; text-align: left;
+          background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
+          padding: 10px 16px; border-radius: 12px; font-size: 12px; text-align: left;
         }
         .hero-status-pill { padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; white-space: nowrap; }
         .hero-fleet-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; width: 100%; max-width: 560px; }
         .hero-fleet-circle { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 66px; }
         .hero-fleet-badge {
-          width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
-          background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+          width: 52px; height: 52px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.45);
+          background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 3px 10px rgba(0,0,0,0.18);
         }
         .hero-fleet-plate { font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 66px; }
         .hero-fleet-status { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+
+        /* 🧱 QUICK ACTION + MAIN CARDS */
+        .qa-card {
+          cursor: pointer; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
+          box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .qa-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: rgba(220,38,38,0.28); }
+        .qa-icon-chip {
+          width: 46px; height: 46px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
+          display: flex; align-items: center; justify-content: center; font-size: 22px;
+        }
+        .section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+        .section-title-icon { background: var(--red-50); padding: 10px; border-radius: 12px; font-size: 19px; line-height: 1; }
+        .list-row {
+          display: flex; gap: 12px; padding: 13px 15px; border-radius: 13px; background: var(--bg);
+          border-left: 3px solid var(--line);
+        }
 
         /* 📱 MEDIA QUERY UNTUK HP */
         .mobile-nav { display: none; }
         @media (max-width: 768px) {
           .desktop-grid { display: none !important; }
-          .main-container { padding-bottom: 100px !important; }
+          .main-container { padding-bottom: 104px !important; }
           .mobile-nav {
             display: flex;
             position: fixed;
-            bottom: 0; left: 0; right: 0;
-            background: rgba(255, 255, 255, 0.95);
+            bottom: 12px; left: 12px; right: 12px;
+            background: rgba(255, 255, 255, 0.94);
             backdrop-filter: blur(15px);
-            border-top: 1px solid #e2e8f0;
+            border: 1px solid var(--line);
+            border-radius: 22px;
             z-index: 90;
-            padding: 12px 15px;
-            gap: 15px;
+            padding: 12px 14px;
+            gap: 14px;
             overflow-x: auto;
             scroll-snap-type: x mandatory;
-            box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
+            box-shadow: 0 12px 30px -8px rgba(24,24,27,0.18);
           }
           .mobile-nav::-webkit-scrollbar { display: none; }
           .m-nav-item {
             flex: 0 0 calc(100% / 4.8);
             scroll-snap-align: start;
             display: flex; flex-direction: column; align-items: center; gap: 6px;
-            color: #4a5568; font-size: 10px; font-weight: 800; text-align: center; cursor: pointer;
+            color: var(--ink-soft); font-size: 10px; font-weight: 800; text-align: center; cursor: pointer;
           }
           .m-nav-icon {
-            width: 48px; height: 48px; border-radius: 16px;
-            display: flex; justify-content: center; align-items: center; font-size: 22px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.2s;
+            width: 46px; height: 46px; border-radius: 14px; background: var(--red-50); color: var(--red-600);
+            display: flex; justify-content: center; align-items: center; font-size: 20px;
+            transition: transform 0.2s;
           }
           .m-nav-item:active .m-nav-icon { transform: scale(0.9); }
         }
       `}} />
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 20px", background: "white", borderBottom: "1px solid #e2e8f0" }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-samudera.png" alt="Samudera Logo" style={{ height: "32px", objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "12px", fontWeight: "bold", color: "#718096" }}>📅 {formatTgl}</span>
+      <div className="site-header">
+        <div className="brand-mark">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-samudera.png"
+            alt="Samudera Logo"
+            style={{ height: "30px", objectFit: "contain" }}
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+          />
+          <div>
+            <div className="brand-name">SIBM</div>
+            <div className="brand-sub">Building Management · GA</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span className="header-date-pill">📅 {formatTgl}</span>
           <Button
             variant="ghost"
             fullWidth={false}
             onClick={() => setActiveModal("login")}
-            style={{ padding: "6px 10px", color: "#a0aec0", fontSize: "12px" }}
+            style={{ padding: "8px 14px", color: "var(--ink-soft)", fontSize: "12px", fontWeight: 700, border: "1px solid var(--line)", borderRadius: "20px" }}
           >
             🔒 Staf Internal
           </Button>
@@ -859,7 +940,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
       {/* 📢 PENGUMUMAN GA — selalu di atas, terpisah dari slideshow supaya tidak ikut kegeser/hilang */}
       {pengumumanGedung && (
-        <div style={{ background: "#c53030", color: "white", padding: "10px 20px", textAlign: "center", fontSize: "13px", fontWeight: "bold", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ background: "var(--red-700)", color: "white", padding: "10px 20px", textAlign: "center", fontSize: "13px", fontWeight: "bold", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
           <span>📢 INFO GA:</span> {pengumumanGedung}
         </div>
       )}
@@ -884,8 +965,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
               {slide === "brand" && (
                 <>
-                  <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 36px)", fontWeight: "900", letterSpacing: "1px" }}>PORTAL SIBM</h1>
-                  <p style={{ margin: "0 0 20px 0", fontSize: "clamp(12px, 3vw, 16px)", opacity: 0.9 }}>Sistem Informasi Building Management - General Affairs</p>
+                  <p className="hero-eyebrow">Sistem Informasi Building Management</p>
+                  <h1 style={{ margin: "0 0 8px 0", fontSize: "clamp(26px, 5vw, 38px)", fontWeight: "900", letterSpacing: "-0.5px" }}>Portal SIBM</h1>
+                  <p style={{ margin: "0 0 20px 0", fontSize: "clamp(12px, 3vw, 15px)", opacity: 0.85 }}>General Affairs · PT Samudera</p>
                   <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
                     <span style={{ background: "rgba(255,255,255,0.15)", padding: "6px 14px", borderRadius: "20px", fontSize: "11px", fontWeight: "bold" }}>🧹 {hadirOB.length} OB Bertugas</span>
                     <span style={{ background: "rgba(255,255,255,0.15)", padding: "6px 14px", borderRadius: "20px", fontSize: "11px", fontWeight: "bold" }}>🚗 {mobilStatus.length} Kendaraan Aktif</span>
@@ -1051,91 +1133,79 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       <div style={{ maxWidth: "1100px", margin: "40px auto 40px", padding: "0 20px", position: "relative", zIndex: 10 }}>
 
         {/* 💻 GRID MENU OPERASIONAL (HANYA MUNCUL DI DESKTOP/LAPTOP) */}
-        <div className="desktop-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px" }}>
-          <Card style={{ cursor: "pointer", transition: "0.2s" }} padded={false}>
-            <div onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ background: "#fff5f5", color: "#e53e3e", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>🧑‍💼</div>
-              <div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "16px" }}>Lacak Tamu</h2><p style={{ margin: "0", color: "#718096", fontSize: "12px" }}>Cek pengunjung gedung.</p></div>
-            </div>
-          </Card>
-          <Card style={{ cursor: "pointer", transition: "0.2s" }} padded={false}>
-            <div onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ background: "#fffaf0", color: "#dd6b20", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>📦</div>
-              <div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "16px" }}>Cek Resi Paket</h2><p style={{ margin: "0", color: "#718096", fontSize: "12px" }}>Lacak dokumen logistik.</p></div>
-            </div>
-          </Card>
-          <Card style={{ cursor: "pointer", transition: "0.2s" }} padded={false}>
-            <div onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ background: "#fdf4ff", color: "#d53f8c", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>🖇️</div>
-              <div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "16px" }}>Gudang ATK</h2><p style={{ margin: "0", color: "#718096", fontSize: "12px" }}>Request barang kantor ke GA.</p></div>
-            </div>
-          </Card>
-          <Card style={{ cursor: "pointer", transition: "0.2s" }} padded={false}>
-            <div onClick={() => { setActiveModal("overtime"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ background: "#fffff0", color: "#d69e2e", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>⏱️</div>
-              <div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "16px" }}>Overtime Gedung</h2><p style={{ margin: "0", color: "#718096", fontSize: "12px" }}>Request AC / Ruang lembur.</p></div>
-            </div>
-          </Card>
-          <Card style={{ cursor: "pointer", transition: "0.2s" }} padded={false}>
-            <div onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ background: "#ebf8ff", color: "#3182ce", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>🛠️</div>
-              <div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "16px" }}>Lapor Kerusakan</h2><p style={{ margin: "0", color: "#718096", fontSize: "12px" }}>Lapor fasilitas rusak ke GA.</p></div>
-            </div>
-          </Card>
-          <Card style={{ cursor: "pointer", transition: "0.2s", background: "#f0fff4", border: "2px solid #9ae6b4", boxShadow: "0 10px 25px -5px rgba(56, 161, 105, 0.2)" }} padded={false}>
-            <div onClick={() => { setActiveModal("sbo"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ background: "#22543d", color: "#c6f6d5", width: "50px", height: "50px", borderRadius: "14px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>🦺</div>
-              <div><h2 style={{ margin: "0 0 5px 0", color: "#22543d", fontSize: "16px" }}>Lapor Bahaya</h2><p style={{ margin: "0", color: "#2f855a", fontSize: "12px", fontWeight: "bold" }}>Temuan kondisi darurat SBO.</p></div>
-            </div>
-          </Card>
+        <div className="desktop-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "18px" }}>
+          <div className="qa-card" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="qa-icon-chip">🧑‍💼</div>
+            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Lacak Tamu</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Cek pengunjung gedung.</p></div>
+          </div>
+          <div className="qa-card" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="qa-icon-chip">📦</div>
+            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Cek Resi Paket</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Lacak dokumen logistik.</p></div>
+          </div>
+          <div className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="qa-icon-chip">🖇️</div>
+            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Gudang ATK</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Request barang kantor ke GA.</p></div>
+          </div>
+          <div className="qa-card" onClick={() => { setActiveModal("overtime"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="qa-icon-chip">⏱️</div>
+            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Overtime Gedung</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Request AC / Ruang lembur.</p></div>
+          </div>
+          <div className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="qa-icon-chip">🛠️</div>
+            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Lapor Kerusakan</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Lapor fasilitas rusak ke GA.</p></div>
+          </div>
+          <div className="qa-card" onClick={() => { setActiveModal("sbo"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px", borderColor: "rgba(220,38,38,0.35)" }}>
+            <div className="qa-icon-chip" style={{ background: "var(--red-600)", color: "white" }}>🦺</div>
+            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--red-700)", fontSize: "16px", fontWeight: 800 }}>Lapor Bahaya</h2><p style={{ margin: 0, color: "var(--red-600)", fontSize: "12px", fontWeight: 700 }}>Temuan kondisi darurat SBO.</p></div>
+          </div>
         </div>
 
         {/* 2 DEDICATED CARDS UTAMA (TETAP MUNCUL DI HP) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "25px", marginTop: "35px" }}>
 
-          <Card>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "12px" }}>
-              <div style={{ background: "#fff5f5", padding: "10px", borderRadius: "12px", fontSize: "20px" }}>🚗</div>
-              <h3 style={{ margin: 0, color: "#2d3748", fontSize: "18px", fontWeight: "900" }}>Status Armada Operasional</h3>
+          <Card style={{ borderRadius: "18px" }}>
+            <div className="section-title">
+              <div className="section-title-icon">🚗</div>
+              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: "800" }}>Status Armada Operasional</h3>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "450px", overflowY: "auto", paddingRight: "5px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "450px", overflowY: "auto", paddingRight: "5px" }}>
               {logKendaraanMentah.length > 0 ? logKendaraanMentah.map((log, idx) => {
                 const keluar = log.status_kendaraan?.toLowerCase().includes("keluar");
                 return (
-                  <div key={idx} style={{ display: "flex", gap: "10px", padding: "12px 14px", borderRadius: "12px", background: keluar ? "#fff5f5" : "#f0fff4", borderLeft: `3px solid ${keluar ? "#e53e3e" : "#38a169"}` }}>
-                    <div style={{ minWidth: "70px", flexShrink: 0, fontWeight: "bold", color: "#2d3748", fontSize: "12px" }}>{formatJam(log.waktu_catat)}</div>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: "13px", color: "#2d3748", wordBreak: "break-word" }}>{buatKalimatRiwayat(log)}</div>
+                  <div key={idx} className="list-row" style={{ borderLeftColor: keluar ? "var(--red-600)" : "#22c55e" }}>
+                    <div style={{ minWidth: "68px", flexShrink: 0, fontWeight: "700", color: "var(--ink-soft)", fontSize: "12px" }}>{formatJam(log.waktu_catat)}</div>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: "13px", color: "var(--ink-soft)", wordBreak: "break-word" }}>{buatKalimatRiwayat(log)}</div>
                   </div>
                 );
-              }) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "14px", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>Belum ada riwayat kendaraan tercatat.</div>}
+              }) : <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "14px", border: "1px dashed var(--line)", borderRadius: "12px" }}>Belum ada riwayat kendaraan tercatat.</div>}
             </div>
           </Card>
 
-          <Card>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "12px" }}>
-              <div style={{ background: "#fffff0", padding: "10px", borderRadius: "12px", fontSize: "20px" }}>⏱️</div>
+          <Card style={{ borderRadius: "18px" }}>
+            <div className="section-title">
+              <div className="section-title-icon">⏱️</div>
               <div>
-                <h3 style={{ margin: 0, color: "#2d3748", fontSize: "18px", fontWeight: "900" }}>Overtime Gedung (Minggu Ini)</h3>
-                <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#a0aec0" }}>{seninMingguIni.split("-").reverse().join("/")} - {mingguMingguIni.split("-").reverse().join("/")} — langsung tercatat, tinggal direkap untuk tagihan</p>
+                <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: "800" }}>Overtime Gedung (Minggu Ini)</h3>
+                <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "var(--muted)" }}>{seninMingguIni.split("-").reverse().join("/")} - {mingguMingguIni.split("-").reverse().join("/")} — langsung tercatat, tinggal direkap untuk tagihan</p>
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "350px", overflowY: "auto", paddingRight: "5px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "350px", overflowY: "auto", paddingRight: "5px" }}>
               {overtimeMingguIni.length > 0 ? overtimeMingguIni.map((ot, idx) => {
                 const isHariIni = ot.tanggal === todayISO;
                 return (
-                  <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "15px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #edf2f7", borderLeft: isHariIni ? "4px solid #d69e2e" : "4px solid #cbd5e0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontWeight: "900", color: "#2d3748", fontSize: "14px", flex: 1 }}>{ot.area_ruangan}</span>
+                  <div key={idx} className="list-row" style={{ flexDirection: "column", gap: "8px", borderLeftColor: isHariIni ? "var(--red-600)" : "var(--line)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
+                      <span style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px", flex: 1 }}>{ot.area_ruangan}</span>
                       <Badge tone={isHariIni ? "warning" : "neutral"} style={{ marginLeft: "10px" }}>{isHariIni ? "Hari Ini" : ot.tanggal.split("-").reverse().join("/")}</Badge>
                     </div>
-                    <div style={{ fontSize: "13px", color: "#4a5568" }}>👤 {ot.nama_pemohon} ({ot.departemen})</div>
-                    <div style={{ fontSize: "13px", color: "#d69e2e", fontWeight: "bold", background: "#fffff0", padding: "6px 10px", borderRadius: "6px", display: "inline-block", width: "fit-content" }}>🕒 {ot.jam_mulai} s/d {ot.jam_selesai}</div>
+                    <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}>👤 {ot.nama_pemohon} ({ot.departemen})</div>
+                    <div style={{ fontSize: "13px", color: "var(--red-700)", fontWeight: "bold", background: "var(--red-50)", padding: "6px 10px", borderRadius: "8px", display: "inline-block", width: "fit-content" }}>🕒 {ot.jam_mulai} s/d {ot.jam_selesai}</div>
                   </div>
                 );
               }) : (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "#a0aec0", background: "#f8fafc", borderRadius: "16px", border: "1px dashed #cbd5e0" }}>
+                <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", background: "var(--bg)", borderRadius: "16px", border: "1px dashed var(--line)" }}>
                   <div style={{ fontSize: "35px", marginBottom: "10px" }}>🏢</div>
-                  <div style={{ fontSize: "14px", fontWeight: "bold", color: "#718096" }}>Tidak Ada Lembur</div>
+                  <div style={{ fontSize: "14px", fontWeight: "bold", color: "var(--ink-soft)" }}>Tidak Ada Lembur</div>
                   <div style={{ fontSize: "12px", marginTop: "5px" }}>Belum ada overtime tercatat minggu ini.</div>
                 </div>
               )}
@@ -1148,27 +1218,27 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       {/* 📱 BOTTOM NAVIGATION (HANYA MUNCUL DI HP) */}
       <div className="mobile-nav">
         <div className="m-nav-item" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }}>
-          <div className="m-nav-icon" style={{ background: "#fff5f5", color: "#e53e3e" }}>🧑‍💼</div>
+          <div className="m-nav-icon">🧑‍💼</div>
           <span>Lacak Tamu</span>
         </div>
         <div className="m-nav-item" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }}>
-          <div className="m-nav-icon" style={{ background: "#fffaf0", color: "#dd6b20" }}>📦</div>
+          <div className="m-nav-icon">📦</div>
           <span>Resi Paket</span>
         </div>
         <div className="m-nav-item" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
-          <div className="m-nav-icon" style={{ background: "#fdf4ff", color: "#d53f8c" }}>🖇️</div>
+          <div className="m-nav-icon">🖇️</div>
           <span>Request ATK</span>
         </div>
         <div className="m-nav-item" onClick={() => setActiveModal("overtime")}>
-          <div className="m-nav-icon" style={{ background: "#fffff0", color: "#d69e2e" }}>⏱️</div>
+          <div className="m-nav-icon">⏱️</div>
           <span>Lembur AC</span>
         </div>
         <div className="m-nav-item" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
-          <div className="m-nav-icon" style={{ background: "#ebf8ff", color: "#3182ce" }}>🛠️</div>
+          <div className="m-nav-icon">🛠️</div>
           <span>Kerusakan</span>
         </div>
         <div className="m-nav-item" onClick={() => setActiveModal("sbo")}>
-          <div className="m-nav-icon" style={{ background: "#f0fff4", color: "#2f855a", border: "1px solid #9ae6b4" }}>🦺</div>
+          <div className="m-nav-icon" style={{ background: "var(--red-600)", color: "white" }}>🦺</div>
           <span>Bahaya SBO</span>
         </div>
       </div>
