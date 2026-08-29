@@ -6,6 +6,41 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp
 import { db } from "../../../../lib/firebase";
 import { useAuthGuard } from "../../../../hooks/useAuthGuard";
 
+// ==========================================
+// IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
+// ==========================================
+type IconProps = { size?: number; color?: string };
+const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
+);
+const IconCrown = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 8 3 3 6-7 6 7 3-3-2 11H5z" /></svg>
+);
+const IconCalendar = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M8 3v4" /><path d="M16 3v4" /></svg>
+);
+const IconHourglass = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12M6 21h12" /><path d="M7 3c0 5 5 6 5 9s-5 4-5 9" /><path d="M17 3c0 5-5 6-5 9s5 4 5 9" /></svg>
+);
+const IconArrowRight = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
+);
+const IconLightbulb = ({ size = 16, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6" /><path d="M10 21h4" /><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z" /></svg>
+);
+const IconCheckCircle = ({ size = 20, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 5-5" /></svg>
+);
+const IconWand = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m15 4 1.5 1.5M4 20l10-10" /><path d="M14.5 9.5 19 5" /><path d="M19 9v.01M15 3v.01M21 15v.01" /></svg>
+);
+const IconRocket = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 16s-1-5 4-9c4-3.4 8-3 8-3s.4 4-3 8c-4 5-9 4-9 4z" /><path d="M9 15l-4 4" /><circle cx="14.5" cy="9.5" r="1.5" /></svg>
+);
+const IconChart = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20V10M11 20V4M18 20v-7" /></svg>
+);
+
 interface SlotHarian {
   tanggalStr: string;
   namaHari: string;
@@ -66,10 +101,10 @@ const tentukanIndexLanjutan = (shiftH1?: string, shiftH2?: string): number | nul
 };
 
 const warnaShift = (s: string) => {
-  if (s === "Off") return "#e53e3e";
-  if (s === "Izin") return "#dd6b20";
-  if (s === "Shift 1" || s === "Shift 2") return "#3182ce";
-  return "#cbd5e0";
+  if (s === "Off") return "var(--red-600)";
+  if (s === "Izin") return "var(--warn)";
+  if (s === "Shift 1" || s === "Shift 2") return "var(--info)";
+  return "var(--line)";
 };
 const labelShift = (s: string) => (s === "Shift 1" ? "S1" : s === "Shift 2" ? "S2" : s === "Izin" ? "Izin" : s === "Off" ? "X" : "—");
 
@@ -200,14 +235,6 @@ export default function PengaturanJadwalSecurity() {
     return () => clearTimeout(t);
   }, [timSecurity, generateKalenderKosong]);
 
-  const handleSetShift = (dayIndex: number, karyawan: string, shiftValue: string) => {
-    setMatriksJadwal(prev => {
-      const update = prev.map(h => ({ ...h, plotKaryawan: { ...h.plotKaryawan } }));
-      update[dayIndex].plotKaryawan[karyawan] = update[dayIndex].plotKaryawan[karyawan] === shiftValue ? "" : shiftValue;
-      return update;
-    });
-  };
-
   const handleCycleShift = (dayIndex: number, karyawan: string) => {
     setMatriksJadwal(prev => {
       const update = prev.map(h => ({ ...h, plotKaryawan: { ...h.plotKaryawan } }));
@@ -328,66 +355,118 @@ export default function PengaturanJadwalSecurity() {
   if (!isAuthReady || !isKalenderReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        * { box-sizing: border-box; }
+        .top-bar {
+          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
+          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+          position: sticky; top: 0; z-index: 50;
+        }
+        .back-btn {
+          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
+          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
+        }
+        .back-btn:hover { background: var(--line); }
+        .danru-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
+
+        .page-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
+          padding: 36px 20px 60px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .page-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .page-hero-content { position: relative; }
+
+        .panel { background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border: 1px solid var(--line); }
+        .config-box { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; background: var(--bg); padding: 15px; border-radius: 12px; border: 1px solid var(--line); }
+        .config-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .config-label { font-size: 12px; font-weight: bold; color: var(--ink-soft); min-width: 110px; display: flex; align-items: center; gap: 6px; }
+        .period-toggle-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold; font-size: 12px; cursor: pointer; font-family: inherit; transition: 0.2s; }
+
+        .howto-box { background: var(--info-50); border: 1px solid rgba(37,99,235,0.2); padding: 12px 15px; border-radius: 12px; margin-bottom: 25px; font-size: 12px; color: var(--info); display: flex; flex-direction: column; gap: 6px; font-weight: bold; line-height: 1.5; }
+        .legend-box { background: var(--warn-50); border: 1px solid rgba(217,119,6,0.25); padding: 12px 15px; border-radius: 12px; margin-bottom: 15px; font-size: 12px; color: var(--warn); font-weight: bold; }
+
+        .matrix-cell-btn { width: 100%; padding: 5px 2px; font-size: 10px; font-weight: bold; border-radius: 5px; border: none; cursor: pointer; color: white; font-family: inherit; }
+        .generate-btn { width: 100%; padding: 14px; background: var(--info); color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(37,99,235,0.3); display: flex; justify-content: center; align-items: center; gap: 8px; font-family: inherit; }
+        .publish-btn { width: 100%; padding: 16px; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 30px; box-shadow: 0 4px 6px rgba(220,38,38,0.3); transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; }
+
+        @media (max-width: 640px) {
+          .panel { padding: 16px !important; border-radius: 16px !important; }
+        }
+      `}} />
 
       {/* NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/dashboard/security")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali</span>
+      <div className="top-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <button className="back-btn" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /></button>
+          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Penyusunan Roster</span>
         </div>
-        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          👑 Danru Desk
-        </div>
+        <div className="danru-badge"><IconCrown size={14} /> Danru Desk</div>
       </div>
 
       {/* HERO SECTION */}
-      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PENYUSUNAN ROSTER</h1>
-        <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>Pembuatan Jadwal Cerdas (Otomatis Pola 2-2-2, Auto-Lanjut Antar Periode)</p>
+      <div className="page-hero">
+        <div className="page-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PENYUSUNAN ROSTER</h1>
+          <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Pembuatan Jadwal Cerdas (Otomatis Pola 2-2-2, Auto-Lanjut Antar Periode)</p>
+        </div>
       </div>
 
       {/* MAIN CONTENT */}
       <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
 
-        <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+        <div className="panel">
 
           {/* PILIHAN TANGGAL MULAI BEBAS + PANJANG PERIODE */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "15px", background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", minWidth: "110px" }}>📅 Tanggal Mulai:</span>
+          <div className="config-box">
+            <div className="config-row">
+              <span className="config-label"><IconCalendar size={13} /> Tanggal Mulai:</span>
               <input
                 type="date"
                 value={tglMulaiPilihan}
                 onChange={(e) => e.target.value && setTglMulaiPilihan(e.target.value)}
-                style={{ flex: 1, minWidth: "160px", padding: "10px", borderRadius: "8px", fontSize: "14px", fontWeight: "bold", border: "1px solid #cbd5e0", background: "white", outline: "none" }}
+                style={{ flex: 1, minWidth: "160px", padding: "10px", borderRadius: "8px", fontSize: "14px", fontWeight: "bold", border: "1px solid var(--line)", background: "var(--surface)", outline: "none", color: "var(--ink)", fontFamily: "inherit" }}
               />
             </div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", minWidth: "110px" }}>⏳ Panjang Periode:</span>
+            <div className="config-row">
+              <span className="config-label"><IconHourglass size={13} /> Panjang Periode:</span>
               <div style={{ display: "flex", gap: "6px" }}>
-                <button type="button" onClick={() => setPanjangPeriode("bulan")} style={{ padding: "8px 16px", borderRadius: "8px", border: "none", fontWeight: "bold", fontSize: "12px", cursor: "pointer", background: panjangPeriode === "bulan" ? "#3182ce" : "#e2e8f0", color: panjangPeriode === "bulan" ? "white" : "#4a5568" }}>1 Bulan (tgl 11 s/d 10)</button>
-                <button type="button" onClick={() => setPanjangPeriode("tahun")} style={{ padding: "8px 16px", borderRadius: "8px", border: "none", fontWeight: "bold", fontSize: "12px", cursor: "pointer", background: panjangPeriode === "tahun" ? "#3182ce" : "#e2e8f0", color: panjangPeriode === "tahun" ? "white" : "#4a5568" }}>🪄 1 Tahun Penuh (365 hari)</button>
+                <button type="button" onClick={() => setPanjangPeriode("bulan")} className="period-toggle-btn" style={{ background: panjangPeriode === "bulan" ? "var(--info)" : "var(--line)", color: panjangPeriode === "bulan" ? "white" : "var(--ink-soft)" }}>1 Bulan (tgl 11 s/d 10)</button>
+                <button type="button" onClick={() => setPanjangPeriode("tahun")} className="period-toggle-btn" style={{ background: panjangPeriode === "tahun" ? "var(--info)" : "var(--line)", color: panjangPeriode === "tahun" ? "white" : "var(--ink-soft)" }}>1 Tahun Penuh (365 hari)</button>
               </div>
             </div>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#718096", fontWeight: "bold", cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--muted)", fontWeight: "bold", cursor: "pointer" }}>
               <input type="checkbox" checked={timpaData} onChange={(e) => setTimpaData(e.target.checked)} />
               Timpa data yang sudah tersimpan (reset total periode ini) — biarkan OFF untuk aman
             </label>
-            <div style={{ fontSize: "11px", color: "#a0aec0" }}>
+            <div style={{ fontSize: "11px", color: "var(--muted)" }}>
               Periode: <b>{getPeriodeText()}</b> · {matriksJadwal.length} hari · {jumlahBulanTerlibat} dokumen bulan akan disimpan
             </div>
             <button
               type="button" onClick={handleProsesPeriodeBerikutnya} disabled={sedangProsesPeriode}
-              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "13px", cursor: sedangProsesPeriode ? "default" : "pointer", background: sedangProsesPeriode ? "#a0aec0" : "#2f855a", color: "white", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px" }}
+              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "13px", cursor: sedangProsesPeriode ? "default" : "pointer", background: sedangProsesPeriode ? "#a0aec0" : "var(--ok)", color: "white", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontFamily: "inherit" }}
             >
-              ➡️ {sedangProsesPeriode ? "Memproses..." : "Proses Periode Berikutnya (lanjut otomatis + isi pola)"}
+              <IconArrowRight size={14} /> {sedangProsesPeriode ? "Memproses..." : "Proses Periode Berikutnya (lanjut otomatis + isi pola)"}
             </button>
           </div>
 
-          <div style={{ background: "#ebf8ff", border: "1px solid #bee3f8", padding: "12px 15px", borderRadius: "12px", marginBottom: "25px", fontSize: "12px", color: "#2b6cb0", display: "flex", flexDirection: "column", gap: "6px", fontWeight: "bold", lineHeight: "1.5" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ fontSize: "16px" }}>💡</span> Cara Pakai:</div>
-            <ul style={{ margin: 0, paddingLeft: "30px", fontWeight: "normal" }}>
+          <div className="howto-box">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><IconLightbulb size={16} /> Cara Pakai:</div>
+            <ul style={{ margin: 0, paddingLeft: "26px", fontWeight: "normal" }}>
               <li>Hari pertama periode <b>otomatis disambung</b> dari 2 hari terakhir periode sebelumnya (kalau datanya ada). Nama staf yang auto-tersambung ditandai badge 🔄.</li>
               <li>Kalau staf baru / belum ada histori, isi manual shift hari pertamanya dulu, baru klik <b>&quot;Generate Otomatis&quot;</b> untuk mengisi sisa periode.</li>
               <li>Untuk perbaikan total (misal Agustus ini kacau), centang <b>&quot;Timpa data&quot;</b> lalu Generate Otomatis — semua hari ditulis ulang sesuai pola dari hari pertama.</li>
@@ -396,24 +475,24 @@ export default function PengaturanJadwalSecurity() {
           </div>
 
           {isSuccess && (
-            <div style={{ background: "#f0fff4", border: "1px solid #c6f6d5", color: "#22543d", padding: "15px", borderRadius: "12px", marginBottom: "20px", fontWeight: "bold", textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
-              <span style={{ fontSize: "20px" }}>✅</span> Roster Periode {getPeriodeText()} sukses disimpan!
+            <div style={{ background: "var(--ok-50)", border: "1px solid rgba(22,163,74,0.25)", color: "var(--ok)", padding: "15px", borderRadius: "12px", marginBottom: "20px", fontWeight: "bold", textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+              <IconCheckCircle size={20} /> Roster Periode {getPeriodeText()} sukses disimpan!
             </div>
           )}
 
           {/* ================= TAMPILAN TABEL LANDSCAPE — kotak-kotak kecil, satu-satunya mode tampilan ================= */}
           <div>
-            <div style={{ background: "#fffaf0", border: "1px solid #feebc8", padding: "12px 15px", borderRadius: "12px", marginBottom: "15px", fontSize: "12px", color: "#7b341e", fontWeight: "bold" }}>
-              📊 {matriksJadwal.length} hari — klik kotak untuk ganti shift bergantian: S1 → S2 → X → Izin → Kosong. Hari pertama disorot biru; yang auto-lanjut ditandai 🔄 di kolom nama.
+            <div className="legend-box">
+              <IconChart size={13} /> {matriksJadwal.length} hari — klik kotak untuk ganti shift bergantian: S1 → S2 → X → Izin → Kosong. Hari pertama disorot biru; yang auto-lanjut ditandai 🔄 di kolom nama.
             </div>
 
-            <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: "12px" }}>
+            <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: "12px" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "12px" }}>
                 <thead>
-                  <tr style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 2 }}>
-                    <th style={{ padding: "6px 8px", textAlign: "left", borderBottom: "2px solid #e2e8f0", position: "sticky", left: 0, background: "#f8fafc", zIndex: 3, minWidth: "90px" }}>Tanggal</th>
+                  <tr style={{ background: "var(--bg)", position: "sticky", top: 0, zIndex: 2 }}>
+                    <th style={{ padding: "6px 8px", textAlign: "left", borderBottom: "2px solid var(--line)", position: "sticky", left: 0, background: "var(--bg)", zIndex: 3, minWidth: "90px", color: "var(--ink-soft)" }}>Tanggal</th>
                     {timSecurity.map(k => (
-                      <th key={k} style={{ padding: "6px 4px", textAlign: "center", borderBottom: "2px solid #e2e8f0", minWidth: "48px", whiteSpace: "nowrap" }}>
+                      <th key={k} style={{ padding: "6px 4px", textAlign: "center", borderBottom: "2px solid var(--line)", minWidth: "48px", whiteSpace: "nowrap", color: "var(--ink-soft)" }}>
                         {k.split(" ")[0]}{lanjutanInfo[k] ? " 🔄" : ""}
                       </th>
                     ))}
@@ -421,21 +500,23 @@ export default function PengaturanJadwalSecurity() {
                 </thead>
                 <tbody>
                   {matriksJadwal.map((hari, dayIdx) => {
-                    const [yy, , dd] = hari.tanggalStr.split("-");
+                    const [, , dd] = hari.tanggalStr.split("-");
                     const bulanLabel = NAMA_BULAN_IND[parseTglStr(hari.tanggalStr).getMonth()].substring(0, 3);
+                    const rowBg = dayIdx === 0 ? "var(--info-50)" : dd === "01" ? "var(--bg)" : "var(--surface)";
                     return (
-                      <tr key={hari.tanggalStr} style={{ background: dayIdx === 0 ? "#ebf8ff" : dd === "01" ? "#f8fafc" : "white" }}>
-                        <td style={{ padding: "4px 8px", fontWeight: "bold", color: "#4a5568", borderBottom: "1px solid #edf2f7", position: "sticky", left: 0, background: dayIdx === 0 ? "#ebf8ff" : dd === "01" ? "#f8fafc" : "white", whiteSpace: "nowrap", fontSize: "11px" }}>
+                      <tr key={hari.tanggalStr} style={{ background: rowBg }}>
+                        <td style={{ padding: "4px 8px", fontWeight: "bold", color: "var(--ink-soft)", borderBottom: "1px solid var(--line)", position: "sticky", left: 0, background: rowBg, whiteSpace: "nowrap", fontSize: "11px" }}>
                           {hari.namaHari.substring(0, 3)}, {dd} {bulanLabel}
                         </td>
                         {timSecurity.map(k => {
                           const val = hari.plotKaryawan[k] || "";
                           return (
-                            <td key={k} style={{ padding: "2px", textAlign: "center", borderBottom: "1px solid #edf2f7" }}>
+                            <td key={k} style={{ padding: "2px", textAlign: "center", borderBottom: "1px solid var(--line)" }}>
                               <button
                                 type="button"
                                 onClick={() => handleCycleShift(dayIdx, k)}
-                                style={{ width: "100%", padding: "5px 2px", fontSize: "10px", fontWeight: "bold", borderRadius: "5px", border: "none", cursor: "pointer", background: warnaShift(val), color: "white", opacity: val ? 1 : 0.5 }}
+                                className="matrix-cell-btn"
+                                style={{ background: warnaShift(val), opacity: val ? 1 : 0.5 }}
                               >
                                 {val ? labelShift(val) : "—"}
                               </button>
@@ -449,16 +530,17 @@ export default function PengaturanJadwalSecurity() {
               </table>
             </div>
 
-            <button onClick={handleAutoGenerate} style={{ width: "100%", padding: "14px", background: "#2b6cb0", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginTop: "15px", boxShadow: "0 4px 6px rgba(43,108,176,0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "18px" }}>🪄</span> Generate Otomatis Untuk Sisa Periode
+            <button onClick={handleAutoGenerate} className="generate-btn">
+              <IconWand size={16} /> Generate Otomatis Untuk Sisa Periode
             </button>
           </div>
 
           <button
             onClick={handleSimpanJadwal} disabled={isLoading}
-            style={{ width: "100%", padding: "16px", background: isLoading ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", marginTop: "30px", boxShadow: "0 4px 6px rgba(229,62,62,0.3)", transition: "0.2s" }}
+            className="publish-btn"
+            style={{ background: isLoading ? "#a0aec0" : "var(--red-600)" }}
           >
-            {isLoading ? "Menyimpan Data Roster..." : `🚀 Terbitkan Roster Resmi ke Portal (${jumlahBulanTerlibat} bulan)`}
+            <IconRocket size={16} /> {isLoading ? "Menyimpan Data Roster..." : `Terbitkan Roster Resmi ke Portal (${jumlahBulanTerlibat} bulan)`}
           </button>
 
         </div>
