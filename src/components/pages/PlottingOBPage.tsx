@@ -21,6 +21,7 @@ import { useConfirm } from "../ui/ConfirmProvider";
 // ==========================================
 // KONSTANTA
 // ==========================================
+const NAMA_HARI_SINGKAT = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 const DAFTAR_LANTAI = ["Basement", "Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Lantai 5"];
 const AREA_PELAYANAN = "Pelayanan Khusus OB";
 const SEMUA_AREA = [...DAFTAR_LANTAI, AREA_PELAYANAN];
@@ -42,6 +43,13 @@ function toISO(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+// OB & CS tidak ada jadwal di akhir pekan (Sabtu/Minggu) — dipakai buat skip generate otomatis
+// & buat gak auto-isi Pelayanan Tetap kalau koordinator buka tanggal weekend secara manual.
+function isWeekend(dateISO: string): boolean {
+  const hari = new Date(dateISO + "T00:00:00").getDay();
+  return hari === 0 || hari === 6; // 0 = Minggu, 6 = Sabtu
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -188,8 +196,9 @@ export default function PlottingOBPage() {
           setPlotHariIni((snap.data().plot_lantai || {}) as PlotHarian);
         } else {
           const kosong: PlotHarian = {};
+          const weekend = isWeekend(selectedDate);
           SEMUA_AREA.forEach((a) => {
-            kosong[a] = a === AREA_PELAYANAN ? pelayananTetap : "";
+            kosong[a] = !weekend && a === AREA_PELAYANAN ? pelayananTetap : "";
           });
           setPlotHariIni(kosong);
         }
@@ -340,9 +349,16 @@ export default function PlottingOBPage() {
         const tgl = new Date(tglMulai);
         tgl.setDate(tglMulai.getDate() + i);
         const tglISO = toISO(tgl);
+        const ref = doc(db, "daily_plots", tglISO);
+
+        // OB & CS tidak ada jadwal Sabtu/Minggu — kosongkan (bukan skip) biar plot lama
+        // yang mungkin nyangkut di tanggal weekend ikut ke-clear pas regenerate.
+        if (isWeekend(tglISO)) {
+          batch.set(ref, { plot_lantai: {}, waktu_update: serverTimestamp(), dibuat_otomatis: true }, { merge: true });
+          continue;
+        }
 
         const plotHari: PlotHarian = { ...rotasiAktif, [AREA_PELAYANAN]: pelayananTetap };
-        const ref = doc(db, "daily_plots", tglISO);
         batch.set(ref, { plot_lantai: plotHari, waktu_update: serverTimestamp(), dibuat_otomatis: true }, { merge: true });
       }
 
@@ -446,6 +462,12 @@ export default function PlottingOBPage() {
                 onChange={(e) => setSelectedDate(e.target.value)}
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", marginBottom: "15px" }}
               />
+
+              {isWeekend(selectedDate) && (
+                <div style={{ background: "#fffaf0", border: "1px solid #fbd38d", color: "#b7791f", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", fontWeight: "bold", marginBottom: "15px" }}>
+                  📌 Tanggal ini akhir pekan — OB & CS normalnya tidak ada jadwal. Kolom di bawah tidak otomatis diisi, tapi tetap bisa diisi manual kalau ada kebutuhan khusus.
+                </div>
+              )}
 
               {isLoadingHari ? (
                 <div style={{ textAlign: "center", color: "#a0aec0", padding: "20px 0" }}>Memuat plotting...</div>
@@ -551,11 +573,15 @@ export default function PlottingOBPage() {
                   <tbody>
                     {daftarTanggalBulan.map((tgl) => {
                       const plot = monthPreview[tgl];
+                      const weekend = isWeekend(tgl);
+                      const namaHari = NAMA_HARI_SINGKAT[new Date(tgl + "T00:00:00").getDay()];
                       return (
-                        <tr key={tgl} style={{ background: tgl === selectedDate ? "#e6fffa" : "white", cursor: "pointer" }} onClick={() => setSelectedDate(tgl)}>
-                          <td style={{ fontWeight: "bold" }}>{tgl}</td>
+                        <tr key={tgl} style={{ background: tgl === selectedDate ? "#e6fffa" : weekend ? "#f8fafc" : "white", cursor: "pointer" }} onClick={() => setSelectedDate(tgl)}>
+                          <td style={{ fontWeight: "bold", color: weekend ? "#a0aec0" : "#1a202c" }}>
+                            {tgl} <span style={{ fontWeight: "normal", fontSize: "11px" }}>({namaHari}{weekend ? " · Libur" : ""})</span>
+                          </td>
                           {SEMUA_AREA.map((a) => (
-                            <td key={a} style={{ color: plot?.[a] ? "#2d3748" : "#cbd5e0" }}>{plot?.[a] || "-"}</td>
+                            <td key={a} style={{ color: weekend ? "#cbd5e0" : plot?.[a] ? "#2d3748" : "#cbd5e0" }}>{weekend ? "-" : (plot?.[a] || "-")}</td>
                           ))}
                         </tr>
                       );

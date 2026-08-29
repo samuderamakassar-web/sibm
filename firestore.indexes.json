@@ -1,0 +1,233 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "driver_status_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "nama_driver",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_ubah",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "kendaraan_inspeksi_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kendaraan_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tanggal",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "kendaraan_odometer_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kendaraan_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tanggal",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "kendaraan_service_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kendaraan_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tanggal",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "ob_checklists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "pic_bertugas",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_selesai",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "ob_checklists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "pic_bertugas",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_selesai",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "operational_vehicle_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driver_bertugas",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_catat",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "operational_vehicle_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kendaraan",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_catat",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "operational_vehicle_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kendaraan",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_catat",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "purchase_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "departemen",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_pengajuan",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "security_patrols",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "petugas",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_laporan",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "inspeksi_fasilitas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "pic_bertugas",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_selesai",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    }
+  ],
+  "fieldOverrides": []
+}
