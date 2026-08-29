@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, getDoc, doc, Timestamp, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
@@ -13,76 +13,160 @@ const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
 );
+const IconPrinter = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="1.5" /><path d="M6 17v4h12v-4" /></svg>
+);
+const IconSearch = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+);
 
-// --- INTERFACES ---
-interface TugasDetail {
-  nama_tugas: string;
-  foto_before: string | null;
-  foto_after: string | null;
-  status: string;
-}
-
+// ==========================================
+// INTERFACES — disamakan sama bentuk data ASLI yang ditulis oleh ChecklistOBPage,
+// StockOpnamePage, PlottingOBPage, dan InspeksiFasilitasPage (components/pages/).
+// Interface lama di file ini gak nyambung sama sekali ke data real (detail_tugas,
+// purchase_requests, plot.tanggal sbg field, dst — semua gak pernah ditulis kemanapun),
+// itu sebabnya laporan yang tampil sebelumnya gak sesuai.
+// ==========================================
+interface JawabanPertanyaan { pertanyaan_id: string; teks: string; jawaban: "Ya" | "Tidak"; }
+interface SegmentLog { segment_id: string; nama_segment: string; jawaban: JawabanPertanyaan[]; }
+interface FotoPasangan { before: string; after: string; }
 interface ChecklistOB {
   id: string;
-  waktu_selesai: Timestamp | null;
-  pic_bertugas: string;
   area: string;
-  detail_tugas: TugasDetail[];
+  pic_bertugas: string;
+  tanggal?: string; // baru ada di dokumen mulai sesi redesign checklist — dok lama mungkin gak punya
+  waktu_selesai: Timestamp | null;
+  detail_segmen: SegmentLog[];
+  foto_bukti: FotoPasangan[];
 }
 
-const getStatusRingkas = (detail: TugasDetail[]) => {
-  if (!detail || detail.length === 0) return "Belum Ada Data";
-  if (detail.every(t => t.status === "Selesai Sempurna")) return "Bersih Sempurna";
-  if (detail.some(t => t.status === "Dilewati")) return "Belum Lengkap";
-  return "Sebagian Selesai";
+const getStatusRingkas = (segmen: SegmentLog[]) => {
+  const semuaJawaban = (segmen || []).flatMap((s) => s.jawaban || []);
+  if (semuaJawaban.length === 0) return "Belum Ada Data";
+  const jumlahTidak = semuaJawaban.filter((j) => j.jawaban === "Tidak").length;
+  if (jumlahTidak === 0) return "Bersih Sempurna";
+  return `${jumlahTidak} Item Perlu Perhatian`;
 };
 
-interface StockOB {
+function getBulanKeyChecklist(item: ChecklistOB): string {
+  if (item.tanggal) return item.tanggal.slice(0, 7);
+  if (item.waktu_selesai) {
+    const d = item.waktu_selesai.toDate();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return "unknown";
+}
+function formatBulanLabel(bulanKey: string): string {
+  if (bulanKey === "unknown") return "Tanpa Tanggal";
+  const [y, m] = bulanKey.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+}
+
+interface StockItem {
   id: string;
   nama_barang: string;
   qty: number;
   batas_minimum: number;
-  diupdate_oleh: string;
+  diupdate_oleh?: string;
   terakhir_diupdate: Timestamp | null;
+}
+interface StockLog {
+  id: string;
+  id_barang?: string;
+  nama_barang: string;
+  jenis_transaksi: string;
+  jumlah_perubahan: number;
+  waktu_transaksi: Timestamp | null;
+}
+
+// Sama persis logicnya dgn StockOpnamePage.tsx (hitungAnalisaPemakaian) — sengaja
+// diduplikasi bukan diimpor, konsisten sama pola project ini (duplikasi kecil per
+// file drpd premature abstraction lintas halaman OB & admin).
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const LIMIT_LOG_ANALISA = 400;
+interface AnalisaPemakaian {
+  item: StockItem;
+  adaDataPemakaian: boolean;
+  rataRataPerBulan: number;
+  proyeksiHabisHari: number | null;
+  proyeksiSisaAkhirBulan: number | null;
+  jumlahDisarankan: number;
+  isUrgent: boolean;
+  isPerluBulanDepan: boolean;
+}
+function hitungAnalisaPemakaian(item: StockItem, semuaLog: StockLog[]): AnalisaPemakaian {
+  const logKeluar = semuaLog.filter(
+    (l) => l.waktu_transaksi && l.jenis_transaksi.includes("KELUAR") && (l.id_barang ? l.id_barang === item.id : l.nama_barang === item.nama_barang)
+  );
+  const isUrgent = item.qty <= item.batas_minimum;
+
+  if (logKeluar.length === 0) {
+    const jumlahDisarankan = isUrgent ? Math.max(0, item.batas_minimum * 2 - item.qty) : 0;
+    return { item, adaDataPemakaian: false, rataRataPerBulan: 0, proyeksiHabisHari: null, proyeksiSisaAkhirBulan: null, jumlahDisarankan, isUrgent, isPerluBulanDepan: false };
+  }
+
+  const totalKeluar = logKeluar.reduce((sum, l) => sum + l.jumlah_perubahan, 0);
+  const waktuTertua = Math.min(...logKeluar.map((l) => l.waktu_transaksi!.toMillis()));
+  const rentangHari = Math.max(1, (Date.now() - waktuTertua) / MS_PER_DAY);
+  const rataRataPerHari = totalKeluar / rentangHari;
+  const rataRataPerBulan = rataRataPerHari * 30;
+  const proyeksiHabisHari = rataRataPerHari > 0 ? Math.floor(item.qty / rataRataPerHari) : null;
+  const proyeksiSisaAkhirBulan = Math.round((item.qty - rataRataPerBulan) * 10) / 10;
+  const isPerluBulanDepan = !isUrgent && proyeksiSisaAkhirBulan <= item.batas_minimum;
+  const targetSehat = item.batas_minimum + rataRataPerBulan;
+  const jumlahDisarankan = Math.max(0, Math.ceil(targetSehat - item.qty));
+
+  return { item, adaDataPemakaian: true, rataRataPerBulan, proyeksiHabisHari, proyeksiSisaAkhirBulan, jumlahDisarankan, isUrgent, isPerluBulanDepan };
 }
 
 interface DailyPlot {
-  id: string;
-  tanggal: string;
-  dibuat_oleh: string;
+  id: string; // format YYYY-MM-DD — ini SATU-SATUNYA sumber tanggal (dokumen gak punya field "tanggal")
   plot_lantai: Record<string, string>;
   waktu_update: Timestamp | null;
+  dibuat_otomatis?: boolean;
+}
+function isWeekend(dateISO: string): boolean {
+  const hari = new Date(`${dateISO}T00:00:00`).getDay();
+  return hari === 0 || hari === 6;
 }
 
-// BARU: Interface untuk Purchase Request
-interface PurchaseRequest {
+type Kondisi = "Baik" | "Rusak" | "Tidak Ada";
+interface InspeksiLog {
   id: string;
-  nama_barang: string;
-  sisa_stok: number;
-  status: string;
-  diajukan_oleh: string;
-  waktu_pengajuan: Timestamp | null;
+  area: string;
+  pic_bertugas: string;
+  minggu_mulai: string;
+  waktu_selesai: Timestamp | null;
+  hasil: { nama: string; kondisi: Kondisi; catatan: string; foto: string }[];
 }
 
 export default function MonitorOBPage() {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminName, setAdminName] = useState("Admin");
-  const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "PLOT" | "RESTOCK">("CHECKLIST");
-  
+  const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "INSPEKSI" | "PLOT">("CHECKLIST");
+  const [bulanFilter, setBulanFilter] = useState<string>("SEMUA");
+  const [bulanFilterPlot, setBulanFilterPlot] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
   // States Data
   const [checklists, setChecklists] = useState<ChecklistOB[]>([]);
-  const [stocks, setStocks] = useState<StockOB[]>([]);
+  const [stocks, setStocks] = useState<StockItem[]>([]);
+  const [stockLogs, setStockLogs] = useState<StockLog[]>([]);
   const [dailyPlots, setDailyPlots] = useState<DailyPlot[]>([]);
-  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]); // State PR Baru
-  
+  const [inspeksiList, setInspeksiList] = useState<InspeksiLog[]>([]);
+
   const [searchQuery, setSearchQuery] = useState("");
+  // Kosong di render awal (server & client SAMA — hindari hydration mismatch dari jam
+  // live), baru diisi pas tombol Export PDF diklik.
+  const [waktuCetak, setWaktuCetak] = useState("");
 
   useEffect(() => {
-    // 1. Verifikasi Admin
     const role = localStorage.getItem("pic_role");
     const nama = localStorage.getItem("pic_nama");
-    
+
     if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
       alert("Akses Ditolak! Halaman ini khusus Administrator.");
       router.push("/dashboard");
@@ -90,79 +174,83 @@ export default function MonitorOBPage() {
     }
     setTimeout(() => setAdminName(nama || "Admin"), 0);
 
-    // 2. Fetch Laporan Checklist OB
+    // Log checklist harian TIDAK dibatasi limit() — ini sumber data audit, sengaja
+    // gak dipotong biar filter "Semua Bulan" & export PDF beneran lengkap.
     const qChecklist = query(collection(db, "ob_checklists"), orderBy("waktu_selesai", "desc"));
     const unsubChecklist = onSnapshot(qChecklist, (snap) => {
-      setChecklists(snap.docs.map(d => ({ id: d.id, ...d.data() })) as ChecklistOB[]);
+      setChecklists(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as ChecklistOB[]);
     });
 
-    // 3. Fetch Stock Gudang
     const qStock = query(collection(db, "ob_stock"), orderBy("nama_barang", "asc"));
     const unsubStock = onSnapshot(qStock, (snap) => {
-      setStocks(snap.docs.map(d => ({ id: d.id, ...d.data() })) as StockOB[]);
+      setStocks(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as StockItem[]);
     });
 
-    // 4. Fetch Daily Plots
-    const qPlot = query(collection(db, "daily_plots"), orderBy("tanggal", "desc"));
-    const unsubPlot = onSnapshot(qPlot, (snap) => {
-      setDailyPlots(snap.docs.map(d => ({ id: d.id, ...d.data() })) as DailyPlot[]);
+    const qStockLog = query(collection(db, "ob_stock_logs"), orderBy("waktu_transaksi", "desc"), limit(LIMIT_LOG_ANALISA));
+    const unsubStockLog = onSnapshot(qStockLog, (snap) => {
+      setStockLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as StockLog[]);
     });
 
-    // 5. Fetch Purchase Requests (BARU)
-    const qPR = query(collection(db, "purchase_requests"), orderBy("waktu_pengajuan", "desc"));
-    const unsubPR = onSnapshot(qPR, (snap) => {
-      setPurchaseRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })) as PurchaseRequest[]);
+    // Plot harian: dokumen daily_plots gak punya field "tanggal" — ID dokumennya SENDIRI
+    // adalah tanggalnya (YYYY-MM-DD). orderBy("tanggal") versi lama gak pernah nge-match
+    // apapun (field itu emang gak ada), jadi tab ini selalu kosong sebelumnya.
+    // Diambil polos tanpa orderBy/limit (collection-nya kecil, ~1 dok/hari, orderBy(documentId())
+    // butuh index khusus yang gak perlu-perlu amat buat collection sekecil ini) — gak dipotong
+    // sama sekali (bukan cuma 90 terakhir) karena sekarang ada pilihan bulan, termasuk bulan-bulan
+    // yang udah digenerate jauh ke depan (lihat §10), jadi datanya harus lengkap.
+    const unsubPlot = onSnapshot(collection(db, "daily_plots"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as DailyPlot[];
+      list.sort((a, b) => b.id.localeCompare(a.id));
+      setDailyPlots(list);
+    });
+
+    const qInspeksi = query(collection(db, "inspeksi_fasilitas"), orderBy("waktu_selesai", "desc"), limit(200));
+    const unsubInspeksi = onSnapshot(qInspeksi, (snap) => {
+      setInspeksiList(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as InspeksiLog[]);
     });
 
     return () => {
-      unsubChecklist(); unsubStock(); unsubPlot(); unsubPR();
+      unsubChecklist(); unsubStock(); unsubStockLog(); unsubPlot(); unsubInspeksi();
     };
   }, [router]);
 
-  const formatWaktu = (timestamp: Timestamp | string | null) => {
+  const formatWaktu = (timestamp: Timestamp | null) => {
     if (!timestamp) return "-";
-    const date = (timestamp as Timestamp).toDate ? (timestamp as Timestamp).toDate() : new Date(timestamp as string);
-    return date.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    return timestamp.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
-
-  const formatDateOnly = (dateString: string) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("id-ID", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  };
-
-  // FUNGSI UPDATE STATUS PR
-  const handleUpdatePR = async (id: string, newStatus: string) => {
-    const isConfirm = window.confirm(`Ubah status pengajuan menjadi: ${newStatus}?`);
-    if (!isConfirm) return;
-
-    try {
-      await updateDoc(doc(db, "purchase_requests", id), {
-        status: newStatus
-      });
-
-      // TODO: INTEGRASI EMAILJS DI SINI (Contoh)
-      // if (newStatus === "Disetujui") {
-      //   emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", { status: newStatus, ... });
-      // }
-      
-    } catch (error) {
-      console.error(error);
-      alert("Gagal mengupdate status pengajuan.");
-    }
-  };
-
   // Filter Data
-  const filteredChecklists = checklists.filter(c =>
-    c.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.area?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const filteredStocks = stocks.filter(i => i.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredPR = purchaseRequests.filter(pr => pr.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()) || pr.diajukan_oleh?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredStocks = stocks.filter((i) => i.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const analisaSemuaBarang = stocks.map((item) => hitungAnalisaPemakaian(item, stockLogs));
+  const daftarUrgent = analisaSemuaBarang.filter((a) => a.isUrgent);
+  const daftarBulanDepan = analisaSemuaBarang.filter((a) => a.isPerluBulanDepan);
 
-  const kolomLantai = ["Area Basement", "Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Lantai 5", "Pelayanan Khusus OB"];
-  
-  // Hitung notifikasi (Berapa banyak PR yang Menunggu)
-  const pendingPRCount = purchaseRequests.filter(pr => pr.status === "Menunggu Approval").length;
+  const bulanTersedia = Array.from(new Set(checklists.map(getBulanKeyChecklist))).sort().reverse();
+  const checklistBulanIni = bulanFilter === "SEMUA" ? checklists : checklists.filter((c) => getBulanKeyChecklist(c) === bulanFilter);
+  const filteredChecklists = checklistBulanIni.filter(
+    (c) => c.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) || c.area?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredInspeksi = inspeksiList.filter(
+    (i) => i.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) || i.area?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const rusakBaruBaruIni = inspeksiList.slice(0, 30).reduce((sum, i) => sum + i.hasil.filter((h) => h.kondisi === "Rusak").length, 0);
+
+  const kolomLantai = ["Basement", "Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Lantai 5", "Pelayanan Khusus OB"];
+  const NAMA_HARI_SINGKAT = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+  // Daftar bulan yang beneran ada plot-nya (biar dropdown gak nampilin bulan kosong).
+  const bulanTersediaPlot = Array.from(new Set(dailyPlots.map((p) => p.id.slice(0, 7)))).sort().reverse();
+  const bulanPlotAktif = bulanTersediaPlot.includes(bulanFilterPlot) ? bulanFilterPlot : (bulanTersediaPlot[0] || bulanFilterPlot);
+  const plotMapBulanIni: Record<string, DailyPlot> = {};
+  dailyPlots.forEach((p) => { if (p.id.startsWith(bulanPlotAktif)) plotMapBulanIni[p.id] = p; });
+  const [tahunPlot, bulanAngkaPlot] = bulanPlotAktif.split("-").map(Number);
+  const jumlahHariBulanPlot = tahunPlot && bulanAngkaPlot ? new Date(tahunPlot, bulanAngkaPlot, 0).getDate() : 0;
+  const daftarTanggalBulanPlot = Array.from({ length: jumlahHariBulanPlot }, (_, i) => `${bulanPlotAktif}-${String(i + 1).padStart(2, "0")}`);
+
+  const handlePrint = () => {
+    setWaktuCetak(new Date().toLocaleString("id-ID"));
+    setTimeout(() => window.print(), 0);
+  };
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
@@ -201,52 +289,62 @@ export default function MonitorOBPage() {
           background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
         }
         .admin-hero-content { position: relative; }
+        .tab-count { background: var(--red-600); color: white; padding: 2px 7px; border-radius: 10px; font-size: 10px; }
+        .print-only { display: none; }
+
+        @media print {
+          @page { size: A4 portrait; margin: 15mm; }
+          html, body { background-color: white !important; -webkit-print-color-adjust: exact; font-size: 11px; }
+          .no-print { display: none !important; }
+          .print-area { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; }
+          .print-only { display: block !important; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          thead { display: table-header-group; }
+          th, td { border: 1px solid #cbd5e0 !important; padding: 6px 8px !important; text-align: left; }
+          th { background-color: #f1f5f9 !important; font-weight: bold !important; color: #2d3748 !important; }
+        }
       `}} />
 
       {/* 🔹 TOP BAR NAVBAR */}
-      <div className="site-header">
+      <div className="site-header no-print">
         <button className="back-btn" onClick={() => router.push("/admin")}>
           <IconArrowLeft size={16} /> Kembali ke Control Panel
         </button>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          {/* LONCENG NOTIFIKASI */}
-          <div onClick={() => setActiveTab("RESTOCK")} style={{ position: "relative", cursor: "pointer", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", width: "40px", height: "40px", background: "#edf2f7", borderRadius: "50%" }}>
-            🔔
-            {pendingPRCount > 0 && (
-              <span style={{ position: "absolute", top: "-5px", right: "-5px", background: "#e53e3e", color: "white", borderRadius: "50%", padding: "2px 6px", fontSize: "10px", fontWeight: "bold", border: "2px solid white", animation: "pulse 2s infinite" }}>
-                {pendingPRCount}
-              </span>
-            )}
-          </div>
-
-          <div className="admin-badge">
-            <IconUserCircle size={14} /> Admin: {adminName}
-          </div>
+        <div className="admin-badge">
+          <IconUserCircle size={14} /> Admin: {adminName}
         </div>
       </div>
 
-      {/* 🔹 HERO SECTION (TEMA MERAH SAMUDERA) */}
-      <div className="admin-hero">
+      {/* 🔹 HERO SECTION */}
+      <div className="admin-hero no-print">
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>PANTAU KINERJA OB & CS</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Monitoring laporan kebersihan, stok gudang, dan permintaan pembelian barang</p>
+          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Monitoring log kebersihan, stok gudang, inspeksi fasilitas, dan plotting tugas</p>
         </div>
+      </div>
+
+      {/* 🖨️ KOP CETAK — cuma muncul pas print */}
+      <div className="print-only" style={{ marginBottom: "15px", borderBottom: "2px solid #2d3748", paddingBottom: "10px" }}>
+        <h2 style={{ margin: 0 }}>
+          {activeTab === "PLOT" ? "Plot Tugas Harian OB & CS" : "Log Pembersihan OB & CS"} — {activeTab === "PLOT" ? formatBulanLabel(bulanPlotAktif) : (bulanFilter === "SEMUA" ? "Semua Periode" : formatBulanLabel(bulanFilter))}
+        </h2>
+        <p style={{ margin: "4px 0 0", fontSize: "11px" }}>Dicetak: {waktuCetak}</p>
       </div>
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
-        
-        {/* NAVIGASI TAB MODEREN */}
-        <div style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "10px" }}>
+      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }} className="print-area">
+
+        {/* NAVIGASI TAB */}
+        <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "10px" }}>
           <button onClick={() => { setActiveTab("CHECKLIST"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "CHECKLIST" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "CHECKLIST" ? "var(--ok)" : "var(--muted)", boxShadow: activeTab === "CHECKLIST" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "CHECKLIST" ? "3px solid var(--ok)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
             📋 Log Pembersihan
           </button>
           <button onClick={() => { setActiveTab("STOCK"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "STOCK" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "STOCK" ? "var(--warn)" : "var(--muted)", boxShadow: activeTab === "STOCK" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "STOCK" ? "3px solid var(--warn)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
-            📦 Data Stock Opname
+            📦 Stok & Pengadaan {daftarUrgent.length > 0 && <span className="tab-count">{daftarUrgent.length}</span>}
           </button>
-          <button onClick={() => { setActiveTab("RESTOCK"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "RESTOCK" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "RESTOCK" ? "var(--red-600)" : "var(--muted)", boxShadow: activeTab === "RESTOCK" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "RESTOCK" ? "3px solid var(--red-600)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
-            🛒 Pengajuan Barang {pendingPRCount > 0 && <span style={{ background: "var(--red-600)", color: "white", padding: "2px 6px", borderRadius: "10px", fontSize: "10px" }}>{pendingPRCount}</span>}
+          <button onClick={() => { setActiveTab("INSPEKSI"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "INSPEKSI" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "INSPEKSI" ? "var(--accent)" : "var(--muted)", boxShadow: activeTab === "INSPEKSI" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "INSPEKSI" ? "3px solid var(--accent)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
+            <IconSearch size={14} /> Inspeksi Fasilitas {rusakBaruBaruIni > 0 && <span className="tab-count">{rusakBaruBaruIni}</span>}
           </button>
           <button onClick={() => { setActiveTab("PLOT"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "PLOT" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "PLOT" ? "var(--info)" : "var(--muted)", boxShadow: activeTab === "PLOT" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "PLOT" ? "3px solid var(--info)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
             📅 Plot Tugas Harian
@@ -255,230 +353,332 @@ export default function MonitorOBPage() {
 
         {/* CONTAINER KONTEN */}
         <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
-          
-          {/* SEARCH BAR (Bisa dipakai di semua tab kecuali Plot) */}
+
+          {/* SEARCH BAR + FILTER BULAN (Checklist) + Export PDF */}
           {activeTab !== "PLOT" && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
+            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
               <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>
-                {activeTab === "CHECKLIST" ? "📋 Laporan Pembersihan" : activeTab === "STOCK" ? "📦 Inventory Gudang OB" : "🛒 Permintaan Pembelian"}
+                {activeTab === "CHECKLIST" ? "📋 Laporan Pembersihan" : activeTab === "STOCK" ? "📦 Inventory & Pengadaan Gudang OB" : "🔍 Inspeksi Fasilitas Mingguan"}
               </h2>
-              <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Ketik untuk mencari..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid var(--line)", fontSize: "13px", width: "260px", background: "var(--bg)", outline: "none" }}
-                />
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                {activeTab === "CHECKLIST" && (
+                  <>
+                    <select value={bulanFilter} onChange={(e) => setBulanFilter(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                      <option value="SEMUA">Semua Bulan</option>
+                      {bulanTersedia.map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>)}
+                    </select>
+                    <button onClick={handlePrint} style={{ background: "var(--info)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <IconPrinter /> Export PDF
+                    </button>
+                  </>
+                )}
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
+                  <input
+                    type="text" placeholder="Ketik untuk mencari..."
+                    value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid var(--line)", fontSize: "13px", width: "220px", background: "var(--bg)", outline: "none" }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* HEADER TAB PLOT: pilihan bulan + Buat Plot Baru + Export PDF */}
+          {activeTab === "PLOT" && (
+            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>📅 Plot Tugas Harian</h2>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                <select value={bulanPlotAktif} onChange={(e) => setBulanFilterPlot(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                  {bulanTersediaPlot.length > 0 ? bulanTersediaPlot.map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>) : <option value={bulanPlotAktif}>{formatBulanLabel(bulanPlotAktif)}</option>}
+                </select>
+                <button onClick={() => router.push("/dashboard/ob/plotting")} style={{ background: "var(--ok)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  + Buat Plot Baru
+                </button>
+                <button onClick={handlePrint} style={{ background: "var(--info)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <IconPrinter /> Export PDF
+                </button>
               </div>
             </div>
           )}
 
           {/* ============================== TAB 1: CHECKLIST ============================== */}
           {activeTab === "CHECKLIST" && (
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+            <>
+              {/* Versi cetak: flat, semua baris kefilter tampil, tanpa foto (biar PDF gak berat) */}
+              <table className="print-only">
                 <thead>
-                  <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Waktu Laporan</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Petugas OB</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Area</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Status Kebersihan</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Foto</th>
-                  </tr>
+                  <tr><th>Waktu</th><th>Petugas</th><th>Area</th><th>Status</th></tr>
                 </thead>
                 <tbody>
-                  {filteredChecklists.length > 0 ? filteredChecklists.map((item) => {
-                    const statusRingkas = getStatusRingkas(item.detail_tugas);
-                    const isOpen = expandedId === item.id;
-                    return (
-                      <Fragment key={item.id}>
-                        <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                          <td style={{ padding: "12px 15px", color: "var(--muted)" }}>{formatWaktu(item.waktu_selesai)}</td>
-                          <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--info)" }}>{item.pic_bertugas}</td>
-                          <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}>{item.area}</td>
-                          <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                            <span style={{
-                              background: statusRingkas === "Bersih Sempurna" ? "var(--ok-50)" : statusRingkas === "Belum Lengkap" ? "var(--red-50)" : "var(--warn-50)",
-                              color: statusRingkas === "Bersih Sempurna" ? "var(--ok)" : statusRingkas === "Belum Lengkap" ? "var(--red-700)" : "var(--warn)",
-                              padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold"
-                            }}>
-                              {statusRingkas}
-                            </span>
-                          </td>
-                          <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                            <button
-                              onClick={() => setExpandedId(isOpen ? null : item.id)}
-                              style={{ background: isOpen ? "var(--ok)" : "var(--bg)", color: isOpen ? "white" : "var(--ink-soft)", border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
-                            >
-                              {isOpen ? "Tutup ▲" : "Lihat Foto ▼"}
-                            </button>
-                          </td>
-                        </tr>
-          
-                        {isOpen && (
-                          <tr>
-                            <td colSpan={5} style={{ padding: "0", background: "var(--bg)" }}>
-                              <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "15px" }}>
-                                {item.detail_tugas && item.detail_tugas.length > 0 ? item.detail_tugas.map((sub, sIdx) => (
-                                  <div key={sIdx} style={{ background: "var(--surface)", padding: "15px", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                                    <div style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "13px", marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
-                                      <span>{sub.nama_tugas}</span>
-                                      <span style={{ fontSize: "10px", padding: "3px 8px", background: "var(--bg)", borderRadius: "6px", color: "var(--ink-soft)" }}>{sub.status}</span>
-                                    </div>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", maxWidth: "400px" }}>
-                                      <div>
-                                        <div style={{ fontSize: "10px", color: "var(--red-600)", fontWeight: "900", marginBottom: "6px", textAlign: "center" }}>SEBELUM</div>
-                                        {sub.foto_before ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img src={sub.foto_before} alt="Sebelum" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--red-50)", cursor: "pointer" }} onClick={() => window.open(sub.foto_before!, "_blank")} />
-                                        ) : (
-                                          <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", borderRadius: "8px", color: "var(--muted)", fontSize: "11px", fontStyle: "italic" }}>Tidak ada foto</div>
-                                        )}
-                                      </div>
-                                      <div>
-                                        <div style={{ fontSize: "10px", color: "var(--ok)", fontWeight: "900", marginBottom: "6px", textAlign: "center" }}>SESUDAH</div>
-                                        {sub.foto_after ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img src={sub.foto_after} alt="Sesudah" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--ok-50)", cursor: "pointer" }} onClick={() => window.open(sub.foto_after!, "_blank")} />
-                                        ) : (
-                                          <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", borderRadius: "8px", color: "var(--muted)", fontSize: "11px", fontStyle: "italic" }}>Tidak ada foto</div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )) : (
-                                  <div style={{ textAlign: "center", color: "var(--muted)", fontSize: "12px" }}>Tidak ada rincian tugas untuk laporan ini.</div>
-                                )}
-                              </div>
+                  {filteredChecklists.map((item) => (
+                    <tr key={item.id}>
+                      <td>{formatWaktu(item.waktu_selesai)}</td>
+                      <td>{item.pic_bertugas}</td>
+                      <td>{item.area}</td>
+                      <td>{getStatusRingkas(item.detail_segmen)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="no-print" style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
+                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Waktu Laporan</th>
+                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Petugas OB</th>
+                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Area</th>
+                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Status Kebersihan</th>
+                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredChecklists.length > 0 ? filteredChecklists.map((item) => {
+                      const statusRingkas = getStatusRingkas(item.detail_segmen);
+                      const isOpen = expandedId === item.id;
+                      const isBersih = statusRingkas === "Bersih Sempurna";
+                      const isKosong = statusRingkas === "Belum Ada Data";
+                      return (
+                        <Fragment key={item.id}>
+                          <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                            <td style={{ padding: "12px 15px", color: "var(--muted)" }}>{formatWaktu(item.waktu_selesai)}</td>
+                            <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--info)" }}>{item.pic_bertugas}</td>
+                            <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}>{item.area}</td>
+                            <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                              <span style={{
+                                background: isBersih ? "var(--ok-50)" : isKosong ? "var(--bg)" : "var(--red-50)",
+                                color: isBersih ? "var(--ok)" : isKosong ? "var(--muted)" : "var(--red-700)",
+                                padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold"
+                              }}>
+                                {statusRingkas}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                              <button
+                                onClick={() => setExpandedId(isOpen ? null : item.id)}
+                                style={{ background: isOpen ? "var(--ok)" : "var(--bg)", color: isOpen ? "white" : "var(--ink-soft)", border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+                              >
+                                {isOpen ? "Tutup ▲" : "Lihat Detail ▼"}
+                              </button>
                             </td>
                           </tr>
-                        )}
-                      </Fragment>
-                    );
-                  }) : (
-                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
 
-          {/* ============================== TAB 2: STOCK OPNAME ============================== */}
-          {activeTab === "STOCK" && (
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                <thead>
-                  <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Nama Barang</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Sisa Stok (Qty)</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Batas Minimum</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Diupdate Oleh</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Terakhir Diupdate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStocks.length > 0 ? filteredStocks.map((item) => {
-                    const isLowStock = item.qty <= item.batas_minimum;
-                    return (
-                      <tr key={item.id} style={{ borderBottom: "1px solid var(--line)", background: isLowStock ? "var(--red-50)" : "var(--surface)" }}>
-                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--ink)" }}>{item.nama_barang}</td>
-                        <td style={{ padding: "12px 15px", textAlign: "center", fontWeight: "900", color: isLowStock ? "var(--red-600)" : "var(--ok)", fontSize: "14px" }}>
-                          {item.qty}
-                          {isLowStock && <div style={{ fontSize: "9px", color: "var(--red-600)", marginTop: "4px", background: "var(--red-50)", padding: "2px 6px", borderRadius: "4px", display: "inline-block" }}>LOW STOCK</div>}
-                        </td>
-                        <td style={{ padding: "12px 15px", textAlign: "center", color: "var(--muted)", fontWeight: "bold" }}>{item.batas_minimum}</td>
-                        <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}>
-                          <span style={{ background: "var(--bg)", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span>
-                        </td>
-                        <td style={{ padding: "12px 15px", color: "var(--muted)", fontSize: "11px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
-                      </tr>
-                    );
-                  }) : (
-                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada data barang di inventori.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          {isOpen && (
+                            <tr>
+                              <td colSpan={5} style={{ padding: "0", background: "var(--bg)" }}>
+                                <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "15px" }}>
+                                  {(item.detail_segmen || []).map((segment, sIdx) => (
+                                    <div key={sIdx} style={{ background: "var(--surface)", padding: "15px", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                                      <div style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "12.5px", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{segment.nama_segment}</div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        {segment.jawaban.map((j, jIdx) => (
+                                          <div key={jIdx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: "8px", background: j.jawaban === "Ya" ? "var(--ok-50)" : "var(--red-50)" }}>
+                                            <span style={{ fontSize: "12px", color: "var(--ink)" }}>{j.teks}</span>
+                                            <span style={{ fontSize: "10px", fontWeight: "900", padding: "3px 8px", borderRadius: "6px", background: j.jawaban === "Ya" ? "var(--ok)" : "var(--red-600)", color: "white" }}>{j.jawaban.toUpperCase()}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
 
-          {/* ============================== TAB 3: RESTOCK PENGAJUAN BARANG ============================== */}
-          {activeTab === "RESTOCK" && (
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                <thead>
-                  <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Waktu Pengajuan</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Barang Diminta</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Stok Saat Diminta</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Pemohon</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Status & Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPR.length > 0 ? filteredPR.map((pr) => {
-                    const isPending = pr.status === "Menunggu Approval";
-                    return (
-                      <tr key={pr.id} style={{ borderBottom: "1px solid var(--line)", background: isPending ? "var(--warn-50)" : "var(--surface)" }}>
-                        <td style={{ padding: "12px 15px", color: "var(--muted)" }}>{formatWaktu(pr.waktu_pengajuan)}</td>
-                        <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--ink)", fontSize: "14px" }}>{pr.nama_barang}</td>
-                        <td style={{ padding: "12px 15px" }}>
-                          <span style={{ background: "var(--red-50)", color: "var(--red-700)", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>Sisa: {pr.sisa_stok}</span>
-                        </td>
-                        <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}>{pr.diajukan_oleh}</td>
-                        <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                          {isPending ? (
-                            <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
-                              <button onClick={() => handleUpdatePR(pr.id, "Disetujui / Proses Beli")} style={{ background: "var(--ok)", color: "white", border: "none", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>✔️ Setujui</button>
-                              <button onClick={() => handleUpdatePR(pr.id, "Ditolak / Ditunda")} style={{ background: "var(--red-600)", color: "white", border: "none", padding: "6px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>❌ Tolak</button>
-                            </div>
-                          ) : (
-                            <span style={{ 
-                              background: pr.status.includes("Disetujui") ? "var(--ok-50)" : "var(--red-50)", 
-                              color: pr.status.includes("Disetujui") ? "var(--ok)" : "var(--red-700)", 
-                              padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" 
-                            }}>
-                              {pr.status}
-                            </span>
+                                  {(item.foto_bukti || []).length > 0 && (
+                                    <div>
+                                      <div style={{ fontWeight: "bold", color: "var(--ink-soft)", fontSize: "11px", marginBottom: "8px", textTransform: "uppercase" }}>Foto Bukti</div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                        {item.foto_bukti.map((f, fIdx) => (
+                                          <div key={fIdx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", maxWidth: "400px" }}>
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={f.before} alt="Sebelum" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--red-50)", cursor: "pointer" }} onClick={() => window.open(f.before, "_blank")} />
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={f.after} alt="Sesudah" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--ok-50)", cursor: "pointer" }} onClick={() => window.open(f.after, "_blank")} />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {(!item.detail_segmen || item.detail_segmen.length === 0) && (!item.foto_bukti || item.foto_bukti.length === 0) && (
+                                    <div style={{ textAlign: "center", color: "var(--muted)", fontSize: "12px" }}>Tidak ada rincian untuk laporan ini.</div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                        </td>
+                        </Fragment>
+                      );
+                    }) : (
+                      <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{bulanFilter !== "SEMUA" ? " di bulan ini" : ""}.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* ============================== TAB 2: STOCK & PENGADAAN ============================== */}
+          {activeTab === "STOCK" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
+
+              {/* PENGADAAN URGENT */}
+              <div>
+                <h3 style={{ margin: "0 0 4px 0", color: "var(--red-700)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>🚨 Pengadaan Urgent</h3>
+                <p style={{ margin: "0 0 12px 0", color: "var(--muted)", fontSize: "12px" }}>Sudah di titik/bawah batas minimum — perlu dibeli sekarang.</p>
+                {daftarUrgent.length > 0 ? (
+                  <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                      <thead><tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
+                        <th style={{ padding: "12px 15px" }}>Nama Barang</th><th style={{ padding: "12px 15px" }}>Sisa</th><th style={{ padding: "12px 15px" }}>Batas Min.</th><th style={{ padding: "12px 15px" }}>Pemakaian/Bulan</th><th style={{ padding: "12px 15px" }}>Disarankan Beli</th>
+                      </tr></thead>
+                      <tbody>
+                        {daftarUrgent.map((a) => (
+                          <tr key={a.item.id} style={{ borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "10px 15px", fontWeight: "bold" }}>{a.item.nama_barang}</td>
+                            <td style={{ padding: "10px 15px", color: "var(--red-600)", fontWeight: "bold" }}>{a.item.qty}</td>
+                            <td style={{ padding: "10px 15px", color: "var(--muted)" }}>{a.item.batas_minimum}</td>
+                            <td style={{ padding: "10px 15px" }}>{a.adaDataPemakaian ? `${Math.round(a.rataRataPerBulan)} / bulan` : "Belum ada data"}</td>
+                            <td style={{ padding: "10px 15px" }}><span style={{ background: "var(--red-600)", color: "white", padding: "4px 9px", borderRadius: "20px", fontSize: "11px", fontWeight: 800 }}>Beli {a.jumlahDisarankan} pcs</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: "12px", border: "1px dashed var(--line)", borderRadius: "10px" }}>Aman — tidak ada barang urgent.</div>}
+              </div>
+
+              {/* RENCANA BELANJA BULAN DEPAN */}
+              <div>
+                <h3 style={{ margin: "0 0 4px 0", color: "var(--warn)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>🛒 Rencana Belanja Bulan Depan</h3>
+                <p style={{ margin: "0 0 12px 0", color: "var(--muted)", fontSize: "12px" }}>Masih aman, tapi diproyeksikan turun ke batas minimum akhir bulan ini.</p>
+                {daftarBulanDepan.length > 0 ? (
+                  <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                      <thead><tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
+                        <th style={{ padding: "12px 15px" }}>Nama Barang</th><th style={{ padding: "12px 15px" }}>Sisa</th><th style={{ padding: "12px 15px" }}>Pemakaian/Bulan</th><th style={{ padding: "12px 15px" }}>Proyeksi Akhir Bulan</th><th style={{ padding: "12px 15px" }}>Disarankan Beli</th>
+                      </tr></thead>
+                      <tbody>
+                        {daftarBulanDepan.map((a) => (
+                          <tr key={a.item.id} style={{ borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "10px 15px", fontWeight: "bold" }}>{a.item.nama_barang}</td>
+                            <td style={{ padding: "10px 15px" }}>{a.item.qty}</td>
+                            <td style={{ padding: "10px 15px" }}>{Math.round(a.rataRataPerBulan)} / bulan</td>
+                            <td style={{ padding: "10px 15px", color: "var(--warn)", fontWeight: "bold" }}>{a.proyeksiSisaAkhirBulan !== null && a.proyeksiSisaAkhirBulan > 0 ? `≈ ${a.proyeksiSisaAkhirBulan}` : "Bakal habis sebelum akhir bulan"}</td>
+                            <td style={{ padding: "10px 15px" }}><span style={{ background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.3)", padding: "4px 9px", borderRadius: "20px", fontSize: "11px", fontWeight: 800 }}>Beli {a.jumlahDisarankan} pcs</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: "12px", border: "1px dashed var(--line)", borderRadius: "10px" }}>Belum ada barang yang diproyeksikan turun bulan ini.</div>}
+              </div>
+
+              {/* KONDISI STOK GUDANG (mentah) */}
+              <div>
+                <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "14px" }}>📋 Kondisi Stok Gudang (Semua Item)</h3>
+                <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
+                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Nama Barang</th>
+                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Sisa Stok (Qty)</th>
+                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Batas Minimum</th>
+                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Diupdate Oleh</th>
+                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Terakhir Diupdate</th>
                       </tr>
-                    );
-                  }) : (
-                    <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada pengajuan pembelian barang dari OB.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {filteredStocks.length > 0 ? filteredStocks.map((item) => {
+                        const isLowStock = item.qty <= item.batas_minimum;
+                        return (
+                          <tr key={item.id} style={{ borderBottom: "1px solid var(--line)", background: isLowStock ? "var(--red-50)" : "var(--surface)" }}>
+                            <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--ink)" }}>{item.nama_barang}</td>
+                            <td style={{ padding: "12px 15px", textAlign: "center", fontWeight: "900", color: isLowStock ? "var(--red-600)" : "var(--ok)", fontSize: "14px" }}>{item.qty}</td>
+                            <td style={{ padding: "12px 15px", textAlign: "center", color: "var(--muted)", fontWeight: "bold" }}>{item.batas_minimum}</td>
+                            <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}><span style={{ background: "var(--bg)", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span></td>
+                            <td style={{ padding: "12px 15px", color: "var(--muted)", fontSize: "11px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada data barang di inventori.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* ============================== TAB 4: PLOT PENEMPATAN ============================== */}
+          {/* ============================== TAB 3: INSPEKSI FASILITAS ============================== */}
+          {activeTab === "INSPEKSI" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              {filteredInspeksi.length > 0 ? filteredInspeksi.map((log) => {
+                const rusak = log.hasil.filter((h) => h.kondisi === "Rusak");
+                return (
+                  <div key={log.id} style={{ border: "1px solid var(--line)", borderRadius: "16px", padding: "18px", background: rusak.length > 0 ? "var(--red-50)" : "var(--surface)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
+                      <div>
+                        <h3 style={{ margin: "0 0 3px 0", color: "var(--ink)", fontSize: "15px" }}>{log.area}</h3>
+                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>{log.pic_bertugas} &middot; Minggu {log.minggu_mulai} &middot; {formatWaktu(log.waktu_selesai)}</span>
+                      </div>
+                      <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
+                        {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {log.hasil.map((h, i) => (
+                        <span key={i} title={h.catatan || undefined} style={{ fontSize: "11px", fontWeight: 700, padding: "5px 10px", borderRadius: "8px", color: "white", background: h.kondisi === "Rusak" ? "var(--red-600)" : h.kondisi === "Tidak Ada" ? "var(--muted)" : "var(--ok)" }}>
+                          {h.nama}: {h.kondisi}
+                        </span>
+                      ))}
+                    </div>
+                    {rusak.length > 0 && (
+                      <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {rusak.map((h, i) => (
+                          <div key={i} style={{ fontSize: "12px", color: "var(--red-700)", background: "var(--surface)", padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(220,38,38,0.2)" }}>
+                            <strong>{h.nama}:</strong> {h.catatan}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }) : (
+                <div style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada laporan inspeksi fasilitas.</div>
+              )}
+            </div>
+          )}
+
+          {/* ============================== TAB 4: PLOT PENEMPATAN — 1 TABEL PER BULAN ============================== */}
           {activeTab === "PLOT" && (
             <div>
               {dailyPlots.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                  {dailyPlots.map((plot) => (
-                    <div key={plot.id} style={{ border: "1px solid var(--line)", borderRadius: "12px", overflow: "hidden" }}>
-                      <div style={{ background: "var(--bg)", padding: "15px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between" }}>
-                        <div><h3 style={{ margin: 0, color: "var(--info)", fontSize: "16px" }}>{formatDateOnly(plot.tanggal)}</h3><p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--muted)" }}>Oleh: {plot.dibuat_oleh}</p></div>
-                        <span style={{ fontSize: "11px", background: "var(--line)", color: "var(--ink-soft)", padding: "4px 10px", borderRadius: "20px", fontWeight: "bold", height: "fit-content" }}>Diupdate: {formatWaktu(plot.waktu_update)}</span>
-                      </div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                          <thead>
-                            <tr>{kolomLantai.map(l => <th key={l} style={{ padding: "12px", borderBottom: "1px solid var(--line)", borderRight: "1px solid var(--line)", color: "var(--ink-soft)", minWidth: "120px" }}>{l}</th>)}</tr>
-                          </thead>
-                          <tbody>
-                            <tr>{kolomLantai.map(l => {
-                              const petugas = plot.plot_lantai?.[l] || "Belum diplot";
-                              return <td key={l} style={{ padding: "12px", borderRight: "1px solid var(--line)", color: petugas === "Belum diplot" ? "var(--muted)" : "var(--ink)", fontWeight: petugas === "Belum diplot" ? "normal" : "bold" }}>{petugas}</td>;
-                            })}</tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "12.5px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
+                        <th style={{ padding: "12px 15px", borderBottom: "2px solid var(--line)", whiteSpace: "nowrap" }}>Tanggal</th>
+                        {kolomLantai.map((l) => <th key={l} style={{ padding: "12px 15px", borderBottom: "2px solid var(--line)", minWidth: "110px" }}>{l}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {daftarTanggalBulanPlot.map((tgl) => {
+                        const weekend = isWeekend(tgl);
+                        const plot = plotMapBulanIni[tgl];
+                        const namaHari = NAMA_HARI_SINGKAT[new Date(`${tgl}T00:00:00`).getDay()];
+                        return (
+                          <tr key={tgl} style={{ borderBottom: "1px solid var(--line)", background: weekend ? "var(--bg)" : "var(--surface)" }}>
+                            <td style={{ padding: "10px 15px", fontWeight: "bold", color: weekend ? "var(--muted)" : "var(--ink)", whiteSpace: "nowrap" }}>
+                              {Number(tgl.slice(8, 10))} {namaHari}{weekend ? " · Libur" : ""}
+                            </td>
+                            {kolomLantai.map((l) => {
+                              const petugas = weekend ? "-" : (plot?.plot_lantai?.[l] || "Belum diplot");
+                              return <td key={l} style={{ padding: "10px 15px", color: petugas === "Belum diplot" || petugas === "-" ? "var(--muted)" : "var(--ink-soft)", fontWeight: petugas === "Belum diplot" || petugas === "-" ? "normal" : "bold" }}>{petugas}</td>;
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "12px" }}>Belum ada catatan pembagian tugas OB.</div>
