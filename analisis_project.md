@@ -1,8 +1,47 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 29 Agustus 2026
+Update terakhir: 29 Agustus 2026 (lanjutan — fix portal utama)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
+
+---
+
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 29 Agustus 2026)
+
+Reza istirahat 2-3 jam, dokumen ini di-update biar chat/sesi berikutnya (atau Reza sendiri) langsung nyambung tanpa baca ulang semua histori di bawah. Detail teknis lengkap tiap poin ada di §8E-§10B (cari nomor section-nya).
+
+### A. Apa yang dikerjakan sesi ini (fokus: modul OB & CS, ujung ke ujung)
+
+Urutan kronologis, semua di `components/pages/` kecuali disebut lain:
+
+1. **`DashboardOBPage.tsx`** (§8E) — redesign visual penuh ke sistem token yang sama dengan portal/admin (bukan sistem warna baru). Kartu shift, peringatan stok menipis, panel koordinator, grid menu, bottom nav mobile — semua ikut token.
+2. **`ChecklistOBPage.tsx`** (§8F, §8G) — redesign visual + 5 fitur baru: (a) daftar item checklist per-lantai diperbaiki sesuai fasilitas fisik asli (Lantai 1 & 5 tadinya pakai template generik yang salah), (b) minimal 2 pasang foto before/after wajib (dulu cuma 1, sekarang ada modal peringatan kalau kurang), (c) reminder WA checklist digeser dari tiap 2 jam ke tiap 3 jam, (d) badge "SESI N" di riwayat (nomor urut laporan per hari per area), (e) Lantai 5 (area kerja bersama) otomatis "selesai buat semua staf" begitu 1 orang submit — gak perlu dikerjain ulang berkali-kali.
+3. **`PlottingOBPage.tsx`** (§8F) — fix: OB & CS gak ada jadwal Sabtu/Minggu (generate otomatis 30 hari sekarang skip weekend, kalender kasih tanda "Libur").
+4. **`StockOpnamePage.tsx`** (§8H) — rombak total: hapus fitur "pengajuan pembelian ke Admin GA" (Reza bilang gak berfungsi), ganti dengan analisa pemakaian rata-rata otomatis + 2 tabel baru (Pengadaan Urgent, Rencana Belanja Bulan Depan) yang nyaranin jumlah beli.
+5. **`InspeksiFasilitasPage.tsx`** (§8I, §8J) — halaman baru, GANTI TOTAL fitur lama "Lapor Kerusakan" (form bebas). Sekarang checklist inspeksi fasilitas MINGGUAN per area (Baik/Rusak/Tidak Ada per fasilitas), daftar fasilitas disesuaikan per area asli (Basement: Genset/Gudang/Mesin Air/Pompa Hydrant/Taman; Lantai 5: Gudang/Ruang Pompa/Rooftop/Tandon Air; lantai lain: daftar generik 11 item). Temuan "Rusak" tetap otomatis diteruskan ke Helpdesk Admin GA (satu-satunya bagian fitur lama yang dipertahankan).
+6. **⚠️ Temuan besar, 3x kejadian**: route `app/dashboard/ob/{plotting,stok,laporan}/page.tsx` ternyata BUKAN thin wrapper ke `components/pages/` seperti yang diklaim di dokumen lama (§4) — masih serve kode duplikat lama secara utuh, jadi semua fix di atas SEMPAT gak muncul di browser sampai ketauan & dibenerin satu-satu. **Sekarang SEMUA route `dashboard/ob/*` sudah benar tersambung** (checklist, deep-cleaning, plotting, stok, laporan — 5/5).
+7. **`admin/monitor-ob/page.tsx`** (§10, §10B) — Reza laporan "laporan yang muncul tidak sesuai", ternyata halaman ini emang udah lama baca bentuk data yang SALAH/gak pernah ditulis sama sekali oleh halaman OB manapun. Dibenerin total: interface checklist disamain ke bentuk data asli (`detail_segmen`+`foto_bukti`, bukan `detail_tugas` yang gak pernah ada), tab "Pengajuan Barang" dihapus (nganggur, fiturnya udah gak ada), tab Plot Tugas Harian dibenerin dari bug fatal (query `orderBy("tanggal")` padahal dokumennya gak punya field itu sama sekali — tab ini KOSONG dari awal, bukan bug baru) sekaligus diredesign jadi 1 tabel simpel per bulan (dropdown bulan, bukan 90 kartu berulang), tab baru Inspeksi Fasilitas ditambahkan, tombol "+ Buat Plot Baru" (link ke halaman plotting) & "Export PDF" (`window.print()`, buat kebutuhan audit) ditambahkan di 2 tab (Log Pembersihan & Plot).
+8. **Firestore**: 2 composite index baru dibikin & di-deploy langsung dari sini pakai Firebase CLI (`inspeksi_fasilitas`, `daily_plots`) — `firestore.indexes.json` sekarang jadi acuan index buat project ini (sebelumnya semua index dikelola manual lewat klik Console, gak pernah ke-track di kode).
+9. **Deploy ke production — 2x** (urutan: commit dev → push dev → merge ke main → push main → `npm run build` → `firebase deploy` → balik ke dev). **Live di https://sibm-app.web.app**, branch `dev` & `main` sinkron, working tree bersih di titik ini.
+
+### B. Status teknis di titik berhenti ini
+
+- `npx tsc --noEmit`: 0 error. `npx eslint`: 0 error (14 warning, semuanya pre-existing dari sebelum sesi ini, dikonfirmasi lewat `git stash` — bukan warning baru).
+- `npm run build`: sukses, 30 halaman static export.
+- Semua perubahan SUDAH di-commit & di-deploy (2 commit: `0c7491f` dan `695585a` di branch `dev`, sudah di-merge ke `main`).
+- Diverifikasi pakai data REAL production (bukan cuma data testing) — termasuk beberapa temuan langsung dari Reza yang sempat coba fitur baru di https://sibm-app.web.app pasca-deploy pertama.
+
+### C. Yang perlu dilanjutkan (urutan bukan prioritas ketat — tanya Reza kalau mulai chat baru)
+
+1. **Belum dites end-to-end asli**: badge "Sesi" & fitur "Lantai 5 selesai buat semua staf" (§8G poin 4-5) baru diverifikasi lewat code review + type-check, belum ada submit checklist sungguhan (upload foto asli) yang dites langsung buat 2 fitur ini.
+2. **Reminder WA checklist jam baru** (tiap 3 jam, ~09:00/12:00/15:00/18:00 WITA) sudah live tapi belum dikonfirmasi beneran jalan sesuai jadwal — baru kelihatan pas jam-jam itu lewat beneran.
+3. **`admin/monitor-security`** — belum dicek apakah punya masalah data-shape yang sama kayak `monitor-ob` sebelum diperbaiki (kemungkinan iya, pola project ini konsisten kalau ada 1 halaman monitoring yang datanya udah gak nyambung).
+4. **Migrasi struktur folder `admin/*`** (§4 poin 5) — tampilannya udah diredesign penuh (§8C/§8D) tapi semua 11 file masih monolitik di `app/admin/*/page.tsx`, belum dipecah ke `components/pages/`. Portal publik `app/page.tsx` (§4 poin 6) sama kondisinya.
+5. **Audit performa Firestore listener** (dari 29 Agustus, §5 lama) — banyak `onSnapshot` di portal/security/dll masih tanpa `limit()`. Juga ada 1 bug leak nyata yang belum difix: `DeepCleaningPage.tsx` — `onSnapshot` gak pernah ke-unsubscribe dengan benar.
+6. **CS belum punya halaman terpisah dari OB** — masih 1 "OB & CS Desk" gabungan. Kalau Reza mau dipisah, belum dikerjakan.
+7. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`.
+
+Open questions lama yang masih nunggu (belum berubah dari sebelum sesi ini): lihat §6.
 
 ---
 
@@ -162,7 +201,9 @@ Kalau nemu bug lama di tengah jalan, sekalian dibenerin pas migrasi biar gak nam
 
 ---
 
-## 5. NEXT STEP (mulai chat baru dari sini)
+## 5. NEXT STEP (arsip — SUDAH DIGANTIKAN §0 di atas, dibiarkan sebagai riwayat historis)
+
+> ⚠️ Section ini ditulis SEBELUM sesi fokus OB & CS (§8E-§10B). Banyak poin di bawah udah selesai/berubah — buat status TERKINI & lanjutan yang beneran aktif, lihat **§0** di paling atas dokumen ini. Section ini dibiarkan apa adanya buat jejak historis, bukan buat diikuti lagi.
 
 - **Selesai**: dedup kendaraan (§3B) terkonfirmasi benar — Firestore & tabel admin sama-sama nunjukin 10 unit fisik.
 - **Selesai**: fix bug kedua slideshow tampil 13 vs Firestore 10 (§3B lanjutan) — belum dikonfirmasi ketest langsung user.
@@ -420,4 +461,50 @@ Reza laporan "laporan yang muncul tidak sesuai" di `admin/monitor-ob` — invest
 
 **Bug baru ketemu & difix pas verifikasi (hydration mismatch)**: baris "Dicetak: {new Date()...}" di kop cetak dihitung langsung di render — karena project ini `output: "export"` (prerender di build time), teks jam yang di-render di server (waktu build) beda sama yang di-render di client (waktu buka beneran), bikin React hydration error. Fix: nilai jam dipindah ke state yang cuma di-set pas tombol Export PDF diklik (bukan dihitung tiap render), jadi render awal server & client SAMA (string kosong).
 
-**Verifikasi**: `npx tsc --noEmit` 0 error, `npx eslint` 0 error, `npm run build` sukses 30 halaman. Dicek di dev server (habis di-restart bersih — kena lagi kasus stale dev-server state kayak §8F/§8I) pakai data PRODUCTION asli (bukan cuma data testing) karena Reza sempat coba fitur baru langsung di https://sibm-app.web.app pasca-deploy: Log Pembersihan nampilin histori asli dari 10 Juni sampai 28 Agustus dengan status benar (ketauan juga insight baru: dokumen sebelum ~18 Agustus emang beneran gak punya `detail_segmen`, kemungkinan dari skema lama — ini temuan data quality yang jujur, bukan bug tampilan), filter bulan jalan (Agustus/Juli/Juni kedeteksi otomatis dari data). Stok & Pengadaan nampilin 6 barang urgent + 2 barang bulan depan sama persis kayak yang OB lihat. Inspeksi Fasilitas nampilin 1 laporan asli (Lantai 5, Hilal Akbar, semua Baik) — bukti fitur §8I jalan end-to-end di production. Plot Tugas Harian nampilin 90 hari plotting asli (termasuk hasil generate otomatis yang tembus sampai Januari 2027!), weekend kedeteksi benar. **Belum di-commit/deploy** — beda batch kerjaan dari §9, Reza belum diminta buat commit/deploy ulang untuk perbaikan ini.
+**Verifikasi**: `npx tsc --noEmit` 0 error, `npx eslint` 0 error, `npm run build` sukses 30 halaman. Dicek di dev server (habis di-restart bersih — kena lagi kasus stale dev-server state kayak §8F/§8I) pakai data PRODUCTION asli (bukan cuma data testing) karena Reza sempat coba fitur baru langsung di https://sibm-app.web.app pasca-deploy: Log Pembersihan nampilin histori asli dari 10 Juni sampai 28 Agustus dengan status benar (ketauan juga insight baru: dokumen sebelum ~18 Agustus emang beneran gak punya `detail_segmen`, kemungkinan dari skema lama — ini temuan data quality yang jujur, bukan bug tampilan), filter bulan jalan (Agustus/Juli/Juni kedeteksi otomatis dari data). Stok & Pengadaan nampilin 6 barang urgent + 2 barang bulan depan sama persis kayak yang OB lihat. Inspeksi Fasilitas nampilin 1 laporan asli (Lantai 5, Hilal Akbar, semua Baik) — bukti fitur §8I jalan end-to-end di production. Plot Tugas Harian nampilin 90 hari plotting asli (termasuk hasil generate otomatis yang tembus sampai Januari 2027!), weekend kedeteksi benar.
+
+### 10B. Redesign tab Plot jadi 1 tabel per bulan + tombol Buat Plot & Export PDF (29 Agustus 2026, lanjutan)
+
+Reza minta tab Plot (§10) yang tadinya kartu-per-hari berulang (90 kartu, masing-masing punya tabel 7 kolom sendiri — kebanyakan scroll, "kurang simple") diganti jadi 1 tabel per bulan yang lebih ringkas, plus tombol buat plot baru & export PDF, serta pilihan bulan (matching pola yang udah ada di tab Log Pembersihan §10).
+
+- Listener `daily_plots` gak dipotong lagi ke 90 dokumen terakhir — diambil semua (collection-nya kecil, ~1 dok/hari) karena sekarang ada dropdown bulan yang bisa loncat jauh ke depan/belakang (ada data ke-generate sampai Januari 2027).
+- Tabel baru: 1 baris per tanggal dalam bulan terpilih (pola sama kayak kalender di `PlottingOBPage.tsx` — `daftarTanggalBulanPlot`, `NAMA_HARI_SINGKAT`, `isWeekend`), kolom tetap 7 area. Baris weekend nampilin "· Libur" + semua kolom "-". Dropdown bulan cuma nampilin bulan yang beneran ada datanya, default ke bulan berjalan (fallback ke bulan terbaru yang ada kalau bulan ini kosong).
+- **Tombol "+ Buat Plot Baru"**: navigasi ke `/dashboard/ob/plotting` — TIDAK bikin UI create/edit plot baru di dalam `monitor-ob` (itu bakal duplikasi logic rotasi staff/generate-otomatis yang udah lengkap di `PlottingOBPage.tsx`). Akses admin ke situ udah otomatis diizinkan (`bolehAkses` di `PlottingOBPage.tsx` include `role.includes("Administrator")`), jadi tinggal link, gak perlu ubah apa-apa di sisi plotting.
+- **Tombol "Export PDF"** (`handlePrint`) & kop cetak sekarang dinamis ikut tab aktif (judul & label bulan beda buat Plot vs Log Pembersihan).
+
+**Verifikasi**: `npx tsc --noEmit` 0 error, `npx eslint` 0 error, `npm run build` sukses 30 halaman. Dicek di dev server data real: dropdown nampilin 8 bulan (Juni 2026 - Januari 2027), default kebuka di Agustus 2026 (bulan berjalan), tabel Agustus nampilin 31 baris dengan weekend/weekday benar, tombol "Buat Plot Baru" dikonfirmasi navigasi ke `/dashboard/ob/plotting`.
+
+**Commit & deploy kedua (29 Agustus 2026)**: urutan yang sama kayak §9 dijalanin lagi buat gabungan §10 (fix data monitor-ob) + §10B (redesign tab Plot) — commit `695585a` ("Perbaiki admin/monitor-ob..."), push dev, merge ke main (bersih, gak ada konflik), push main, build sukses, `firebase deploy` sukses (hosting + firestore indexes). **Live di https://sibm-app.web.app.** Balik ke branch `dev` di akhir sesuai perintah.
+
+## 11. FIX Portal Utama `app/page.tsx` (29 Agustus 2026, lanjutan — balik dari admin/monitor-ob)
+
+Reza minta balik dulu ke portal publik (`app/page.tsx`) sebelum lanjut ke dashboard admin, ada 6 keluhan konkret. Semua fix di file yang sama, murni tampilan + 1 bug data (gak ada perubahan skema Firestore).
+
+1. **Kalender Aktivitas gak informatif**: sel heatmap dulu cuma kotak warna polos (tanggal cuma ada di `title` tooltip, gak kelihatan tanpa hover). Sekarang tiap sel nampilin ANGKA TANGGAL asli di dalam kotaknya (warna teks otomatis putih kalau sel gelap/level tinggi, biar tetap kebaca).
+2. **Tim Bertugas Hari Ini nampilin OB padahal weekend harusnya kosong**: root cause SAMA PERSIS kelas bug yang udah difix di `PlottingOBPage.tsx`/`admin/monitor-ob` (§8F/§10) — dokumen `daily_plots/{tanggal}` lama yang belum di-regenerate ulang masih nyimpan `plot_lantai` basi buat tanggal Sabtu/Minggu, dan portal baca mentah-mentah tanpa cek weekend. Fix: helper baru `isWeekend(iso)` (pola sama kayak file lain), `hadirOB` dipaksa array kosong kalau `todayISO` weekend — regardless data Firestore.
+3. **Plot Besok muncul walau besok weekend**: subscription `onSnapshot(daily_plots/{tomorrowISO})` (aktif >=20:00 WITA) sekarang di-skip total kalau `tomorrowISO` weekend (`isWeekend(tomorrowISO)`), bukan cuma ngandelin data kosong dari Firestore.
+4. **Tombol "+" (FAB) tengah bottom-nav**: dulu cuma scroll ke section Menu Cepat. Sekarang langsung buka modal Lapor Bahaya (SBO) (`setActiveModal("sbo")`), ikon diganti `IconAlertTriangle` (segitiga peringatan, dari `IconPlus`). Card "Bahaya SBO" di grid Menu Cepat **dihapus** (sudah kepegang FAB, gak perlu dobel).
+5. **Icon lonceng notifikasi di header atas dihapus total** (dulu cuma `window.scrollTo(top)`, gak ada halaman notifikasi publik sungguhan — dead-end button). Tombol "Staf Internal" di header tetap ada.
+6. **2 tombol bottom-nav diganti fungsinya** (dari sekadar scroll-to-section jadi shortcut modal beneran):
+   - "Monitor" (dulu scroll ke Tren Aktivitas) → **"Kerusakan"** (`IconWrench`), langsung buka modal Helpdesk GA (`setActiveModal("helpdesk")`) — ini yang dimaksud "lapor kerusakan fasilitas".
+   - "Info" (dulu lonceng, scroll ke atas) → **"ATK"** (`IconClipboard`), langsung buka modal Request ATK (`setActiveModal("atk")`) — ini yang dimaksud "pengajuan atk".
+   - Bottom-nav final: Home · Kerusakan · [FAB: Lapor SBO] · ATK · Profil.
+
+**Dead code dibersihkan sekalian** (biar gak nambah warning lint): komponen ikon `IconBell`/`IconChart`/`IconPlus` dan fungsi `scrollKeSection` dihapus (udah gak ada pemanggil setelah perubahan di atas), CSS `.header-icon-btn`/`.header-icon-dot` dihapus. Section id `menu-cepat-section` & `tren-aktivitas-section` DIBIARKAN (masih valid sebagai anchor DOM, gak ada downside dibiarkan walau gak ada lagi yang scroll ke situ).
+
+**Verifikasi**: `npx tsc --noEmit` 0 error, `npx eslint src/app/page.tsx` 0 error/warning baru. Dicek di dev server pakai data real (tanggal berjalan 29 Agustus 2026 = Sabtu, dikonfirmasi di §8F): "OB & CS Bertugas" nampilin `0` (bukan salah nampilin staf), Tim Bertugas Hari Ini cuma nampilin Security + 2 Driver (gak ada OB), Plot Besok gak muncul sama sekali (besok = Minggu, juga weekend). Kalender Aktivitas nampilin tanggal 1-31 asli di tiap sel. Bottom-nav mobile dites klik satu-satu via JS (`element.click()`, browser pane sempat kepakai background sehingga klik `computer` tool timeout — bukan berarti UI-nya rusak, cuma test tool yang gak reliable pas pane hidden): FAB tengah buka modal SBO, "Kerusakan" buka Helpdesk GA, "ATK" buka Gudang ATK GA — semua benar. **Belum di-commit** (nunggu instruksi lanjut ke dashboard admin selesai dulu, sesuai kebiasaan project ini nge-commit di akhir sesi/batch besar, bukan per-file).
+
+**Catatan buat sesi lanjut ke dashboard admin**: Reza eksplisit bilang "setelah itu baru kita kembali lagi ke tampilan dashboard admin" — jadi setelah fix ini dikonfirmasi Reza, lanjut ke `app/admin/page.tsx` / subhalaman admin (redesign shell & badan konten sudah ada di §8C/§8D, tapi migrasi struktur folder #5 di §4 masih belum dikerjakan — mungkin ini yang dimaksud "kembali ke dashboard admin", perlu diklarifikasi dulu di awal chat/giliran berikutnya apakah maksudnya redesign lanjutan, migrasi struktur, atau ada keluhan baru spesifik kayak sesi ini).
+
+### 11B. Revisi §11 — beda perilaku mobile vs web yang diminta Reza (29 Agustus 2026, lanjutan lagi)
+
+Setelah §11 dicoba Reza, ada 4 revisi (semua di `app/page.tsx`, gak ada perubahan lain):
+
+1. **Tombol "Staf Internal" di header** — dulu dihapus niatnya cuma icon lonceng doang, ternyata tombol login ini juga diminta hilang **TAPI HANYA DI MOBILE** (karena akses staf sudah ada di bottom-nav "Profil"). Di desktop tombolnya harus tetap ada (gak ada bottom-nav sama sekali di desktop, jadi ini satu-satunya akses login di layar lebar).
+2. **Card "Request ATK" dan "Kerusakan" di grid Menu Cepat** — sama kayak "Bahaya SBO" yang udah dihapus di §11, ternyata harusnya juga cuma disembunyikan **DI MOBILE** (karena sudah ada shortcut sama-sama persis di bottom-nav: ATK, Kerusakan, FAB). §11 kemarin kelewatan menghapus totalnya padahal harusnya cuma disembunyikan kondisional.
+3. **Card "Bahaya SBO" DIKEMBALIKAN** ke grid Menu Cepat (sempat dihapus total di §11) — sama alasannya, cuma perlu disembunyikan di mobile, BUKAN dihapus permanen, karena di desktop gak ada FAB/bottom-nav pengganti.
+4. **Kalender Aktivitas**: angka tanggal di tiap sel (baru ditambahkan di §11) dibikin lebih besar & tegas — `font-size` 10px → 13px (14px di layar >=480px), `font-weight` non-hari-ini 600 → 700, warna teks sel kosong `var(--muted)` (abu pucat) → `var(--ink-soft)` (lebih gelap, kontras lebih baik).
+
+**Cara implementasi poin 1-3**: dipakai ulang class `.desktop-only-hide` yang sebelumnya didefinisikan di CSS tapi gak pernah dipasang ke elemen manapun (`display:block` di layar >768px, `display:none` di <=768px — kebalikan dari `.mobile-only`). Elemen yang perlu ikut aturan ini DIBUNGKUS wrapper `<div className="desktop-only-hide">` terpisah (bukan taruh class ini langsung gabung di elemen yang sudah punya inline `style={{ display: "flex" }}` sendiri) — soalnya inline `style` React SELALU menang dibanding aturan class dari stylesheet biasa untuk properti yang sama, jadi kalau class ditaruh langsung di elemen yang punya inline `display:flex`, aturan `display:none` dari class pas mobile gak akan pernah kepakai. Wrapper div polos (gak ada inline `display` sendiri) beres masalah ini.
+
+**Verifikasi**: `npx tsc --noEmit` 0 error, `npx eslint src/app/page.tsx` 0 error/warning baru. Dicek di dev server 2 breakpoint: mobile (375px) — header cuma logo+tanggal (gak ada tombol Staf Internal), Menu Cepat cuma 3 card (Lacak Tamu, Resi Paket, Lembur AC), bottom-nav 5 tombol lengkap (Home/Kerusakan/FAB SBO/ATK/Profil); desktop (800px) — tombol "Staf Internal" muncul di header, Menu Cepat lengkap 6 card (termasuk Request ATK, Kerusakan, Bahaya SBO). Kalender Aktivitas dicek `getComputedStyle` langsung (`font-size: 14px`, `font-weight: 700` di desktop, naik dari 10px/600 sebelumnya) + screenshot visual, angka tanggal jelas kebaca. **Belum di-commit** — masih nunggu instruksi lanjut ke dashboard admin.

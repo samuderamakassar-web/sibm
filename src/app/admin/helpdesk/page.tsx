@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../../../lib/notify";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -38,6 +38,7 @@ interface HelpdeskTicket {
   foto_awal?: string;
   foto_proses?: string;
   waktu_lapor?: Timestamp | null;
+  waktu_selesai?: Timestamp | null;
 }
 
 type StatusFilterType = "Semua" | "Menunggu" | "Sedang Dikerjakan" | "Selesai";
@@ -46,11 +47,6 @@ const STATUS_TONE: Record<string, "warning" | "info" | "success"> = {
   Menunggu: "warning",
   "Sedang Dikerjakan": "info",
   Selesai: "success",
-};
-const STATUS_CARD_BG: Record<string, string> = {
-  Menunggu: "var(--warn-50)",
-  "Sedang Dikerjakan": "var(--info-50)",
-  Selesai: "var(--ok-50)",
 };
 
 export default function AdminHelpdeskPage() {
@@ -68,6 +64,12 @@ export default function AdminHelpdeskPage() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const [filterStatus, setFilterStatus] = useState<StatusFilterType>("Semua");
+  const [previewFoto, setPreviewFoto] = useState<string | null>(null);
+
+  // Filter Bulan & Tahun (berdasarkan waktu_lapor) -- dipisah jadi 2 dropdown independen
+  // (bukan 1 dropdown gabungan "Agustus 2026") biar bisa lihat "semua Agustus lintas tahun" dst.
+  const [filterBulan, setFilterBulan] = useState<string>("SEMUA");
+  const [filterTahun, setFilterTahun] = useState<string>("SEMUA");
 
   useEffect(() => {
     const role = localStorage.getItem("pic_role");
@@ -103,6 +105,11 @@ export default function AdminHelpdeskPage() {
   const formatJam = (ts: Timestamp | null | undefined) => {
     if (!ts) return "-";
     return new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatTanggal = (ts: Timestamp | null | undefined) => {
+    if (!ts) return "-";
+    return new Date(ts.toDate()).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
   };
 
   const handleBukaModal = (tiket: HelpdeskTicket) => {
@@ -144,11 +151,18 @@ export default function AdminHelpdeskPage() {
     }
 
     const statusBerubah = statusUbah !== selectedTicket.status;
+    // Rekam waktu_selesai cuma sekali, pas pertama kali tiket ditutup (Selesai) -- supaya kalau admin buka lagi
+    // buat lihat detail, waktu penyelesaian aslinya gak ketiban ulang.
+    const baruTertutup = statusUbah === "Selesai" && selectedTicket.status !== "Selesai";
 
     setIsUpdating(true);
     try {
       const ref = doc(db, "helpdesk_tickets", selectedTicket.id);
-      await updateDoc(ref, { status: statusUbah, foto_proses: fotoHasil || null });
+      await updateDoc(ref, {
+        status: statusUbah,
+        foto_proses: fotoHasil || null,
+        ...(baruTertutup ? { waktu_selesai: serverTimestamp() } : {}),
+      });
 
       if (statusBerubah) {
         await kirimNotifikasiHelpdesk(selectedTicket.nama_pelapor, statusUbah, selectedTicket.id);
@@ -191,7 +205,18 @@ export default function AdminHelpdeskPage() {
     }
   };
 
-  const filteredTickets = filterStatus === "Semua" ? tickets : tickets.filter((t) => t.status === filterStatus);
+  const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  const tahunTersedia = Array.from(
+    new Set(tickets.filter((t) => t.waktu_lapor).map((t) => String(t.waktu_lapor!.toDate().getFullYear())))
+  ).sort().reverse();
+
+  const filteredTickets = tickets.filter((t) => {
+    const matchStatus = filterStatus === "Semua" || t.status === filterStatus;
+    const tglLapor = t.waktu_lapor?.toDate();
+    const matchBulan = filterBulan === "SEMUA" || (tglLapor && String(tglLapor.getMonth()) === filterBulan);
+    const matchTahun = filterTahun === "SEMUA" || (tglLapor && String(tglLapor.getFullYear()) === filterTahun);
+    return matchStatus && matchBulan && matchTahun;
+  });
 
   if (!isReady) return null;
 
@@ -232,6 +257,28 @@ export default function AdminHelpdeskPage() {
           background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
         }
         .admin-hero-content { position: relative; }
+
+        .helpdesk-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
+        .helpdesk-table th { padding: 12px 15px; font-weight: bold; }
+        .helpdesk-table td { padding: 12px 15px; vertical-align: top; border-bottom: 1px solid var(--line); word-wrap: break-word; }
+        .helpdesk-table tbody tr:hover td { filter: brightness(0.98); }
+        .helpdesk-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
+
+        @media (max-width: 900px) {
+          .helpdesk-table, .helpdesk-table tbody { display: block; width: 100%; }
+          .helpdesk-table thead { display: none; }
+          .helpdesk-table tr {
+            display: block; width: 100%; margin-bottom: 15px;
+            border: 1px solid var(--line); border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden;
+          }
+          .helpdesk-table td {
+            display: block; width: 100%; padding: 12px 15px !important;
+            border-bottom: 1px dashed var(--line) !important;
+          }
+          .helpdesk-table td:last-child { border-bottom: none !important; }
+          .helpdesk-table td::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+        }
       `}} />
       <div className="site-header">
         <button className="back-btn" onClick={() => router.push("/admin")}>
@@ -249,59 +296,104 @@ export default function AdminHelpdeskPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: "1300px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         <Card style={{ marginBottom: "20px" }}>
-          <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px" }}>
-            {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai"] as StatusFilterType[]).map((status) => {
-              const count = status === "Semua" ? tickets.length : tickets.filter((t) => t.status === status).length;
-              const active = filterStatus === status;
-              return (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: active ? "var(--info)" : "var(--bg)", color: active ? "var(--surface)" : "var(--ink-soft)", fontSize: "13px" }}
-                >
-                  {status} ({count})
-                </button>
-              );
-            })}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px" }}>
+              {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai"] as StatusFilterType[]).map((status) => {
+                const count = status === "Semua" ? tickets.length : tickets.filter((t) => t.status === status).length;
+                const active = filterStatus === status;
+                return (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: active ? "var(--info)" : "var(--bg)", color: active ? "var(--surface)" : "var(--ink-soft)", fontSize: "13px" }}
+                  >
+                    {status} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <select
+                value={filterBulan}
+                onChange={(e) => setFilterBulan(e.target.value)}
+                style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}
+              >
+                <option value="SEMUA">Semua Bulan</option>
+                {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
+              </select>
+              <select
+                value={filterTahun}
+                onChange={(e) => setFilterTahun(e.target.value)}
+                style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}
+              >
+                <option value="SEMUA">Semua Tahun</option>
+                {tahunTersedia.map((th) => <option key={th} value={th}>{th}</option>)}
+              </select>
+            </div>
           </div>
         </Card>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "20px" }}>
+        <div style={{ background: "var(--surface)", borderRadius: "16px", border: "1px solid var(--line)", overflow: "hidden" }}>
           {filteredTickets.length > 0 ? (
-            filteredTickets.map((tiket) => (
-              <Card key={tiket.id} padded={false} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                <div style={{ padding: "15px", background: STATUS_CARD_BG[tiket.status] || "var(--surface)", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontWeight: "900", color: "var(--ink)", fontSize: "15px", marginBottom: "3px" }}>📍 {tiket.lokasi}</div>
-                    <div style={{ fontSize: "11px", color: "var(--muted)" }}>Dilaporkan: {formatJam(tiket.waktu_lapor)}</div>
-                  </div>
-                  <Badge tone={STATUS_TONE[tiket.status] || "neutral"}>{tiket.status}</Badge>
-                </div>
-
-                <div style={{ padding: "15px", flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "var(--bg)", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "14px" }}>🧑‍💼</div>
-                    <div>
-                      <div style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink)" }}>{tiket.nama_pelapor}</div>
-                      <div style={{ fontSize: "11px", color: "var(--muted)" }}>{tiket.departemen}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: "13px", color: "var(--ink-soft)", background: "var(--bg)", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontStyle: "italic", minHeight: "50px" }}>
-                    &quot;{tiket.deskripsi}&quot;
-                  </div>
-                </div>
-
-                <div style={{ padding: "15px", borderTop: "1px solid var(--line)", background: "var(--bg)" }}>
-                  <Button variant="primary" onClick={() => handleBukaModal(tiket)}>
-                    {tiket.status === "Selesai" ? "Lihat Detail Bukti" : "Tindak Lanjuti Laporan"}
-                  </Button>
-                </div>
-              </Card>
-            ))
+            <div style={{ overflowX: "auto" }}>
+              <table className="helpdesk-table">
+                <thead style={{ background: "var(--bg)" }}>
+                  <tr>
+                    <th style={{ width: "14%" }}>Pelapor</th>
+                    <th style={{ width: "10%" }}>Tanggal</th>
+                    <th style={{ width: "18%" }}>Keluhan</th>
+                    <th style={{ width: "9%" }}>Foto Laporan</th>
+                    <th style={{ width: "13%" }}>Waktu Lapor</th>
+                    <th style={{ width: "13%" }}>Waktu Selesai</th>
+                    <th style={{ width: "9%" }}>Foto Selesai</th>
+                    <th style={{ width: "8%" }}>Status</th>
+                    <th style={{ width: "10%" }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTickets.map((tiket) => (
+                    <tr key={tiket.id}>
+                      <td data-label="Pelapor">
+                        <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{tiket.nama_pelapor}</div>
+                        <div style={{ fontSize: "11px", color: "var(--muted)" }}>{tiket.departemen}</div>
+                        <div style={{ fontSize: "11px", color: "var(--muted)" }}>📍 {tiket.lokasi}</div>
+                      </td>
+                      <td data-label="Tanggal">{formatTanggal(tiket.waktu_lapor)}</td>
+                      <td data-label="Keluhan">
+                        <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>&quot;{tiket.deskripsi}&quot;</span>
+                      </td>
+                      <td data-label="Foto Laporan">
+                        {tiket.foto_awal ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={tiket.foto_awal} alt="Foto Laporan" className="helpdesk-thumb" onClick={() => setPreviewFoto(tiket.foto_awal!)} />
+                        ) : <span style={{ color: "var(--muted)", fontSize: "12px" }}>-</span>}
+                      </td>
+                      <td data-label="Waktu Lapor" style={{ fontSize: "12px" }}>{formatJam(tiket.waktu_lapor)}</td>
+                      <td data-label="Waktu Selesai" style={{ fontSize: "12px" }}>{formatJam(tiket.waktu_selesai)}</td>
+                      <td data-label="Foto Selesai">
+                        {tiket.foto_proses ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={tiket.foto_proses} alt="Foto Selesai" className="helpdesk-thumb" onClick={() => setPreviewFoto(tiket.foto_proses!)} />
+                        ) : <span style={{ color: "var(--muted)", fontSize: "12px" }}>-</span>}
+                      </td>
+                      <td data-label="Status">
+                        <Badge tone={STATUS_TONE[tiket.status] || "neutral"}>{tiket.status}</Badge>
+                      </td>
+                      <td data-label="Aksi">
+                        <Button variant="primary" onClick={() => handleBukaModal(tiket)} style={{ fontSize: "12px", padding: "8px 12px" }}>
+                          {tiket.status === "Selesai" ? "Lihat Detail" : "Tindak Lanjuti"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "50px 20px", background: "var(--surface)", borderRadius: "20px", border: "1px dashed var(--line)", color: "var(--muted)" }}>
+            <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--muted)" }}>
               <div style={{ fontSize: "40px", marginBottom: "10px" }}>🎉</div>
               <h3 style={{ margin: "0 0 5px 0", color: "var(--ink-soft)" }}>Tidak ada tiket di kategori ini!</h3>
               <p style={{ margin: 0, fontSize: "13px" }}>Tim GA sedang bersantai atau semua fasilitas dalam kondisi prima.</p>
@@ -309,6 +401,14 @@ export default function AdminHelpdeskPage() {
           )}
         </div>
       </div>
+
+      {/* LIGHTBOX FOTO */}
+      <Modal open={!!previewFoto} onClose={() => setPreviewFoto(null)} maxWidth="600px">
+        {previewFoto && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewFoto} alt="Preview Foto" style={{ width: "100%", borderRadius: "12px" }} />
+        )}
+      </Modal>
 
       <Modal open={!!selectedTicket} onClose={() => setSelectedTicket(null)} maxWidth="600px">
         {selectedTicket && (

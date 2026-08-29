@@ -48,18 +48,35 @@ const getStatusRingkas = (segmen: SegmentLog[]) => {
   return `${jumlahTidak} Item Perlu Perhatian`;
 };
 
-function getBulanKeyChecklist(item: ChecklistOB): string {
-  if (item.tanggal) return item.tanggal.slice(0, 7);
-  if (item.waktu_selesai) {
-    const d = item.waktu_selesai.toDate();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  }
-  return "unknown";
-}
 function formatBulanLabel(bulanKey: string): string {
   if (bulanKey === "unknown") return "Tanpa Tanggal";
   const [y, m] = bulanKey.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+}
+
+const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+// Label periode utk kop cetak, dari 2 filter independen (bulan 0-11 / "SEMUA", tahun / "SEMUA")
+function formatPeriodeLabel(filterBulan: string, filterTahun: string): string {
+  if (filterBulan === "SEMUA" && filterTahun === "SEMUA") return "Semua Periode";
+  const bulanLabel = filterBulan !== "SEMUA" ? NAMA_BULAN[Number(filterBulan)] : "";
+  const tahunLabel = filterTahun !== "SEMUA" ? filterTahun : "";
+  return [bulanLabel, tahunLabel].filter(Boolean).join(" ");
+}
+
+// Ambil {tahun, bulan (0-11)} dari sebuah dokumen ChecklistOB -- prioritas field `tanggal`
+// (lebih akurat, ini tanggal kerja beneran), fallback ke waktu_selesai buat dokumen lama yang
+// belum punya field tanggal. Dipakai buat filter Bulan & Tahun terpisah (bukan 1 dropdown gabungan).
+function getTahunBulanChecklist(item: ChecklistOB): { tahun: number; bulan: number } | null {
+  if (item.tanggal) {
+    const [y, m] = item.tanggal.split("-").map(Number);
+    if (y && m) return { tahun: y, bulan: m - 1 };
+  }
+  if (item.waktu_selesai) {
+    const d = item.waktu_selesai.toDate();
+    return { tahun: d.getFullYear(), bulan: d.getMonth() };
+  }
+  return null;
 }
 
 interface StockItem {
@@ -140,12 +157,24 @@ interface InspeksiLog {
   hasil: { nama: string; kondisi: Kondisi; catatan: string; foto: string }[];
 }
 
+// Sama polanya dgn getTahunBulanChecklist -- minggu_mulai selalu ada (field wajib), jadi gak perlu fallback.
+function getTahunBulanInspeksi(item: InspeksiLog): { tahun: number; bulan: number } | null {
+  const [y, m] = (item.minggu_mulai || "").split("-").map(Number);
+  if (!y || !m) return null;
+  return { tahun: y, bulan: m - 1 };
+}
+
 export default function MonitorOBPage() {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminName, setAdminName] = useState("Admin");
   const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "INSPEKSI" | "PLOT">("CHECKLIST");
-  const [bulanFilter, setBulanFilter] = useState<string>("SEMUA");
+  // Filter Bulan & Tahun Log Pembersihan (dipisah jadi 2 dropdown independen)
+  const [filterBulanChecklist, setFilterBulanChecklist] = useState<string>("SEMUA");
+  const [filterTahunChecklist, setFilterTahunChecklist] = useState<string>("SEMUA");
+  // Filter Bulan & Tahun Inspeksi Fasilitas
+  const [filterBulanInspeksi, setFilterBulanInspeksi] = useState<string>("SEMUA");
+  const [filterTahunInspeksi, setFilterTahunInspeksi] = useState<string>("SEMUA");
   const [bulanFilterPlot, setBulanFilterPlot] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -224,15 +253,27 @@ export default function MonitorOBPage() {
   const daftarUrgent = analisaSemuaBarang.filter((a) => a.isUrgent);
   const daftarBulanDepan = analisaSemuaBarang.filter((a) => a.isPerluBulanDepan);
 
-  const bulanTersedia = Array.from(new Set(checklists.map(getBulanKeyChecklist))).sort().reverse();
-  const checklistBulanIni = bulanFilter === "SEMUA" ? checklists : checklists.filter((c) => getBulanKeyChecklist(c) === bulanFilter);
-  const filteredChecklists = checklistBulanIni.filter(
-    (c) => c.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) || c.area?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const tahunTersediaChecklist = Array.from(
+    new Set(checklists.map((c) => getTahunBulanChecklist(c)?.tahun).filter((y): y is number => !!y))
+  ).sort((a, b) => b - a);
+  const filteredChecklists = checklists.filter((c) => {
+    const tb = getTahunBulanChecklist(c);
+    const matchBulan = filterBulanChecklist === "SEMUA" || tb?.bulan === Number(filterBulanChecklist);
+    const matchTahun = filterTahunChecklist === "SEMUA" || tb?.tahun === Number(filterTahunChecklist);
+    const matchSearch = c.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) || c.area?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchBulan && matchTahun && matchSearch;
+  });
 
-  const filteredInspeksi = inspeksiList.filter(
-    (i) => i.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) || i.area?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const tahunTersediaInspeksi = Array.from(
+    new Set(inspeksiList.map((i) => getTahunBulanInspeksi(i)?.tahun).filter((y): y is number => !!y))
+  ).sort((a, b) => b - a);
+  const filteredInspeksi = inspeksiList.filter((i) => {
+    const tb = getTahunBulanInspeksi(i);
+    const matchBulan = filterBulanInspeksi === "SEMUA" || tb?.bulan === Number(filterBulanInspeksi);
+    const matchTahun = filterTahunInspeksi === "SEMUA" || tb?.tahun === Number(filterTahunInspeksi);
+    const matchSearch = i.pic_bertugas?.toLowerCase().includes(searchQuery.toLowerCase()) || i.area?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchBulan && matchTahun && matchSearch;
+  });
   const rusakBaruBaruIni = inspeksiList.slice(0, 30).reduce((sum, i) => sum + i.hasil.filter((h) => h.kondisi === "Rusak").length, 0);
 
   const kolomLantai = ["Basement", "Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Lantai 5", "Pelayanan Khusus OB"];
@@ -327,7 +368,14 @@ export default function MonitorOBPage() {
       {/* 🖨️ KOP CETAK — cuma muncul pas print */}
       <div className="print-only" style={{ marginBottom: "15px", borderBottom: "2px solid #2d3748", paddingBottom: "10px" }}>
         <h2 style={{ margin: 0 }}>
-          {activeTab === "PLOT" ? "Plot Tugas Harian OB & CS" : "Log Pembersihan OB & CS"} — {activeTab === "PLOT" ? formatBulanLabel(bulanPlotAktif) : (bulanFilter === "SEMUA" ? "Semua Periode" : formatBulanLabel(bulanFilter))}
+          {activeTab === "PLOT" ? "Plot Tugas Harian OB & CS" : activeTab === "INSPEKSI" ? "Laporan Inspeksi Fasilitas" : "Log Pembersihan OB & CS"}
+          {activeTab === "PLOT"
+            ? ` — ${formatBulanLabel(bulanPlotAktif)}`
+            : activeTab === "CHECKLIST"
+            ? ` — ${formatPeriodeLabel(filterBulanChecklist, filterTahunChecklist)}`
+            : activeTab === "INSPEKSI"
+            ? ` — ${formatPeriodeLabel(filterBulanInspeksi, filterTahunInspeksi)}`
+            : ""}
         </h2>
         <p style={{ margin: "4px 0 0", fontSize: "11px" }}>Dicetak: {waktuCetak}</p>
       </div>
@@ -363,11 +411,30 @@ export default function MonitorOBPage() {
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                 {activeTab === "CHECKLIST" && (
                   <>
-                    <select value={bulanFilter} onChange={(e) => setBulanFilter(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select value={filterBulanChecklist} onChange={(e) => setFilterBulanChecklist(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
                       <option value="SEMUA">Semua Bulan</option>
-                      {bulanTersedia.map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>)}
+                      {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
+                    </select>
+                    <select value={filterTahunChecklist} onChange={(e) => setFilterTahunChecklist(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                      <option value="SEMUA">Semua Tahun</option>
+                      {tahunTersediaChecklist.map((th) => <option key={th} value={String(th)}>{th}</option>)}
                     </select>
                     <button onClick={handlePrint} style={{ background: "var(--info)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <IconPrinter /> Export PDF
+                    </button>
+                  </>
+                )}
+                {activeTab === "INSPEKSI" && (
+                  <>
+                    <select value={filterBulanInspeksi} onChange={(e) => setFilterBulanInspeksi(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                      <option value="SEMUA">Semua Bulan</option>
+                      {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
+                    </select>
+                    <select value={filterTahunInspeksi} onChange={(e) => setFilterTahunInspeksi(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                      <option value="SEMUA">Semua Tahun</option>
+                      {tahunTersediaInspeksi.map((th) => <option key={th} value={String(th)}>{th}</option>)}
+                    </select>
+                    <button onClick={handlePrint} style={{ background: "var(--accent)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                       <IconPrinter /> Export PDF
                     </button>
                   </>
@@ -405,22 +472,53 @@ export default function MonitorOBPage() {
           {/* ============================== TAB 1: CHECKLIST ============================== */}
           {activeTab === "CHECKLIST" && (
             <>
-              {/* Versi cetak: flat, semua baris kefilter tampil, tanpa foto (biar PDF gak berat) */}
-              <table className="print-only">
-                <thead>
-                  <tr><th>Waktu</th><th>Petugas</th><th>Area</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                  {filteredChecklists.map((item) => (
-                    <tr key={item.id}>
-                      <td>{formatWaktu(item.waktu_selesai)}</td>
-                      <td>{item.pic_bertugas}</td>
-                      <td>{item.area}</td>
-                      <td>{getStatusRingkas(item.detail_segmen)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* Versi cetak: laporan lengkap per entri — rincian checklist per segmen (Ya/Tidak) + foto bukti before/after,
+                  bukan cuma ringkasan status. Dibatasi filteredChecklists yang sama dgn layar (ikut bulan & pencarian aktif). */}
+              <div className="print-only">
+                <div style={{ fontSize: "10px", marginBottom: "10px" }}>Total laporan: {filteredChecklists.length}</div>
+                {filteredChecklists.map((item) => {
+                  const statusRingkas = getStatusRingkas(item.detail_segmen);
+                  return (
+                    <div key={item.id} style={{ border: "1px solid #cbd5e0", borderRadius: "6px", padding: "10px 12px", marginBottom: "12px", breakInside: "avoid" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: "12px", marginBottom: "3px" }}>
+                        <span>{item.area}</span>
+                        <span>{formatWaktu(item.waktu_selesai)}</span>
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#4a5568", marginBottom: "8px" }}>
+                        Petugas: {item.pic_bertugas} &nbsp;|&nbsp; Status: {statusRingkas}
+                      </div>
+
+                      {(item.detail_segmen || []).map((segment, sIdx) => (
+                        <div key={sIdx} style={{ marginBottom: "6px" }}>
+                          <div style={{ fontWeight: "bold", fontSize: "10px", textTransform: "uppercase", marginBottom: "3px" }}>{segment.nama_segment}</div>
+                          {(segment.jawaban || []).map((j, jIdx) => (
+                            <div key={jIdx} style={{ display: "flex", justifyContent: "space-between", fontSize: "9.5px", padding: "2px 0", borderBottom: "1px dotted #cbd5e0" }}>
+                              <span>{j.teks}</span>
+                              <span style={{ fontWeight: "bold" }}>{j.jawaban}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+
+                      {(item.foto_bukti || []).length > 0 && (
+                        <div style={{ marginTop: "8px" }}>
+                          <div style={{ fontSize: "9.5px", fontWeight: "bold", marginBottom: "4px" }}>Foto Bukti (Sebelum / Sesudah)</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                            {item.foto_bukti.map((f, fIdx) => (
+                              <Fragment key={fIdx}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={f.before} alt="Sebelum" style={{ width: "90px", height: "110px", objectFit: "cover", border: "1px solid #cbd5e0", borderRadius: "4px" }} />
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={f.after} alt="Sesudah" style={{ width: "90px", height: "110px", objectFit: "cover", border: "1px solid #cbd5e0", borderRadius: "4px" }} />
+                              </Fragment>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
               <div className="no-print" style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
@@ -508,7 +606,7 @@ export default function MonitorOBPage() {
                         </Fragment>
                       );
                     }) : (
-                      <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{bulanFilter !== "SEMUA" ? " di bulan ini" : ""}.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{(filterBulanChecklist !== "SEMUA" || filterTahunChecklist !== "SEMUA") ? " di periode ini" : ""}.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -611,40 +709,71 @@ export default function MonitorOBPage() {
           {/* ============================== TAB 3: INSPEKSI FASILITAS ============================== */}
           {activeTab === "INSPEKSI" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              {filteredInspeksi.length > 0 ? filteredInspeksi.map((log) => {
-                const rusak = log.hasil.filter((h) => h.kondisi === "Rusak");
-                return (
-                  <div key={log.id} style={{ border: "1px solid var(--line)", borderRadius: "16px", padding: "18px", background: rusak.length > 0 ? "var(--red-50)" : "var(--surface)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
-                      <div>
-                        <h3 style={{ margin: "0 0 3px 0", color: "var(--ink)", fontSize: "15px" }}>{log.area}</h3>
-                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>{log.pic_bertugas} &middot; Minggu {log.minggu_mulai} &middot; {formatWaktu(log.waktu_selesai)}</span>
+              {/* Versi cetak: rincian lengkap tiap sesi inspeksi — semua titik cek (Baik/Rusak/Tidak Ada), catatan, dan foto. */}
+              <div className="print-only">
+                <div style={{ fontSize: "10px", marginBottom: "10px" }}>Total sesi inspeksi: {filteredInspeksi.length}</div>
+                {filteredInspeksi.map((log) => (
+                  <div key={log.id} style={{ border: "1px solid #cbd5e0", borderRadius: "6px", padding: "10px 12px", marginBottom: "12px", breakInside: "avoid" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: "12px", marginBottom: "3px" }}>
+                      <span>{log.area}</span>
+                      <span>{formatWaktu(log.waktu_selesai)}</span>
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#4a5568", marginBottom: "8px" }}>
+                      Petugas: {log.pic_bertugas} &nbsp;|&nbsp; Minggu: {log.minggu_mulai}
+                    </div>
+                    {(log.hasil || []).map((h, hIdx) => (
+                      <div key={hIdx} style={{ marginBottom: "4px", fontSize: "9.5px", padding: "2px 0", borderBottom: "1px dotted #cbd5e0" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span>{h.nama}</span>
+                          <span style={{ fontWeight: "bold" }}>{h.kondisi}</span>
+                        </div>
+                        {h.catatan && <div style={{ color: "#4a5568", fontStyle: "italic" }}>Catatan: {h.catatan}</div>}
+                        {h.foto && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={h.foto} alt={h.nama} style={{ width: "90px", height: "90px", objectFit: "cover", border: "1px solid #cbd5e0", borderRadius: "4px", marginTop: "4px" }} />
+                        )}
                       </div>
-                      <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
-                        {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                      {log.hasil.map((h, i) => (
-                        <span key={i} title={h.catatan || undefined} style={{ fontSize: "11px", fontWeight: 700, padding: "5px 10px", borderRadius: "8px", color: "white", background: h.kondisi === "Rusak" ? "var(--red-600)" : h.kondisi === "Tidak Ada" ? "var(--muted)" : "var(--ok)" }}>
-                          {h.nama}: {h.kondisi}
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                {filteredInspeksi.length > 0 ? filteredInspeksi.map((log) => {
+                  const rusak = log.hasil.filter((h) => h.kondisi === "Rusak");
+                  return (
+                    <div key={log.id} style={{ border: "1px solid var(--line)", borderRadius: "16px", padding: "18px", background: rusak.length > 0 ? "var(--red-50)" : "var(--surface)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
+                        <div>
+                          <h3 style={{ margin: "0 0 3px 0", color: "var(--ink)", fontSize: "15px" }}>{log.area}</h3>
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>{log.pic_bertugas} &middot; Minggu {log.minggu_mulai} &middot; {formatWaktu(log.waktu_selesai)}</span>
+                        </div>
+                        <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
+                          {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
                         </span>
-                      ))}
-                    </div>
-                    {rusak.length > 0 && (
-                      <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                        {rusak.map((h, i) => (
-                          <div key={i} style={{ fontSize: "12px", color: "var(--red-700)", background: "var(--surface)", padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(220,38,38,0.2)" }}>
-                            <strong>{h.nama}:</strong> {h.catatan}
-                          </div>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                        {log.hasil.map((h, i) => (
+                          <span key={i} title={h.catatan || undefined} style={{ fontSize: "11px", fontWeight: 700, padding: "5px 10px", borderRadius: "8px", color: "white", background: h.kondisi === "Rusak" ? "var(--red-600)" : h.kondisi === "Tidak Ada" ? "var(--muted)" : "var(--ok)" }}>
+                            {h.nama}: {h.kondisi}
+                          </span>
                         ))}
                       </div>
-                    )}
-                  </div>
-                );
-              }) : (
-                <div style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada laporan inspeksi fasilitas.</div>
-              )}
+                      {rusak.length > 0 && (
+                        <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {rusak.map((h, i) => (
+                            <div key={i} style={{ fontSize: "12px", color: "var(--red-700)", background: "var(--surface)", padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(220,38,38,0.2)" }}>
+                              <strong>{h.nama}:</strong> {h.catatan}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }) : (
+                  <div style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada laporan inspeksi fasilitas.</div>
+                )}
+              </div>
             </div>
           )}
 
