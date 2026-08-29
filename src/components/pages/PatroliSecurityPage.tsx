@@ -9,6 +9,53 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 
 // ==========================================
+// IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
+// ==========================================
+type IconProps = { size?: number; color?: string };
+const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
+);
+const IconSiren = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 18v-6a5 5 0 0 1 10 0v6" /><path d="M5 18h14v2H5z" /><path d="M12 2v2M4.2 6.2l1.4 1.4M19.8 6.2l-1.4 1.4" /></svg>
+);
+const IconHistory = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /><path d="M12 7v5l4 2" /></svg>
+);
+const IconTarget = ({ size = 17, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></svg>
+);
+const IconChevronDown = ({ size = 16, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+);
+const IconCamera = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2l1-1.6A1.5 1.5 0 0 1 9.5 3.6h5a1.5 1.5 0 0 1 1.3.8L17 6h1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" /><circle cx="12" cy="13" r="3.5" /></svg>
+);
+const IconCheck = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+);
+const IconX = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="M6 6l12 12" /></svg>
+);
+const IconClipboardCheck = ({ size = 16, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="m9 14 2 2 4-4" /></svg>
+);
+const IconRocket = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 16s-1-5 4-9c4-3.4 8-3 8-3s.4 4-3 8c-4 5-9 4-9 4z" /><path d="M9 15l-4 4" /><circle cx="14.5" cy="9.5" r="1.5" /></svg>
+);
+const IconAlertTriangle = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.5 4.5 2.9 18a2 2 0 0 0 1.8 3h14.6a2 2 0 0 0 1.8-3L13.5 4.5a2 2 0 0 0-3 0z" /><path d="M12 10v4" /><path d="M12 17h.01" /></svg>
+);
+const IconInboxEmpty = ({ size = 40, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
+);
+const IconSettings = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+);
+const IconMapPin = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-6.7 7-12a7 7 0 1 0-14 0c0 5.3 7 12 7 12z" /><circle cx="12" cy="9" r="2.5" /></svg>
+);
+
+// ==========================================
 // 1. DATA TITIK PATROLI
 // ==========================================
 const GROUPED_PATROLI: Record<string, { id: string, nama: string }[]> = {
@@ -306,31 +353,78 @@ export default function PatroliSecurityPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        * { box-sizing: border-box; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .top-bar {
+          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
+          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+          position: sticky; top: 0; z-index: 50;
+        }
+        .back-link { background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-weight: bold; font-size: 14px; font-family: inherit; }
+        .tab-switch { background: var(--bg); padding: 4px; border-radius: 10px; display: flex; gap: 4px; }
+        .tab-btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+        .tab-btn.active { background: var(--surface); color: var(--red-600); box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+
+        .page-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
+          padding: 36px 20px 70px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .page-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .page-hero-content { position: relative; }
+
+        .panel { background: var(--surface); padding: 22px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border: 1px solid var(--line); }
+        .floor-card { background: var(--surface); border-radius: 16px; overflow: hidden; }
+        .floor-head { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .point-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--surface); border-radius: 10px; }
+        .scan-btn { background: var(--red-600); color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+        .missed-input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(217,119,6,0.4); font-size: 13px; font-family: inherit; outline: none; }
+
+        @media (max-width: 640px) {
+          .panel { padding: 16px !important; border-radius: 16px !important; }
+        }
+      `}} />
 
       {/* 🔹 TOP BAR NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <button onClick={() => router.push("/dashboard/security")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>⬅️ <span style={{ fontSize: "14px", fontWeight: "bold", color: "#2d3748" }}>Kembali</span></button>
+      <div className="top-bar">
+        <button className="back-link" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /> Kembali</button>
 
         {/* FITUR TAB BARU (FORM VS HISTORY) */}
-        <div style={{ background: "#edf2f7", padding: "4px", borderRadius: "10px", display: "flex", gap: "5px" }}>
-          <button onClick={() => setActiveTab("FORM")} style={{ border: "none", padding: "8px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "FORM" ? "white" : "transparent", color: activeTab === "FORM" ? "#e53e3e" : "#718096", transition: "all 0.2s", boxShadow: activeTab === "FORM" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>
-            🚨 Lapor
+        <div className="tab-switch">
+          <button onClick={() => setActiveTab("FORM")} className={`tab-btn ${activeTab === "FORM" ? "active" : ""}`}>
+            <IconSiren size={14} /> Lapor
           </button>
-          <button onClick={() => setActiveTab("HISTORY")} style={{ border: "none", padding: "8px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer", background: activeTab === "HISTORY" ? "white" : "transparent", color: activeTab === "HISTORY" ? "#e53e3e" : "#718096", transition: "all 0.2s", boxShadow: activeTab === "HISTORY" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>
-            📜 Riwayat
+          <button onClick={() => setActiveTab("HISTORY")} className={`tab-btn ${activeTab === "HISTORY" ? "active" : ""}`}>
+            <IconHistory size={14} /> Riwayat
           </button>
         </div>
       </div>
 
       {/* 🔹 HERO SECTION */}
-      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 80px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PATROLI AREA</h1>
-        <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>Pemantauan keliling titik rawan Gedung SIBM</p>
+      <div className="page-hero">
+        <div className="page-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PATROLI AREA</h1>
+          <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Pemantauan keliling titik rawan Gedung SIBM</p>
+        </div>
       </div>
 
       {/* 🔹 MAIN CONTENT */}
-      <div style={{ maxWidth: "800px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: "800px", margin: "-45px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
 
         {/* ========================================================= */}
         {/* TAB 1: FORM PENGISIAN PATROLI                             */}
@@ -338,16 +432,16 @@ export default function PatroliSecurityPage() {
         {activeTab === "FORM" && (
           <div style={{ animation: "fadeIn 0.3s" }}>
             {/* KARTU PROGRESS */}
-            <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", marginBottom: "25px", border: "1px solid #e2e8f0" }}>
+            <div className="panel" style={{ marginBottom: "25px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                <h2 style={{ margin: 0, color: "#2d3748", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><span>🎯</span> Progres Keliling</h2>
-                <span style={{ fontWeight: "900", color: progressPersen === 100 ? "#38a169" : "#e53e3e" }}>{scannedItems.length} / {totalTitikKeseluruhan} Titik</span>
+                <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconTarget size={17} color="var(--muted)" /> Progres Keliling</h2>
+                <span style={{ fontWeight: "900", color: progressPersen === 100 ? "var(--ok)" : "var(--red-600)" }}>{scannedItems.length} / {totalTitikKeseluruhan} Titik</span>
               </div>
-              <div style={{ width: "100%", background: "#edf2f7", borderRadius: "50px", height: "12px", overflow: "hidden" }}>
-                <div style={{ height: "100%", background: progressPersen === 100 ? "#38a169" : "linear-gradient(90deg, #e53e3e, #dd6b20)", width: `${progressPersen}%`, transition: "width 0.5s ease-in-out" }}></div>
+              <div style={{ width: "100%", background: "var(--line)", borderRadius: "50px", height: "12px", overflow: "hidden" }}>
+                <div style={{ height: "100%", background: progressPersen === 100 ? "var(--ok)" : "linear-gradient(90deg, var(--red-600), var(--warn))", width: `${progressPersen}%`, transition: "width 0.5s ease-in-out" }}></div>
               </div>
               {isSuccess && (
-                <div style={{ background: "#f0fff4", color: "#22543d", padding: "12px", borderRadius: "10px", marginTop: "15px", fontSize: "13px", fontWeight: "bold", border: "1px solid #c6f6d5" }}>✅ Laporan patroli berhasil dikirim! Mengalihkan...</div>
+                <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "12px", borderRadius: "10px", marginTop: "15px", fontSize: "13px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}><IconCheck size={14} /> Laporan patroli berhasil dikirim! Mengalihkan...</div>
               )}
             </div>
 
@@ -361,40 +455,40 @@ export default function PatroliSecurityPage() {
                     const isAktif = lantaiAktif === lantai;
 
                     return (
-                      <div key={lantai} style={{ background: "white", borderRadius: "16px", overflow: "hidden", border: isLengkap ? "2px solid #c6f6d5" : "1px solid #e2e8f0" }}>
-                        <div onClick={() => setLantaiAktif(isAktif ? "" : lantai)} style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", background: isLengkap ? "#f0fff4" : (isAktif ? "#f8fafc" : "white"), cursor: "pointer" }}>
+                      <div key={lantai} className="floor-card" style={{ border: isLengkap ? "2px solid rgba(22,163,74,0.3)" : "1px solid var(--line)" }}>
+                        <div onClick={() => setLantaiAktif(isAktif ? "" : lantai)} className="floor-head" style={{ background: isLengkap ? "var(--ok-50)" : (isAktif ? "var(--bg)" : "var(--surface)") }}>
                           <div>
-                            <h3 style={{ margin: "0 0 4px 0", color: isLengkap ? "#22543d" : "#2d3748", fontSize: "16px" }}>{lantai}</h3>
-                            <div style={{ fontSize: "12px", color: isLengkap ? "#38a169" : "#718096", fontWeight: "bold" }}>{stat.selesai} / {stat.total} Titik Selesai</div>
+                            <h3 style={{ margin: "0 0 4px 0", color: isLengkap ? "var(--ok)" : "var(--ink)", fontSize: "16px" }}>{lantai}</h3>
+                            <div style={{ fontSize: "12px", color: isLengkap ? "var(--ok)" : "var(--muted)", fontWeight: "bold" }}>{stat.selesai} / {stat.total} Titik Selesai</div>
                           </div>
-                          <div style={{ transform: isAktif ? "rotate(180deg)" : "rotate(0deg)", transition: "0.3s" }}>🔽</div>
+                          <div style={{ transform: isAktif ? "rotate(180deg)" : "rotate(0deg)", transition: "0.3s", color: "var(--muted)" }}><IconChevronDown size={18} /></div>
                         </div>
 
                         {isAktif && (
-                          <div style={{ padding: "15px", borderTop: "1px solid #edf2f7", display: "flex", flexDirection: "column", gap: "10px", background: "#fbfcfd" }}>
+                          <div style={{ padding: "15px", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "10px", background: "var(--bg)" }}>
                             {GROUPED_PATROLI[lantai].map((titik) => {
                               const dataSelesai = scannedItems.find((item) => item.id === titik.id);
 
                               return (
-                                <div key={titik.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 15px", background: "white", border: dataSelesai ? "1px solid #9ae6b4" : "1px solid #e2e8f0", borderRadius: "10px" }}>
+                                <div key={titik.id} className="point-row" style={{ border: dataSelesai ? "1px solid rgba(22,163,74,0.35)" : "1px solid var(--line)" }}>
                                   <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
                                     {dataSelesai && (
                                       /* eslint-disable-next-line @next/next/no-img-element */
-                                      <img src={dataSelesai.foto} alt="Thumb" style={{ width: "40px", height: "40px", borderRadius: "8px", objectFit: "cover", border: "1px solid #c6f6d5" }} />
+                                      <img src={dataSelesai.foto} alt="Thumb" style={{ width: "40px", height: "40px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(22,163,74,0.35)" }} />
                                     )}
                                     <div>
-                                      <div style={{ fontSize: "14px", color: dataSelesai ? "#22543d" : "#4a5568", fontWeight: "bold" }}>{titik.nama}</div>
+                                      <div style={{ fontSize: "14px", color: dataSelesai ? "var(--ok)" : "var(--ink-soft)", fontWeight: "bold" }}>{titik.nama}</div>
                                       {dataSelesai ? (
-                                        <div style={{ fontSize: "11px", color: dataSelesai.kondisi === "Aman Terkendali" ? "#38a169" : "#e53e3e", marginTop: "4px", fontWeight: "bold" }}>
+                                        <div style={{ fontSize: "11px", color: dataSelesai.kondisi === "Aman Terkendali" ? "var(--ok)" : "var(--red-600)", marginTop: "4px", fontWeight: "bold" }}>
                                           ↳ {dataSelesai.kondisi} ({dataSelesai.waktu_patroli})
                                         </div>
-                                      ) : <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "4px" }}>Belum dikunjungi</div>}
+                                      ) : <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>Belum dikunjungi</div>}
                                     </div>
                                   </div>
 
                                   {!dataSelesai ? (
-                                    <button onClick={() => { setKondisiTitik("Aman Terkendali"); setScanTarget(titik.id); }} style={{ background: "#e53e3e", color: "white", border: "none", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>📷 Scan</button>
-                                  ) : <div style={{ color: "#38a169", fontWeight: "bold" }}>✓ Selesai</div>}
+                                    <button onClick={() => { setKondisiTitik("Aman Terkendali"); setScanTarget(titik.id); }} className="scan-btn"><IconCamera size={13} /> Scan</button>
+                                  ) : <div style={{ color: "var(--ok)", fontWeight: "bold", display: "flex", alignItems: "center", gap: "4px" }}><IconCheck size={12} /> Selesai</div>}
                                 </div>
                               );
                             })}
@@ -405,38 +499,38 @@ export default function PatroliSecurityPage() {
                   })}
                 </div>
 
-                <div style={{ background: "white", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", marginBottom: "25px" }}>
-                  <label style={{ display: "block", fontWeight: "bold", marginBottom: "10px", color: "#2d3748", fontSize: "14px" }}>📝 Catatan Akhir Shift (Opsional):</label>
-                  <textarea value={catatanUmum} onChange={(e) => setCatatanUmum(e.target.value)} placeholder="Tuliskan kendala atau temuan penting..." style={{ width: "100%", padding: "15px", height: "100px", borderRadius: "10px", border: "1px solid #cbd5e0", resize: "none", fontSize: "14px" }} />
+                <div className="panel" style={{ marginBottom: "25px" }}>
+                  <label style={{ display: "block", fontWeight: "bold", marginBottom: "10px", color: "var(--ink)", fontSize: "14px" }}>Catatan Akhir Shift (Opsional):</label>
+                  <textarea value={catatanUmum} onChange={(e) => setCatatanUmum(e.target.value)} placeholder="Tuliskan kendala atau temuan penting..." style={{ width: "100%", padding: "15px", height: "100px", borderRadius: "10px", border: "1px solid var(--line)", resize: "none", fontSize: "14px", background: "var(--bg)", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
                 </div>
 
                 <button onClick={() => {
                   if (scannedItems.length === 0) return alert("Belum ada titik yang dipatroli!");
                   setShowReview(true);
                   window.scrollTo({ top: 0, behavior: "smooth" });
-                }} style={{ width: "100%", padding: "18px", background: scannedItems.length === 0 ? "#a0aec0" : "#2b6cb0", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: scannedItems.length === 0 ? "not-allowed" : "pointer", boxShadow: "0 10px 15px -3px rgba(43, 108, 176, 0.4)" }}>
-                  📋 Review Hasil Patroli ➔
+                }} style={{ width: "100%", padding: "18px", background: scannedItems.length === 0 ? "#a0aec0" : "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: scannedItems.length === 0 ? "not-allowed" : "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+                  <IconClipboardCheck size={16} /> Review Hasil Patroli ➔
                 </button>
               </div>
             )}
 
             {/* TABEL REVIEW SEBELUM SUBMIT */}
             {showReview && (
-              <div style={{ background: "white", padding: "25px", borderRadius: "20px", border: "1px solid #e2e8f0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", animation: "fadeIn 0.3s ease-in-out" }}>
-                <h2 style={{ margin: "0 0 10px 0", color: "#2d3748", fontSize: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "10px" }}>📋 Verifikasi Laporan</h2>
-                <p style={{ color: "#718096", fontSize: "13px", marginBottom: "20px" }}>Pastikan tidak ada titik yang terlewat sebelum mengunci laporan.</p>
+              <div className="panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+                <h2 style={{ margin: "0 0 10px 0", color: "var(--ink)", fontSize: "20px", borderBottom: "2px solid var(--bg)", paddingBottom: "10px" }}>Verifikasi Laporan</h2>
+                <p style={{ color: "var(--muted)", fontSize: "13px", marginBottom: "20px" }}>Pastikan tidak ada titik yang terlewat sebelum mengunci laporan.</p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "15px", marginBottom: "30px", maxHeight: "60vh", overflowY: "auto", paddingRight: "10px" }}>
                   {scannedItems.map((item, idx) => {
                     const isAman = item.kondisi === "Aman Terkendali";
                     return (
-                      <div key={idx} style={{ display: "flex", gap: "15px", padding: "15px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc" }}>
+                      <div key={idx} style={{ display: "flex", gap: "15px", padding: "15px", border: "1px solid var(--line)", borderRadius: "12px", background: "var(--bg)" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.foto} alt="Patroli" style={{ width: "80px", height: "100px", objectFit: "cover", borderRadius: "8px", border: "2px solid #cbd5e0" }} />
+                        <img src={item.foto} alt="Patroli" style={{ width: "80px", height: "100px", objectFit: "cover", borderRadius: "8px", border: "2px solid var(--line)" }} />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: "12px", color: "#a0aec0", fontWeight: "bold" }}>{item.id.split("::")[0]}</div>
-                          <div style={{ fontSize: "15px", fontWeight: "bold", color: "#2d3748", marginBottom: "5px" }}>{item.id.split("::")[1]}</div>
-                          <span style={{ fontSize: "11px", background: isAman ? "#c6f6d5" : "#fed7d7", color: isAman ? "#22543d" : "#9b2c2c", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold" }}>{item.kondisi}</span>
+                          <div style={{ fontSize: "12px", color: "var(--muted)", fontWeight: "bold" }}>{item.id.split("::")[0]}</div>
+                          <div style={{ fontSize: "15px", fontWeight: "bold", color: "var(--ink)", marginBottom: "5px" }}>{item.id.split("::")[1]}</div>
+                          <span style={{ fontSize: "11px", background: isAman ? "var(--ok-50)" : "var(--red-50)", color: isAman ? "var(--ok)" : "var(--red-600)", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold" }}>{item.kondisi}</span>
                         </div>
                       </div>
                     );
@@ -444,25 +538,25 @@ export default function PatroliSecurityPage() {
                 </div>
 
                 <div style={{ display: "flex", gap: "15px" }}>
-                  <button onClick={() => setShowReview(false)} style={{ flex: 1, padding: "15px", background: "#edf2f7", color: "#4a5568", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer" }}>⬅️ Cek Area Lain</button>
+                  <button onClick={() => setShowReview(false)} style={{ flex: 1, padding: "15px", background: "var(--line)", color: "var(--ink-soft)", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}><IconArrowLeft size={14} /> Cek Area Lain</button>
                   <button
                     onClick={handleSubmitFinal}
                     disabled={isLoading || belumLengkapAlasan}
-                    style={{ flex: 2, padding: "15px", background: (isLoading || belumLengkapAlasan) ? "#a0aec0" : "#e53e3e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: (isLoading || belumLengkapAlasan) ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(229, 62, 62, 0.3)" }}
+                    style={{ flex: 2, padding: "15px", background: (isLoading || belumLengkapAlasan) ? "#a0aec0" : "var(--red-600)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: (isLoading || belumLengkapAlasan) ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(220,38,38,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}
                   >
-                    {isLoading ? "Mengunggah..." : belumLengkapAlasan ? "⚠️ Isi Alasan Dulu" : "🚀 Kunci & Kirim Laporan"}
+                    {isLoading ? "Mengunggah..." : belumLengkapAlasan ? <><IconAlertTriangle size={14} /> Isi Alasan Dulu</> : <><IconRocket size={15} /> Kunci & Kirim Laporan</>}
                   </button>
                 </div>
               </div>
             )}
             {titikTerlewat.length > 0 && (
-              <div style={{ background: "#fffaf0", border: "1px solid #fbd38d", borderRadius: "12px", padding: "20px", marginBottom: "25px" }}>
-                <h3 style={{ margin: "0 0 5px 0", color: "#9c4221", fontSize: "15px" }}>⚠️ {titikTerlewat.length} Titik Belum Terpantau</h3>
-                <p style={{ margin: "0 0 15px 0", color: "#7b341e", fontSize: "12px" }}>Wajib isi alasan kenapa titik ini belum sempat difoto sebelum laporan bisa dikirim.</p>
+              <div style={{ background: "var(--warn-50)", border: "1px solid rgba(217,119,6,0.3)", borderRadius: "12px", padding: "20px", marginBottom: "25px" }}>
+                <h3 style={{ margin: "0 0 5px 0", color: "var(--warn)", fontSize: "15px", display: "flex", alignItems: "center", gap: "6px" }}><IconAlertTriangle size={15} /> {titikTerlewat.length} Titik Belum Terpantau</h3>
+                <p style={{ margin: "0 0 15px 0", color: "var(--warn)", fontSize: "12px" }}>Wajib isi alasan kenapa titik ini belum sempat difoto sebelum laporan bisa dikirim.</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   {titikTerlewat.map((t) => (
                     <div key={t.id}>
-                      <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#2d3748", marginBottom: "4px" }}>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "var(--ink)", marginBottom: "4px" }}>
                         {t.id.split("::")[0]} — {t.nama}
                       </label>
                       <input
@@ -470,7 +564,7 @@ export default function PatroliSecurityPage() {
                         value={alasanTerlewat[t.id] || ""}
                         onChange={(e) => handleUbahAlasan(t.id, e.target.value)}
                         placeholder="Alasan tidak sempat difoto..."
-                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #fbd38d", fontSize: "13px" }}
+                        className="missed-input"
                       />
                     </div>
                   ))}
@@ -486,20 +580,20 @@ export default function PatroliSecurityPage() {
         {activeTab === "HISTORY" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "25px", animation: "fadeIn 0.3s" }}>
             {riwayatSaya.length > 0 ? riwayatSaya.map((log) => (
-              <div key={log.id} style={{ background: "white", borderRadius: "20px", padding: "25px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px" }}>
+              <div key={log.id} className="panel" style={{ padding: "25px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "2px solid var(--bg)", paddingBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
                   <div>
-                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", color: "#a0aec0", fontWeight: "bold" }}>Diserahkan Pada:</span>
-                    <h3 style={{ margin: "5px 0 0 0", color: "#2d3748", fontSize: "16px" }}>{formatWaktu(log.waktu_laporan)}</h3>
+                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", fontWeight: "bold" }}>Diserahkan Pada:</span>
+                    <h3 style={{ margin: "5px 0 0 0", color: "var(--ink)", fontSize: "16px" }}>{formatWaktu(log.waktu_laporan)}</h3>
                   </div>
-                  <span style={{ background: log.status.includes("Sempurna") ? "#f0fff4" : "#fff5f5", color: log.status.includes("Sempurna") ? "#22543d" : "#9b2c2c", border: log.status.includes("Sempurna") ? "1px solid #c6f6d5" : "1px solid #fed7d7", padding: "8px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold" }}>
+                  <span style={{ background: log.status.includes("Sempurna") ? "var(--ok-50)" : "var(--red-50)", color: log.status.includes("Sempurna") ? "var(--ok)" : "var(--red-600)", border: log.status.includes("Sempurna") ? "1px solid rgba(22,163,74,0.3)" : "1px solid rgba(220,38,38,0.3)", padding: "8px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold" }}>
                     {log.status}
                   </span>
                 </div>
 
                 {log.catatan_shift && (
-                  <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", marginBottom: "20px", fontSize: "13px", color: "#4a5568", border: "1px dashed #cbd5e0" }}>
-                    <strong>Catatan:</strong> <i style={{ color: "#718096" }}>&quot;{log.catatan_shift}&quot;</i>
+                  <div style={{ background: "var(--bg)", padding: "15px", borderRadius: "12px", marginBottom: "20px", fontSize: "13px", color: "var(--ink-soft)", border: "1px dashed var(--line)" }}>
+                    <strong>Catatan:</strong> <i style={{ color: "var(--muted)" }}>&quot;{log.catatan_shift}&quot;</i>
                   </div>
                 )}
 
@@ -507,16 +601,16 @@ export default function PatroliSecurityPage() {
                   {log.titik_patroli.map((t, i) => {
                     const isAman = t.kondisi.includes("Aman");
                     return (
-                      <div key={i} style={{ background: "white", borderRadius: "12px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                      <div key={i} style={{ background: "var(--surface)", borderRadius: "12px", border: "1px solid var(--line)", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                         <div style={{ position: "relative" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={t.foto} alt="Titik" style={{ width: "100%", height: "200px", objectFit: "cover" }} />
                           <div style={{ position: "absolute", bottom: "8px", right: "8px", background: "rgba(0,0,0,0.7)", color: "white", padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "bold" }}>{t.waktu_patroli}</div>
                         </div>
                         <div style={{ padding: "10px" }}>
-                          <div style={{ fontSize: "10px", color: "#a0aec0", fontWeight: "bold" }}>{t.id.split("::")[0]}</div>
-                          <div style={{ fontWeight: "bold", color: "#2d3748", fontSize: "13px", margin: "2px 0 8px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.id.split("::")[1]}</div>
-                          <span style={{ fontSize: "10px", background: isAman ? "#c6f6d5" : "#fed7d7", color: isAman ? "#22543d" : "#9b2c2c", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold" }}>{t.kondisi}</span>
+                          <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: "bold" }}>{t.id.split("::")[0]}</div>
+                          <div style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "13px", margin: "2px 0 8px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.id.split("::")[1]}</div>
+                          <span style={{ fontSize: "10px", background: isAman ? "var(--ok-50)" : "var(--red-50)", color: isAman ? "var(--ok)" : "var(--red-600)", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold" }}>{t.kondisi}</span>
                         </div>
                       </div>
                     );
@@ -524,10 +618,10 @@ export default function PatroliSecurityPage() {
                 </div>
               </div>
             )) : (
-              <div style={{ padding: "60px 20px", textAlign: "center", background: "white", borderRadius: "20px", border: "2px dashed #cbd5e0" }}>
-                <div style={{ fontSize: "50px", marginBottom: "15px" }}>📭</div>
-                <h3 style={{ color: "#4a5568", margin: "0 0 10px 0" }}>Belum Ada Riwayat</h3>
-                <p style={{ color: "#a0aec0", fontSize: "14px", margin: 0 }}>Catatan patroli keliling Anda akan terekam dan ditampilkan di sini.</p>
+              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
+                <div style={{ color: "var(--muted)", marginBottom: "15px", display: "flex", justifyContent: "center" }}><IconInboxEmpty size={40} /></div>
+                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Belum Ada Riwayat</h3>
+                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Catatan patroli keliling Anda akan terekam dan ditampilkan di sini.</p>
               </div>
             )}
           </div>
@@ -541,8 +635,8 @@ export default function PatroliSecurityPage() {
       {scanTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", flexDirection: "column", backdropFilter: "blur(5px)" }}>
           <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <span style={{ fontWeight: "bold", fontSize: "16px" }}>📸 Scan Lokasi: {scanTarget.split("::")[1]}</span>
-            <button onClick={() => setScanTarget(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", fontSize: "18px", cursor: "pointer" }}>✖</button>
+            <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconMapPin size={16} /> Scan Lokasi: {scanTarget.split("::")[1]}</span>
+            <button onClick={() => setScanTarget(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} color="white" /></button>
           </div>
           <div style={{ padding: "20px", background: "#1a202c", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", overflowY: "auto" }}>
             <div style={{ background: "white", padding: "15px", borderRadius: "16px", marginBottom: "20px", width: "100%", maxWidth: "400px" }}>
@@ -557,8 +651,8 @@ export default function PatroliSecurityPage() {
             <div style={{ width: "100%", maxWidth: "400px", background: "white", padding: "10px", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
               <div id="reader" style={{ width: "100%" }}></div>
             </div>
-            <button onClick={() => { const targetNama = scanTarget.split("::")[1]; setScanTarget(null); bukaKamera(scanTarget, targetNama); }} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "rgba(255,255,255,0.1)", color: "white", border: "1px dashed rgba(255,255,255,0.3)", borderRadius: "12px", cursor: "pointer" }}>
-              ⚙️ By-pass QR (Simulasi Langsung Foto)
+            <button onClick={() => { const targetNama = scanTarget.split("::")[1]; setScanTarget(null); bukaKamera(scanTarget, targetNama); }} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "rgba(255,255,255,0.1)", color: "white", border: "1px dashed rgba(255,255,255,0.3)", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+              <IconSettings size={14} /> By-pass QR (Simulasi Langsung Foto)
             </button>
           </div>
         </div>
@@ -571,10 +665,10 @@ export default function PatroliSecurityPage() {
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000", zIndex: 1100, display: "flex", flexDirection: "column" }}>
           <div style={{ position: "absolute", top: 20, left: 20, right: 20, zIndex: 10, display: "flex", justifyContent: "space-between" }}>
             <div style={{ background: "rgba(0,0,0,0.6)", color: "white", padding: "8px 15px", borderRadius: "20px", backdropFilter: "blur(5px)", fontSize: "12px" }}>
-              <div style={{ fontWeight: "bold", fontSize: "14px", color: "#fef08a" }}>📍 {photoTarget.nama}</div>
+              <div style={{ fontWeight: "bold", fontSize: "14px", color: "#fef08a", display: "flex", alignItems: "center", gap: "6px" }}><IconMapPin size={13} color="#fef08a" /> {photoTarget.nama}</div>
               <div>{currentTime}</div>
             </div>
-            <button onClick={matikanKamera} style={{ background: "rgba(255,0,0,0.8)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%" }}>✖</button>
+            <button onClick={matikanKamera} style={{ background: "rgba(255,0,0,0.8)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><IconX size={16} color="white" /></button>
           </div>
           <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
             <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }}></video>

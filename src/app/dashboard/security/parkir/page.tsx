@@ -6,6 +6,62 @@ import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timest
 import { db } from "../../../../lib/firebase";
 
 // ==========================================
+// IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
+// ==========================================
+type IconProps = { size?: number; color?: string };
+const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
+);
+const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+const IconClock = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+);
+const IconCar = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14" /><path d="M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /><path d="M23 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /><path d="M3 17v-4l2-5a2 2 0 0 1 2-1.4h10A2 2 0 0 1 19 8l2 5v4" /><path d="M3 13h18" /></svg>
+);
+const IconSteeringWheel = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.2" /><path d="M12 5v5" /><path d="m7.5 15 3-2" /><path d="m16.5 15-3-2" /></svg>
+);
+const IconWrench = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2z" /></svg>
+);
+const IconPlaneTakeoff = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M6 16l5-1.5 6.5 2a1.2 1.2 0 0 0 1-2.2L9 9V4a1.3 1.3 0 0 0-2.6 0v4l-2 .6L3 7l-1 .5 1.4 4L2 12v2l4 1z" /></svg>
+);
+const IconPlaneLand = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="m7 15 12-3-1.5-2.6-4 .5-4.3-6-2 .5 2 6.3L4 12l-.7-1.7-1.3.3.7 3.4z" /></svg>
+);
+const IconDisc = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2" /></svg>
+);
+const IconGauge = ({ size = 11, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15a8 8 0 1 1 16 0" /><path d="M12 15 15 10" /><path d="M4 15h1M19 15h1M12 5v1" /></svg>
+);
+const IconUsers = ({ size = 16, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="8.5" cy="8" r="3.2" /><path d="M2.5 20c0-3.4 2.7-5.8 6-5.8s6 2.4 6 5.8" /><path d="M16 8.2a3 3 0 1 1 0-6" /><path d="M15 14.5c2.8.4 4.8 2.5 4.8 5.5" /></svg>
+);
+const IconClipboardList = ({ size = 16, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 11h6" /><path d="M9 15h6" /><path d="M9 19h3" /></svg>
+);
+const IconSearch = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+);
+const IconInboxEmpty = ({ size = 26, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
+);
+const IconCheckCircle = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 5-5" /></svg>
+);
+const IconRefresh = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" /><path d="M3 21v-5h5" /></svg>
+);
+const IconSave = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h11l3 3v15H5z" /><path d="M8 3v6h8V3" /><path d="M8 21v-7h8v7" /></svg>
+);
+
+// ==========================================
 // INTERFACES
 // ==========================================
 interface KendaraanLog {
@@ -57,11 +113,11 @@ const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
 
 export default function LogOperasionalPage() {
   const router = useRouter();
-  
+
   const [picName, setPicName] = useState<string>("");
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
   const [isReady, setIsReady] = useState<boolean>(false);
-  
+
   // Loading & Success States
   const [isLoadingMobil, setIsLoadingMobil] = useState<boolean>(false);
   const [isLoadingDriver, setIsLoadingDriver] = useState<boolean>(false);
@@ -91,7 +147,7 @@ export default function LogOperasionalPage() {
       router.push("/dashboard/security");
       return;
     }
-    
+
     setTimeout(() => {
       setPicName(nama);
       setIsReady(true);
@@ -232,176 +288,234 @@ export default function LogOperasionalPage() {
     log.driver_bertugas.toLowerCase().includes(searchTabel.toLowerCase())
   );
 
-  const sharedInputStyle = {
-    width: "100%",
-    padding: "14px 16px",
-    borderRadius: "12px",
-    border: "1px solid #cbd5e0",
-    fontSize: "14px",
-    background: "#f8fafc",
-    outline: "none",
-    boxSizing: "border-box" as const,
-    boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)",
-    transition: "all 0.2s",
-    color: "#2d3748"
-  };
-
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        * { box-sizing: border-box; }
+        .top-bar {
+          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
+          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+          position: sticky; top: 0; z-index: 50;
+        }
+        .back-btn {
+          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
+          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
+        }
+        .back-btn:hover { background: var(--line); }
+        .pic-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
+
+        .page-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
+          padding: 36px 20px 55px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .page-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .page-hero-content { position: relative; }
+        .page-hero-badge {
+          display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
+          backdrop-filter: blur(5px); padding: 6px 16px; border-radius: 50px; font-size: 12px; font-weight: 700;
+          border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .panel { background: var(--surface); padding: 22px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border: 1px solid var(--line); box-sizing: border-box; }
+        .panel-flat { background: var(--surface); padding: 20px; border-radius: 20px; border: 1px solid var(--line); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); box-sizing: border-box; }
+        .panel-title { margin-top: 0; color: var(--ink); border-bottom: 2px solid var(--bg); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800; }
+        .panel-title-icon { padding: 7px; border-radius: 10px; display: flex; }
+
+        .field-label { display: block; font-weight: 700; margin-bottom: 5px; font-size: 11px; color: var(--muted); letter-spacing: 0.3px; }
+        .field-input { width: 100%; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; box-sizing: border-box; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s; color: var(--ink-soft); font-family: inherit; }
+        .field-input:focus { border-color: var(--info); background: var(--surface); }
+
+        .choice-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .choice-item { padding: 10px 5px; border-radius: 10px; cursor: pointer; text-align: center; font-weight: 700; font-size: 11px; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); }
+
+        .status-card { padding: 15px; border-radius: 14px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; transition: 0.3s; }
+        .status-pill { font-size: 10px; font-weight: bold; padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; }
+
+        .responsive-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+        .responsive-table thead tr { background: var(--bg); color: var(--ink-soft); }
+        .responsive-table th { padding: 12px 15px; border-bottom: 2px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+        .responsive-table td { padding: 12px 15px; border-bottom: 1px solid var(--line); }
+        .table-search { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 0 15px; width: 220px; }
+        .table-search input { border: none; outline: none; background: transparent; padding: 10px 0; font-size: 14px; flex: 1; font-family: inherit; }
+
+        @media (max-width: 900px) {
+          .parkir-layout { flex-direction: column !important; }
+          .parkir-layout > * { flex: 1 1 auto !important; width: 100% !important; }
+        }
+        @media (max-width: 640px) {
+          .table-search { width: 100% !important; }
+          .parkir-header-row { flex-direction: column; align-items: stretch !important; }
+          .choice-grid { gap: 6px; }
+          .choice-item { font-size: 10px; padding: 8px 3px; }
+        }
+      `}} />
+
       {/* NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/dashboard/security")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali</span>
+      <div className="top-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <button className="back-btn" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /></button>
+          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Log Operasional</span>
         </div>
-        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          👮 {picName}
-        </div>
+        <div className="pic-badge"><IconUserCircle size={14} /> {picName}</div>
       </div>
 
       {/* HERO SECTION */}
-      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>LOG OPERASIONAL GERBANG</h1>
-        <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Manajemen terpisah status pergerakan armada dan kesiagaan team driver SIBM</p>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(5px)", padding: "6px 15px", borderRadius: "50px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(255,255,255,0.3)" }}>
-          🕒 {waktuSekarang || "Memuat waktu..."}
+      <div className="page-hero">
+        <div className="page-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>LOG OPERASIONAL GERBANG</h1>
+          <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Manajemen terpisah status pergerakan armada dan kesiagaan team driver SIBM</p>
+          <div className="page-hero-badge">
+            <IconClock size={14} /> {waktuSekarang || "Memuat waktu..."}
+          </div>
         </div>
       </div>
 
       {/* WRAPPER UTAMA SPLIT SCREEN */}
-      <div style={{ maxWidth: "1250px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
-        
-        {/* ============================================================== */}
+      <div className="parkir-layout" style={{ maxWidth: "1250px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
+
         {/* SISI KIRI: KUMPULAN FORM INPUT */}
-        {/* ============================================================== */}
         <div style={{ flex: "1 1 380px", display: "flex", flexDirection: "column", gap: "25px" }}>
-          
+
           {/* CARD 1: FORM KENDARAAN */}
-          <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", boxSizing: "border-box" }}>
-            <h3 style={{ marginTop: "0", color: "#2d3748", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", display: "flex", alignItems: "center", gap: "10px", fontSize: "16px", fontWeight: "800" }}>
-              <span style={{background:"#fff5f5", padding:"6px 10px", borderRadius:"10px"}}>🚙</span> LOG PERGERAKAN ARMADA
+          <div className="panel">
+            <h3 className="panel-title">
+              <span className="panel-title-icon" style={{ background: "var(--red-50)", color: "var(--red-600)" }}><IconCar size={16} /></span> LOG PERGERAKAN ARMADA
             </h3>
             {isSuccessMobil && (
-              <div style={{ background: "#f0fff4", color: "#22543d", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "12px", fontWeight: "bold", border: "1px solid #c6f6d5" }}>✓ Log armada dan status driver berhasil sinkron!</div>
+              <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}><IconCheckCircle size={14} /> Log armada dan status driver berhasil sinkron!</div>
             )}
             <form onSubmit={handleSubmitMobil} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>PILIH ARMADA GEDUNG *</label>
-                <select value={kendaraan} onChange={(e) => setKendaraan(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold", fontSize: "13px"}}>
+                <label className="field-label">PILIH ARMADA GEDUNG *</label>
+                <select value={kendaraan} onChange={(e) => setKendaraan(e.target.value)} className="field-input" style={{ fontWeight: "bold", fontSize: "13px" }}>
                   {KENDARAAN_OPERASIONAL.map(mobil => <option key={mobil} value={mobil}>{mobil}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>AKTIVITAS MOBIL *</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                  {["Keluar Beroperasi", "Tiba di Kantor (Standby)", "Masuk Bengkel / Service"].map((st) => (
-                    <div 
-                      key={st} onClick={() => setStatusMobil(st)}
-                      style={{
-                        padding: "10px 5px", borderRadius: "10px", cursor: "pointer", textAlign: "center", fontWeight: "bold", fontSize: "11px", transition: "0.2s",
-                        border: statusMobil === st ? "2px solid #3182ce" : "1px solid #e2e8f0",
-                        background: statusMobil === st ? "#ebf8ff" : "#f8fafc",
-                        color: statusMobil === st ? "#2b6cb0" : "#718096"
-                      }}
-                    >
-                      {st === "Keluar Beroperasi" ? "🛫 Keluar" : st === "Tiba di Kantor (Standby)" ? "🛬 Standby" : "🛠️ Service"}
-                    </div>
-                  ))}
+                <label className="field-label">AKTIVITAS MOBIL *</label>
+                <div className="choice-grid">
+                  {["Keluar Beroperasi", "Tiba di Kantor (Standby)", "Masuk Bengkel / Service"].map((st) => {
+                    const active = statusMobil === st;
+                    const StIcon = st === "Keluar Beroperasi" ? IconPlaneTakeoff : st === "Tiba di Kantor (Standby)" ? IconPlaneLand : IconWrench;
+                    return (
+                      <div
+                        key={st} onClick={() => setStatusMobil(st)}
+                        className="choice-item"
+                        style={active ? { border: "2px solid var(--info)", background: "var(--info-50)", color: "var(--info)" } : {}}
+                      >
+                        <StIcon size={14} />
+                        {st === "Keluar Beroperasi" ? "Keluar" : st === "Tiba di Kantor (Standby)" ? "Standby" : "Service"}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>SIAPA YANG MEMBAWA KENDARAAN? *</label>
-                <select value={driverMobil} onChange={(e) => setDriverMobil(e.target.value)} style={sharedInputStyle}>
+                <label className="field-label">SIAPA YANG MEMBAWA KENDARAAN? *</label>
+                <select value={driverMobil} onChange={(e) => setDriverMobil(e.target.value)} className="field-input">
                   {DAFTAR_DRIVER.map(drv => <option key={drv} value={drv}>{drv}</option>)}
                 </select>
                 {DRIVER_ONLY.includes(driverMobil) && (
-                  <div style={{ fontSize: "10px", color: "#38a169", marginTop: "5px", fontWeight: "bold" }}>💡 Info: Status absensi driver ini akan ikut ter-update otomatis.</div>
+                  <div style={{ fontSize: "10px", color: "var(--ok)", marginTop: "5px", fontWeight: "bold" }}>Info: Status absensi driver ini akan ikut ter-update otomatis.</div>
                 )}
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>TUJUAN / KEPERLUAN PERJALANAN</label>
-                <textarea placeholder="Contoh: Mengantar dokumen ke Pelabuhan..." value={tujuan} onChange={(e) => setTujuan(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none" }} />
+                <label className="field-label">TUJUAN / KEPERLUAN PERJALANAN</label>
+                <textarea placeholder="Contoh: Mengantar dokumen ke Pelabuhan..." value={tujuan} onChange={(e) => setTujuan(e.target.value)} className="field-input" style={{ height: "60px", resize: "none" }} />
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>SPEEDOMETER (KM)</label>
-                <input type="number" placeholder="KM saat ini (Opsional)" value={kilometer} onChange={(e) => setKilometer(e.target.value)} style={sharedInputStyle} />
+                <label className="field-label">SPEEDOMETER (KM)</label>
+                <input type="number" placeholder="KM saat ini (Opsional)" value={kilometer} onChange={(e) => setKilometer(e.target.value)} className="field-input" />
               </div>
-              <button type="submit" disabled={isLoadingMobil} style={{ width: "100%", padding: "14px", background: "#3182ce", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
-                {isLoadingMobil ? "Menyimpan..." : "💾 Kirim Log Armada"}
+              <button type="submit" disabled={isLoadingMobil} style={{ width: "100%", padding: "14px", background: "var(--info)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+                <IconSave size={15} /> {isLoadingMobil ? "Menyimpan..." : "Kirim Log Armada"}
               </button>
             </form>
           </div>
 
           {/* CARD 2: FORM STATUS DRIVER MURNI */}
-          <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", boxSizing: "border-box" }}>
-            <h3 style={{ marginTop: "0", color: "#2d3748", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", display: "flex", alignItems: "center", gap: "10px", fontSize: "16px", fontWeight: "800" }}>
-              <span style={{background:"#ebf8ff", padding:"6px 10px", borderRadius:"10px"}}>🧑‍✈️</span> KOREKSI MANUAL ABSENSI DRIVER
+          <div className="panel">
+            <h3 className="panel-title">
+              <span className="panel-title-icon" style={{ background: "var(--info-50)", color: "var(--info)" }}><IconSteeringWheel size={16} /></span> KOREKSI MANUAL ABSENSI DRIVER
             </h3>
             {isSuccessDriver && (
-              <div style={{ background: "#f0fff4", color: "#22543d", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "12px", fontWeight: "bold", border: "1px solid #c6f6d5" }}>✓ Status kesiagaan Driver diperbarui!</div>
+              <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}><IconCheckCircle size={14} /> Status kesiagaan Driver diperbarui!</div>
             )}
             <form onSubmit={handleSubmitDriver} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>PILIH NAMA DRIVER *</label>
-                <select value={targetDriver} onChange={(e) => setTargetDriver(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold"}}>
+                <label className="field-label">PILIH NAMA DRIVER *</label>
+                <select value={targetDriver} onChange={(e) => setTargetDriver(e.target.value)} className="field-input" style={{ fontWeight: "bold" }}>
                   {DRIVER_ONLY.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: "bold", marginBottom: "5px", fontSize: "11px", color: "#718096" }}>KONDISI DRIVER SAAT INI *</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                  {["Standby", "Keluar Beroperasi", "Off Duty / Izin"].map((sd) => (
-                    <div 
-                      key={sd} onClick={() => setStatusDriver(sd)}
-                      style={{
-                        padding: "12px 5px", borderRadius: "10px", cursor: "pointer", textAlign: "center", fontWeight: "bold", fontSize: "11px", transition: "0.2s",
-                        border: statusDriver === sd ? "2px solid #2f855a" : "1px solid #e2e8f0",
-                        background: statusDriver === sd ? "#e6fffa" : "#f8fafc",
-                        color: statusDriver === sd ? "#234e52" : "#718096"
-                      }}
-                    >
-                      {sd === "Standby" ? "🟢 Standby" : sd === "Keluar Beroperasi" ? "🔴 Keluar" : "⚪ Off / Izin"}
-                    </div>
-                  ))}
+                <label className="field-label">KONDISI DRIVER SAAT INI *</label>
+                <div className="choice-grid">
+                  {["Standby", "Keluar Beroperasi", "Off Duty / Izin"].map((sd) => {
+                    const active = statusDriver === sd;
+                    const SdIcon = sd === "Standby" ? IconPlaneLand : sd === "Keluar Beroperasi" ? IconPlaneTakeoff : IconDisc;
+                    return (
+                      <div
+                        key={sd} onClick={() => setStatusDriver(sd)}
+                        className="choice-item"
+                        style={active ? { border: "2px solid var(--ok)", background: "var(--ok-50)", color: "var(--ok)" } : {}}
+                      >
+                        <SdIcon size={14} />
+                        {sd === "Standby" ? "Standby" : sd === "Keluar Beroperasi" ? "Keluar" : "Off / Izin"}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <button type="submit" disabled={isLoadingDriver} style={{ width: "100%", padding: "14px", background: "#2f855a", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginTop: "5px" }}>
-                {isLoadingDriver ? "Memperbarui..." : "🔄 Update Manual Personel"}
+              <button type="submit" disabled={isLoadingDriver} style={{ width: "100%", padding: "14px", background: "var(--ok)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginTop: "5px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+                <IconRefresh size={14} /> {isLoadingDriver ? "Memperbarui..." : "Update Manual Personel"}
               </button>
             </form>
           </div>
 
         </div>
 
-        {/* ============================================================== */}
         {/* SISI KANAN: MONITORING MONITOR REAL-TIME */}
-        {/* ============================================================== */}
         <div style={{ flex: "2 1 550px", display: "flex", flexDirection: "column", gap: "25px", boxSizing: "border-box" }}>
-          
+
           {/* PANEL KANAN ATAS: MONITOR STATUS SIAGA DRIVER TERKINI */}
-          <div style={{ background: "white", padding: "20px", borderRadius: "20px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
-            <h4 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "15px", fontWeight: "800" }}>👥 STATUS KESIAGAAN DRIVER TERKINI (REAL-TIME)</h4>
+          <div className="panel-flat">
+            <h4 style={{ margin: "0 0 15px 0", color: "var(--ink)", fontSize: "14px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconUsers size={16} color="var(--muted)" /> STATUS KESIAGAAN DRIVER TERKINI (REAL-TIME)</h4>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "15px" }}>
               {DRIVER_ONLY.map(nama => {
                 const liveStatus = driverStatusTerkini[nama];
                 const statusStr = liveStatus ? liveStatus.status : "Standby";
-                
+                const isStandby = statusStr === "Standby";
+                const isKeluar = statusStr === "Keluar Beroperasi";
+
                 return (
-                  <div key={nama} style={{ padding: "15px", borderRadius: "14px", border: "1px solid #e2e8f0", background: statusStr === "Standby" ? "#f0fff4" : statusStr === "Keluar Beroperasi" ? "#fff5f5" : "#f7fafc", display: "flex", flexDirection: "column", gap: "6px", transition: "0.3s" }}>
-                    <div style={{ fontWeight: "800", color: "#2d3748", fontSize: "14px" }}>🧑‍✈️ {nama}</div>
+                  <div key={nama} className="status-card" style={{ background: isStandby ? "var(--ok-50)" : isKeluar ? "var(--red-50)" : "var(--bg)" }}>
+                    <div style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}><IconSteeringWheel size={14} color="var(--muted)" /> {nama}</div>
                     <div style={{ marginTop: "2px" }}>
-                      <span style={{ 
-                        fontSize: "10px", fontWeight: "bold", padding: "3px 8px", borderRadius: "6px",
-                        background: statusStr === "Standby" ? "#c6f6d5" : statusStr === "Keluar Beroperasi" ? "#fed7d7" : "#e2e8f0",
-                        color: statusStr === "Standby" ? "#22543d" : statusStr === "Keluar Beroperasi" ? "#9b2c2c" : "#4a5568"
+                      <span className="status-pill" style={{
+                        background: isStandby ? "var(--ok-50)" : isKeluar ? "rgba(220,38,38,0.15)" : "var(--line)",
+                        color: isStandby ? "var(--ok)" : isKeluar ? "var(--red-600)" : "var(--ink-soft)"
                       }}>
-                        {statusStr === "Standby" ? "🟢 STANDBY DI POS" : statusStr === "Keluar Beroperasi" ? "🔴 SEDANG KELUAR" : "⚪ OFF DUTY / IZIN"}
+                        {isStandby ? "STANDBY DI POS" : isKeluar ? "SEDANG KELUAR" : "OFF DUTY / IZIN"}
                       </span>
                     </div>
-                    <div style={{ fontSize: "10px", color: "#cbd5e0", marginTop: "5px", fontWeight:"bold" }}>
+                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "5px", fontWeight: "bold" }}>
                       Diperbarui: {liveStatus ? formatWaktu(liveStatus.waktu_ubah) : "Bawaan Sistem"}
                     </div>
                   </div>
@@ -411,58 +525,60 @@ export default function LogOperasionalPage() {
           </div>
 
           {/* PANEL KANAN BAWAH: TABEL MONITOR PERGERAKAN MOBIL */}
-          <div style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-              <h3 style={{ margin: 0, color: "#2d3748", fontSize: "16px", fontWeight: "800" }}>📋 LOG AKTIVITAS MOBIL HARI INI</h3>
-              <input 
-                type="text" placeholder="🔍 Cari mobil / driver..." value={searchTabel}
-                onChange={(e) => setSearchTabel(e.target.value)}
-                style={{ ...sharedInputStyle, padding: "10px 15px", borderRadius: "20px", width: "220px" }}
-              />
+          <div className="panel-flat">
+            <div className="parkir-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
+              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "15px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconClipboardList size={16} color="var(--muted)" /> LOG AKTIVITAS MOBIL HARI INI</h3>
+              <div className="table-search">
+                <IconSearch size={13} color="var(--muted)" />
+                <input type="text" placeholder="Cari mobil / driver..." value={searchTabel} onChange={(e) => setSearchTabel(e.target.value)} />
+              </div>
             </div>
 
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+              <table className="responsive-table">
                 <thead>
-                  <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
-                    <th style={{ padding: "12px 15px", borderBottom: "2px solid #e2e8f0" }}>Mobil Operasional</th>
-                    <th style={{ padding: "12px 15px", borderBottom: "2px solid #e2e8f0" }}>Driver Pengendara</th>
-                    <th style={{ padding: "12px 15px", borderBottom: "2px solid #e2e8f0" }}>Tujuan & KM</th>
-                    <th style={{ padding: "12px 15px", borderBottom: "2px solid #e2e8f0" }}>Waktu & Petugas</th>
+                  <tr>
+                    <th>Mobil Operasional</th>
+                    <th>Driver Pengendara</th>
+                    <th>Tujuan & KM</th>
+                    <th>Waktu & Petugas</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logMobilTerfilter.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: "center", color: "#a0aec0", padding: "40px 20px" }}>📭 Belum ada riwayat pergerakan hari ini.</td>
+                      <td colSpan={4} style={{ textAlign: "center", color: "var(--muted)", padding: "40px 20px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                          <IconInboxEmpty size={26} color="var(--muted)" /> Belum ada riwayat pergerakan hari ini.
+                        </div>
+                      </td>
                     </tr>
                   ) : (
                     logMobilTerfilter.map((log) => {
                       const isStandby = log.status_kendaraan.includes("Standby");
                       const isBengkel = log.status_kendaraan.includes("Bengkel");
-                      
+
                       return (
-                        <tr key={log.id} style={{ borderBottom: "1px solid #edf2f7" }}>
-                          <td style={{ padding: "12px 15px" }}>
-                            <div style={{ fontWeight: "bold", color: "#2d3748" }}>{log.kendaraan.split(" - ")[0]}</div>
+                        <tr key={log.id}>
+                          <td>
+                            <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{log.kendaraan.split(" - ")[0]}</div>
                             <div style={{ marginTop: "4px" }}>
-                              <span style={{ 
-                                fontSize: "10px", fontWeight: "bold", padding: "2px 6px", borderRadius: "4px",
-                                background: isStandby ? "#c6f6d5" : isBengkel ? "#e2e8f0" : "#fff5f5",
-                                color: isStandby ? "#22543d" : isBengkel ? "#4a5568" : "#c53030"
+                              <span className="status-pill" style={{
+                                background: isStandby ? "var(--ok-50)" : isBengkel ? "var(--line)" : "var(--red-50)",
+                                color: isStandby ? "var(--ok)" : isBengkel ? "var(--ink-soft)" : "var(--red-600)"
                               }}>
-                                {isStandby ? "🟢 STANDBY" : isBengkel ? "🛠️ SERVICE" : "🔴 KELUAR POOL"}
+                                {isStandby ? "STANDBY" : isBengkel ? "SERVICE" : "KELUAR POOL"}
                               </span>
                             </div>
                           </td>
-                          <td style={{ padding: "12px 15px", color: "#2b6cb0", fontWeight: "800" }}>{log.driver_bertugas}</td>
-                          <td style={{ padding: "12px 15px", color: "#4a5568" }}>
-                            <div style={{ fontStyle: "italic", fontSize:"12px" }}>&quot;{log.tujuan_keperluan}&quot;</div>
-                            <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "3px" }}>📟 KM: {log.kilometer_kendaraan}</div>
+                          <td style={{ color: "var(--info)", fontWeight: "800" }}>{log.driver_bertugas}</td>
+                          <td style={{ color: "var(--ink-soft)" }}>
+                            <div style={{ fontStyle: "italic", fontSize: "12px" }}>&quot;{log.tujuan_keperluan}&quot;</div>
+                            <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "3px", display: "flex", alignItems: "center", gap: "4px" }}><IconGauge size={11} /> KM: {log.kilometer_kendaraan}</div>
                           </td>
-                          <td style={{ padding: "12px 15px" }}>
-                            <div style={{ fontWeight: "bold", color:"#4a5568" }}>{formatWaktu(log.waktu_catat)}</div>
-                            <div style={{ fontSize: "11px", color: "#cbd5e0", marginTop: "2px" }}>👮 {log.petugas_security.split(" ")[0]}</div>
+                          <td>
+                            <div style={{ fontWeight: "bold", color: "var(--ink-soft)" }}>{formatWaktu(log.waktu_catat)}</div>
+                            <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }}><IconUserCircle size={11} /> {log.petugas_security.split(" ")[0]}</div>
                           </td>
                         </tr>
                       );

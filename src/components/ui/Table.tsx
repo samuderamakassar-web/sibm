@@ -16,8 +16,8 @@ export function TBody({ children }: { children: ReactNode }) {
   return <tbody>{children}</tbody>;
 }
 
-export function Tr({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <tr style={{ borderBottom: "1px solid #edf2f7", ...style }}>{children}</tr>;
+export function Tr({ children, style, onClick }: { children: ReactNode; style?: CSSProperties; onClick?: () => void }) {
+  return <tr onClick={onClick} style={{ borderBottom: "1px solid #edf2f7", cursor: onClick ? "pointer" : undefined, ...style }}>{children}</tr>;
 }
 
 export function Th({ children, style }: { children: ReactNode; style?: CSSProperties }) {

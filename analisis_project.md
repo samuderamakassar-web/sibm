@@ -1,38 +1,37 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 29 Agustus 2026 (lanjutan — overtime, helpdesk, monitor-ob, monitor-security, shell admin — SUDAH DI-DEPLOY)
+Update terakhir: 30 Agustus 2026 (redesign penuh `dashboard/security` + rombak `buku-tamu` + fitur baru Inspeksi APAR + serah-terima foto paket — SUDAH DI-DEPLOY, lihat §13)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 29 Agustus 2026, lanjutan — §12)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §13)
 
-Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini nerusin dari checkpoint sebelumnya (§0 versi lama — kini archived, isinya sudah tercakup di §8E-§11B) dengan fokus baru: `admin/overtime`, `admin/helpdesk`, `admin/monitor-ob` (PDF export), `admin/monitor-security` (filter + roster), dan shell `admin/page.tsx`. Detail teknis lengkap ada di **§12** (cari nomor section-nya).
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini fokus penuh ke `dashboard/security` (halaman utama + semua sub-modul: buku-tamu, paket, parkir, jadwal, patroli) plus 1 fitur baru dari nol (Inspeksi APAR). Detail teknis lengkap ada di **§13** (cari nomor section-nya).
 
 ### A. Apa yang dikerjakan sesi ini
 
-1. **`admin/overtime/page.tsx`** — pisah alur Lembur Gedung/Tenant (approval DIHAPUS, sudah auto "Tercatat" dari portal, jadi tabel-only + filter bulan/tahun + export Excel asli) dari Lembur Tim (approval Setujui/Tolak TETAP jalan, tambah "Lihat Detail Tabel" via modal kalau staf input >1 hari, tambah tombol "Kirim Email Rekap" per periode begitu semua pengajuan periode itu sudah diputuskan).
-2. **`admin/helpdesk/page.tsx`** — tampilan kartu grid → tabel (Pelapor, Tanggal, Keluhan, Foto Laporan, Waktu Lapor, Waktu Selesai, Foto Selesai, Status, Aksi), field `waktu_selesai` baru direkam otomatis pas status pertama kali jadi "Selesai", foto bisa diklik jadi lightbox. Notifikasi email ke pelapor pas tiket selesai **SUDAH ADA dari sebelumnya** (`kirimNotifikasiHelpdesk`, jalan berdasar Master Data Karyawan) — dikonfirmasi ulang masih utuh, tidak perlu kode baru.
-3. **`admin/atk/page.tsx`** — dicek: notifikasi email ke pemohon pas ATK "Selesai/Diambil" **JUGA SUDAH ADA dari sebelumnya** (`kirimNotifikasiAtkSiap`) — dikonfirmasi masih utuh, tidak ada perubahan kode di file ini sesi ini.
-4. **`admin/monitor-ob/page.tsx`** — Export PDF tab Log Pembersihan sekarang isinya laporan LENGKAP per entri (semua jawaban checklist per segmen + foto before/after), bukan cuma ringkasan status. Tab Inspeksi Fasilitas dapat tombol Export PDF baru (sebelumnya gak ada) dengan detail penuh juga. Filter bulan yang tadinya 1 dropdown gabungan ("Agustus 2026") dipecah jadi 2 dropdown independen (Bulan + Tahun) di Log Pembersihan, dan filter Bulan/Tahun baru ditambahkan di Inspeksi (sebelumnya gak ada filter periode sama sekali).
-5. **`admin/monitor-security/page.tsx`** — tab Log Patroli dapat filter Bulan/Tahun + Export PDF detail (semua titik patroli, kondisi, foto, area terlewat). Tab Roster Danru: **bug nyata diperbaiki** (tabel dulu nampilin gabungan mentah 2 dokumen bulanan = kebaca ~2 bulan kalender penuh, sekarang persis 1 siklus 11→10 bulan berikutnya), ditambah dropdown pilihan periode (bisa lihat siklus lain, gak cuma yang aktif hari ini), tombol print A4 Landscape dengan kop logo Samudera + judul "ROSTER SECURITY — PERIODE ...", tampilan dipadatkan (chip warna per shift, padding lebih kecil) biar 1 periode (≤31 hari) muat 1 lembar cetak.
-6. **`admin/page.tsx`** (shell Control Panel) — logo `logo-samudera.png` **ketemu bug filter CSS** (`invert(1) brightness(0.2)` bikin logo yang aslinya merah/hitam berubah jadi item legam — root cause "logo hitam" yang dilaporkan), dihapus. Tombol logout desktop diganti jadi ikon bulat kecil (bukan pill teks panjang), dan `window.confirm()` native diganti Modal konfirmasi custom (avatar ikon + 2 tombol Batal/Ya Keluar) — jauh lebih modern, konsisten sama UI lain di app ini.
-7. **Dependency baru**: `xlsx` (SheetJS, dari npm registry — versi 0.18.5) buat export Excel ASLI (`.xlsx` beneran, bukan CSV berkedok `.csv` yang dinamain manual). Dipakai cuma buat MENULIS file yang datanya digenerate sendiri (bukan parsing file asing), jadi 2 advisory keamanan npm yang nempel di versi ini (prototype pollution & ReDoS, keduanya soal *parsing*) gak relevan buat cara pakai di project ini.
+1. **Redesign visual penuh `dashboard/security`** — halaman utama (Command Center) + 4 sub-halaman (buku-tamu, paket, parkir, jadwal) + `PatroliSecurityPage.tsx`, semua dipindah ke sistem token/ikon SVG yang sama kayak `dashboard/ob` & portal (lihat §8B/§8E). Termasuk fix bug logo hitam (`invert(1) brightness(0.2)`, item lama yang dicatat sebagai utang di §0/§12C sesi sebelumnya), modal logout custom (ganti `window.confirm()`), dan roster shift dipadatkan (chip warna) + cetak A4 landscape 1 halaman dengan kop logo.
+2. **`buku-tamu` — migrasi struktur folder BENERAN diselesaikan** (koreksi: §2 dokumen ini sempat nyatat halaman ini "sudah migrasi ke `components/pages/`" padahal kenyataannya kode lengkap masih di `app/dashboard/security/buku-tamu/page.tsx` (675 baris) dan `components/pages/BukuTamuSecurity.tsx` isinya duplikat basi yang gak dipakai — sekarang beneran cuma 1 sumber, `page.tsx` jadi thin wrapper 5 baris).
+3. **Buku Tamu — fitur baru**: kategori "Magang" (sub-pilihan dalam tab Tamu Eksternal, dipindah ke ATAS sebelum Nama sesuai revisi Reza — form Magang dipangkas cuma Nama+Unit Bisnis+Foto ID Card, tujuan otomatis "Magang Kerja"), riwayat nama+PT Magang tersimpan di collection baru `security_magang_directory` (autocomplete + auto-upsert), validasi keras nama Karyawan (harus cocok Master Data Karyawan, kalau tidak ditolak submit + modal "Nama Karyawan Tidak Sesuai"), filter tab Riwayat (Kategori/Bulan/Tahun/PT) + tombol Export Excel yang ngikut filter aktif (bukan cuma export semua data).
+4. **Mobile bottom-nav disederhanakan**: dari 7 tombol jadi 4 (Home/Tamu/Paket/Keluar) di halaman utama security — card "Buku Tamu Digital" & "Manajemen Paket" di grid menu disembunyikan KHUSUS di mobile (`hide-card-mobile`, karena sudah ada shortcut permanen di nav), tetap tampil normal di desktop.
+5. **Fitur baru dari nol: Inspeksi APAR** — 3 halaman baru: `admin/apar` (Admin GA kelola master data APAR per lantai + cetak QR), `dashboard/security/inspeksi-apar` (Security lihat APAR per lantai, scan QR → form inspeksi bulanan), `qr-apar` (halaman PUBLIK tanpa login — QR yang sama kalau discan kamera biasa di luar app langsung nampilin status "sudah/belum diinspeksi bulan ini + oleh siapa + kapan"). QR di-generate sebagai URL penuh (beda dari QR Patroli/Checklist OB yang cuma plain-text payload), karena harus bisa dibuka browser biasa.
+6. **Manajemen Paket — serah terima wajib foto bukti**: tombol "Serahkan" gak langsung `window.confirm()` lagi, sekarang buka modal yang WAJIB ambil/upload foto dulu sebelum status berubah jadi "Sudah Diambil". Tabel nampilin thumbnail foto before (diterima) + after (diambil) bertumpuk. Baris tabel bisa diklik buat buka modal Detail lengkap: kapan tiba + diinput petugas siapa + foto diterima, kapan diambil + diserahkan petugas siapa + penerima siapa + foto diambil.
 
-### B. Status: SUDAH commit, merge, push, build, DAN deploy (bukan cuma "siap deploy")
+### B. Status: SUDAH commit, merge, push, build, DAN deploy — **dilakukan otomatis sesuai instruksi eksplisit Reza di akhir sesi ini** (lihat §13G untuk detail commit hash & output)
 
-- Commit `5000ac4` di `dev` ("Rombak overtime/helpdesk/monitor-ob/monitor-security, fix logo & logout admin") → push `origin/dev` → checkout `main` → merge `dev` (bersih, 0 konflik) → push `origin/main` (`1ca38c0`) → `npm run build` (sukses, 30 halaman) → `firebase deploy` (hosting + firestore indexes, sukses) → balik ke `dev`.
-- **Live di https://sibm-app.web.app**, dikonfirmasi langsung di production: logo tampil warna asli, tombol logout bulat, halaman `admin/overtime` nampilin data real dengan tampilan baru.
-- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error (101 warning, semuanya pre-existing — dicek satu-satu gak ada yang baru dari perubahan sesi ini).
-- Sisa file berubah tapi TIDAK termasuk commit di atas (baru muncul lagi SETELAH commit, karena `npm run build`/`firebase deploy` regenerate artifact-nya): `public/sw.js` & `.firebase/hosting.*.cache` — bakal ikut kebawa di commit dokumentasi ini (§12), no-op fungsional (bukan perubahan kode nyata).
+- `npx tsc --noEmit`: 0 error (dicek berkali-kali sepanjang sesi, tiap selesai 1 fitur). `npx eslint`: 0 error/warning baru dari perubahan sesi ini.
+- Diverifikasi visual di dev server buat hampir semua fitur (redesign tiap halaman, modal logout, roster compact+print, buku tamu kategori Magang+validasi karyawan+filter riwayat, admin/apar CRUD+QR, inspeksi-apar scan+form, qr-apar publik, paket detail modal). **Satu pengecualian**: alur create-paket-baru + serah-terima foto gak sempat dites end-to-end interaktif (tool browser sesi ini sempat gak stabil pas isi form multi-field — klik/fokus kadang gak nyangkut), tapi modal Detail-nya sendiri sudah dikonfirmasi render benar pakai data real yang sudah ada, dan `tsc`/`eslint` bersih untuk semua kode baru. **Perlu dicoba manual sekali sama Security sungguhan** buat mastiin alur serah-terima+foto jalan mulus di device asli.
 
 ### C. Yang perlu dilanjutkan
 
-1. **Bug filter logo yang sama (`invert(1) brightness(0.2)` / `invert(1) brightness(0)`) masih ada di 2 file lain**: `dashboard/security/page.tsx` dan `admin/qr-manager/page.tsx` — belum diperbaiki sesi ini (Reza cuma minta `admin/page.tsx`), kemungkinan logonya juga tampil item di situ. Tanya Reza kalau mau sekalian dibenerin.
-2. **`admin/monitor-security` tab Buku Tamu & Log Paket** — belum dicek apakah butuh filter bulan/tahun & export juga (cuma Log Patroli & Roster yang diminta sesi ini).
-3. Poin lama dari §0 versi sebelumnya yang masih relevan (belum berubah): migrasi struktur folder `admin/*` ke `components/pages/` (§4 poin 5) masih belum disentuh; CS masih belum punya halaman terpisah dari OB; audit performa Firestore listener (`onSnapshot` tanpa `limit()`) belum dieksekusi; bug leak `DeepCleaningPage.tsx` (`onSnapshot` gak ke-unsubscribe) belum difix.
-4. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`.
+1. Alur serah-terima paket (foto wajib) — lihat catatan verifikasi di atas, minta feedback user asli setelah deploy.
+2. `admin/monitor-security` belum ditambah tab buat monitoring Inspeksi APAR (saat ini Admin GA cuma bisa lihat status per-unit di `admin/apar`, belum ada rekap/export PDF khusus APAR kayak Log Patroli).
+3. `security_magang_directory` masih koleksi baru tanpa halaman admin buat kelola manual (hapus/edit nama magang yang typo) — kalau ada nama salah ketik, sementara harus dibenerin langsung dari Firestore console.
+4. Bug filter logo yang sama sempat dicatat di 2 file (`dashboard/security/page.tsx` sudah DIPERBAIKI sesi ini; `admin/qr-manager/page.tsx` **masih belum**, `invert(1) brightness(0)` — kemungkinan logo di situ juga tampil item legam).
+5. Poin lama yang masih relevan (belum berubah): CS masih belum punya halaman terpisah dari OB; audit performa Firestore listener (`onSnapshot` tanpa `limit()`) belum dieksekusi; bug leak `DeepCleaningPage.tsx` (`onSnapshot` gak ke-unsubscribe) belum difix; migrasi struktur folder `admin/*` ke `components/pages/` (§4 poin 5) masih belum disentuh.
+6. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`.
 
 Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
@@ -584,3 +583,77 @@ Urutan persis sesuai request: `git checkout dev` (sudah di situ) → `git add .`
 Working tree abis build+deploy balik ada 2 file berubah lagi (`public/sw.js`, `.firebase/hosting.*.cache`) — regenerated otomatis sama tooling, bukan perubahan manual, ikut kebawa di commit dokumentasi §12/§0 ini.
 
 **Belum dikerjakan (di luar scope literal permintaan sesi ini, dicatat biar gak lupa)**: fix filter logo di 2 file lain (12F), filter/export buat tab Buku Tamu & Log Paket di `monitor-security` (cuma Log Patroli & Roster yang diminta).
+
+---
+
+## 13. Redesign penuh `dashboard/security` + rombak `buku-tamu` (Magang, validasi Karyawan, filter Riwayat) + fitur baru Inspeksi APAR + serah-terima foto `paket` (30 Agustus 2026 — SUDAH DI-DEPLOY)
+
+Sesi baru, fokus 100% ke sisi Security (kebalikan dari §12 yang fokus admin). Empat giliran percakapan, tiap giliran nutup sebelum lanjut ke berikutnya:
+
+### 13A. Redesign visual `dashboard/security/page.tsx` (halaman utama)
+
+Pola identik sama redesign `dashboard/ob` (§8E) — token CSS (`--ink`/`--bg`/`--red-600` dst), ikon SVG garis gantiin emoji, kelas `.admin-hero`/`.admin-card`/`.shift-card` yang sama. Logic Firestore (jadwal shift, roster bulanan 11→10, klaim lembur multi-hari) **tidak diubah sama sekali** — murni reskin. Menu grid: Buku Tamu Digital, Manajemen Paket, Patroli Area, Log Kendaraan, Klaim Lembur (Inspeksi APAR nambah belakangan, lihat §13D). Bottom-nav mobile awalnya 7 tombol (lihat §13D buat revisi jadi 4).
+
+### 13B. Reskin 4 sub-halaman + `PatroliSecurityPage.tsx`
+
+`buku-tamu`, `paket`, `parkir`, `jadwal` (generator roster Danru), dan `PatroliSecurityPage.tsx` — semua dapet treatment sama: top-bar sticky + back-button, hero gradient merah, form/tabel dibikin responsive penuh (collapse 1 kolom di mobile, font/padding nyusut), semua ikon emoji diganti SVG. Logic bisnis di semua file ini **tidak diubah** (Firestore query, validasi, kalkulasi shift/rotasi 2-2-2, watermark kamera patroli, dst) — murni ganti tampilan.
+
+### 13C. Perbaikan lanjutan halaman utama (giliran ke-2 Reza)
+
+1. **Logo hitam** — root cause SAMA PERSIS kayak yang udah difix di `admin/page.tsx` (§12F): `<img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" style={{filter:"invert(1) brightness(0.2)"}}>`. Diganti `<img src="/logo-samudera.png">` tanpa filter (pola yang sama).
+2. **Roster Shift Security** — diminta lebih compact + cetak A4 landscape 1 halaman + kop logo pas print. Tabel shift diubah dari sel teks tebal polos jadi pill/chip warna kecil (biru=on-duty, merah=Off) — pola sama persis kayak yang dipakai di `admin/monitor-security` (§12E). Kop cetak (`.print-only`, cuma keluar pas print) ditambahkan: logo Samudera + "ROSTER SECURITY — PERIODE ..." + waktu cetak (`waktuCetak` di-set pas tombol print diklik, BUKAN di render awal — biar gak ada hydration mismatch). CSS print padding/font dipangkas (`padding: 3px 4px; font-size: 9px` di sel) biar 1 periode (≤31 hari, 2-3 kolom staf) muat 1 lembar A4 landscape.
+3. **Tombol Keluar → Modal** — `window.confirm()` diganti Modal custom (reuse `components/ui/Modal`, pola identik §12F: avatar ikon logout dalam lingkaran merah muda, judul "Keluar dari Sesi Security?", tombol Batal/Ya Keluar).
+
+### 13D. Menu tambahan + mobile nav disederhanakan (giliran ke-3 Reza)
+
+1. **Card baru "Inspeksi APAR"** ditambahkan ke grid menu (link ke `/dashboard/security/inspeksi-apar`, lihat §13F).
+2. **Bottom-nav mobile**: dari 7 tombol (Portal/Tamu/Paket/Patroli/Kendaraan/Lembur/Keluar) dipangkas jadi 4 (**Home/Tamu/Paket/Keluar**) — sesuai request eksplisit "biar lebih elegan".
+3. **Card "Buku Tamu Digital" & "Manajemen Paket" disembunyikan KHUSUS di mobile** (class baru `.hide-card-mobile`, `display:none` di breakpoint `<=768px`) — karena 2 modul itu sekarang sudah permanen ada di bottom-nav, jadi kartu gede di grid jadi redundan di layar kecil. Di desktop (gak ada bottom-nav) kartu-kartu ini TETAP tampil normal.
+
+### 13E. `buku-tamu` — migrasi struktur folder + fitur Magang + validasi Karyawan + filter Riwayat (giliran ke-3 & lanjutan)
+
+**Migrasi (koreksi utang lama)**: §2 dokumen ini sempat mencatat `security/buku-tamu` "sudah migrasi ke `components/pages/`" — ternyata keliru, kode lengkap (675 baris) masih nyantol di `app/dashboard/security/buku-tamu/page.tsx`, sedangkan `components/pages/BukuTamuSecurity.tsx` isinya duplikat basi dari migrasi lama yang gak pernah beneran ke-pakai (gak ada import-nya di manapun). Sekarang dibereskan beneran: kode lengkap pindah ke `components/pages/BukuTamuSecurity.tsx` (kanonik, satu-satunya sumber), `page.tsx` jadi thin wrapper 5 baris (`return <BukuTamuSecurity />`). Dicek `grep` gak ada import ganda lagi.
+
+**Fitur "Tamu Eksternal / Magang"** (3 revisi bertahap sesuai instruksi Reza):
+- Tab toggle diurutkan ulang: **Karyawan/Staf duluan**, baru "Tamu Eksternal / Magang" (tukar posisi dari sebelumnya).
+- Dalam tab gabungan itu, ada sub-pilihan **Kategori Tamu** (Tamu Eksternal vs Magang) — awalnya diposisikan sejajar sama field Asal Instansi, lalu di revisi terakhir **dipindah ke PALING ATAS, sebelum Nama Lengkap** (biar field yang muncul di bawahnya langsung nyesuain pilihan).
+- **Kalau pilih Tamu Eksternal**: form gak berubah sama sekali (Nama, Asal Instansi, Bertemu Dengan Host, Tujuan Kunjungan, Foto KTP).
+- **Kalau pilih Magang**: form dipangkas drastis — cuma **Nama Lengkap, Unit Bisnis, dan Foto Bersama ID Card**. Field Host & Tujuan Kunjungan HILANG dari tampilan; `tujuan` otomatis kesimpen "Magang Kerja" di background (bukan input manual).
+- **Riwayat nama Magang**: collection Firestore baru `security_magang_directory` ({nama, instansi_dept, updated_at}). Tiap kali ada Magang check-in, doc di-upsert (`setDoc` merge, id = slug dari nama) — jadi kunjungan berikutnya nama & Unit Bisnis-nya auto-muncul di autocomplete (persis pola autocomplete Karyawan yang udah ada, cuma sumber datanya beda collection).
+- Field lama `no_kendaraan` (plat) yang tadinya ada di form Tamu Eksternal **dihapus dari UI** (diganti posisinya sama Kategori Tamu) — tapi field `no_kendaraan` di form Karyawan TETAP ada & tetap auto-terisi dari `employees_directory.plat_kendaraan` kalau karyawannya punya data plat (dicek eksplisit atas permintaan Reza — sudah benar dari awal, gak ada bug, gak perlu perbaikan).
+
+**Validasi Karyawan**: sebelum ini, staf security bisa aja ngetik nama sembarangan di kolom Karyawan tanpa milih dari dropdown, dan tetap ke-submit apa adanya. Sekarang `handleCheckIn` cek dulu: nama yang diketik HARUS persis cocok (case-insensitive) sama salah satu nama di `karyawanDB` (dari `employees_directory`) — kalau enggak, submit diblok + Modal "Nama Karyawan Tidak Sesuai" muncul (bukan cuma toast, biar jelas keliatan blocking).
+
+**Filter tab Riwayat**: 4 dropdown baru (Kategori: Internal/Eksternal/Magang, Bulan, Tahun, PT/Instansi — opsi Bulan/Tahun/PT di-generate dinamis dari data yang ada), plus **tombol Export Excel baru KHUSUS tab Riwayat** yang ngikut filter aktif (beda dari tombol Export Excel lama di header yang selalu export SEMUA data tanpa filter — keduanya sekarang hidup berdampingan: 1 buat "export semua", 1 lagi "export sesuai filter yang lagi dilihat").
+
+### 13F. Fitur baru dari nol: Inspeksi APAR (giliran ke-4 Reza)
+
+Konsep dari Reza: APAR (Alat Pemadam Api Ringan) ada di tiap lantai, datanya dikelola Admin GA, dan tiap bulan Security wajib inspeksi tiap unit — cukup scan QR fisik yang nempel di APAR-nya, otomatis kecatat siapa+kapan. QR-nya juga harus berfungsi ganda: kalau discan Security dari dalam app pas lagi inspeksi ya buka form; tapi kalau discan orang random pakai kamera HP biasa (di luar app), harus tetap nampilin sesuatu yang berguna (bukan cuma teks mentah) — status "sudah/belum diinspeksi bulan ini".
+
+**Kenapa QR-nya beda dari Patroli/Checklist OB**: QR Patroli & Checklist OB (§ lama, `admin/qr-manager`) payload-nya cuma STRING POLOS (misal `"Lantai 2::Ruang Kerja Utama"`) — kalau discan kamera biasa di luar app, yang muncul cuma teks mentah gak berguna, karena itu emang didesain buat dibaca CUMA lewat scanner in-app (`Html5QrcodeScanner`) yang lagi expect teks itu. APAR butuh perilaku beda (harus ada isi yang berguna kalau dibuka browser biasa), jadi payload-nya di-generate sebagai **URL PENUH** (`https://.../qr-apar?id=<docId>`), bukan string polos.
+
+**Constraint penting**: project ini `output: "export"` (static export murni, lihat baris 5 dokumen ini) — TIDAK BISA pakai dynamic route Next.js (`app/qr-apar/[id]/page.tsx`) karena butuh `generateStaticParams` yang gak cocok buat data yang nambah terus. Solusinya: route statis biasa `app/qr-apar/page.tsx`, baca `id` dari **query string** (`window.location.search` + `URLSearchParams`, bukan `useSearchParams()` dari Next biar gak kena syarat Suspense boundary), baru fetch Firestore client-side. Ini satu-satunya dynamic-content-via-URL di seluruh app (dicek: gak ada folder `[xxx]` lain di `src/app`).
+
+**3 file baru**:
+1. **`admin/apar/page.tsx`** (Admin GA, `useAuthGuard roles:["Admin"]`) — CRUD unit APAR (lantai/kode/lokasi/kadaluarsa opsional) ke collection `apar_units`, plus generate+cetak QR per unit (pola sama `admin/qr-manager`: `api.qrserver.com` buat render gambar QR, grid 3 kolom pas print, kop logo). Ditambahkan ke menu `admin/page.tsx` ("Master Data APAR").
+2. **`components/pages/InspeksiAparPage.tsx`** + thin wrapper `dashboard/security/inspeksi-apar/page.tsx` — accordion per lantai (pola sama Patroli), tiap unit APAR nampilin status "sudah/belum diinspeksi bulan ini" + tombol "Scan QR". Scan pakai `Html5QrcodeScanner` yang sama kayak Patroli, tapi decode hasil scan-nya di-parse sebagai URL (`new URL(decodedText).searchParams.get("id")`) trus dicocokkan sama id unit yang lagi mau diinspeksi — kalau QR salah, toast warning (gak lolos ke form). Ada juga tombol "By-pass QR" (fallback manual kalau QR fisik rusak, pola sama Patroli). Form inspeksi: Kondisi Tabung (Baik/Berkarat/Bocor-Rusak), Tekanan (Normal/Kurang/Habis), Segel (Utuh/Rusak), catatan opsional. Submit nulis ke collection baru `apar_inspections` (log historis tiap inspeksi) SEKALIGUS update field `terakhir_inspeksi` di `apar_units/{id}` (denormalisasi biar halaman publik & progress bar gak perlu query tambahan).
+3. **`app/qr-apar/page.tsx`** (publik, TANPA `useAuthGuard`) — baca `?id=`, tampilkan kartu status: nama/kode APAR + lokasi + lantai, badge hijau "Sudah Diinspeksi Bulan Ini" (dengan detail: petugas, waktu, kondisi tabung/tekanan/segel) atau kuning "Belum Diinspeksi Bulan Ini" kalau belum ada record bulan berjalan.
+
+**Verifikasi**: `tsc`/`eslint` bersih. Dicek end-to-end di dev server: tambah unit APAR baru di `admin/apar` → QR ke-generate (payload dicek langsung dari `<img src>`, isinya persis `.../qr-apar?id=<docId>`) → buka `dashboard/security/inspeksi-apar`, unit muncul di lantai yang benar, klik Scan → By-pass → isi form → submit → progress bar naik ke 100%, badge unit berubah jadi "Sudah diinspeksi (nama petugas)" → buka URL QR publiknya langsung (`/qr-apar?id=...`) di tab baru **tanpa login** → tampil status lengkap sesuai yang baru diinspeksi. Data uji dihapus lagi setelah verifikasi (tombol hapus di `admin/apar`, ada modal konfirmasi juga — reuse `useConfirm`).
+
+### 13G. `paket` — serah terima wajib foto bukti + modal Detail lengkap (giliran ke-4, bareng APAR)
+
+Masalah yang mau diselesaikan Reza: kadang ada kesalahpahaman soal paket — siapa yang nyerahin, siapa yang nerima, kapan — karena sebelumnya tombol "Serahkan" cuma `window.confirm()` polos, gak ada bukti apa-apa selain teks status.
+
+- **Field baru** di `TipePaket`/collection `packages`: `foto_bukti_ambil_url` (foto pas diserahkan, beda dari `foto_bukti_url` yang udah ada buat foto pas diterima), `petugas_input` (nama Security yang nge-log paket masuk — sebelumnya CUMA dipakai buat kirim notif WA, gak pernah disimpan ke Firestore!), `petugas_ambil` (nama Security yang konfirmasi serah terima).
+- **Alur baru**: klik "Serahkan ➔" gak langsung update Firestore — buka Modal "Serah Terima Paket" yang WAJIB ambil foto (kamera atau galeri, reuse mekanisme capture/resize yang sama kayak form input, sekarang di-generalisasi pakai flag `cameraMode: "input" | "serahkan"` biar 1 set kode kamera bisa dipakai 2 konteks). Tombol submit disabled sampai ada foto. Baru setelah itu `updateDoc` (status → "Sudah Diambil", `waktu_diambil`, `foto_bukti_ambil_url`, `petugas_ambil`).
+- **Tabel Riwayat Paket**: kolom Barang sekarang nampilin 2 thumbnail bertumpuk (foto diterima + foto diambil, kalau ada) — bukan cuma 1 foto kayak sebelumnya.
+- **Baris tabel bisa diklik** (fitur baru di komponen shared `components/ui/Table.tsx` — `Tr` sekarang nerima prop `onClick` opsional, dipakai di sini tapi additive/gak ganggu pemakaian di file lain) buat buka Modal Detail: 2 kolom (Diterima/Masuk vs Diambil/Keluar) masing-masing nampilin foto besar + waktu + nama petugas, plus nama penerima. Kalau status masih "Belum Diambil", kolom kanan nampilin placeholder + tombol "Serahkan Sekarang" yang langsung buka modal serah-terima.
+
+**Verifikasi**: `tsc`/`eslint` bersih. Modal Detail dicek visual pakai data lama (real, dari sebelum fitur ini ada) — behavior fallback benar: foto "diambil" gak ada (placeholder ikon paket), `petugas_input`/`petugas_ambil` nampilin "-" (field baru, data lama emang gak punya). **Alur create-paket-baru & submit serah-terima foto gak sempat dites interaktif penuh** sesi ini (browser tool sempat gak stabil pas isi form banyak field — klik/fokus kadang meleset ke elemen lain, dikonfirmasi lewat cek `document.activeElement` yang tetap `BODY` walau tool bilang klik sukses; dicoba beberapa pendekatan termasuk native input setter, semua kena batasan sandbox yang sama). **Rekomendasi**: minta Security coba beneran sekali di device asli buat mastiin foto-wajib-sebelum-submit jalan mulus, terutama di HP (kamera native, bukan browser desktop).
+
+### 13H. Commit, deploy, dan status akhir
+
+Urutan sesuai instruksi eksplisit Reza, dijalankan tanpa jeda konfirmasi tambahan (sudah given eksplisit di prompt): `git checkout dev` → `git add .` → `git commit` → `git push origin dev` → `git checkout main` → `git merge dev` → `git push origin main` → `npm run build` → `firebase deploy`. Hash commit & hasil masing-masing langkah dicatat di riwayat command Bash sesi ini (lihat transcript kalau butuh hash persis).
+
+**Belum dikerjakan (di luar scope literal sesi ini)**: lihat poin C di §0 di atas.

@@ -51,6 +51,9 @@ const IconFileText = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconLogOut = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
 );
+const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v2" /><path d="M8 5h6l1 2H7z" /><path d="M9 7v3" /><path d="M15 7l4-2" /><path d="M9 10h4a3 3 0 0 1 3 3v8H8v-8a3 3 0 0 1 1-2z" /><path d="M8 15h8" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -147,6 +150,13 @@ export default function AdminDashboardPage() {
       path: "/admin/monitor-security",
       token: "red",
       icon: IconShield,
+    },
+    {
+      title: "Master Data APAR",
+      desc: "Kelola data APAR per lantai & cetak QR inspeksi bulanan.",
+      path: "/admin/apar",
+      token: "red",
+      icon: IconFireExtinguisher,
     },
     {
       title: "QR Code Generator",
