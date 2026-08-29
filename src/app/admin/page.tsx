@@ -2,11 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Modal from "../../components/ui/Modal";
 
 // Ikon SVG garis — set sama dengan portal utama (src/app/page.tsx) & shell subhalaman admin
 type IconProps = { size?: number; color?: string };
 const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+const IconHome = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V21h13V9.5" /><path d="M9.5 21v-6h5v6" /></svg>
 );
 const IconIdCard = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="8.5" cy="11" r="2" /><path d="M6 16c.5-1.7 1.6-2.5 2.5-2.5s2 .8 2.5 2.5" /><path d="M14 10h5" /><path d="M14 13.5h5" /></svg>
@@ -52,6 +56,7 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [adminName, setAdminName] = useState<string>("Admin");
   const [isReady, setIsReady] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     // 💡 VALIDASI KEAMANAN TINGKAT TINGGI (STRICT MODE)
@@ -72,11 +77,11 @@ export default function AdminDashboardPage() {
     }, 0);
   }, [router]);
 
-  const handleLogout = () => {
-    if (window.confirm("Apakah Anda yakin ingin keluar dari Sesi Admin?")) {
-      localStorage.clear();
-      router.replace("/");
-    }
+  const handleLogout = () => setShowLogoutModal(true);
+
+  const confirmLogout = () => {
+    localStorage.clear();
+    router.replace("/");
   };
 
   const menuAdmin = [
@@ -189,12 +194,12 @@ export default function AdminDashboardPage() {
           border-bottom: 1px solid var(--line);
         }
         .site-header-brand { display: flex; align-items: center; gap: 10px; }
-        .logout-btn {
-          display: flex; align-items: center; gap: 6px; background: var(--red-50); color: var(--red-600);
-          border: 1px solid rgba(220,38,38,0.2); padding: 8px 15px; border-radius: 8px; font-size: 13px;
-          font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s;
+        .logout-icon-btn {
+          display: flex; align-items: center; justify-content: center; width: 38px; height: 38px;
+          background: var(--red-50); color: var(--red-600); border: 1px solid rgba(220,38,38,0.2);
+          border-radius: 50%; cursor: pointer; transition: 0.2s; flex-shrink: 0;
         }
-        .logout-btn:hover { background: var(--red-600); color: white; }
+        .logout-icon-btn:hover { background: var(--red-600); color: white; transform: scale(1.06); }
         .admin-hero {
           position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
           padding: 50px 20px 90px; text-align: center;
@@ -223,11 +228,11 @@ export default function AdminDashboardPage() {
         .admin-card-title { margin: 0 0 8px 0; color: var(--ink); font-size: 20px; font-weight: bold; }
         .admin-card-desc { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
         .admin-card-arrow { margin-top: auto; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 5px; position: relative; z-index: 2; }
-        .mobile-nav { display: none; }
+        .app-bottom-nav { display: none; }
 
         /* 📱 MEDIA QUERY UNTUK HP */
         @media (max-width: 768px) {
-          .main-container { padding-bottom: 90px !important; }
+          .main-container { padding-bottom: 108px !important; }
           .admin-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
           .admin-card { flex-direction: row !important; align-items: center !important; padding: 15px 20px !important; gap: 15px !important; border-radius: 16px !important; }
           .admin-card:hover { transform: translateY(-2px); }
@@ -238,14 +243,16 @@ export default function AdminDashboardPage() {
           .admin-card-arrow { display: none !important; }
           .admin-bg-decor { display: none !important; }
 
-          /* DESAIN BOTTOM NAV KHUSUS RUANG ADMIN (SECURE AREA) */
-          .mobile-nav {
-            display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-top: 1px solid var(--line);
-            z-index: 90; padding: 12px 15px; justify-content: space-around; box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
+          /* BOTTOM NAV APP-STYLE — pola sama seperti halaman utama (src/app/page.tsx) */
+          .app-bottom-nav {
+            display: flex; position: fixed; left: 14px; right: 14px; bottom: 14px; height: 66px;
+            background: rgba(255,255,255,0.97); backdrop-filter: blur(14px); border: 1px solid var(--line);
+            border-radius: 24px; box-shadow: 0 14px 32px -10px rgba(24,24,27,0.2); z-index: 90;
+            align-items: center; justify-content: space-around; padding: 0 6px;
           }
-          .m-nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink-soft); font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; background: none; border: none; font-family: inherit; }
-          .m-nav-item:active { transform: scale(0.9); }
+          .nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; color: #a1a1aa; cursor: pointer; background: none; border: none; font-family: inherit; }
+          .nav-item.active { color: var(--red-600); }
+          .nav-item span { font-size: 9.5px; font-weight: 700; }
           .hide-on-mobile { display: none !important; }
         }
       `}} />
@@ -254,11 +261,11 @@ export default function AdminDashboardPage() {
       <div className="hide-on-mobile site-header">
         <div className="site-header-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-samudera.png" alt="Logo" style={{ height: "30px", filter: "invert(1) brightness(0.2)" }} />
+          <img src="/logo-samudera.png" alt="Logo" style={{ height: "30px" }} />
           <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "18px", borderLeft: "2px solid var(--line)", paddingLeft: "10px" }}>Admin Desk</span>
         </div>
-        <button className="logout-btn" onClick={handleLogout}>
-          <IconLogOut size={15} /> Keluar Sesi Admin
+        <button className="logout-icon-btn" onClick={handleLogout} title="Keluar Sesi Admin" aria-label="Keluar Sesi Admin">
+          <IconLogOut size={17} />
         </button>
       </div>
 
@@ -310,26 +317,45 @@ export default function AdminDashboardPage() {
 
       </div>
 
-      {/* 📱 BOTTOM NAVIGATION EKSKLUSIF ADMIN (HANYA MUNCUL DI HP) */}
-      <div className="mobile-nav">
+      {/* 📱 BOTTOM NAVIGATION EKSKLUSIF ADMIN (HANYA MUNCUL DI HP) — pola sama seperti halaman utama */}
+      <div className="app-bottom-nav">
         {/* Mengembalikan ke posisi atas (Dashboard Admin) bukan Portal Utama */}
-        <button className="m-nav-item" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} style={{ color: "var(--info)" }}>
-          <IconShield size={20} />
+        <button className="nav-item active" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+          <IconHome size={21} />
           <span>Beranda</span>
         </button>
-        <button className="m-nav-item" onClick={() => router.push("/admin/users")}>
-          <IconIdCard size={20} />
-          <span>Pengguna</span>
+        <button className="nav-item" onClick={() => router.push("/admin/monitor-ob")}>
+          <IconBroom size={21} />
+          <span>OB & CS</span>
         </button>
-        <button className="m-nav-item" onClick={() => router.push("/admin/report")}>
-          <IconFileText size={20} />
-          <span>Laporan</span>
+        <button className="nav-item" onClick={() => router.push("/admin/monitor-security")}>
+          <IconShield size={21} />
+          <span>Security</span>
         </button>
-        <button className="m-nav-item" onClick={handleLogout} style={{ color: "var(--red-600)" }}>
-          <IconLogOut size={20} />
+        <button className="nav-item" onClick={handleLogout}>
+          <IconLogOut size={21} />
           <span>Keluar</span>
         </button>
       </div>
+
+      {/* 🔹 MODAL KONFIRMASI LOGOUT — ganti window.confirm() native biar lebih modern & konsisten sama UI lain */}
+      <Modal open={showLogoutModal} onClose={() => setShowLogoutModal(false)} maxWidth="380px">
+        <div style={{ textAlign: "center", padding: "10px 0" }}>
+          <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "var(--red-50)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+            <IconLogOut size={26} color="var(--red-600)" />
+          </div>
+          <h3 style={{ margin: "0 0 8px 0", fontSize: "17px", fontWeight: 800, color: "var(--ink)" }}>Keluar dari Sesi Admin?</h3>
+          <p style={{ margin: "0 0 22px 0", fontSize: "13px", color: "var(--muted)" }}>Anda perlu login ulang untuk mengakses Control Panel setelah ini.</p>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-soft)", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
+              Batal
+            </button>
+            <button onClick={confirmLogout} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "none", background: "var(--red-600)", color: "white", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
+              Ya, Keluar
+            </button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

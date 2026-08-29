@@ -36,20 +36,11 @@ interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; ar
 // IKON — SVG garis (bukan emoji), 1 set dipakai bareng di header, menu cepat, & bottom nav
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconBell = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-);
 const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
 );
 const IconHome = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V21h13V9.5" /><path d="M9.5 21v-6h5v6" /></svg>
-);
-const IconChart = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 20V10" /><path d="M12 20V4" /><path d="M18 20v-7" /></svg>
-);
-const IconPlus = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
 );
 const IconIdCard = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="8.5" cy="11" r="2" /><path d="M6 16c.5-1.7 1.6-2.5 2.5-2.5s2 .8 2.5 2.5" /><path d="M14 10h5" /><path d="M14 13.5h5" /></svg>
@@ -84,6 +75,14 @@ const geserTanggalISO = (iso: string, n: number) => {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, m - 1, d + n);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+};
+
+// Sabtu/Minggu — OB & CS tidak ada jadwal di hari ini (sama pola dengan PlottingOBPage/monitor-ob),
+// dipakai buat "paksa kosong" tampilan tim bertugas walau dokumen daily_plots lama masih nyimpan data basi
+const isWeekend = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const day = new Date(y, m - 1, d).getDay();
+  return day === 0 || day === 6;
 };
 
 // Ambil plat nomor murni dari field `kendaraan` — field ini di Firestore kadang berupa
@@ -214,8 +213,9 @@ export default function PortalSIBM() {
     });
 
     // 1b. Setelah jam 20:00 WITA, tarik juga plot BESOK biar staf/GA bisa lihat plotting besok dari malam ini
+    // (skip kalau besok Sabtu/Minggu — OB & CS tidak ada jadwal, walau dokumen plot lama mungkin masih nyimpan data basi)
     let unsubPlotBesok = () => {};
-    if (sudahMalam) {
+    if (sudahMalam && !isWeekend(tomorrowISO)) {
       unsubPlotBesok = onSnapshot(doc(db, "daily_plots", tomorrowISO), (docSnap) => {
         setObBesok(parsePlotDoc(docSnap));
       });
@@ -768,7 +768,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     });
   }, [logKendaraanMentah, daftarSemuaKendaraan]);
 
-  const hadirOB = obBertugas.filter(o => o.status.includes("Hadir"));
+  // Sabtu/Minggu dipaksa kosong di sisi tampilan (bukan cuma andalkan data Firestore) — OB & CS
+  // memang tidak ada jadwal weekend, tapi dokumen daily_plots lama yang belum di-regenerate ulang
+  // masih bisa nyimpan plot basi, jadi kalau dibaca mentah-mentah tim bertugas hari ini jadi "tidak sesuai".
+  const hadirOB = isWeekend(todayISO) ? [] : obBertugas.filter(o => o.status.includes("Hadir"));
   const driverEntries = Object.entries(driverStatusMap);
 
   // ==========================================
@@ -890,10 +893,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
   const WARNA_LEVEL_KALENDER = ["#f7f6f5", "#fee2e2", "#fca5a5", "#f87171", "#dc2626"];
 
-  const scrollKeSection = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   return (
     <div className="main-container" style={{ backgroundColor: "#f7f6f5", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
 
@@ -925,13 +924,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         }
         .brand-name { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: 0.2px; line-height: 1.15; }
         .brand-sub { font-size: 10.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.2px; }
-        .header-icon-btn {
-          width: 36px; height: 36px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line);
-          display: flex; align-items: center; justify-content: center; color: var(--ink-soft); position: relative;
-          cursor: pointer; flex-shrink: 0;
-        }
-        .header-icon-dot { position: absolute; top: 6px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--red-600); border: 1.5px solid #fff; }
-
         /* 🔴 RINGKASAN HARI INI — pengganti hero slideshow lama, tetap merah + motif blueprint-grid */
         .ringkasan-strip {
           position: relative; overflow: hidden; border-radius: 22px; color: #fff; padding: 22px;
@@ -972,7 +964,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .tren-bar { width: 6px; border-radius: 2px; min-height: 2px; }
 
         /* 🗓️ KALENDER AKTIVITAS */
-        .kalender-cell { aspect-ratio: 1; border-radius: 7px; }
+        .kalender-cell { aspect-ratio: 1; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+        @media (min-width: 480px) { .kalender-cell { font-size: 14px; } }
 
         /* 📱 BOTTOM NAV APP-STYLE */
         .app-bottom-nav { display: none; }
@@ -1003,11 +996,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             <div className="brand-sub">{formatTgl}</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button className="header-icon-btn" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Notifikasi &amp; pengumuman" title="Notifikasi &amp; pengumuman">
-            <IconBell size={17} />
-            {pengumumanGedung && <span className="header-icon-dot" />}
-          </button>
+        <div className="desktop-only-hide" style={{ alignItems: "center", gap: "10px" }}>
           <Button
             variant="ghost"
             fullWidth={false}
@@ -1064,21 +1053,31 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               <div className="qa-icon-chip"><IconPackage size={20} /></div>
               <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Resi Paket</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lacak dokumen logistik</p></div>
             </div>
-            <div className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-              <div className="qa-icon-chip"><IconClipboard size={20} /></div>
-              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Request ATK</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Barang kantor ke GA</p></div>
+            {/* Request ATK, Kerusakan & Bahaya SBO disembunyikan di mobile (sudah ada shortcut sama persis di bottom-nav
+                mobile: ATK, Kerusakan, FAB tengah) — di desktop TETAP MUNCUL karena gak ada bottom-nav sama sekali.
+                Dibungkus wrapper terpisah (bukan taruh class toggle langsung di .qa-card) supaya display:flex
+                bawaan .qa-card gak ketiban display:block/none dari class toggle-nya. */}
+            <div className="desktop-only-hide">
+              <div className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="qa-icon-chip"><IconClipboard size={20} /></div>
+                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Request ATK</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Barang kantor ke GA</p></div>
+              </div>
             </div>
             <div className="qa-card" onClick={() => setActiveModal("overtime")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
               <div className="qa-icon-chip"><IconClock size={20} /></div>
               <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Lembur AC</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Request ruang lembur</p></div>
             </div>
-            <div className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-              <div className="qa-icon-chip"><IconWrench size={20} /></div>
-              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Kerusakan</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lapor fasilitas rusak</p></div>
+            <div className="desktop-only-hide">
+              <div className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="qa-icon-chip"><IconWrench size={20} /></div>
+                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Kerusakan</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lapor fasilitas rusak</p></div>
+              </div>
             </div>
-            <div className="qa-card" onClick={() => setActiveModal("sbo")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px", borderColor: "rgba(220,38,38,0.35)" }}>
-              <div className="qa-icon-chip" style={{ background: "var(--red-600)", color: "#fff" }}><IconAlertTriangle size={20} /></div>
-              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--red-700)", fontSize: "14px", fontWeight: 800 }}>Bahaya SBO</h2><p style={{ margin: 0, color: "var(--red-600)", fontSize: "11px", fontWeight: 700 }}>Temuan kondisi darurat</p></div>
+            <div className="desktop-only-hide">
+              <div className="qa-card" onClick={() => setActiveModal("sbo")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px", borderColor: "rgba(220,38,38,0.35)" }}>
+                <div className="qa-icon-chip" style={{ background: "var(--red-600)", color: "#fff" }}><IconAlertTriangle size={20} /></div>
+                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--red-700)", fontSize: "14px", fontWeight: 800 }}>Bahaya SBO</h2><p style={{ margin: 0, color: "var(--red-600)", fontSize: "11px", fontWeight: 700 }}>Temuan kondisi darurat</p></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1129,13 +1128,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               <div
                 key={h.iso}
                 className="kalender-cell"
-                title={h.adaData ? `${h.tanggal}: ada aktivitas` : `${h.tanggal}: belum ada data`}
+                title={h.adaData ? `Tanggal ${h.tanggal}: ada aktivitas` : `Tanggal ${h.tanggal}: belum ada data`}
                 style={{
                   background: WARNA_LEVEL_KALENDER[h.level],
                   border: h.adaData ? "none" : "1px dashed var(--line)",
                   boxShadow: h.hariIni ? "0 0 0 2px #fff, 0 0 0 3.5px var(--ink)" : "none",
+                  color: h.level >= 3 ? "#fff" : h.hariIni ? "var(--red-600)" : "var(--ink-soft)",
+                  fontWeight: h.hariIni ? 800 : 700,
                 }}
-              />
+              >
+                {h.tanggal}
+              </div>
             ))}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", marginTop: "14px" }}>
@@ -1296,17 +1299,16 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           <IconHome size={21} />
           <span>Home</span>
         </button>
-        <button className="nav-item" onClick={() => scrollKeSection("tren-aktivitas-section")}>
-          <IconChart size={21} />
-          <span>Monitor</span>
+        <button className="nav-item" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
+          <IconWrench size={21} />
+          <span>Kerusakan</span>
         </button>
-        <div className="nav-fab" onClick={() => scrollKeSection("menu-cepat-section")} role="button" aria-label="Menu Cepat">
-          <IconPlus size={22} color="#fff" />
+        <div className="nav-fab" onClick={() => setActiveModal("sbo")} role="button" aria-label="Lapor Bahaya (SBO)">
+          <IconAlertTriangle size={22} color="#fff" />
         </div>
-        <button className="nav-item" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ position: "relative" }}>
-          <IconBell size={21} />
-          {pengumumanGedung && <span style={{ position: "absolute", top: "-2px", right: "6px", width: "7px", height: "7px", borderRadius: "50%", background: "var(--red-600)", border: "1.5px solid #fff" }} />}
-          <span>Info</span>
+        <button className="nav-item" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
+          <IconClipboard size={21} />
+          <span>ATK</span>
         </button>
         <button className="nav-item" onClick={() => setActiveModal("login")}>
           <IconUserCircle size={21} />
