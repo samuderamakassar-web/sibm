@@ -9,7 +9,7 @@ initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
-const JAM_TOLERANSI_MS = 2 * 60 * 60 * 1000; // 2 jam
+const JAM_TOLERANSI_MS = 3 * 60 * 60 * 1000; // 3 jam — patroli kebersihan berikutnya kalau belum lapor lagi
 
 // Tanggal hari ini dalam zona WITA (UTC+8), biar konsisten sama doc ID daily_plots
 function todayISO() {
@@ -86,7 +86,7 @@ async function main() {
 
     const nomorWA = userSnap.empty ? null : userSnap.docs[0].data().whatsapp;
     const areaTeks = areaTugas.join(", ");
-    const pesan = `Halo ${nama}, ini reminder untuk upload laporan checklist di area: ${areaTeks}. Jangan lupa terus keliling & lapor foto before/after ya. 🧹`;
+    const pesan = `Halo ${nama}, sudah waktunya patroli kebersihan lagi di area: ${areaTeks}. Yuk keliling & upload laporan checklist (foto before/after) untuk sesi berikutnya. 🧹`;
 
     await kirimWA(nomorWA, pesan);
 
