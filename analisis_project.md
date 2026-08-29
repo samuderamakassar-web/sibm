@@ -1,47 +1,40 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 29 Agustus 2026 (lanjutan — fix portal utama)
+Update terakhir: 29 Agustus 2026 (lanjutan — overtime, helpdesk, monitor-ob, monitor-security, shell admin — SUDAH DI-DEPLOY)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 29 Agustus 2026)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 29 Agustus 2026, lanjutan — §12)
 
-Reza istirahat 2-3 jam, dokumen ini di-update biar chat/sesi berikutnya (atau Reza sendiri) langsung nyambung tanpa baca ulang semua histori di bawah. Detail teknis lengkap tiap poin ada di §8E-§10B (cari nomor section-nya).
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini nerusin dari checkpoint sebelumnya (§0 versi lama — kini archived, isinya sudah tercakup di §8E-§11B) dengan fokus baru: `admin/overtime`, `admin/helpdesk`, `admin/monitor-ob` (PDF export), `admin/monitor-security` (filter + roster), dan shell `admin/page.tsx`. Detail teknis lengkap ada di **§12** (cari nomor section-nya).
 
-### A. Apa yang dikerjakan sesi ini (fokus: modul OB & CS, ujung ke ujung)
+### A. Apa yang dikerjakan sesi ini
 
-Urutan kronologis, semua di `components/pages/` kecuali disebut lain:
+1. **`admin/overtime/page.tsx`** — pisah alur Lembur Gedung/Tenant (approval DIHAPUS, sudah auto "Tercatat" dari portal, jadi tabel-only + filter bulan/tahun + export Excel asli) dari Lembur Tim (approval Setujui/Tolak TETAP jalan, tambah "Lihat Detail Tabel" via modal kalau staf input >1 hari, tambah tombol "Kirim Email Rekap" per periode begitu semua pengajuan periode itu sudah diputuskan).
+2. **`admin/helpdesk/page.tsx`** — tampilan kartu grid → tabel (Pelapor, Tanggal, Keluhan, Foto Laporan, Waktu Lapor, Waktu Selesai, Foto Selesai, Status, Aksi), field `waktu_selesai` baru direkam otomatis pas status pertama kali jadi "Selesai", foto bisa diklik jadi lightbox. Notifikasi email ke pelapor pas tiket selesai **SUDAH ADA dari sebelumnya** (`kirimNotifikasiHelpdesk`, jalan berdasar Master Data Karyawan) — dikonfirmasi ulang masih utuh, tidak perlu kode baru.
+3. **`admin/atk/page.tsx`** — dicek: notifikasi email ke pemohon pas ATK "Selesai/Diambil" **JUGA SUDAH ADA dari sebelumnya** (`kirimNotifikasiAtkSiap`) — dikonfirmasi masih utuh, tidak ada perubahan kode di file ini sesi ini.
+4. **`admin/monitor-ob/page.tsx`** — Export PDF tab Log Pembersihan sekarang isinya laporan LENGKAP per entri (semua jawaban checklist per segmen + foto before/after), bukan cuma ringkasan status. Tab Inspeksi Fasilitas dapat tombol Export PDF baru (sebelumnya gak ada) dengan detail penuh juga. Filter bulan yang tadinya 1 dropdown gabungan ("Agustus 2026") dipecah jadi 2 dropdown independen (Bulan + Tahun) di Log Pembersihan, dan filter Bulan/Tahun baru ditambahkan di Inspeksi (sebelumnya gak ada filter periode sama sekali).
+5. **`admin/monitor-security/page.tsx`** — tab Log Patroli dapat filter Bulan/Tahun + Export PDF detail (semua titik patroli, kondisi, foto, area terlewat). Tab Roster Danru: **bug nyata diperbaiki** (tabel dulu nampilin gabungan mentah 2 dokumen bulanan = kebaca ~2 bulan kalender penuh, sekarang persis 1 siklus 11→10 bulan berikutnya), ditambah dropdown pilihan periode (bisa lihat siklus lain, gak cuma yang aktif hari ini), tombol print A4 Landscape dengan kop logo Samudera + judul "ROSTER SECURITY — PERIODE ...", tampilan dipadatkan (chip warna per shift, padding lebih kecil) biar 1 periode (≤31 hari) muat 1 lembar cetak.
+6. **`admin/page.tsx`** (shell Control Panel) — logo `logo-samudera.png` **ketemu bug filter CSS** (`invert(1) brightness(0.2)` bikin logo yang aslinya merah/hitam berubah jadi item legam — root cause "logo hitam" yang dilaporkan), dihapus. Tombol logout desktop diganti jadi ikon bulat kecil (bukan pill teks panjang), dan `window.confirm()` native diganti Modal konfirmasi custom (avatar ikon + 2 tombol Batal/Ya Keluar) — jauh lebih modern, konsisten sama UI lain di app ini.
+7. **Dependency baru**: `xlsx` (SheetJS, dari npm registry — versi 0.18.5) buat export Excel ASLI (`.xlsx` beneran, bukan CSV berkedok `.csv` yang dinamain manual). Dipakai cuma buat MENULIS file yang datanya digenerate sendiri (bukan parsing file asing), jadi 2 advisory keamanan npm yang nempel di versi ini (prototype pollution & ReDoS, keduanya soal *parsing*) gak relevan buat cara pakai di project ini.
 
-1. **`DashboardOBPage.tsx`** (§8E) — redesign visual penuh ke sistem token yang sama dengan portal/admin (bukan sistem warna baru). Kartu shift, peringatan stok menipis, panel koordinator, grid menu, bottom nav mobile — semua ikut token.
-2. **`ChecklistOBPage.tsx`** (§8F, §8G) — redesign visual + 5 fitur baru: (a) daftar item checklist per-lantai diperbaiki sesuai fasilitas fisik asli (Lantai 1 & 5 tadinya pakai template generik yang salah), (b) minimal 2 pasang foto before/after wajib (dulu cuma 1, sekarang ada modal peringatan kalau kurang), (c) reminder WA checklist digeser dari tiap 2 jam ke tiap 3 jam, (d) badge "SESI N" di riwayat (nomor urut laporan per hari per area), (e) Lantai 5 (area kerja bersama) otomatis "selesai buat semua staf" begitu 1 orang submit — gak perlu dikerjain ulang berkali-kali.
-3. **`PlottingOBPage.tsx`** (§8F) — fix: OB & CS gak ada jadwal Sabtu/Minggu (generate otomatis 30 hari sekarang skip weekend, kalender kasih tanda "Libur").
-4. **`StockOpnamePage.tsx`** (§8H) — rombak total: hapus fitur "pengajuan pembelian ke Admin GA" (Reza bilang gak berfungsi), ganti dengan analisa pemakaian rata-rata otomatis + 2 tabel baru (Pengadaan Urgent, Rencana Belanja Bulan Depan) yang nyaranin jumlah beli.
-5. **`InspeksiFasilitasPage.tsx`** (§8I, §8J) — halaman baru, GANTI TOTAL fitur lama "Lapor Kerusakan" (form bebas). Sekarang checklist inspeksi fasilitas MINGGUAN per area (Baik/Rusak/Tidak Ada per fasilitas), daftar fasilitas disesuaikan per area asli (Basement: Genset/Gudang/Mesin Air/Pompa Hydrant/Taman; Lantai 5: Gudang/Ruang Pompa/Rooftop/Tandon Air; lantai lain: daftar generik 11 item). Temuan "Rusak" tetap otomatis diteruskan ke Helpdesk Admin GA (satu-satunya bagian fitur lama yang dipertahankan).
-6. **⚠️ Temuan besar, 3x kejadian**: route `app/dashboard/ob/{plotting,stok,laporan}/page.tsx` ternyata BUKAN thin wrapper ke `components/pages/` seperti yang diklaim di dokumen lama (§4) — masih serve kode duplikat lama secara utuh, jadi semua fix di atas SEMPAT gak muncul di browser sampai ketauan & dibenerin satu-satu. **Sekarang SEMUA route `dashboard/ob/*` sudah benar tersambung** (checklist, deep-cleaning, plotting, stok, laporan — 5/5).
-7. **`admin/monitor-ob/page.tsx`** (§10, §10B) — Reza laporan "laporan yang muncul tidak sesuai", ternyata halaman ini emang udah lama baca bentuk data yang SALAH/gak pernah ditulis sama sekali oleh halaman OB manapun. Dibenerin total: interface checklist disamain ke bentuk data asli (`detail_segmen`+`foto_bukti`, bukan `detail_tugas` yang gak pernah ada), tab "Pengajuan Barang" dihapus (nganggur, fiturnya udah gak ada), tab Plot Tugas Harian dibenerin dari bug fatal (query `orderBy("tanggal")` padahal dokumennya gak punya field itu sama sekali — tab ini KOSONG dari awal, bukan bug baru) sekaligus diredesign jadi 1 tabel simpel per bulan (dropdown bulan, bukan 90 kartu berulang), tab baru Inspeksi Fasilitas ditambahkan, tombol "+ Buat Plot Baru" (link ke halaman plotting) & "Export PDF" (`window.print()`, buat kebutuhan audit) ditambahkan di 2 tab (Log Pembersihan & Plot).
-8. **Firestore**: 2 composite index baru dibikin & di-deploy langsung dari sini pakai Firebase CLI (`inspeksi_fasilitas`, `daily_plots`) — `firestore.indexes.json` sekarang jadi acuan index buat project ini (sebelumnya semua index dikelola manual lewat klik Console, gak pernah ke-track di kode).
-9. **Deploy ke production — 2x** (urutan: commit dev → push dev → merge ke main → push main → `npm run build` → `firebase deploy` → balik ke dev). **Live di https://sibm-app.web.app**, branch `dev` & `main` sinkron, working tree bersih di titik ini.
+### B. Status: SUDAH commit, merge, push, build, DAN deploy (bukan cuma "siap deploy")
 
-### B. Status teknis di titik berhenti ini
+- Commit `5000ac4` di `dev` ("Rombak overtime/helpdesk/monitor-ob/monitor-security, fix logo & logout admin") → push `origin/dev` → checkout `main` → merge `dev` (bersih, 0 konflik) → push `origin/main` (`1ca38c0`) → `npm run build` (sukses, 30 halaman) → `firebase deploy` (hosting + firestore indexes, sukses) → balik ke `dev`.
+- **Live di https://sibm-app.web.app**, dikonfirmasi langsung di production: logo tampil warna asli, tombol logout bulat, halaman `admin/overtime` nampilin data real dengan tampilan baru.
+- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error (101 warning, semuanya pre-existing — dicek satu-satu gak ada yang baru dari perubahan sesi ini).
+- Sisa file berubah tapi TIDAK termasuk commit di atas (baru muncul lagi SETELAH commit, karena `npm run build`/`firebase deploy` regenerate artifact-nya): `public/sw.js` & `.firebase/hosting.*.cache` — bakal ikut kebawa di commit dokumentasi ini (§12), no-op fungsional (bukan perubahan kode nyata).
 
-- `npx tsc --noEmit`: 0 error. `npx eslint`: 0 error (14 warning, semuanya pre-existing dari sebelum sesi ini, dikonfirmasi lewat `git stash` — bukan warning baru).
-- `npm run build`: sukses, 30 halaman static export.
-- Semua perubahan SUDAH di-commit & di-deploy (2 commit: `0c7491f` dan `695585a` di branch `dev`, sudah di-merge ke `main`).
-- Diverifikasi pakai data REAL production (bukan cuma data testing) — termasuk beberapa temuan langsung dari Reza yang sempat coba fitur baru di https://sibm-app.web.app pasca-deploy pertama.
+### C. Yang perlu dilanjutkan
 
-### C. Yang perlu dilanjutkan (urutan bukan prioritas ketat — tanya Reza kalau mulai chat baru)
+1. **Bug filter logo yang sama (`invert(1) brightness(0.2)` / `invert(1) brightness(0)`) masih ada di 2 file lain**: `dashboard/security/page.tsx` dan `admin/qr-manager/page.tsx` — belum diperbaiki sesi ini (Reza cuma minta `admin/page.tsx`), kemungkinan logonya juga tampil item di situ. Tanya Reza kalau mau sekalian dibenerin.
+2. **`admin/monitor-security` tab Buku Tamu & Log Paket** — belum dicek apakah butuh filter bulan/tahun & export juga (cuma Log Patroli & Roster yang diminta sesi ini).
+3. Poin lama dari §0 versi sebelumnya yang masih relevan (belum berubah): migrasi struktur folder `admin/*` ke `components/pages/` (§4 poin 5) masih belum disentuh; CS masih belum punya halaman terpisah dari OB; audit performa Firestore listener (`onSnapshot` tanpa `limit()`) belum dieksekusi; bug leak `DeepCleaningPage.tsx` (`onSnapshot` gak ke-unsubscribe) belum difix.
+4. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`.
 
-1. **Belum dites end-to-end asli**: badge "Sesi" & fitur "Lantai 5 selesai buat semua staf" (§8G poin 4-5) baru diverifikasi lewat code review + type-check, belum ada submit checklist sungguhan (upload foto asli) yang dites langsung buat 2 fitur ini.
-2. **Reminder WA checklist jam baru** (tiap 3 jam, ~09:00/12:00/15:00/18:00 WITA) sudah live tapi belum dikonfirmasi beneran jalan sesuai jadwal — baru kelihatan pas jam-jam itu lewat beneran.
-3. **`admin/monitor-security`** — belum dicek apakah punya masalah data-shape yang sama kayak `monitor-ob` sebelum diperbaiki (kemungkinan iya, pola project ini konsisten kalau ada 1 halaman monitoring yang datanya udah gak nyambung).
-4. **Migrasi struktur folder `admin/*`** (§4 poin 5) — tampilannya udah diredesign penuh (§8C/§8D) tapi semua 11 file masih monolitik di `app/admin/*/page.tsx`, belum dipecah ke `components/pages/`. Portal publik `app/page.tsx` (§4 poin 6) sama kondisinya.
-5. **Audit performa Firestore listener** (dari 29 Agustus, §5 lama) — banyak `onSnapshot` di portal/security/dll masih tanpa `limit()`. Juga ada 1 bug leak nyata yang belum difix: `DeepCleaningPage.tsx` — `onSnapshot` gak pernah ke-unsubscribe dengan benar.
-6. **CS belum punya halaman terpisah dari OB** — masih 1 "OB & CS Desk" gabungan. Kalau Reza mau dipisah, belum dikerjakan.
-7. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`.
-
-Open questions lama yang masih nunggu (belum berubah dari sebelum sesi ini): lihat §6.
+Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
 ---
 
@@ -508,3 +501,86 @@ Setelah §11 dicoba Reza, ada 4 revisi (semua di `app/page.tsx`, gak ada perubah
 **Cara implementasi poin 1-3**: dipakai ulang class `.desktop-only-hide` yang sebelumnya didefinisikan di CSS tapi gak pernah dipasang ke elemen manapun (`display:block` di layar >768px, `display:none` di <=768px — kebalikan dari `.mobile-only`). Elemen yang perlu ikut aturan ini DIBUNGKUS wrapper `<div className="desktop-only-hide">` terpisah (bukan taruh class ini langsung gabung di elemen yang sudah punya inline `style={{ display: "flex" }}` sendiri) — soalnya inline `style` React SELALU menang dibanding aturan class dari stylesheet biasa untuk properti yang sama, jadi kalau class ditaruh langsung di elemen yang punya inline `display:flex`, aturan `display:none` dari class pas mobile gak akan pernah kepakai. Wrapper div polos (gak ada inline `display` sendiri) beres masalah ini.
 
 **Verifikasi**: `npx tsc --noEmit` 0 error, `npx eslint src/app/page.tsx` 0 error/warning baru. Dicek di dev server 2 breakpoint: mobile (375px) — header cuma logo+tanggal (gak ada tombol Staf Internal), Menu Cepat cuma 3 card (Lacak Tamu, Resi Paket, Lembur AC), bottom-nav 5 tombol lengkap (Home/Kerusakan/FAB SBO/ATK/Profil); desktop (800px) — tombol "Staf Internal" muncul di header, Menu Cepat lengkap 6 card (termasuk Request ATK, Kerusakan, Bahaya SBO). Kalender Aktivitas dicek `getComputedStyle` langsung (`font-size: 14px`, `font-weight: 700` di desktop, naik dari 10px/600 sebelumnya) + screenshot visual, angka tanggal jelas kebaca. **Belum di-commit** — masih nunggu instruksi lanjut ke dashboard admin.
+
+---
+
+## 12. Rombak `admin/overtime`, `admin/helpdesk`, PDF export `admin/monitor-ob`, filter+roster `admin/monitor-security`, fix shell `admin/page.tsx` (29 Agustus 2026, sesi baru — SUDAH DI-DEPLOY)
+
+Beda dari kebanyakan section di atas: sesi ini diminta jalan sampai ke commit+push+merge+build+**deploy production**, bukan berhenti di working tree. Semua poin di bawah **sudah live di https://sibm-app.web.app** per akhir sesi ini.
+
+### 12A. `admin/overtime/page.tsx` — pisah alur Gedung vs Tim
+
+Reza: lembur Gedung/Tenant gak butuh approval lagi (portal publik sudah nulis status "Tercatat" otomatis sejak sesi lalu, tapi halaman admin ini masih nampilin tombol Setujui/Tolak yang gak relevan lagi), minta jadi tabel simpel + export Excel + filter bulan. Lembur Tim tetap butuh approval, tapi tambah cara lihat detail kalau staf klaim banyak hari + tombol kirim rekap by-email pas semua approval kelar.
+
+- **Tab Gedung**: kolom Setujui/Tolak & badge status approval dihapus total dari tabel (bukan cuma disembunyikan). Kolom baru: Nama Yang Lembur, Aktivitas/Keterangan (field `alasan`), Tanggal+Hari+Jam (pakai `formatTanggalHari` baru, format "Senin, 12 Agustus 2026"), Unit Bisnis/Departemen/Lokasi. Filter Bulan+Tahun 2 dropdown terpisah (bukan gabungan) ditambah di atas tabel, plus tombol Export Excel yang ngikut filter aktif.
+- **Tab Tim**: approval Setujui/Tolak (`handleProcessDecision`, kirim notif WA/Email via `employees_directory`) **TIDAK DIUBAH SAMA SEKALI**. Tambahan: kalau 1 pengajuan punya >1 hari klaim (`items.length > 1`), baris tabel nampilin ringkasan ("N hari lembur — total X jam") + tombol "Lihat Detail Tabel" yang buka Modal berisi tabel rinci (Tanggal, Hari, Jam, Jumlah Jam, Lokasi, Keterangan) — kalau cuma 1 hari, tetap tampil ringkas inline kayak sebelumnya (gak perlu modal buat 1 baris).
+- **Tombol "Kirim Email Rekap"**: muncul otomatis per-periode begitu SEMUA pengajuan Tim di periode itu udah berstatus Approved/Rejected (gak ada lagi yang "Menunggu") — `semuaPeriodeSelesai(periode)`. Default periode = periode pengajuan paling baru, tapi bisa dipilih manual lewat dropdown periode yang udah ada. Klik tombol → generate Excel rekap (cuma yang Approved, kolom Nama/Departemen/Tanggal/Hari/Jam/Jumlah Jam/Lokasi/Keterangan) → auto-download → buka `mailto:` dengan subjek+isi pre-filled (ringkasan jumlah staf & total jam).
+- **⚠️ Keterbatasan teknis yang disampaikan eksplisit ke Reza**: browser TIDAK BISA melampirkan file ke email secara otomatis (batasan `mailto:` di semua browser, bukan sesuatu yang bisa diakali dari kode client-side doang). Jadi alurnya: file Excel ke-download duluan, baru aplikasi email default kebuka dengan draft siap pakai — Admin GA tinggal drag file yang baru ke-download itu ke email sebelum kirim. Auto-attach beneran butuh backend (Cloud Function kirim email server-side), di luar scope app ini yang murni `output: "export"` (lihat baris 5 dokumen ini).
+- **Excel asli, bukan CSV**: sebelumnya export "Excel" itu sebenarnya CSV yang dikasih nama file `.csv` doang. Sekarang pakai `xlsx` (SheetJS) buat generate `.xlsx` beneran (`XLSX.utils.aoa_to_sheet` + `XLSX.writeFile`), dipakai di export Gedung, export Tim, dan Kirim Email Rekap.
+- **Fungsi baru**: `hitungDurasiJam(mulai, selesai)` (parse "HH:MM", handle lembur lewat tengah malam), `formatTanggalHari`, `labelBulan`, `unduhExcel` (generic wrapper SheetJS).
+
+**Verifikasi**: `tsc`/`eslint` bersih. Dicek di dev server pakai data real: tab Gedung nampilin 88-99 record (angka naik antar-pengecekan karena data live production terus masuk) dengan kolom baru & tanpa tombol approval; tab Tim nampilin 1 record real (Awaluddin, 18 jam lembur lewat tengah malam — durasi 18 jam kehitung benar), tombol "Kirim Email Rekap (11 Juni - 10 Juli 2026)" muncul otomatis karena periode itu udah Approved semua (dikonfirmasi lewat kondisi `semuaPeriodeSelesai`, TIDAK diklik beneran biar gak trigger download+mailto asli di sesi otomatis).
+
+### 12B. `admin/helpdesk/page.tsx` — kartu grid → tabel
+
+Reza minta tampilan lebih simpel (tabel, bukan kartu), lengkap semua field, dan notifikasi email otomatis pas laporan selesai (ternyata sudah ada — lihat 12C).
+
+- Grid kartu (`display:grid, repeat(auto-fill,...)`) diganti `<table>` responsive (jadi kartu lagi otomatis di layar <900px, pola CSS sama kayak tabel lain di project ini — `data-label` attribute buat label per baris di mobile).
+- Kolom: Pelapor (+departemen+lokasi), Tanggal, Keluhan, Foto Laporan (thumbnail 52x52, klik → lightbox Modal), Waktu Lapor, Waktu Selesai, Foto Selesai (thumbnail juga), Status, Aksi.
+- **Field baru `waktu_selesai`**: direkam via `serverTimestamp()` di `handleSimpanPerubahan`, TAPI cuma sekali — pas transisi PERTAMA KALI status jadi "Selesai" (`statusUbah === "Selesai" && selectedTicket.status !== "Selesai"`), biar kalau admin buka lagi tiketnya buat lihat detail, waktu penyelesaian asli gak ketiban ulang.
+- Tombol "Tindak Lanjuti"/"Lihat Detail" & seluruh alur Modal update status (dropdown status, wajib upload foto kalau pilih Selesai) **TIDAK DIUBAH** — persis kayak sebelumnya sesuai permintaan eksplisit Reza ("sama seperti sebelumnya").
+
+**Verifikasi**: dicek di dev server data real — tabel nampilin 2 tiket (1 "Sedang Dikerjakan" tanpa waktu_selesai = "-", 1 "Selesai" dengan waktu_selesai keisi wajar), modal Tindak Lanjuti dibuka & ditutup tanpa ubah data (gak disimpan, biar gak ganggu data production), mobile view (375px) transformasi ke kartu jalan benar.
+
+### 12C. `admin/helpdesk` & `admin/atk` — notifikasi email pelapor/pemohon (SUDAH ADA, dikonfirmasi ulang)
+
+Reza minta ditambahkan notif email otomatis ke pelapor (helpdesk) & pemohon (ATK) pas laporan/permintaan diselesaikan. **Dicek dulu sebelum nulis kode baru — ternyata KEDUANYA SUDAH ADA dari sesi-sesi sebelumnya**, gak pernah didokumentasikan eksplisit di file ini sebelumnya:
+
+- **Helpdesk** (`kirimNotifikasiHelpdesk`, dipanggil dari `handleSimpanPerubahan` tiap kali `statusBerubah`, termasuk pas jadi "Selesai") — cari kontak dari `employees_directory` berdasar `nama_pelapor` (case-insensitive), kirim WA (Fonnte) + Email (EmailJS) pakai template `template.helpdeskUpdate`.
+- **ATK** (`kirimNotifikasiAtkSiap`, dipanggil dari `handleUpdateStatus` KHUSUS pas `newStatus === "Selesai / Diambil"`) — cari kontak dari `employees_directory` berdasar `nama_pemohon`, kirim WA + Email pakai template `template.atkSiapDiambil`.
+
+Kedua fungsi udah nge-`console.warn` (bukan gagal diam-diam) kalau kontak karyawan gak ketemu/belum lengkap di Master Data Karyawan — jadi kalau notif gak sampai ke seseorang, kemungkinan besar penyebabnya data `employees_directory` orang itu belum lengkap (no_wa/email kosong), bukan bug kode. **Tidak ada perubahan kode di kedua fungsi ini sesi ini** — cuma dikonfirmasi lewat pembacaan kode, bukan dites kirim WA/email sungguhan (biar gak spam kontak real).
+
+### 12D. `admin/monitor-ob/page.tsx` — Export PDF lengkap + filter bulan/tahun terpisah
+
+Reza: Log Pembersihan exportnya harus nampilin detail checklist+foto (bukan cuma ringkasan status) selama 1 bulan, dan tab Inspeksi butuh Export PDF juga. Lanjutan sesi: tambah filter bulan DAN tahun (dipisah) di Log Pembersihan & Inspeksi.
+
+- **Print-only Log Pembersihan** diganti total: dari `<table>` flat (Waktu/Petugas/Area/Status doang) jadi 1 blok kartu per entri — header (area+waktu+petugas+status), semua segmen checklist dengan tiap pertanyaan+jawaban Ya/Tidak, dan grid foto before/after (`<img>` langsung dari URL Cloudinary, browser yang fetch pas print).
+- **Print-only Inspeksi** (baru dari nol, sebelumnya gak ada Export PDF sama sekali di tab ini): kartu per sesi inspeksi — area+petugas+minggu+waktu, semua titik cek dengan kondisi (Baik/Rusak/Tidak Ada)+catatan+foto kalau ada.
+- Tombol Export PDF (`handlePrint`, `window.print()`) ditambahkan ke header tab Inspeksi (sebelumnya cuma ada di Log Pembersihan & Plot).
+- **Filter dipecah**: `bulanFilter` (1 dropdown gabungan "YYYY-MM" via `getBulanKeyChecklist`) diganti 2 dropdown independen `filterBulanChecklist`+`filterTahunChecklist` (helper baru `getTahunBulanChecklist`, prioritas field `tanggal` lalu fallback `waktu_selesai`). Filter Bulan+Tahun BARU ditambahkan di Inspeksi (`filterBulanInspeksi`+`filterTahunInspeksi`, dari field `minggu_mulai`) — sebelumnya tab ini cuma bisa search nama/area, gak ada filter periode.
+- Kop cetak (`formatPeriodeLabel`, helper baru) otomatis nampilin label periode gabungan ("Agustus 2026" / "Agustus" / "2026" / "Semua Periode") sesuai kombinasi filter aktif, dipakai di judul PDF Log Pembersihan maupun Inspeksi.
+
+**Verifikasi**: dicek di dev server data real — filter Log Pembersihan dari "Semua Bulan" (158 entri, 64 foto ter-embed di print-only DOM) ke "Juni" (turun ke 3 entri, benar). Filter Inspeksi dari kosong ke "Januari" (0 hasil, benar — data cuma ada di Agustus). Print-only DOM dicek langsung lewat `querySelectorAll('.print-only')` (bukan cuma screenshot), konten & jumlah `<img>` dikonfirmasi sesuai data.
+
+### 12E. `admin/monitor-security/page.tsx` — filter+export Log Patroli, fix+redesign Roster Danru
+
+Bagian paling banyak iterasi sesi ini — Reza kasih revisi tambahan setelah implementasi pertama.
+
+**Log Patroli** (implementasi pertama, gak direvisi): filter Bulan+Tahun (`filterBulanPatroli`/`filterTahunPatroli`, dari `waktu_laporan`) ditambahkan, tabel di layar ikut kefilter (bukan cuma exportnya). Export PDF baru: detail penuh per patroli — petugas, status, catatan shift, semua titik dengan kondisi+waktu+foto, area terlewat dengan alasan. CSS print baru ditambahkan ke file ini dari nol (sebelumnya gak ada `@media print` sama sekali di halaman ini) — `@page` orientasinya DINAMIS ikut `activeTab` (portrait buat Patroli, landscape buat Roster — lihat di bawah), dirender langsung via template literal di style block (bukan CSS statis) karena React re-render tiap `activeTab` berubah.
+
+**Roster Danru** (2 putaran):
+- *Putaran 1*: tombol "Print Roster (A4 Landscape)" + kop cetak logo Samudera + judul "ROSTER SECURITY — PERIODE ..." ditambahkan.
+- *Putaran 2 (revisi Reza)*: **bug nyata ketemu** — tabel yang tampil masih nampilin SEMUA key gabungan dari 2 dokumen bulanan (`data_hari`, masing-masing isinya 1 bulan kalender penuh), padahal siklus roster itu 11 → 10 bulan berikutnya (bukan kalender bulan biasa). Jadi yang kebaca "1 bulan penuh" itu sebenarnya lebih (potongan 2 bulan kalender berbeda). Fix: helper baru `hitungPeriodeRoster(bulanAwalStr)` hitung rentang PERSIS (`tglMulaiISO`/`tglAkhirISO`), tabel sekarang iterasi `daftarTanggalPeriode` (dibangun dari rentang itu, bukan `Object.keys(rosterData)`) — dikonfirmasi persis 31 baris, tanggal 11 sampai 10.
+  - **Tambahan filter periode** (disebut Reza sebagai opsi "bisa juga"): dropdown baru pilih periode mana yang mau dilihat/dicetak (`rosterPeriodeAwal`, daftar dari `getDocs(security_monthly_schedules)` sekali di awal), bukan cuma periode yang aktif hari ini. Ganti dropdown → `useEffect` baru fetch ulang 2 dokumen terkait & recompute rentang.
+  - **Tampilan dipadatkan & dimodernkan**: padding sel dipangkas, shift ditampilkan sebagai pill/chip warna kecil (biru=Shift 1, ungu=Shift 2, merah=Off) gantiin teks tebal polos.
+  - **CSS print khusus roster** (`padding: 2px 4px !important; font-size: 8px !important` dst di `.roster-table`) biar 31 baris × kolom staf konsisten muat 1 lembar A4 landscape.
+
+**Verifikasi**: dicek di dev server data real — Log Patroli filter Juni turun dari 132 ke jumlah lebih kecil dengan benar, print-only DOM Patroli "Semua Periode" nampilin 132 laporan + 2512 foto ter-embed. Roster: `document.querySelectorAll('.roster-table tbody tr').length` = 31, baris pertama tanggal "11" baris terakhir "10" (dikonfirmasi via JS, bukan cuma visual). Ganti dropdown periode dari "Agustus 2026" ke "Juni 2026" — badge & data reload benar. `@page` dicek langsung lewat regex di `<style>` terender: `A4 landscape` pas di tab Roster, balik `A4 portrait` pas pindah ke tab Patroli.
+
+### 12F. `admin/page.tsx` — fix logo hitam, logout jadi ikon bulat + modal
+
+- **Root cause logo hitam ditemukan**: `<img src="/logo-samudera.png" style={{ filter: "invert(1) brightness(0.2)" }}>`. Dicek file PNG-nya langsung (`Read` tool bisa baca gambar) — logo aslinya SUDAH gelap (teks "SAMUDERA" hitam + lambang "S" merah/putih di atas background transparan), BUKAN logo putih yang butuh di-invert biar keliatan di header terang. Filter invert+darken jadi bikin teks hitam → putih lalu digelapin lagi (jadi abu gelap) dan merah → cyan lalu digelapin (jadi hampir hitam juga) — hasil akhirnya blob gelap nyaris gak kebaca, persis keluhan Reza. Fix: filter dihapus total, logo tampil warna asli.
+  - **⚠️ Bug yang sama (pola filter identik) masih ada di 2 file lain** yang TIDAK disentuh sesi ini (di luar scope — Reza cuma minta `admin/page.tsx`): `dashboard/security/page.tsx` (`invert(1) brightness(0.2)`) dan `admin/qr-manager/page.tsx` (`invert(1) brightness(0)`, malah lebih parah — maksa jadi solid hitam apapun warna aslinya).
+- **Logout**: desktop — pill button teks "🚪 Keluar Sesi Admin" diganti tombol ikon bulat 38x38px pojok kanan atas (`.logout-icon-btn`, `title`/`aria-label` tetap ada buat aksesibilitas). Mobile bottom-nav TIDAK diubah bentuknya (tetap ikon+label "Keluar", konsisten sama 3 tombol lain di nav yang sama).
+- **`window.confirm()` → Modal**: state `showLogoutModal` baru, `handleLogout` sekarang cuma `setShowLogoutModal(true)` (dipanggil dari desktop icon-button MAUPUN mobile bottom-nav — 1 fungsi buat 2 tempat), aksi konfirmasi aslinya pindah ke fungsi baru `confirmLogout`. Modal (reuse `components/ui/Modal`) isinya ikon logout dalam lingkaran merah muda, judul "Keluar dari Sesi Admin?", 2 tombol (Batal / Ya, Keluar).
+
+**Verifikasi**: dicek di dev server & **di production** (https://sibm-app.web.app) — logo tampil merah/putih/hitam asli di kedua tempat, tombol logout bulat di pojok kanan, klik tombol itu munculin modal (bukan browser-native confirm), tombol "Batal" nutup modal tanpa logout beneran (sengaja gak diklik "Ya, Keluar" biar sesi Test Admin gak ke-invalidate di tengah verifikasi).
+
+### 12G. Commit, deploy, dan status akhir
+
+Urutan persis sesuai request: `git checkout dev` (sudah di situ) → `git add .` → commit `5000ac4` → `git push origin dev` → `git checkout main` → `git merge dev` (merge bersih, 0 konflik, 11 file) → `git push origin main` (`1ca38c0`) → `npm run build` (sukses, 30 halaman static export, ~8-10 detik) → `npx firebase deploy` (hosting + firestore indexes, sukses) → `git checkout dev`.
+
+Working tree abis build+deploy balik ada 2 file berubah lagi (`public/sw.js`, `.firebase/hosting.*.cache`) — regenerated otomatis sama tooling, bukan perubahan manual, ikut kebawa di commit dokumentasi §12/§0 ini.
+
+**Belum dikerjakan (di luar scope literal permintaan sesi ini, dicatat biar gak lupa)**: fix filter logo di 2 file lain (12F), filter/export buat tab Buku Tamu & Log Paket di `monitor-security` (cuma Log Patroli & Roster yang diminta).
