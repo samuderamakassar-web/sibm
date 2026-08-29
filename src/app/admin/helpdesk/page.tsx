@@ -13,6 +13,15 @@ import Modal from "../../../components/ui/Modal";
 import Badge from "../../../components/ui/Badge";
 import Select from "../../../components/ui/Select";
 
+// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
+type IconProps = { size?: number; color?: string };
+const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
+);
+const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+
 interface KontakKaryawan {
   nama: string;
   no_wa?: string;
@@ -39,9 +48,9 @@ const STATUS_TONE: Record<string, "warning" | "info" | "success"> = {
   Selesai: "success",
 };
 const STATUS_CARD_BG: Record<string, string> = {
-  Menunggu: "#fffaf0",
-  "Sedang Dikerjakan": "#ebf8ff",
-  Selesai: "#f0fff4",
+  Menunggu: "var(--warn-50)",
+  "Sedang Dikerjakan": "var(--info-50)",
+  Selesai: "var(--ok-50)",
 };
 
 export default function AdminHelpdeskPage() {
@@ -187,20 +196,57 @@ export default function AdminHelpdeskPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Admin</span>
-        </div>
-        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          🛠️ Tim GA: {adminName}
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        .site-header {
+          position: sticky; top: 0; z-index: 30;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .back-btn {
+          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
+          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
+        }
+        .back-btn:hover { color: var(--red-600); }
+        .admin-badge {
+          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
+          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
+        }
+        .admin-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
+          padding: 34px 20px 50px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .admin-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .admin-hero-content { position: relative; }
+      `}} />
+      <div className="site-header">
+        <button className="back-btn" onClick={() => router.push("/admin")}>
+          <IconArrowLeft size={16} /> Kembali ke Control Panel
+        </button>
+        <div className="admin-badge">
+          <IconUserCircle size={14} /> Tim GA: {adminName}
         </div>
       </div>
 
-      <div style={{ background: "linear-gradient(135deg, #1a365d 0%, #3182ce 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(49, 130, 206, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>HELPDESK COMMAND CENTER</h1>
-        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung</p>
+      <div className="admin-hero">
+        <div className="admin-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>HELPDESK COMMAND CENTER</h1>
+          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung</p>
+        </div>
       </div>
 
       <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
@@ -213,7 +259,7 @@ export default function AdminHelpdeskPage() {
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
-                  style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: active ? "#3182ce" : "#edf2f7", color: active ? "white" : "#4a5568", fontSize: "13px" }}
+                  style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: active ? "var(--info)" : "var(--bg)", color: active ? "var(--surface)" : "var(--ink-soft)", fontSize: "13px" }}
                 >
                   {status} ({count})
                 </button>
@@ -226,28 +272,28 @@ export default function AdminHelpdeskPage() {
           {filteredTickets.length > 0 ? (
             filteredTickets.map((tiket) => (
               <Card key={tiket.id} padded={false} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                <div style={{ padding: "15px", background: STATUS_CARD_BG[tiket.status] || "white", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ padding: "15px", background: STATUS_CARD_BG[tiket.status] || "var(--surface)", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
-                    <div style={{ fontWeight: "900", color: "#2d3748", fontSize: "15px", marginBottom: "3px" }}>📍 {tiket.lokasi}</div>
-                    <div style={{ fontSize: "11px", color: "#718096" }}>Dilaporkan: {formatJam(tiket.waktu_lapor)}</div>
+                    <div style={{ fontWeight: "900", color: "var(--ink)", fontSize: "15px", marginBottom: "3px" }}>📍 {tiket.lokasi}</div>
+                    <div style={{ fontSize: "11px", color: "var(--muted)" }}>Dilaporkan: {formatJam(tiket.waktu_lapor)}</div>
                   </div>
                   <Badge tone={STATUS_TONE[tiket.status] || "neutral"}>{tiket.status}</Badge>
                 </div>
 
                 <div style={{ padding: "15px", flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "14px" }}>🧑‍💼</div>
+                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "var(--bg)", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "14px" }}>🧑‍💼</div>
                     <div>
-                      <div style={{ fontSize: "13px", fontWeight: "bold", color: "#2d3748" }}>{tiket.nama_pelapor}</div>
-                      <div style={{ fontSize: "11px", color: "#a0aec0" }}>{tiket.departemen}</div>
+                      <div style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink)" }}>{tiket.nama_pelapor}</div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)" }}>{tiket.departemen}</div>
                     </div>
                   </div>
-                  <div style={{ fontSize: "13px", color: "#4a5568", background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #edf2f7", fontStyle: "italic", minHeight: "50px" }}>
+                  <div style={{ fontSize: "13px", color: "var(--ink-soft)", background: "var(--bg)", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontStyle: "italic", minHeight: "50px" }}>
                     &quot;{tiket.deskripsi}&quot;
                   </div>
                 </div>
 
-                <div style={{ padding: "15px", borderTop: "1px solid #e2e8f0", background: "#f8fafc" }}>
+                <div style={{ padding: "15px", borderTop: "1px solid var(--line)", background: "var(--bg)" }}>
                   <Button variant="primary" onClick={() => handleBukaModal(tiket)}>
                     {tiket.status === "Selesai" ? "Lihat Detail Bukti" : "Tindak Lanjuti Laporan"}
                   </Button>
@@ -255,9 +301,9 @@ export default function AdminHelpdeskPage() {
               </Card>
             ))
           ) : (
-            <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "50px 20px", background: "white", borderRadius: "20px", border: "1px dashed #cbd5e0", color: "#a0aec0" }}>
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "50px 20px", background: "var(--surface)", borderRadius: "20px", border: "1px dashed var(--line)", color: "var(--muted)" }}>
               <div style={{ fontSize: "40px", marginBottom: "10px" }}>🎉</div>
-              <h3 style={{ margin: "0 0 5px 0", color: "#4a5568" }}>Tidak ada tiket di kategori ini!</h3>
+              <h3 style={{ margin: "0 0 5px 0", color: "var(--ink-soft)" }}>Tidak ada tiket di kategori ini!</h3>
               <p style={{ margin: 0, fontSize: "13px" }}>Tim GA sedang bersantai atau semua fasilitas dalam kondisi prima.</p>
             </div>
           )}
@@ -267,34 +313,34 @@ export default function AdminHelpdeskPage() {
       <Modal open={!!selectedTicket} onClose={() => setSelectedTicket(null)} maxWidth="600px">
         {selectedTicket && (
           <>
-            <div style={{ marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", fontSize: "18px", fontWeight: "800", color: "#1a202c" }}>📝 Eksekusi Tiket GA</h2>
-              <div style={{ fontSize: "12px", color: "#a0aec0" }}>Tiket ID: {selectedTicket.id.slice(0, 8).toUpperCase()}</div>
+            <div style={{ marginBottom: "20px", borderBottom: "2px solid var(--line)", paddingBottom: "15px", paddingRight: "30px" }}>
+              <h2 style={{ margin: "0 0 5px 0", fontSize: "18px", fontWeight: "800", color: "var(--ink)" }}>📝 Eksekusi Tiket GA</h2>
+              <div style={{ fontSize: "12px", color: "var(--muted)" }}>Tiket ID: {selectedTicket.id.slice(0, 8).toUpperCase()}</div>
             </div>
 
-            <div style={{ background: "white", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
-              <div style={{ fontSize: "11px", fontWeight: "bold", color: "#a0aec0", textTransform: "uppercase", marginBottom: "8px" }}>Detail Laporan Kerusakan</div>
+            <div style={{ background: "var(--surface)", padding: "15px", borderRadius: "12px", border: "1px solid var(--line)", marginBottom: "20px" }}>
+              <div style={{ fontSize: "11px", fontWeight: "bold", color: "var(--muted)", textTransform: "uppercase", marginBottom: "8px" }}>Detail Laporan Kerusakan</div>
               <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: "8px", fontSize: "13px" }}>
-                <div style={{ color: "#718096" }}>Pelapor:</div>
-                <div style={{ fontWeight: "bold", color: "#2d3748" }}>{selectedTicket.nama_pelapor} ({selectedTicket.departemen})</div>
-                <div style={{ color: "#718096" }}>Lokasi:</div>
-                <div style={{ fontWeight: "bold", color: "#2d3748" }}>{selectedTicket.lokasi}</div>
-                <div style={{ color: "#718096" }}>Keluhan:</div>
-                <div style={{ color: "#4a5568", fontStyle: "italic" }}>&quot;{selectedTicket.deskripsi}&quot;</div>
+                <div style={{ color: "var(--muted)" }}>Pelapor:</div>
+                <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{selectedTicket.nama_pelapor} ({selectedTicket.departemen})</div>
+                <div style={{ color: "var(--muted)" }}>Lokasi:</div>
+                <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{selectedTicket.lokasi}</div>
+                <div style={{ color: "var(--muted)" }}>Keluhan:</div>
+                <div style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>&quot;{selectedTicket.deskripsi}&quot;</div>
               </div>
             </div>
 
             {selectedTicket.foto_awal && (
               <div style={{ marginBottom: "20px" }}>
-                <div style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "8px" }}>📸 Foto Kondisi Awal (Dari Pelapor)</div>
+                <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "8px" }}>📸 Foto Kondisi Awal (Dari Pelapor)</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedTicket.foto_awal} alt="Foto Awal" style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "12px", border: "1px solid #e2e8f0" }} />
+                <img src={selectedTicket.foto_awal} alt="Foto Awal" style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "12px", border: "1px solid var(--line)" }} />
               </div>
             )}
 
             <form onSubmit={handleSimpanPerubahan} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              <div style={{ background: "#ebf8ff", padding: "15px", borderRadius: "12px", border: "1px solid #bee3f8" }}>
-                <Select label="Ubah Status Pengerjaan:" value={statusUbah} onChange={(e) => setStatusUbah(e.target.value)} style={{ border: "1px solid #90cdf4" }}>
+              <div style={{ background: "var(--info-50)", padding: "15px", borderRadius: "12px", border: "1px solid rgba(37,99,235,0.2)" }}>
+                <Select label="Ubah Status Pengerjaan:" value={statusUbah} onChange={(e) => setStatusUbah(e.target.value)} style={{ border: "1px solid rgba(37,99,235,0.35)" }}>
                   <option value="Menunggu">⏳ Menunggu (Belum direspon)</option>
                   <option value="Sedang Dikerjakan">🧑‍🔧 Sedang Dikerjakan (In Progress)</option>
                   <option value="Selesai">✅ Selesai (Closed)</option>
@@ -302,26 +348,26 @@ export default function AdminHelpdeskPage() {
               </div>
 
               {statusUbah === "Selesai" && (
-                <div style={{ background: fotoHasil ? "#f0fff4" : "white", border: fotoHasil ? "2px solid #9ae6b4" : "2px dashed #cbd5e0", padding: "20px", borderRadius: "12px", textAlign: "center" }}>
+                <div style={{ background: fotoHasil ? "var(--ok-50)" : "var(--surface)", border: fotoHasil ? "2px solid var(--ok)" : "2px dashed var(--line)", padding: "20px", borderRadius: "12px", textAlign: "center" }}>
                   <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                     <span style={{ fontSize: "30px", filter: fotoHasil ? "none" : "grayscale(100%) opacity(0.5)" }}>📸</span>
-                    <div style={{ fontSize: "13px", fontWeight: "bold", color: fotoHasil ? "#22543d" : "#4a5568" }}>
+                    <div style={{ fontSize: "13px", fontWeight: "bold", color: fotoHasil ? "var(--ok)" : "var(--ink-soft)" }}>
                       {fotoHasil ? "Foto Hasil Perbaikan Siap Diunggah ✓" : "Upload Foto Hasil Perbaikan (Wajib) *"}
                     </div>
-                    {!fotoHasil && <div style={{ fontSize: "11px", color: "#a0aec0" }}>Sebagai bukti untuk menutup tiket ini</div>}
+                    {!fotoHasil && <div style={{ fontSize: "11px", color: "var(--muted)" }}>Sebagai bukti untuk menutup tiket ini</div>}
                     <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} style={{ display: "none" }} />
                   </label>
                   {fotoHasil && (
                     <div style={{ marginTop: "15px", position: "relative", display: "inline-block" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotoHasil} alt="Hasil" style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "8px", border: "1px solid #c6f6d5" }} />
-                      <button type="button" onClick={() => setFotoHasil("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", width: "25px", height: "25px", borderRadius: "50%", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>✖</button>
+                      <img src={fotoHasil} alt="Hasil" style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--ok-50)" }} />
+                      <button type="button" onClick={() => setFotoHasil("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--red-600)", color: "var(--surface)", border: "none", width: "25px", height: "25px", borderRadius: "50%", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>✖</button>
                     </div>
                   )}
                 </div>
               )}
 
-              <Button type="submit" loading={isUpdating} loadingText="Menyimpan & Mengirim Notifikasi..." style={{ marginTop: "10px", background: isUpdating ? undefined : "#2d3748" }}>
+              <Button type="submit" loading={isUpdating} loadingText="Menyimpan & Mengirim Notifikasi..." style={{ marginTop: "10px", background: isUpdating ? undefined : "var(--ink)" }}>
                 💾 Simpan Pembaruan Tiket
               </Button>
             </form>

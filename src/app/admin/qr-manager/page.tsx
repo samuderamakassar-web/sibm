@@ -3,6 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
+type IconProps = { size?: number; color?: string };
+const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
+);
+const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+
 // ==============================================================
 // 1. DATA MASTER OB & CS (DARI KODE ANDA)
 // ==============================================================
@@ -40,12 +49,46 @@ export default function AdminQRManagerPage() {
   const currentData = activeTab === "OB" ? DATA_OB : DATA_SECURITY;
 
   return (
-    <div style={{ padding: "0", fontFamily: "'Inter', sans-serif", minHeight: "100vh", background: "#f8fafc" }}>
+    <div style={{ padding: "0", fontFamily: "'Inter', sans-serif", minHeight: "100vh", background: "var(--bg)" }}>
       
       {/* ========================================================= */}
       {/* CSS KHUSUS PRINT (Mengatur ukuran label agar pas dipotong) */}
       {/* ========================================================= */}
       <style jsx global>{`
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        .site-header {
+          position: sticky; top: 0; z-index: 30;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .back-btn {
+          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
+          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
+        }
+        .back-btn:hover { color: var(--red-600); }
+        .admin-badge {
+          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
+          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
+        }
+        .admin-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
+          padding: 34px 20px 50px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .admin-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .admin-hero-content { position: relative; }
         @media print {
           @page { margin: 10mm; size: A4 portrait; }
           .no-print { display: none !important; }
@@ -69,52 +112,52 @@ export default function AdminQRManagerPage() {
       `}</style>
 
       {/* 🔹 HEADER TOP BAR */}
-      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Admin</span>
-        </div>
-        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          👑 Admin GA
+      <div className="site-header no-print">
+        <button className="back-btn" onClick={() => router.push("/admin")}>
+          <IconArrowLeft size={16} /> Kembali ke Control Panel
+        </button>
+        <div className="admin-badge">
+          <IconUserCircle size={14} /> Admin GA
         </div>
       </div>
 
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "30px" }}>
-        
+      {/* 🔹 HERO SECTION */}
+      <div className="admin-hero no-print">
+        <div className="admin-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>QR CODE GENERATOR</h1>
+          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Cetak label QR Code penanda lokasi fisik untuk ditempel di dinding area / pos patroli.</p>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 20px 30px", position: "relative", zIndex: 10 }}>
+
         {/* 🔹 KONTROL PANEL (AKAN SEMBUNYI SAAT DIPRINT) */}
-        <div className="no-print" style={{ background: "white", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", marginBottom: "30px" }}>
-          
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "20px" }}>
-            <div>
-              <h1 style={{ margin: "0 0 10px 0", color: "#1a202c", fontSize: "24px", display: "flex", alignItems: "center", gap: "10px" }}>
-                🖨️ Mesin Pencetak QR Code
-              </h1>
-              <p style={{ margin: "0", color: "#718096", fontSize: "14px" }}>Cetak label QR Code penanda lokasi fisik untuk ditempel di dinding area / pos patroli.</p>
-            </div>
-            
-            <button 
+        <div className="no-print" style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid var(--line)", marginBottom: "30px" }}>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-start", flexWrap: "wrap", gap: "20px" }}>
+            <button
               onClick={handlePrint}
-              style={{ padding: "12px 25px", background: "#e53e3e", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(229,62,62,0.3)" }}
+              style={{ padding: "12px 25px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(220,38,38,0.3)" }}
             >
               🖨️ Cetak {activeTab === "SECURITY" ? "Patroli Security" : "Area OB/CS"}
             </button>
           </div>
 
-          <hr style={{ border: "1px dashed #e2e8f0", margin: "20px 0" }} />
+          <hr style={{ border: "1px dashed var(--line)", margin: "20px 0" }} />
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px" }}>
-            
+
             {/* TOGGLE MODUL */}
-            <div style={{ display: "flex", gap: "10px", background: "#f8fafc", padding: "6px", borderRadius: "12px", border: "1px solid #edf2f7" }}>
-              <button 
+            <div style={{ display: "flex", gap: "10px", background: "var(--bg)", padding: "6px", borderRadius: "12px", border: "1px solid var(--line)" }}>
+              <button
                 onClick={() => { setActiveTab("SECURITY"); setFilterLantai("Semua"); }}
-                style={{ padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "SECURITY" ? "#e53e3e" : "transparent", color: activeTab === "SECURITY" ? "white" : "#718096", transition: "0.2s" }}
+                style={{ padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "SECURITY" ? "var(--red-600)" : "transparent", color: activeTab === "SECURITY" ? "white" : "var(--muted)", transition: "0.2s" }}
               >
                 🛡️ Patroli Security
               </button>
-              <button 
+              <button
                 onClick={() => { setActiveTab("OB"); setFilterLantai("Semua"); }}
-                style={{ padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "OB" ? "#319795" : "transparent", color: activeTab === "OB" ? "white" : "#718096", transition: "0.2s" }}
+                style={{ padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "OB" ? "var(--ok)" : "transparent", color: activeTab === "OB" ? "white" : "var(--muted)", transition: "0.2s" }}
               >
                 🧹 Area OB & CS
               </button>
@@ -122,11 +165,11 @@ export default function AdminQRManagerPage() {
 
             {/* FILTER LANTAI */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "13px", fontWeight: "bold", color: "#4a5568" }}>Pilih Lantai:</span>
-              <select 
-                value={filterLantai} 
+              <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink-soft)" }}>Pilih Lantai:</span>
+              <select
+                value={filterLantai}
                 onChange={(e) => setFilterLantai(e.target.value)}
-                style={{ padding: "10px 15px", borderRadius: "8px", border: "2px solid #cbd5e0", fontWeight: "bold", cursor: "pointer", outline: "none", background: "white", color: "#2d3748" }}
+                style={{ padding: "10px 15px", borderRadius: "8px", border: "2px solid var(--line)", fontWeight: "bold", cursor: "pointer", outline: "none", background: "var(--surface)", color: "var(--ink)" }}
               >
                 <option value="Semua">🗂️ Tampilkan Semua Lantai</option>
                 {currentData.map((g) => (
@@ -159,14 +202,15 @@ export default function AdminQRManagerPage() {
               
               // API QR
               const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPayload)}`;
-              const themeColor = activeTab === "SECURITY" ? "#e53e3e" : "#319795";
+              const themeColor = activeTab === "SECURITY" ? "var(--red-600)" : "var(--ok)";
+              const themeColorRGB = activeTab === "SECURITY" ? "220,38,38" : "22,163,74";
 
               return (
-                <div 
+                <div
                   key={indexArea}
                   className="qr-card"
                   style={{
-                    background: "white", padding: "20px", borderRadius: "16px", border: `2px solid ${themeColor}40`, boxShadow: "0 4px 6px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", position: "relative", overflow: "hidden"
+                    background: "var(--surface)", padding: "20px", borderRadius: "16px", border: `2px solid rgba(${themeColorRGB},0.25)`, boxShadow: "0 4px 6px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", position: "relative", overflow: "hidden"
                   }}
                 >
                   {/* Pita Warna Atas */}
@@ -180,18 +224,18 @@ export default function AdminQRManagerPage() {
                   <span style={{ fontSize: "10px", fontWeight: "900", color: themeColor, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "10px" }}>
                     {activeTab === "SECURITY" ? "ASSET PATROLI SECURITY" : "ASSET CHECKLIST OB/CS"}
                   </span>
-                  
+
                   {/* Gambar QR Code */}
-                  <div style={{ padding: "10px", border: "2px dashed #cbd5e0", borderRadius: "12px", background: "white", marginBottom: "15px" }}>
+                  <div style={{ padding: "10px", border: "2px dashed var(--line)", borderRadius: "12px", background: "var(--surface)", marginBottom: "15px" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img className="qr-img" src={qrImageUrl} alt={`QR ${qrPayload}`} style={{ width: "150px", height: "150px", display: "block" }} />
                   </div>
 
                   {/* Info Lokasi */}
-                  <h3 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "18px", lineHeight: "1.3" }}>
+                  <h3 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "18px", lineHeight: "1.3" }}>
                     {namaDisplay}
                   </h3>
-                  <div style={{ fontSize: "12px", color: "white", background: "#4a5568", padding: "4px 12px", borderRadius: "20px", fontWeight: "bold", marginTop: "auto" }}>
+                  <div style={{ fontSize: "12px", color: "white", background: "var(--ink-soft)", padding: "4px 12px", borderRadius: "20px", fontWeight: "bold", marginTop: "auto" }}>
                     Lantai: {lantaiObj.lantai}
                   </div>
                 </div>

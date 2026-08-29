@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../lib/notify";
@@ -31,6 +31,53 @@ interface MasterAtk { id: string; nama_barang: string; foto_url?: string; }
 interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; }
 interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; }
 interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; tanggal: string; jam_mulai: string; jam_selesai: string; status: string; }
+
+// ==========================================
+// IKON — SVG garis (bukan emoji), 1 set dipakai bareng di header, menu cepat, & bottom nav
+// ==========================================
+type IconProps = { size?: number; color?: string };
+const IconBell = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+);
+const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+const IconHome = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V21h13V9.5" /><path d="M9.5 21v-6h5v6" /></svg>
+);
+const IconChart = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 20V10" /><path d="M12 20V4" /><path d="M18 20v-7" /></svg>
+);
+const IconPlus = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+);
+const IconIdCard = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="8.5" cy="11" r="2" /><path d="M6 16c.5-1.7 1.6-2.5 2.5-2.5s2 .8 2.5 2.5" /><path d="M14 10h5" /><path d="M14 13.5h5" /></svg>
+);
+const IconPackage = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" /></svg>
+);
+const IconClipboard = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 11h6" /><path d="M9 15h6" /><path d="M9 19h3" /></svg>
+);
+const IconClock = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+);
+const IconWrench = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.6 5l-6 6 2.6 2.6 6-6a4 4 0 0 0 5.6-5.6l-3 3-2.6-2.6 3-3z" /></svg>
+);
+const IconAlertTriangle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v4" /><path d="M12 17.5h.01" /></svg>
+);
+const IconTruck = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13" /><rect x="3" y="13" width="18" height="5" rx="1.5" /><circle cx="7.5" cy="18.5" r="1.5" /><circle cx="16.5" cy="18.5" r="1.5" /></svg>
+);
+const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z" /></svg>
+);
+const IconChevronRight = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+);
 
 // Geser tanggal ISO (YYYY-MM-DD) sejumlah n hari, lewat komponen Y/M/D langsung (aman dari isu timezone)
 const geserTanggalISO = (iso: string, n: number) => {
@@ -79,14 +126,22 @@ export default function PortalSIBM() {
   const [overtimeMingguIni, setOvertimeMingguIni] = useState<OvertimeLog[]>([]);
 
   // STATE INFO PEMELIHARAAN GEDUNG
-  const [maintenanceInfo, setMaintenanceInfo] = useState<string>("Memuat status operasional gedung...");
+  // String kosong = "belum ada info / normal", BUKAN "Memuat..." — dulu placeholder loading dipakai
+  // di sini, tapi sekarang string ini juga dipakai sebagai flag boolean (Ringkasan Hari Ini & Status
+  // Operasional), jadi placeholder loading yang truthy bikin sekilas salah nampilin "ada perbaikan".
+  const [maintenanceInfo, setMaintenanceInfo] = useState<string>("");
   const [pengumumanGedung, setPengumumanGedung] = useState<string>("");
 
-  // STATE HERO SLIDESHOW
+  // STATE HERO / RINGKASAN
   const [staffFotoMap, setStaffFotoMap] = useState<Record<string, string>>({});
   const [kendaraanMetaMap, setKendaraanMetaMap] = useState<Record<string, { kategori: string; warna: string }>>({});
   const [daftarSemuaKendaraan, setDaftarSemuaKendaraan] = useState<string[]>([]);
-  const [heroSlide, setHeroSlide] = useState(0);
+
+  // STATE TREN AKTIVITAS & KALENDER AKTIVITAS (dashboard baru) — data dibatasi (limit) biar
+  // gak narik seluruh histori collection tiap buka portal, konsisten sama pola limit() di halaman lain
+  const [visitorLogsTrend, setVisitorLogsTrend] = useState<DataTamu[]>([]);
+  const [packageLogsTrend, setPackageLogsTrend] = useState<DataPaket[]>([]);
+  const [ticketsTrend, setTicketsTrend] = useState<HelpdeskTicket[]>([]);
 
   // STATE MODAL & SEARCH
   const [activeModal, setActiveModal] = useState<"none" | "login" | "tamu" | "paket" | "helpdesk" | "sbo" | "atk" | "overtime">("none");
@@ -169,7 +224,8 @@ export default function PortalSIBM() {
       setTimeout(() => setObBesok([]), 0);
     }
 
-    // 2. Tarik Data Kendaraan (mentah — status per kendaraan + prioritas Standby dihitung di useMemo `mobilStatus` di bawah)
+    // 2. Tarik Data Kendaraan (mentah — status per kendaraan + prioritas Standby dihitung di useMemo `mobilStatus` di bawah,
+    // sekaligus jadi sumber angka "Kendaraan" di widget Tren Aktivitas)
     const unsubVeh = onSnapshot(query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"), limit(30)), (snapshot) => {
       setLogKendaraanMentah(snapshot.docs.map(d => d.data() as KendaraanLog));
     });
@@ -196,21 +252,31 @@ export default function PortalSIBM() {
       }
     );
 
-    // 5. Tarik Info Pemeliharaan Gedung
+    // 5. Tarik Info Pemeliharaan Gedung (tiket ini juga jadi sumber angka "Tiket Selesai" di widget Tren Aktivitas)
     const unsubMaintenance = onSnapshot(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(20)), (snapshot) => {
       const tickets = snapshot.docs.map(d => d.data() as HelpdeskTicket);
+      setTicketsTrend(tickets);
       const activeMaintenance = tickets.filter(t => t.status === "Sedang Dikerjakan").slice(0, 3);
       if (activeMaintenance.length > 0) {
-        const infos = activeMaintenance.map(t => `🛠️ SEDANG DIKERJAKAN: Perbaikan ${t.lokasi} (${t.deskripsi})`);
+        const infos = activeMaintenance.map(t => `SEDANG DIKERJAKAN: Perbaikan ${t.lokasi} (${t.deskripsi})`);
         setMaintenanceInfo(infos.join("   |   "));
       } else {
         setMaintenanceInfo("");
       }
     });
 
+    // 5b. Tarik Riwayat Tamu & Paket (dibatasi limit 60 — dipakai buat widget Tren Aktivitas & Kalender Aktivitas,
+    // BUKAN pencarian; pencarian tamu/paket tetap pakai getDocs on-demand di handleCariTamu/handleCariPaket)
+    const unsubVisitorTrend = onSnapshot(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc"), limit(60)), (snapshot) => {
+      setVisitorLogsTrend(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DataTamu)));
+    });
+    const unsubPackageTrend = onSnapshot(query(collection(db, "packages"), orderBy("waktu_diterima", "desc"), limit(60)), (snapshot) => {
+      setPackageLogsTrend(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DataPaket)));
+    });
+
     getDocs(collection(db, "employees_directory")).then(snap => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee))));
 
-    // Foto profil staf (untuk slide "OB Bertugas") & foto kendaraan (untuk slide "Armada")
+    // Foto profil staf (untuk kartu "Tim Bertugas") & foto kendaraan (untuk armada)
     getDocs(collection(db, "users_master")).then(snap => {
       const map: Record<string, string> = {};
       snap.docs.forEach(d => {
@@ -278,7 +344,7 @@ export default function PortalSIBM() {
       }
     });
 
-    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubMasterAtk(); };
+    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
   }, [todayISO, tomorrowISO, sudahMalam, seninMingguIni, mingguMingguIni]);
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
@@ -702,68 +768,147 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     });
   }, [logKendaraanMentah, daftarSemuaKendaraan]);
 
-  // Slide "brand" selalu tampil; slide OB & Armada hanya muncul kalau ada datanya
-  const heroSlides = useMemo(() => {
-    const slides: Array<"brand" | "ob" | "armada" | "security"> = ["brand"];
-    if (obBertugas.length > 0 || obBesok.length > 0) slides.push("ob");
-    if (mobilStatus.length > 0) slides.push("armada");
-    slides.push("security");
-    return slides;
-  }, [obBertugas, obBesok, mobilStatus]);
-
-  // Slideshow manual saja — user geser (swipe) atau klik arrow, tidak ada auto-advance
-  const [heroDragStartX, setHeroDragStartX] = useState<number | null>(null);
-  const handleHeroTouchStart = (e: ReactTouchEvent) => setHeroDragStartX(e.touches[0].clientX);
-  const handleHeroTouchEnd = (e: ReactTouchEvent) => {
-    if (heroDragStartX === null) return;
-    const deltaX = e.changedTouches[0].clientX - heroDragStartX;
-    const SWIPE_THRESHOLD = 40;
-    if (deltaX > SWIPE_THRESHOLD) {
-      setHeroSlide(p => (p - 1 + heroSlides.length) % heroSlides.length); // geser ke kanan -> slide sebelumnya
-    } else if (deltaX < -SWIPE_THRESHOLD) {
-      setHeroSlide(p => (p + 1) % heroSlides.length); // geser ke kiri -> slide berikutnya
-    }
-    setHeroDragStartX(null);
-  };
-
-  // Index aman untuk dirender — dihitung langsung saat render, bukan lewat setState di useEffect,
-  // supaya tidak melanggar react-hooks/set-state-in-effect kalau daftar slide tiba-tiba lebih pendek
-  const safeHeroSlide = heroSlide >= heroSlides.length ? 0 : heroSlide;
-
   const hadirOB = obBertugas.filter(o => o.status.includes("Hadir"));
   const driverEntries = Object.entries(driverStatusMap);
+
+  // ==========================================
+  // TIM BERTUGAS HARI INI — gabungan OB/CS + Security + Driver jadi satu daftar untuk dashboard baru
+  // ==========================================
+  type TimBertugasEntry = { key: string; nama: string; sub: string; label: string; tipe: "ob" | "security" | "driver"; foto?: string; aktif: boolean };
+  // Catatan: sengaja TANPA useMemo — React Compiler (aktif di project ini, lihat eslint
+  // react-hooks/preserve-manual-memoization) auto-memoize komputasi biasa, dan array dependency
+  // manual di sini gampang meleset dari inferensi compiler (akses properti nested kayak
+  // securityShift.current) sehingga malah bikin error build, bukan warning.
+  const timBertugasHariIni: TimBertugasEntry[] = (() => {
+    const daftar: TimBertugasEntry[] = [];
+    hadirOB.forEach(o => {
+      daftar.push({
+        key: `ob-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: true,
+        sub: `OB · ${o.lokasi[0] || "Standby"}${o.lokasi.length > 1 ? ` +${o.lokasi.length - 1}` : ""}`,
+        label: "HADIR",
+      });
+    });
+    securityShift.current.forEach(nama => {
+      daftar.push({
+        key: `sec-${nama}`, nama, tipe: "security", foto: staffFotoMap[nama], aktif: true,
+        sub: `Security · ${securityShift.currentName}`,
+        label: "JAGA",
+      });
+    });
+    driverEntries.forEach(([nama, status]) => {
+      const standby = status.includes("Standby");
+      daftar.push({
+        key: `drv-${nama}`, nama, tipe: "driver", foto: staffFotoMap[nama], aktif: !standby,
+        sub: `Driver · ${standby ? "standby di pool" : "sedang bertugas keluar"}`,
+        label: standby ? "STANDBY" : "KELUAR",
+      });
+    });
+    return daftar;
+  })();
+
+  // ==========================================
+  // TREN AKTIVITAS (7 hari terakhir) & KALENDER AKTIVITAS (bulan berjalan)
+  // Sumber: data yang sudah ditarik dengan limit() di atas (bukan query baru tanpa batas) —
+  // jujur soal keterbatasannya: kalau volume harian tinggi, hari-hari lebih lama di kalender bisa
+  // belum kecover jendela limit(60)/limit(30), makanya ditandai "tidak ada data" bukan dianggap 0.
+  // ==========================================
+  const tanggalWITAdariTimestamp = (ts?: Timestamp | null) => {
+    if (!ts) return null;
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(ts.toDate());
+  };
+
+  const NAMA_HARI_PENDEK = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+  const trenAktivitas7Hari = useMemo(() => {
+    const hari: { tanggal: string; label: string; tamu: number; kendaraan: number; tiket: number; paket: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const iso = geserTanggalISO(todayISO, -i);
+      const [y, m, d] = iso.split("-").map(Number);
+      hari.push({ tanggal: iso, label: NAMA_HARI_PENDEK[new Date(y, m - 1, d).getDay()], tamu: 0, kendaraan: 0, tiket: 0, paket: 0 });
+    }
+    const idxByTanggal: Record<string, number> = {};
+    hari.forEach((h, i) => { idxByTanggal[h.tanggal] = i; });
+
+    visitorLogsTrend.forEach(t => {
+      const tgl = tanggalWITAdariTimestamp(t.waktu_masuk);
+      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].tamu++;
+    });
+    logKendaraanMentah.forEach(k => {
+      const tgl = tanggalWITAdariTimestamp(k.waktu_catat);
+      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].kendaraan++;
+    });
+    ticketsTrend.forEach(t => {
+      if (!t.status?.toLowerCase().includes("selesai")) return;
+      const tgl = tanggalWITAdariTimestamp(t.waktu_lapor);
+      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].tiket++;
+    });
+    packageLogsTrend.forEach(p => {
+      const tgl = tanggalWITAdariTimestamp(p.waktu_diterima);
+      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].paket++;
+    });
+
+    return hari;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayISO, visitorLogsTrend, logKendaraanMentah, ticketsTrend, packageLogsTrend]);
+
+  const trenMaxNilai = useMemo(() => {
+    let max = 1;
+    trenAktivitas7Hari.forEach(h => { max = Math.max(max, h.tamu, h.kendaraan, h.tiket, h.paket); });
+    return max;
+  }, [trenAktivitas7Hari]);
+
+  // Sengaja TANPA useMemo (lihat catatan di timBertugasHariIni di atas) — pola reduce+object-literal
+  // ini yang bikin React Compiler gagal mempertahankan memoization manualnya di source.
+  const trenTotal = trenAktivitas7Hari.reduce((acc, h) => ({
+    tamu: acc.tamu + h.tamu, kendaraan: acc.kendaraan + h.kendaraan, tiket: acc.tiket + h.tiket, paket: acc.paket + h.paket
+  }), { tamu: 0, kendaraan: 0, tiket: 0, paket: 0 });
+
+  const kalenderAktivitas = useMemo(() => {
+    const [thn, bln] = todayISO.split("-").map(Number);
+    const jumlahHari = new Date(thn, bln, 0).getDate();
+    const counts: Record<string, number> = {};
+    const prefixBulan = todayISO.slice(0, 7);
+    const tambah = (tgl: string | null) => { if (tgl && tgl.startsWith(prefixBulan)) counts[tgl] = (counts[tgl] || 0) + 1; };
+    visitorLogsTrend.forEach(t => tambah(tanggalWITAdariTimestamp(t.waktu_masuk)));
+    logKendaraanMentah.forEach(k => tambah(tanggalWITAdariTimestamp(k.waktu_catat)));
+    ticketsTrend.forEach(t => tambah(tanggalWITAdariTimestamp(t.waktu_lapor)));
+    packageLogsTrend.forEach(p => tambah(tanggalWITAdariTimestamp(p.waktu_diterima)));
+
+    const nilaiTerbesar = Math.max(1, ...Object.values(counts));
+    const daftarHari: { tanggal: number; iso: string; level: number; adaData: boolean; hariIni: boolean }[] = [];
+    for (let d = 1; d <= jumlahHari; d++) {
+      const iso = `${prefixBulan}-${String(d).padStart(2, "0")}`;
+      const c = counts[iso] || 0;
+      daftarHari.push({ tanggal: d, iso, level: c === 0 ? 0 : Math.min(4, Math.ceil((c / nilaiTerbesar) * 4)), adaData: c > 0, hariIni: iso === todayISO });
+    }
+
+    const hariPertama = new Date(thn, bln - 1, 1).getDay(); // 0=Minggu..6=Sabtu
+    const leadingBlanks = hariPertama === 0 ? 6 : hariPertama - 1; // konversi ke kolom Senin..Minggu
+
+    return { daftarHari, leadingBlanks };
+  }, [todayISO, visitorLogsTrend, logKendaraanMentah, ticketsTrend, packageLogsTrend]);
+
+  const WARNA_LEVEL_KALENDER = ["#f7f6f5", "#fee2e2", "#fca5a5", "#f87171", "#dc2626"];
+
+  const scrollKeSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className="main-container" style={{ backgroundColor: "#f7f6f5", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* 💡 DESIGN TOKENS + CSS RESPONSIVE & MOBILE BOTTOM NAV — redesign landing, palet merah dipertahankan sbg brand color, motif blueprint-grid sbg signature (relevan ke "Building Management") */}
+      {/* 💡 DESIGN TOKENS + CSS — dashboard app-style: header ramping, ringkasan merah, menu cepat,
+          tren aktivitas & kalender aktivitas, tim bertugas, bottom nav ala aplikasi native */}
       <style dangerouslySetInnerHTML={{__html: `
         :root {
           --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
           --bg: #f7f6f5; --surface: #ffffff;
           --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
           --shadow-card: 0 1px 2px rgba(24,24,27,0.04), 0 10px 24px -14px rgba(24,24,27,0.16);
           --shadow-card-hover: 0 1px 2px rgba(24,24,27,0.05), 0 18px 34px -14px rgba(220,38,38,0.28);
         }
-        @keyframes ticker-scroll {
-          0% { transform: translateX(100vw); }
-          100% { transform: translateX(-100%); }
-        }
-        .ticker-wrap {
-          width: 100%; overflow: hidden; background-color: var(--ink); color: white; padding: 10px 0; border-bottom: 2px solid var(--red-600);
-          display: flex; align-items: center; position: relative; z-index: 20; box-sizing: border-box;
-        }
-        .ticker-label {
-          background: var(--red-600); color: white; padding: 10px 20px; font-weight: 900; font-size: 12px; position: absolute;
-          left: 0; top: 0; bottom: 0; z-index: 21; display: flex; align-items: center; letter-spacing: 1px; box-shadow: 2px 0 5px rgba(0,0,0,0.5);
-        }
-        .ticker-content {
-          display: inline-block; white-space: nowrap;
-          animation: ticker-scroll 35s linear infinite; font-size: 13px; font-weight: 500;
-        }
-        .ticker-content:hover { animation-play-state: paused; cursor: default; }
-        .ticker-item { display: inline-flex; align-items: center; gap: 8px; margin-right: 50px; }
-        .t-badge { background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
 
         /* 🧭 HEADER */
         .site-header {
@@ -774,401 +919,332 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         }
         .brand-mark { display: flex; align-items: center; gap: 10px; }
         .brand-logo-fallback {
-          width: 34px; height: 34px; border-radius: 9px; background: var(--red-600);
+          width: 36px; height: 36px; border-radius: 10px; background: var(--red-600);
           display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-          box-shadow: 0 4px 10px -3px rgba(220,38,38,0.5);
+          box-shadow: 0 4px 10px -3px rgba(220,38,38,0.5); color: #fff; font-weight: 900; font-size: 16px;
         }
-        .brand-name { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: 0.2px; line-height: 1.1; }
-        .brand-sub { font-size: 10.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.3px; }
-        .header-date-pill {
-          font-size: 11.5px; font-weight: 700; color: var(--ink-soft); background: var(--bg);
-          border: 1px solid var(--line); padding: 6px 12px; border-radius: 20px;
+        .brand-name { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: 0.2px; line-height: 1.15; }
+        .brand-sub { font-size: 10.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.2px; }
+        .header-icon-btn {
+          width: 36px; height: 36px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line);
+          display: flex; align-items: center; justify-content: center; color: var(--ink-soft); position: relative;
+          cursor: pointer; flex-shrink: 0;
         }
+        .header-icon-dot { position: absolute; top: 6px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--red-600); border: 1.5px solid #fff; }
 
-        /* 🎞️ HERO SLIDESHOW — gradient merah + motif blueprint-grid tipis (nuansa "building/floor plan") */
-        .hero-slideshow {
-          position: relative; overflow: hidden;
-          background:
-            radial-gradient(circle at 15% -10%, rgba(255,255,255,0.14), transparent 45%),
-            linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+        /* 🔴 RINGKASAN HARI INI — pengganti hero slideshow lama, tetap merah + motif blueprint-grid */
+        .ringkasan-strip {
+          position: relative; overflow: hidden; border-radius: 22px; color: #fff; padding: 22px;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
         }
-        .hero-slideshow::before {
+        .ringkasan-strip::before {
           content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
-          background-size: 34px 34px;
-          mask-image: linear-gradient(180deg, black, transparent 92%);
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
         }
-        .hero-eyebrow {
-          font-size: 10.5px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase;
-          color: rgba(255,255,255,0.75); margin: 0 0 8px 0;
-        }
-        .hero-slide-track {
-          display: flex; transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1); position: relative; z-index: 1;
-        }
-        .hero-slide {
-          flex: 0 0 100%; width: 100%; box-sizing: border-box;
-          min-height: 290px; padding: 34px 20px 48px 20px; color: white;
-          display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
-        }
-        @media (max-width: 768px) { .hero-slide { min-height: 255px; padding: 26px 16px 44px 16px; } }
-        .hero-dots {
-          position: absolute; left: 0; right: 0; bottom: 16px; display: flex; justify-content: center; gap: 8px; z-index: 5;
-        }
-        .hero-dot {
-          width: 8px; height: 8px; border-radius: 50%; border: none; background: rgba(255,255,255,0.4);
-          cursor: pointer; padding: 0; transition: 0.25s;
-        }
-        .hero-dot.active { background: white; width: 22px; border-radius: 5px; }
-        .hero-arrow {
-          position: absolute; top: 50%; transform: translateY(-50%); z-index: 5;
-          background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: white;
-          width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 14px;
-          display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);
-        }
-        .hero-arrow:hover { background: rgba(255,255,255,0.3); }
-        .hero-arrow.prev { left: 12px; }
-        .hero-arrow.next { right: 12px; }
-        .hero-avatar-row { display: flex; gap: 18px; overflow-x: auto; padding: 6px 6px 12px; max-width: 100%; scrollbar-width: thin; justify-content: center; flex-wrap: wrap; }
-        .hero-avatar-card { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 108px; }
-        .hero-avatar-photo {
-          width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.85);
-          background: rgba(255,255,255,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.22);
-        }
-        .hero-avatar-fallback {
-          width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.85);
-          background: rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center;
-          font-weight: 800; font-size: 21px; box-shadow: 0 4px 12px rgba(0,0,0,0.22);
-        }
-        .hero-armada-row { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 480px; }
-        .hero-armada-item {
-          display: flex; align-items: center; justify-content: space-between; gap: 10px;
-          background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
-          padding: 10px 16px; border-radius: 12px; font-size: 12px; text-align: left;
-        }
-        .hero-status-pill { padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; white-space: nowrap; }
-        .hero-fleet-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; width: 100%; max-width: 560px; }
-        .hero-fleet-circle { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 66px; }
-        .hero-fleet-badge {
-          width: 52px; height: 52px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.45);
-          background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 3px 10px rgba(0,0,0,0.18);
-        }
-        .hero-fleet-plate { font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 66px; }
-        .hero-fleet-status { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+        .ringkasan-chip { flex: 1; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 14px; padding: 12px 10px; text-align: center; }
 
-        /* 🧱 QUICK ACTION + MAIN CARDS */
+        /* 🧱 QUICK ACTION + KARTU */
         .qa-card {
           cursor: pointer; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
           box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
         .qa-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: rgba(220,38,38,0.28); }
         .qa-icon-chip {
-          width: 46px; height: 46px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
-          display: flex; align-items: center; justify-content: center; font-size: 22px;
+          width: 44px; height: 44px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
         .section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-        .section-title-icon { background: var(--red-50); padding: 10px; border-radius: 12px; font-size: 19px; line-height: 1; }
+        .section-title-icon { background: var(--red-50); color: var(--red-600); padding: 10px; border-radius: 12px; display: flex; }
         .list-row {
           display: flex; gap: 12px; padding: 13px 15px; border-radius: 13px; background: var(--bg);
           border-left: 3px solid var(--line);
         }
+        .team-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+        .team-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+        .team-avatar-fallback { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+        .status-op-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #f0efee; }
+        .status-op-row:last-child { border-bottom: none; }
 
-        /* 📱 MEDIA QUERY UNTUK HP */
-        .mobile-nav { display: none; }
+        /* 📊 CHART BARS */
+        .tren-bar-col { display: flex; align-items: flex-end; gap: 3px; height: 100%; flex: 1; justify-content: center; }
+        .tren-bar { width: 6px; border-radius: 2px; min-height: 2px; }
+
+        /* 🗓️ KALENDER AKTIVITAS */
+        .kalender-cell { aspect-ratio: 1; border-radius: 7px; }
+
+        /* 📱 BOTTOM NAV APP-STYLE */
+        .app-bottom-nav { display: none; }
+        .mobile-only { display: none; }
+        .desktop-only-hide { display: block; }
         @media (max-width: 768px) {
-          .desktop-grid { display: none !important; }
-          .main-container { padding-bottom: 104px !important; }
-          .mobile-nav {
-            display: flex;
-            position: fixed;
-            bottom: 12px; left: 12px; right: 12px;
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(15px);
-            border: 1px solid var(--line);
-            border-radius: 22px;
-            z-index: 90;
-            padding: 12px 14px;
-            gap: 14px;
-            overflow-x: auto;
-            scroll-snap-type: x mandatory;
-            box-shadow: 0 12px 30px -8px rgba(24,24,27,0.18);
+          .main-container { padding-bottom: 108px !important; }
+          .mobile-only { display: flex; }
+          .desktop-only-hide { display: none; }
+          .app-bottom-nav {
+            display: flex; position: fixed; left: 14px; right: 14px; bottom: 14px; height: 66px;
+            background: rgba(255,255,255,0.97); backdrop-filter: blur(14px); border: 1px solid var(--line);
+            border-radius: 24px; box-shadow: 0 14px 32px -10px rgba(24,24,27,0.2); z-index: 90;
+            align-items: center; justify-content: space-around; padding: 0 6px;
           }
-          .mobile-nav::-webkit-scrollbar { display: none; }
-          .m-nav-item {
-            flex: 0 0 calc(100% / 4.8);
-            scroll-snap-align: start;
-            display: flex; flex-direction: column; align-items: center; gap: 6px;
-            color: var(--ink-soft); font-size: 10px; font-weight: 800; text-align: center; cursor: pointer;
-          }
-          .m-nav-icon {
-            width: 46px; height: 46px; border-radius: 14px; background: var(--red-50); color: var(--red-600);
-            display: flex; justify-content: center; align-items: center; font-size: 20px;
-            transition: transform 0.2s;
-          }
-          .m-nav-item:active .m-nav-icon { transform: scale(0.9); }
+          .nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; color: #a1a1aa; cursor: pointer; background: none; border: none; font-family: inherit; }
+          .nav-item.active { color: var(--red-600); }
+          .nav-item span { font-size: 9.5px; font-weight: 700; }
+          .nav-fab { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(150deg, var(--red-600), var(--red-700)); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px -6px rgba(220,38,38,0.6); border: 4px solid var(--bg); transform: translateY(-16px); cursor: pointer; }
         }
       `}} />
 
       <div className="site-header">
         <div className="brand-mark">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-samudera.png"
-            alt="Samudera Logo"
-            style={{ height: "30px", objectFit: "contain" }}
-            onError={(e) => { e.currentTarget.style.display = "none"; }}
-          />
+          <div className="brand-logo-fallback">S</div>
           <div>
             <div className="brand-name">SIBM</div>
-            <div className="brand-sub">Building Management · GA</div>
+            <div className="brand-sub">{formatTgl}</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span className="header-date-pill">📅 {formatTgl}</span>
+          <button className="header-icon-btn" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Notifikasi &amp; pengumuman" title="Notifikasi &amp; pengumuman">
+            <IconBell size={17} />
+            {pengumumanGedung && <span className="header-icon-dot" />}
+          </button>
           <Button
             variant="ghost"
             fullWidth={false}
             onClick={() => setActiveModal("login")}
-            style={{ padding: "8px 14px", color: "var(--ink-soft)", fontSize: "12px", fontWeight: 700, border: "1px solid var(--line)", borderRadius: "20px" }}
+            style={{ padding: "8px 14px", color: "var(--ink-soft)", fontSize: "12px", fontWeight: 700, border: "1px solid var(--line)", borderRadius: "20px", display: "flex", alignItems: "center", gap: "6px" }}
           >
-            🔒 Staf Internal
+            <IconUserCircle size={15} /> Staf Internal
           </Button>
         </div>
       </div>
 
-      {/* 📢 PENGUMUMAN GA — selalu di atas, terpisah dari slideshow supaya tidak ikut kegeser/hilang */}
+      {/* 📢 PENGUMUMAN GA */}
       {pengumumanGedung && (
         <div style={{ background: "var(--red-700)", color: "white", padding: "10px 20px", textAlign: "center", fontSize: "13px", fontWeight: "bold", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
-          <span>📢 INFO GA:</span> {pengumumanGedung}
+          <span>INFO GA:</span> {pengumumanGedung}
         </div>
       )}
 
-      {/* 🎞️ HERO SLIDESHOW — manual saja: geser (swipe) atau klik arrow. Slide: Brand, OB Bertugas, Armada, Security */}
-      <div className="hero-slideshow">
-        {heroSlides.length > 1 && (
-          <>
-            <button className="hero-arrow prev" onClick={() => setHeroSlide(p => (p - 1 + heroSlides.length) % heroSlides.length)} aria-label="Slide sebelumnya">‹</button>
-            <button className="hero-arrow next" onClick={() => setHeroSlide(p => (p + 1) % heroSlides.length)} aria-label="Slide berikutnya">›</button>
-          </>
-        )}
+      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>
 
-        <div
-          className="hero-slide-track"
-          style={{ transform: `translateX(-${safeHeroSlide * 100}%)` }}
-          onTouchStart={handleHeroTouchStart}
-          onTouchEnd={handleHeroTouchEnd}
-        >
-          {heroSlides.map((slide, idx) => (
-            <div className="hero-slide" key={idx}>
-
-              {slide === "brand" && (
-                <>
-                  <p className="hero-eyebrow">Sistem Informasi Building Management</p>
-                  <h1 style={{ margin: "0 0 8px 0", fontSize: "clamp(26px, 5vw, 38px)", fontWeight: "900", letterSpacing: "-0.5px" }}>Portal SIBM</h1>
-                  <p style={{ margin: "0 0 20px 0", fontSize: "clamp(12px, 3vw, 15px)", opacity: 0.85 }}>General Affairs · PT Samudera</p>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
-                    <span style={{ background: "rgba(255,255,255,0.15)", padding: "6px 14px", borderRadius: "20px", fontSize: "11px", fontWeight: "bold" }}>🧹 {hadirOB.length} OB Bertugas</span>
-                    <span style={{ background: "rgba(255,255,255,0.15)", padding: "6px 14px", borderRadius: "20px", fontSize: "11px", fontWeight: "bold" }}>🚗 {mobilStatus.length} Kendaraan Aktif</span>
-                    <span style={{ background: "rgba(255,255,255,0.15)", padding: "6px 14px", borderRadius: "20px", fontSize: "11px", fontWeight: "bold" }}>🛡️ {securityShift.currentName}</span>
-                  </div>
-                </>
-              )}
-
-              {slide === "ob" && (
-                <>
-                  <h2 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "900" }}>🧹 Plot Hari Ini {formatTgl.split(",")[0] ? `— ${formatTgl}` : ""}</h2>
-                  <p style={{ margin: "0 0 14px 0", fontSize: "12px", opacity: 0.85 }}>
-                    {obBertugas.length > 0 ? `${obBertugas.length} OB & CS bertugas — tap foto untuk lihat area tugas` : "Belum ada plot untuk hari ini"}
-                  </p>
-                  {obBertugas.length > 0 && (
-                    <div className="hero-avatar-row">
-                      {obBertugas.map((o) => {
-                        const foto = staffFotoMap[o.nama];
-                        return (
-                          <div className="hero-avatar-card" key={o.nama} title={o.lokasi.join(", ") || "Standby"}>
-                            {foto ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={foto} alt={o.nama} className="hero-avatar-photo" />
-                            ) : (
-                              <div className="hero-avatar-fallback">{getInitials(o.nama)}</div>
-                            )}
-                            <div style={{ fontSize: "12px", fontWeight: "bold", lineHeight: 1.25 }}>{o.nama}</div>
-                            <div style={{ fontSize: "11px", opacity: 0.85, lineHeight: 1.2 }}>{o.lokasi[0] || "Standby"}{o.lokasi.length > 1 ? ` +${o.lokasi.length - 1}` : ""}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {sudahMalam && (
-                    <div style={{ marginTop: obBertugas.length > 0 ? "20px" : "6px", paddingTop: "16px", borderTop: "1px dashed rgba(255,255,255,0.3)", width: "100%" }}>
-                      <h2 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: "900" }}>🌙 Plot Besok</h2>
-                      <p style={{ margin: "0 0 12px 0", fontSize: "12px", opacity: 0.85 }}>
-                        {obBesok.length > 0 ? `${obBesok.length} OB & CS terjadwal besok` : "Plot besok belum diisi coordinator"}
-                      </p>
-                      {obBesok.length > 0 && (
-                        <div className="hero-avatar-row">
-                          {obBesok.map((o) => {
-                            const foto = staffFotoMap[o.nama];
-                            return (
-                              <div className="hero-avatar-card" key={`besok-${o.nama}`} title={o.lokasi.join(", ") || "Standby"}>
-                                {foto ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={foto} alt={o.nama} className="hero-avatar-photo" />
-                                ) : (
-                                  <div className="hero-avatar-fallback">{getInitials(o.nama)}</div>
-                                )}
-                                <div style={{ fontSize: "12px", fontWeight: "bold", lineHeight: 1.25 }}>{o.nama}</div>
-                                <div style={{ fontSize: "11px", opacity: 0.85, lineHeight: 1.2 }}>{o.lokasi[0] || "Standby"}{o.lokasi.length > 1 ? ` +${o.lokasi.length - 1}` : ""}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {slide === "armada" && (
-                <>
-                  <h2 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "900" }}>🚗 Status Armada Operasional</h2>
-                  <p style={{ margin: "0 0 14px 0", fontSize: "12px", opacity: 0.85 }}>{mobilStatus.filter(m => isStandbyLabel(m.status_kendaraan)).length} standby di parkiran · {mobilStatus.length} kendaraan total</p>
-                  <div className="hero-fleet-grid">
-                    {mobilStatus.map((k) => {
-                      const isBengkel = k.status_kendaraan?.includes("Bengkel") || k.status_kendaraan?.includes("Service");
-                      const standby = !isBengkel && isStandbyLabel(k.status_kendaraan);
-                      const statusColor = isBengkel ? "#cbd5e0" : standby ? "#68d391" : "#fc8181";
-                      const statusLabel = isBengkel ? "Service" : standby ? "Standby" : "Keluar";
-                      const plat = k.kendaraan.split(" - ")[0];
-                      return (
-                        <div className="hero-fleet-circle" key={k.kendaraan} title={`${plat} — ${statusLabel}`}>
-                          <div className="hero-fleet-badge" style={{ borderColor: statusColor }}>
-                            <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={28} />
-                          </div>
-                          <div className="hero-fleet-plate">{plat}</div>
-                          <div className="hero-fleet-status" style={{ color: statusColor }}>{statusLabel}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {slide === "security" && (
-                <>
-                  <h2 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "900" }}>🛡️ Security & Driver Bertugas</h2>
-                  <p style={{ margin: "0 0 12px 0", fontSize: "12px", opacity: 0.85 }}>{securityShift.currentName}</p>
-
-                  <div className="hero-avatar-row">
-                    {securityShift.current.length === 0 && driverEntries.length === 0 && (
-                      <div style={{ fontSize: "12px", opacity: 0.8 }}>Belum ada yang diplot bertugas</div>
-                    )}
-                    {securityShift.current.map((nama) => {
-                      const foto = staffFotoMap[nama];
-                      return (
-                        <div className="hero-avatar-card" key={`sec-${nama}`} title="Security - ON DUTY">
-                          {foto ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={foto} alt={nama} className="hero-avatar-photo" />
-                          ) : (
-                            <div className="hero-avatar-fallback">{getInitials(nama)}</div>
-                          )}
-                          <div style={{ fontSize: "11px", fontWeight: "bold", lineHeight: 1.2 }}>{nama}</div>
-                          <div style={{ fontSize: "10px", opacity: 0.8 }}>🛡️ Jaga</div>
-                        </div>
-                      );
-                    })}
-                    {driverEntries.map(([nama, stat]) => {
-                      const foto = staffFotoMap[nama];
-                      const standby = stat.includes("Standby");
-                      return (
-                        <div className="hero-avatar-card" key={`drv-${nama}`} title={stat}>
-                          {foto ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={foto} alt={nama} className="hero-avatar-photo" />
-                          ) : (
-                            <div className="hero-avatar-fallback">{getInitials(nama)}</div>
-                          )}
-                          <div style={{ fontSize: "11px", fontWeight: "bold", lineHeight: 1.2 }}>{nama}</div>
-                          <div style={{ fontSize: "10px", opacity: 0.8 }}>🧑‍✈️ {standby ? "Standby" : "Keluar"}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%", maxWidth: "480px", marginTop: "14px" }}>
-                    <div className="hero-armada-item">
-                      <div style={{ textAlign: "left" }}>
-                        <div style={{ fontWeight: "bold" }}>Shift Berikutnya</div>
-                        <div style={{ opacity: 0.85, fontSize: "11px" }}>{securityShift.next.length > 0 ? securityShift.next.join(", ") : "Belum diplot"}</div>
-                      </div>
-                      <span className="hero-status-pill" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>{securityShift.nextName}</span>
-                    </div>
-                    <div className="hero-armada-item">
-                      <div style={{ textAlign: "left" }}>
-                        <div style={{ fontWeight: "bold" }}>🛠️ Maintenance</div>
-                        <div style={{ opacity: 0.85, fontSize: "11px" }}>{maintenanceInfo || "✅ Semua normal, tidak ada perbaikan berjalan"}</div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
+        {/* 🔴 RINGKASAN HARI INI */}
+        <div className="ringkasan-strip">
+          <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div>
+              <div style={{ fontSize: "10.5px", fontWeight: 800, letterSpacing: "1.4px", textTransform: "uppercase", color: "rgba(255,255,255,0.72)" }}>Ringkasan Hari Ini</div>
+              <div style={{ fontSize: "19px", fontWeight: 800, marginTop: "5px" }}>{maintenanceInfo ? "Ada perbaikan sedang berjalan" : "Semua operasional normal"}</div>
             </div>
-          ))}
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div className="ringkasan-chip">
+                <div style={{ fontSize: "18px", fontWeight: 800 }}>{hadirOB.length}</div>
+                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>OB &amp; CS Bertugas</div>
+              </div>
+              <div className="ringkasan-chip">
+                <div style={{ fontSize: "18px", fontWeight: 800 }}>{mobilStatus.length}</div>
+                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>Kendaraan Aktif</div>
+              </div>
+              <div className="ringkasan-chip">
+                <div style={{ fontSize: "13px", fontWeight: 800 }}>{securityShift.currentName.split(" (")[0]}</div>
+                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>{securityShift.currentName.match(/\(([^)]+)\)/)?.[1] || "Security"}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {heroSlides.length > 1 && (
-          <div className="hero-dots">
-            {heroSlides.map((_, idx) => (
-              <button key={idx} className={`hero-dot ${idx === safeHeroSlide ? "active" : ""}`} onClick={() => setHeroSlide(idx)} aria-label={`Ke slide ${idx + 1}`} />
+        {/* 🧱 MENU CEPAT — satu grid dipakai HP & desktop, gantikan desktop-grid + mobile-nav lama yang isinya duplikat */}
+        <div style={{ marginTop: "24px" }} id="menu-cepat-section">
+          <div style={{ fontSize: "15px", fontWeight: 800, marginBottom: "12px", color: "var(--ink)" }}>Menu Cepat</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+            <div className="qa-card" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="qa-icon-chip"><IconIdCard size={20} /></div>
+              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Lacak Tamu</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Cek pengunjung gedung</p></div>
+            </div>
+            <div className="qa-card" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="qa-icon-chip"><IconPackage size={20} /></div>
+              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Resi Paket</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lacak dokumen logistik</p></div>
+            </div>
+            <div className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="qa-icon-chip"><IconClipboard size={20} /></div>
+              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Request ATK</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Barang kantor ke GA</p></div>
+            </div>
+            <div className="qa-card" onClick={() => setActiveModal("overtime")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="qa-icon-chip"><IconClock size={20} /></div>
+              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Lembur AC</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Request ruang lembur</p></div>
+            </div>
+            <div className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="qa-icon-chip"><IconWrench size={20} /></div>
+              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Kerusakan</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lapor fasilitas rusak</p></div>
+            </div>
+            <div className="qa-card" onClick={() => setActiveModal("sbo")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px", borderColor: "rgba(220,38,38,0.35)" }}>
+              <div className="qa-icon-chip" style={{ background: "var(--red-600)", color: "#fff" }}><IconAlertTriangle size={20} /></div>
+              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--red-700)", fontSize: "14px", fontWeight: 800 }}>Bahaya SBO</h2><p style={{ margin: 0, color: "var(--red-600)", fontSize: "11px", fontWeight: 700 }}>Temuan kondisi darurat</p></div>
+            </div>
+          </div>
+        </div>
+
+        {/* 📊 TREN AKTIVITAS GEDUNG */}
+        <div id="tren-aktivitas-section">
+        <Card style={{ borderRadius: "20px", marginTop: "22px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "16px" }}>
+            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>Tren Aktivitas Gedung</h3>
+            <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>7 hari terakhir</span>
+          </div>
+          <div style={{ display: "flex", gap: "18px", flexWrap: "wrap", marginBottom: "18px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--ok)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Tamu</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.tamu}</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--info)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Kendaraan</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.kendaraan}</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--warn)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Tiket Selesai</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.tiket}</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Paket</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.paket}</span></div>
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end", height: "110px", borderBottom: "1px solid var(--line)", paddingBottom: "8px" }}>
+            {trenAktivitas7Hari.map((h) => (
+              <div className="tren-bar-col" key={h.tanggal} title={`${h.label}: ${h.tamu} tamu, ${h.kendaraan} kendaraan, ${h.tiket} tiket, ${h.paket} paket`}>
+                <div className="tren-bar" style={{ height: `${Math.max(2, (h.tamu / trenMaxNilai) * 100)}%`, background: "var(--ok)" }} />
+                <div className="tren-bar" style={{ height: `${Math.max(2, (h.kendaraan / trenMaxNilai) * 100)}%`, background: "var(--info)" }} />
+                <div className="tren-bar" style={{ height: `${Math.max(2, (h.tiket / trenMaxNilai) * 100)}%`, background: "var(--warn)" }} />
+                <div className="tren-bar" style={{ height: `${Math.max(2, (h.paket / trenMaxNilai) * 100)}%`, background: "var(--accent)" }} />
+              </div>
             ))}
           </div>
-        )}
-      </div>
+          <div style={{ display: "flex", marginTop: "8px" }}>
+            {trenAktivitas7Hari.map((h, idx) => (
+              <span key={h.tanggal} style={{ flex: 1, textAlign: "center", fontSize: "10px", fontWeight: idx === 6 ? 800 : 600, color: idx === 6 ? "var(--red-600)" : "#a1a1aa" }}>{h.label}</span>
+            ))}
+          </div>
+        </Card>
+        </div>
 
-      <div style={{ maxWidth: "1100px", margin: "40px auto 40px", padding: "0 20px", position: "relative", zIndex: 10 }}>
+        {/* 🗓️ KALENDER AKTIVITAS */}
+        <Card style={{ borderRadius: "20px", marginTop: "18px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "14px" }}>
+            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>Kalender Aktivitas</h3>
+            <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>{new Date(thnW, blnW - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px", marginBottom: "6px" }}>
+            {["S", "S", "R", "K", "J", "S", "M"].map((h, idx) => <span key={idx} style={{ fontSize: "9px", color: "#a1a1aa", fontWeight: 700, textAlign: "center" }}>{h}</span>)}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
+            {Array.from({ length: kalenderAktivitas.leadingBlanks }).map((_, idx) => <div key={`blank-${idx}`} />)}
+            {kalenderAktivitas.daftarHari.map((h) => (
+              <div
+                key={h.iso}
+                className="kalender-cell"
+                title={h.adaData ? `${h.tanggal}: ada aktivitas` : `${h.tanggal}: belum ada data`}
+                style={{
+                  background: WARNA_LEVEL_KALENDER[h.level],
+                  border: h.adaData ? "none" : "1px dashed var(--line)",
+                  boxShadow: h.hariIni ? "0 0 0 2px #fff, 0 0 0 3.5px var(--ink)" : "none",
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", marginTop: "14px" }}>
+            <span style={{ fontSize: "9px", color: "#a1a1aa", fontWeight: 600 }}>Rendah</span>
+            <div style={{ display: "flex", gap: "2px" }}>
+              {WARNA_LEVEL_KALENDER.slice(1).map((c, idx) => <div key={idx} style={{ width: "12px", height: "12px", borderRadius: "3px", background: c }} />)}
+            </div>
+            <span style={{ fontSize: "9px", color: "#a1a1aa", fontWeight: 600 }}>Tinggi</span>
+          </div>
+        </Card>
 
-        {/* 💻 GRID MENU OPERASIONAL (HANYA MUNCUL DI DESKTOP/LAPTOP) */}
-        <div className="desktop-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "18px" }}>
-          <div className="qa-card" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="qa-icon-chip">🧑‍💼</div>
-            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Lacak Tamu</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Cek pengunjung gedung.</p></div>
+        {/* 👥 TIM BERTUGAS HARI INI */}
+        <div style={{ marginTop: "22px" }}>
+          <div className="section-title">
+            <div className="section-title-icon"><IconShield size={18} /></div>
+            <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Tim Bertugas Hari Ini</h3>
           </div>
-          <div className="qa-card" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="qa-icon-chip">📦</div>
-            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Cek Resi Paket</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Lacak dokumen logistik.</p></div>
-          </div>
-          <div className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="qa-icon-chip">🖇️</div>
-            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Gudang ATK</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Request barang kantor ke GA.</p></div>
-          </div>
-          <div className="qa-card" onClick={() => { setActiveModal("overtime"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="qa-icon-chip">⏱️</div>
-            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Overtime Gedung</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Request AC / Ruang lembur.</p></div>
-          </div>
-          <div className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="qa-icon-chip">🛠️</div>
-            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Lapor Kerusakan</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>Lapor fasilitas rusak ke GA.</p></div>
-          </div>
-          <div className="qa-card" onClick={() => { setActiveModal("sbo"); }} style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px", borderColor: "rgba(220,38,38,0.35)" }}>
-            <div className="qa-icon-chip" style={{ background: "var(--red-600)", color: "white" }}>🦺</div>
-            <div><h2 style={{ margin: "0 0 4px 0", color: "var(--red-700)", fontSize: "16px", fontWeight: 800 }}>Lapor Bahaya</h2><p style={{ margin: 0, color: "var(--red-600)", fontSize: "12px", fontWeight: 700 }}>Temuan kondisi darurat SBO.</p></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {timBertugasHariIni.length > 0 ? timBertugasHariIni.map((t) => {
+              const warna = t.tipe === "ob" ? { fg: "var(--red-600)", bg: "var(--red-50)" } : t.tipe === "security" ? { fg: "var(--info)", bg: "var(--info-50)" } : { fg: t.aktif ? "var(--warn)" : "var(--ok)", bg: t.aktif ? "var(--warn-50)" : "var(--ok-50)" };
+              return (
+                <div className="team-row" key={t.key}>
+                  {t.foto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={t.foto} alt={t.nama} className="team-avatar" />
+                  ) : (
+                    <div className="team-avatar-fallback" style={{ background: warna.bg, color: warna.fg }}>{getInitials(t.nama)}</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{t.nama}</div>
+                    <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "1px" }}>{t.sub}</div>
+                  </div>
+                  <span style={{ fontSize: "9.5px", fontWeight: 800, color: warna.fg, background: warna.bg, padding: "4px 9px", borderRadius: "20px", flexShrink: 0 }}>{t.label}</span>
+                </div>
+              );
+            }) : (
+              <div style={{ textAlign: "center", padding: "24px", color: "var(--muted)", fontSize: "13px", border: "1px dashed var(--line)", borderRadius: "14px" }}>Belum ada staf yang terplot bertugas hari ini.</div>
+            )}
           </div>
         </div>
 
-        {/* 2 DEDICATED CARDS UTAMA (TETAP MUNCUL DI HP) */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "25px", marginTop: "35px" }}>
+        {/* 🌙 PLOT BESOK — cuma tampil setelah jam 20:00 WITA, biar staf/GA bisa lihat plotting besok dari malam ini */}
+        {sudahMalam && obBesok.length > 0 && (
+          <div style={{ marginTop: "14px", background: "var(--bg)", border: "1px dashed var(--line)", borderRadius: "16px", padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 800, color: "var(--ink-soft)", marginBottom: "8px" }}>
+              <IconChevronRight size={14} color="var(--muted)" /> Plot Besok ({obBesok.length} OB &amp; CS terjadwal)
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {obBesok.map((o) => (
+                <span key={o.nama} title={o.lokasi.join(", ") || "Standby"} style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-soft)", background: "var(--surface)", border: "1px solid var(--line)", padding: "6px 12px", borderRadius: "20px" }}>{o.nama}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ⚙️ STATUS OPERASIONAL (ringkas) */}
+        <Card style={{ borderRadius: "20px", marginTop: "18px", padding: "6px 20px" }}>
+          <div className="status-op-row">
+            <div className="section-title-icon" style={{ background: "var(--info-50)", color: "var(--info)", margin: 0, padding: "9px" }}><IconTruck size={16} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>Status Armada</div>
+              <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "1px" }}>{mobilStatus.filter(m => isStandbyLabel(m.status_kendaraan)).length} dari {mobilStatus.length} kendaraan standby</div>
+            </div>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }} />
+          </div>
+          <div className="status-op-row">
+            <div className="section-title-icon" style={{ background: "var(--ok-50)", color: "var(--ok)", margin: 0, padding: "9px" }}><IconWrench size={16} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>Maintenance Gedung</div>
+              <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "1px" }}>{maintenanceInfo || "Tidak ada perbaikan berjalan"}</div>
+            </div>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: maintenanceInfo ? "var(--warn)" : "var(--ok)", flexShrink: 0 }} />
+          </div>
+          <div className="status-op-row">
+            <div className="section-title-icon" style={{ background: "var(--warn-50)", color: "var(--warn)", margin: 0, padding: "9px" }}><IconClock size={16} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>Overtime Minggu Ini</div>
+              <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "1px" }}>{overtimeMingguIni.length} pengajuan &middot; {seninMingguIni.split("-").reverse().join("/")}-{mingguMingguIni.split("-").reverse().join("/")}</div>
+            </div>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: overtimeMingguIni.length > 0 ? "var(--warn)" : "var(--ok)", flexShrink: 0 }} />
+          </div>
+        </Card>
+
+        {/* 🚗 DETAIL RIWAYAT ARMADA + ⏱️ OVERTIME MINGGU INI (kartu detail, tetap dipertahankan dari versi lama) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "18px", marginTop: "18px" }}>
 
           <Card style={{ borderRadius: "18px" }}>
             <div className="section-title">
-              <div className="section-title-icon">🚗</div>
-              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: "800" }}>Status Armada Operasional</h3>
+              <div className="section-title-icon"><IconTruck size={18} /></div>
+              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: "800" }}>Riwayat Armada Operasional</h3>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "450px", overflowY: "auto", paddingRight: "5px" }}>
+            {mobilStatus.length > 0 && (
+              <div style={{ display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "14px", marginBottom: "4px" }}>
+                {mobilStatus.map((k) => {
+                  const isBengkel = k.status_kendaraan?.includes("Bengkel") || k.status_kendaraan?.includes("Service");
+                  const standby = !isBengkel && isStandbyLabel(k.status_kendaraan);
+                  const statusColor = isBengkel ? "#a1a1aa" : standby ? "var(--ok)" : "var(--red-600)";
+                  return (
+                    <div key={k.kendaraan} title={`${k.kendaraan} — ${k.status_kendaraan}`} style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", width: "58px" }}>
+                      <div style={{ width: "46px", height: "46px", borderRadius: "14px", border: `2px solid ${statusColor}`, background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={24} />
+                      </div>
+                      <div style={{ fontSize: "9px", fontWeight: 800, color: "var(--ink-soft)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "56px" }}>{k.kendaraan}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto", paddingRight: "5px" }}>
               {logKendaraanMentah.length > 0 ? logKendaraanMentah.map((log, idx) => {
                 const keluar = log.status_kendaraan?.toLowerCase().includes("keluar");
                 return (
@@ -1183,9 +1259,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
           <Card style={{ borderRadius: "18px" }}>
             <div className="section-title">
-              <div className="section-title-icon">⏱️</div>
+              <div className="section-title-icon"><IconClock size={18} /></div>
               <div>
-                <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: "800" }}>Overtime Gedung (Minggu Ini)</h3>
+                <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: "800" }}>Overtime Gedung (Minggu Ini)</h3>
                 <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "var(--muted)" }}>{seninMingguIni.split("-").reverse().join("/")} - {mingguMingguIni.split("-").reverse().join("/")} — langsung tercatat, tinggal direkap untuk tagihan</p>
               </div>
             </div>
@@ -1198,13 +1274,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       <span style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px", flex: 1 }}>{ot.area_ruangan}</span>
                       <Badge tone={isHariIni ? "warning" : "neutral"} style={{ marginLeft: "10px" }}>{isHariIni ? "Hari Ini" : ot.tanggal.split("-").reverse().join("/")}</Badge>
                     </div>
-                    <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}>👤 {ot.nama_pemohon} ({ot.departemen})</div>
-                    <div style={{ fontSize: "13px", color: "var(--red-700)", fontWeight: "bold", background: "var(--red-50)", padding: "6px 10px", borderRadius: "8px", display: "inline-block", width: "fit-content" }}>🕒 {ot.jam_mulai} s/d {ot.jam_selesai}</div>
+                    <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}>{ot.nama_pemohon} ({ot.departemen})</div>
+                    <div style={{ fontSize: "13px", color: "var(--red-700)", fontWeight: "bold", background: "var(--red-50)", padding: "6px 10px", borderRadius: "8px", display: "inline-block", width: "fit-content" }}>{ot.jam_mulai} s/d {ot.jam_selesai}</div>
                   </div>
                 );
               }) : (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", background: "var(--bg)", borderRadius: "16px", border: "1px dashed var(--line)" }}>
-                  <div style={{ fontSize: "35px", marginBottom: "10px" }}>🏢</div>
                   <div style={{ fontSize: "14px", fontWeight: "bold", color: "var(--ink-soft)" }}>Tidak Ada Lembur</div>
                   <div style={{ fontSize: "12px", marginTop: "5px" }}>Belum ada overtime tercatat minggu ini.</div>
                 </div>
@@ -1215,32 +1290,28 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
       </div>
 
-      {/* 📱 BOTTOM NAVIGATION (HANYA MUNCUL DI HP) */}
-      <div className="mobile-nav">
-        <div className="m-nav-item" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }}>
-          <div className="m-nav-icon">🧑‍💼</div>
-          <span>Lacak Tamu</span>
+      {/* 📱 BOTTOM NAV APP-STYLE (HANYA MUNCUL DI HP) */}
+      <div className="app-bottom-nav">
+        <button className="nav-item active" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+          <IconHome size={21} />
+          <span>Home</span>
+        </button>
+        <button className="nav-item" onClick={() => scrollKeSection("tren-aktivitas-section")}>
+          <IconChart size={21} />
+          <span>Monitor</span>
+        </button>
+        <div className="nav-fab" onClick={() => scrollKeSection("menu-cepat-section")} role="button" aria-label="Menu Cepat">
+          <IconPlus size={22} color="#fff" />
         </div>
-        <div className="m-nav-item" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }}>
-          <div className="m-nav-icon">📦</div>
-          <span>Resi Paket</span>
-        </div>
-        <div className="m-nav-item" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
-          <div className="m-nav-icon">🖇️</div>
-          <span>Request ATK</span>
-        </div>
-        <div className="m-nav-item" onClick={() => setActiveModal("overtime")}>
-          <div className="m-nav-icon">⏱️</div>
-          <span>Lembur AC</span>
-        </div>
-        <div className="m-nav-item" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
-          <div className="m-nav-icon">🛠️</div>
-          <span>Kerusakan</span>
-        </div>
-        <div className="m-nav-item" onClick={() => setActiveModal("sbo")}>
-          <div className="m-nav-icon" style={{ background: "var(--red-600)", color: "white" }}>🦺</div>
-          <span>Bahaya SBO</span>
-        </div>
+        <button className="nav-item" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ position: "relative" }}>
+          <IconBell size={21} />
+          {pengumumanGedung && <span style={{ position: "absolute", top: "-2px", right: "6px", width: "7px", height: "7px", borderRadius: "50%", background: "var(--red-600)", border: "1.5px solid #fff" }} />}
+          <span>Info</span>
+        </button>
+        <button className="nav-item" onClick={() => setActiveModal("login")}>
+          <IconUserCircle size={21} />
+          <span>Profil</span>
+        </button>
       </div>
 
       {/* MODAL WRAPPER (via komponen Modal) */}

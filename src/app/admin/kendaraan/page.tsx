@@ -17,6 +17,15 @@ import Badge from "../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../components/ui/Table";
 import VehicleIcon3D, { KATEGORI_KENDARAAN, WARNA_KENDARAAN } from "../../../components/VehicleIcon3D";
 
+// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
+type IconProps = { size?: number; color?: string };
+const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
+);
+const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+
 interface Employee {
   id: string;
   nama: string;
@@ -543,27 +552,64 @@ export default function ManajemenKendaraanPage() {
   );
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali ke Control Panel</span>
-        </div>
-        <div style={{ background: "#ebf8ff", color: "#3182ce", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #bee3f8" }}>
-          👑 Admin: {adminName}
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        .site-header {
+          position: sticky; top: 0; z-index: 30;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .back-btn {
+          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
+          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
+        }
+        .back-btn:hover { color: var(--red-600); }
+        .admin-badge {
+          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
+          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
+        }
+        .admin-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
+          padding: 34px 20px 50px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .admin-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .admin-hero-content { position: relative; }
+      `}} />
+      <div className="site-header">
+        <button className="back-btn" onClick={() => router.push("/admin")}>
+          <IconArrowLeft size={16} /> Kembali ke Control Panel
+        </button>
+        <div className="admin-badge">
+          <IconUserCircle size={14} /> {adminName}
         </div>
       </div>
 
-      <div style={{ background: "linear-gradient(135deg, #8b0000 0%, #e53e3e 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(229, 62, 62, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>MASTER DATA KENDARAAN</h1>
-        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola foto, PIC, dan riwayat armada operasional</p>
+      <div className="admin-hero">
+        <div className="admin-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>MASTER DATA KENDARAAN</h1>
+          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola foto, PIC, dan riwayat armada operasional</p>
+        </div>
       </div>
 
       <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         <div style={{ display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
           <div style={{ flex: "1 1 350px", display: "flex", flexDirection: "column", gap: "20px" }}>
             <Card>
-              <h2 style={{ margin: "0 0 20px 0", color: editingId ? "#dd6b20" : "#1a202c", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "2px solid #edf2f7", paddingBottom: "10px" }}>
+              <h2 style={{ margin: "0 0 20px 0", color: editingId ? "var(--warn)" : "var(--ink)", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "2px solid var(--line)", paddingBottom: "10px" }}>
                 <span>{editingId ? "✏️" : "🚗"}</span> {editingId ? "Edit Data Kendaraan" : "Input Kendaraan Baru"}
               </h2>
 
@@ -571,26 +617,26 @@ export default function ManajemenKendaraanPage() {
 
                 {/* PREVIEW ICON 3D + PILIHAN KATEGORI & WARNA */}
                 <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                  <div style={{ width: "80px", height: "70px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid #e2e8f0" }}>
+                  <div style={{ width: "80px", height: "70px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, background: "var(--bg)", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid var(--line)" }}>
                     <VehicleIcon3D jenis={formData.kategori} warna={formData.warna} size={56} />
                   </div>
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
                     <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Kategori Kendaraan</label>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Kategori Kendaraan</label>
                       <select
                         value={formData.kategori}
                         onChange={(e) => setFormData({ ...formData, kategori: e.target.value })}
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", background: "white", cursor: "pointer" }}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--surface)", cursor: "pointer" }}
                       >
                         {KATEGORI_KENDARAAN.map((k) => <option key={k} value={k}>{k}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Warna</label>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Warna</label>
                       <select
                         value={formData.warna}
                         onChange={(e) => setFormData({ ...formData, warna: e.target.value })}
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", background: "white", cursor: "pointer" }}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--surface)", cursor: "pointer" }}
                       >
                         {WARNA_KENDARAAN.map((w) => <option key={w.label} value={w.label}>{w.label}</option>)}
                       </select>
@@ -600,21 +646,21 @@ export default function ManajemenKendaraanPage() {
 
                 {/* UPLOAD FOTO DOKUMENTASI (opsional — bukan icon utama, cuma buat referensi/arsip) */}
                 <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                  <div style={{ width: "80px", height: "60px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid #e2e8f0" }}>
+                  <div style={{ width: "80px", height: "60px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, background: "var(--bg)", display: "flex", justifyContent: "center", alignItems: "center", border: "2px solid var(--line)" }}>
                     {formData.foto_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={formData.foto_url} alt="Foto kendaraan" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <span style={{ fontSize: "22px", color: "#a0aec0" }}>📷</span>
+                      <span style={{ fontSize: "22px", color: "var(--muted)" }}>📷</span>
                     )}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: "inline-block", padding: "8px 14px", background: "#edf2f7", border: "1px dashed #a0aec0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+                    <label style={{ display: "inline-block", padding: "8px 14px", background: "var(--bg)", border: "1px dashed var(--muted)", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", cursor: "pointer" }}>
                       {isUploadingFoto ? "⏳ Mengunggah..." : (formData.foto_url ? "📸 Ganti Foto Dokumentasi" : "📸 Upload Foto Dokumentasi (opsional)")}
                       <input type="file" accept="image/*" onChange={handleFotoUpload} disabled={isUploadingFoto} style={{ display: "none" }} />
                     </label>
                     {formData.foto_url && !isUploadingFoto && (
-                      <button type="button" onClick={() => setFormData((prev) => ({ ...prev, foto_url: "" }))} style={{ marginLeft: "8px", background: "none", border: "none", color: "#e53e3e", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+                      <button type="button" onClick={() => setFormData((prev) => ({ ...prev, foto_url: "" }))} style={{ marginLeft: "8px", background: "none", border: "none", color: "var(--red-600)", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
                         Hapus
                       </button>
                     )}
@@ -642,9 +688,9 @@ export default function ManajemenKendaraanPage() {
                 <Input label="Pajak/STNK Berlaku Sampai" name="tanggal_pajak" type="date" value={formData.tanggal_pajak} onChange={handleInputChange} />
 
                 {(formData.plat_nomor || formData.pic_kendaraan) && (
-                  <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "10px", padding: "10px 14px" }}>
-                    <div style={{ fontSize: "10px", fontWeight: "bold", color: "#a0aec0", marginBottom: "3px" }}>IDENTIFIER OTOMATIS (dipakai driver & log)</div>
-                    <div style={{ fontSize: "13px", fontWeight: "bold", color: "#2d3748" }}>{buildKendaraanId(formData.plat_nomor, formData.pic_kendaraan, formData.unit_bisnis)}</div>
+                  <div style={{ background: "var(--bg)", border: "1px dashed var(--line)", borderRadius: "10px", padding: "10px 14px" }}>
+                    <div style={{ fontSize: "10px", fontWeight: "bold", color: "var(--muted)", marginBottom: "3px" }}>IDENTIFIER OTOMATIS (dipakai driver & log)</div>
+                    <div style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink)" }}>{buildKendaraanId(formData.plat_nomor, formData.pic_kendaraan, formData.unit_bisnis)}</div>
                   </div>
                 )}
 
@@ -662,13 +708,13 @@ export default function ManajemenKendaraanPage() {
 
             {kendaraanList.length === 0 && (
               <Card>
-                <h2 style={{ margin: "0 0 10px 0", color: "#2b6cb0", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <h2 style={{ margin: "0 0 10px 0", color: "var(--info)", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
                   <span>📥</span> Import Data Lama
                 </h2>
-                <p style={{ fontSize: "12px", color: "#718096", marginBottom: "12px", lineHeight: "1.5" }}>
+                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px", lineHeight: "1.5" }}>
                   Ada {MIGRASI_KENDARAAN_LAMA.length} kendaraan yang sebelumnya hardcode di halaman driver. Klik tombol ini biar nggak perlu input manual satu-satu.
                 </p>
-                <Button type="button" loading={isMigrating} loadingText="Mengimport..." onClick={handleImportDataLama} style={{ background: "#3182ce" }}>
+                <Button type="button" loading={isMigrating} loadingText="Mengimport..." onClick={handleImportDataLama} style={{ background: "var(--info)" }}>
                   Import {MIGRASI_KENDARAAN_LAMA.length} Kendaraan
                 </Button>
               </Card>
@@ -677,8 +723,8 @@ export default function ManajemenKendaraanPage() {
 
           <Card style={{ flex: "2 1 600px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
-              <h2 style={{ margin: 0, color: "#2d3748", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
-                <span>📋</span> Daftar Kendaraan <span style={{ background: "#edf2f7", padding: "4px 10px", borderRadius: "8px", fontSize: "12px", color: "#4a5568" }}>{kendaraanList.length} Unit</span>
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
+                <span>📋</span> Daftar Kendaraan <span style={{ background: "var(--bg)", padding: "4px 10px", borderRadius: "8px", fontSize: "12px", color: "var(--ink-soft)" }}>{kendaraanList.length} Unit</span>
               </h2>
 
               <div style={{ position: "relative" }}>
@@ -688,7 +734,7 @@ export default function ManajemenKendaraanPage() {
                   placeholder="Cari nama, plat, PIC, unit bisnis..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid #cbd5e0", fontSize: "13px", width: "260px", background: "#f8fafc", outline: "none" }}
+                  style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid var(--line)", fontSize: "13px", width: "260px", background: "var(--bg)", outline: "none" }}
                 />
               </div>
             </div>
@@ -710,44 +756,44 @@ export default function ManajemenKendaraanPage() {
                     <Tr key={k.id}>
                       <Td>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <div style={{ width: "48px", height: "40px", borderRadius: "8px", background: "#edf2f7", display: "flex", justifyContent: "center", alignItems: "center", flexShrink: 0 }}>
+                          <div style={{ width: "48px", height: "40px", borderRadius: "8px", background: "var(--bg)", display: "flex", justifyContent: "center", alignItems: "center", flexShrink: 0 }}>
                             <VehicleIcon3D jenis={k.kategori} warna={k.warna} size={36} />
                           </div>
                           <div>
-                            <div style={{ fontWeight: "bold", color: "#2c5282" }}>{k.kendaraan}</div>
-                            <div style={{ fontSize: "12px", color: "#a0aec0" }}>{k.plat_nomor || "-"} {k.jenis ? `• ${k.jenis}` : ""}</div>
+                            <div style={{ fontWeight: "bold", color: "var(--info)" }}>{k.kendaraan}</div>
+                            <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.plat_nomor || "-"} {k.jenis ? `• ${k.jenis}` : ""}</div>
                             {(k.no_rangka || k.no_mesin) && (
-                              <div style={{ fontSize: "11px", color: "#a0aec0" }}>
+                              <div style={{ fontSize: "11px", color: "var(--muted)" }}>
                                 {k.no_rangka ? `Rangka: ${k.no_rangka}` : ""}{k.no_rangka && k.no_mesin ? " • " : ""}{k.no_mesin ? `Mesin: ${k.no_mesin}` : ""}
                               </div>
                             )}
                           </div>
                         </div>
                       </Td>
-                      <Td style={{ color: "#718096", fontSize: "13px" }}>
+                      <Td style={{ color: "var(--ink-soft)", fontSize: "13px" }}>
                         <div>{k.pic_kendaraan || <span style={{ opacity: 0.5 }}>PIC belum diisi</span>}</div>
-                        <div style={{ fontSize: "12px", color: "#a0aec0" }}>{k.unit_bisnis || "-"}</div>
+                        <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.unit_bisnis || "-"}</div>
                       </Td>
                       <Td style={{ fontSize: "12px" }}>
                         <Badge tone={pajak.tone}>{pajak.label}</Badge>
-                        {k.tanggal_pajak && <div style={{ fontSize: "11px", color: "#a0aec0", marginTop: "4px" }}>{k.tanggal_pajak.split("-").reverse().join("/")}</div>}
+                        {k.tanggal_pajak && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>{k.tanggal_pajak.split("-").reverse().join("/")}</div>}
                       </Td>
                       <Td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                         <button
                           onClick={() => bukaRiwayat(k)}
-                          style={{ background: "#f0fff4", color: "#2f855a", border: "1px solid #c6f6d5", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", marginRight: "6px" }}
+                          style={{ background: "var(--ok-50)", color: "var(--ok)", border: "1px solid rgba(22,163,74,0.2)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", marginRight: "6px" }}
                         >
                           📊 Riwayat
                         </button>
                         <button
                           onClick={() => handleMulaiEdit(k)}
-                          style={{ background: "#fffaf0", color: "#dd6b20", border: "1px solid #feebc8", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", marginRight: "6px" }}
+                          style={{ background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.2)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", marginRight: "6px" }}
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleHapusKendaraan(k.id, k.kendaraan)}
-                          style={{ background: "#fff5f5", color: "#e53e3e", border: "1px solid #fed7d7", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
+                          style={{ background: "var(--red-50)", color: "var(--red-600)", border: "1px solid rgba(220,38,38,0.2)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
                         >
                           Hapus
                         </button>
@@ -757,7 +803,7 @@ export default function ManajemenKendaraanPage() {
                   })
                 ) : (
                   <Tr>
-                    <Td colSpan={4} style={{ padding: "50px 20px", textAlign: "center", color: "#a0aec0" }}>
+                    <Td colSpan={4} style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)" }}>
                       <div style={{ fontSize: "30px", marginBottom: "10px" }}>🚗</div>
                       Belum ada kendaraan terdaftar.
                     </Td>
@@ -774,23 +820,23 @@ export default function ManajemenKendaraanPage() {
         {riwayatKendaraan && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ marginBottom: "15px", paddingRight: "20px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "20px", fontWeight: "800" }}>Riwayat: {riwayatKendaraan.kendaraan}</h2>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "20px", fontWeight: "800" }}>Riwayat: {riwayatKendaraan.kendaraan}</h2>
             </div>
-            <div style={{ display: "flex", background: "#f1f5f9", padding: "6px", borderRadius: "14px", marginBottom: "20px", border: "1px solid #e2e8f0" }}>
-              <button onClick={() => setRiwayatTab("ODOMETER")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "ODOMETER" ? "white" : "transparent", color: riwayatTab === "ODOMETER" ? "#2f855a" : "#64748b" }}>🛣️ Odometer</button>
-              <button onClick={() => setRiwayatTab("SERVICE")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "SERVICE" ? "white" : "transparent", color: riwayatTab === "SERVICE" ? "#2f855a" : "#64748b" }}>🔧 Servis</button>
-              <button onClick={() => setRiwayatTab("PEMAKAIAN")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "PEMAKAIAN" ? "white" : "transparent", color: riwayatTab === "PEMAKAIAN" ? "#2f855a" : "#64748b" }}>🚙 Pemakaian</button>
-              <button onClick={() => setRiwayatTab("INSPEKSI")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "INSPEKSI" ? "white" : "transparent", color: riwayatTab === "INSPEKSI" ? "#2f855a" : "#64748b" }}>🔍 Inspeksi</button>
+            <div style={{ display: "flex", background: "var(--bg)", padding: "6px", borderRadius: "14px", marginBottom: "20px", border: "1px solid var(--line)" }}>
+              <button onClick={() => setRiwayatTab("ODOMETER")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "ODOMETER" ? "var(--surface)" : "transparent", color: riwayatTab === "ODOMETER" ? "var(--ok)" : "var(--muted)" }}>🛣️ Odometer</button>
+              <button onClick={() => setRiwayatTab("SERVICE")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "SERVICE" ? "var(--surface)" : "transparent", color: riwayatTab === "SERVICE" ? "var(--ok)" : "var(--muted)" }}>🔧 Servis</button>
+              <button onClick={() => setRiwayatTab("PEMAKAIAN")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "PEMAKAIAN" ? "var(--surface)" : "transparent", color: riwayatTab === "PEMAKAIAN" ? "var(--ok)" : "var(--muted)" }}>🚙 Pemakaian</button>
+              <button onClick={() => setRiwayatTab("INSPEKSI")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "12px", background: riwayatTab === "INSPEKSI" ? "var(--surface)" : "transparent", color: riwayatTab === "INSPEKSI" ? "var(--ok)" : "var(--muted)" }}>🔍 Inspeksi</button>
             </div>
 
             {riwayatTab === "ODOMETER" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div style={{ background: "#f0fff4", border: "1px solid #c6f6d5", borderRadius: "12px", padding: "15px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: "bold", color: "#2f855a", marginBottom: "4px" }}>ODOMETER TERAKHIR</div>
-                  <div style={{ fontSize: "22px", fontWeight: "900", color: "#22543d" }}>
+                <div style={{ background: "var(--ok-50)", border: "1px solid rgba(22,163,74,0.2)", borderRadius: "12px", padding: "15px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ok)", marginBottom: "4px" }}>ODOMETER TERAKHIR</div>
+                  <div style={{ fontSize: "22px", fontWeight: "900", color: "var(--ok)" }}>
                     {odometerLogs.length > 0 ? `${odometerLogs[0].odometer.toLocaleString("id-ID")} km` : "Belum ada data"}
                   </div>
-                  {odometerLogs.length > 0 && <div style={{ fontSize: "11px", color: "#718096" }}>Dicatat {odometerLogs[0].tanggal}</div>}
+                  {odometerLogs.length > 0 && <div style={{ fontSize: "11px", color: "var(--muted)" }}>Dicatat {odometerLogs[0].tanggal}</div>}
                 </div>
 
                 <form onSubmit={handleSubmitOdometer} style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
@@ -801,23 +847,23 @@ export default function ManajemenKendaraanPage() {
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "220px", overflowY: "auto" }}>
                   {odometerLogs.length > 0 ? odometerLogs.map((log) => (
-                    <div key={log.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #edf2f7", fontSize: "13px" }}>
-                      <span style={{ fontWeight: "bold", color: "#2d3748" }}>{log.odometer.toLocaleString("id-ID")} km</span>
-                      <span style={{ color: "#a0aec0" }}>{log.tanggal}{log.dicatat_oleh ? ` • ${log.dicatat_oleh}` : ""}</span>
+                    <div key={log.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "var(--bg)", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px" }}>
+                      <span style={{ fontWeight: "bold", color: "var(--ink)" }}>{log.odometer.toLocaleString("id-ID")} km</span>
+                      <span style={{ color: "var(--muted)" }}>{log.tanggal}{log.dicatat_oleh ? ` • ${log.dicatat_oleh}` : ""}</span>
                     </div>
-                  )) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px" }}>Belum ada riwayat odometer.</div>}
+                  )) : <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px" }}>Belum ada riwayat odometer.</div>}
                 </div>
               </div>
             )}
 
             {riwayatTab === "SERVICE" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div style={{ background: "#fffaf0", border: "1px solid #feebc8", borderRadius: "12px", padding: "15px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: "bold", color: "#c05621", marginBottom: "4px" }}>SERVIS TERAKHIR</div>
-                  <div style={{ fontSize: "16px", fontWeight: "900", color: "#7b341e" }}>
+                <div style={{ background: "var(--warn-50)", border: "1px solid rgba(217,119,6,0.2)", borderRadius: "12px", padding: "15px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--warn)", marginBottom: "4px" }}>SERVIS TERAKHIR</div>
+                  <div style={{ fontSize: "16px", fontWeight: "900", color: "var(--warn)" }}>
                     {serviceLogs.length > 0 ? serviceLogs[0].jenis_service : "Belum ada data"}
                   </div>
-                  {serviceLogs.length > 0 && <div style={{ fontSize: "11px", color: "#718096" }}>{serviceLogs[0].tanggal}</div>}
+                  {serviceLogs.length > 0 && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{serviceLogs[0].tanggal}</div>}
                 </div>
 
                 <form onSubmit={handleSubmitService} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -828,7 +874,7 @@ export default function ManajemenKendaraanPage() {
                   <Input label="Deskripsi" value={formService.deskripsi} onChange={(e) => setFormService({ ...formService, deskripsi: e.target.value })} placeholder="Detail servis (opsional)" />
                   <Input label="Biaya (opsional)" value={formService.biaya} onChange={(e) => setFormService({ ...formService, biaya: e.target.value })} placeholder="Cth: 350000" />
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "10px", padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "var(--bg)", border: "1px dashed var(--line)", borderRadius: "10px", padding: "10px 12px" }}>
                     {formService.foto_emisi_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={formService.foto_emisi_url} alt="Hasil uji emisi" style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
@@ -836,12 +882,12 @@ export default function ManajemenKendaraanPage() {
                       <span style={{ fontSize: "20px" }}>🌫️</span>
                     )}
                     <div style={{ flex: 1 }}>
-                      <label style={{ display: "inline-block", padding: "6px 12px", background: "#edf2f7", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+                      <label style={{ display: "inline-block", padding: "6px 12px", background: "var(--bg)", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", cursor: "pointer" }}>
                         {isUploadingEmisi ? "⏳ Mengunggah..." : (formService.foto_emisi_url ? "Ganti Foto Uji Emisi" : "Upload Hasil Uji Emisi (opsional)")}
                         <input type="file" accept="image/*" onChange={handleFotoEmisiUpload} disabled={isUploadingEmisi} style={{ display: "none" }} />
                       </label>
                       {formService.foto_emisi_url && !isUploadingEmisi && (
-                        <button type="button" onClick={() => setFormService((prev) => ({ ...prev, foto_emisi_url: "" }))} style={{ marginLeft: "8px", background: "none", border: "none", color: "#e53e3e", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
+                        <button type="button" onClick={() => setFormService((prev) => ({ ...prev, foto_emisi_url: "" }))} style={{ marginLeft: "8px", background: "none", border: "none", color: "var(--red-600)", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
                           Hapus
                         </button>
                       )}
@@ -853,66 +899,66 @@ export default function ManajemenKendaraanPage() {
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "220px", overflowY: "auto" }}>
                   {serviceLogs.length > 0 ? serviceLogs.map((log) => (
-                    <div key={log.id} style={{ padding: "10px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #edf2f7", fontSize: "13px" }}>
+                    <div key={log.id} style={{ padding: "10px 14px", background: "var(--bg)", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ fontWeight: "bold", color: "#2d3748" }}>{log.jenis_service}</span>
-                        <span style={{ color: "#a0aec0" }}>{log.tanggal}</span>
+                        <span style={{ fontWeight: "bold", color: "var(--ink)" }}>{log.jenis_service}</span>
+                        <span style={{ color: "var(--muted)" }}>{log.tanggal}</span>
                       </div>
-                      {log.deskripsi && <div style={{ color: "#718096", marginTop: "4px" }}>{log.deskripsi}</div>}
-                      {log.biaya && <div style={{ color: "#38a169", fontWeight: "bold", marginTop: "4px" }}>Rp {log.biaya}</div>}
+                      {log.deskripsi && <div style={{ color: "var(--muted)", marginTop: "4px" }}>{log.deskripsi}</div>}
+                      {log.biaya && <div style={{ color: "var(--ok)", fontWeight: "bold", marginTop: "4px" }}>Rp {log.biaya}</div>}
                       {log.foto_emisi_url && (
-                        <a href={log.foto_emisi_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "12px", fontWeight: "bold", color: "#3182ce", textDecoration: "none" }}>
+                        <a href={log.foto_emisi_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "12px", fontWeight: "bold", color: "var(--info)", textDecoration: "none" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={log.foto_emisi_url} alt="Uji emisi" style={{ width: "32px", height: "32px", objectFit: "cover", borderRadius: "6px" }} />
                           🌫️ Lihat Hasil Uji Emisi
                         </a>
                       )}
                     </div>
-                  )) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px" }}>Belum ada riwayat servis.</div>}
+                  )) : <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px" }}>Belum ada riwayat servis.</div>}
                 </div>
               </div>
             )}
 
             {riwayatTab === "PEMAKAIAN" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "400px", overflowY: "auto" }}>
-                <div style={{ fontSize: "11px", color: "#a0aec0", marginBottom: "5px" }}>Ditarik otomatis dari log status kendaraan (Driver) — data ini tidak diinput dari halaman ini.</div>
+                <div style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "5px" }}>Ditarik otomatis dari log status kendaraan (Driver) — data ini tidak diinput dari halaman ini.</div>
                 {pemakaianLogs.length > 0 ? pemakaianLogs.map((log, idx) => (
-                  <div key={idx} style={{ padding: "12px 14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #edf2f7", fontSize: "13px" }}>
+                  <div key={idx} style={{ padding: "12px 14px", background: "var(--bg)", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ fontWeight: "bold", color: "#2d3748" }}>{log.status_kendaraan}</span>
-                      <span style={{ color: "#a0aec0" }}>{formatTgl(log.waktu_catat)}</span>
+                      <span style={{ fontWeight: "bold", color: "var(--ink)" }}>{log.status_kendaraan}</span>
+                      <span style={{ color: "var(--muted)" }}>{formatTgl(log.waktu_catat)}</span>
                     </div>
-                    <div style={{ color: "#718096", marginTop: "4px" }}>👤 {log.driver_bertugas?.replace("Standby: ", "") || "-"}</div>
-                    {log.tujuan_keperluan && <div style={{ color: "#718096", fontStyle: "italic" }}>📍 {log.tujuan_keperluan}</div>}
+                    <div style={{ color: "var(--muted)", marginTop: "4px" }}>👤 {log.driver_bertugas?.replace("Standby: ", "") || "-"}</div>
+                    {log.tujuan_keperluan && <div style={{ color: "var(--muted)", fontStyle: "italic" }}>📍 {log.tujuan_keperluan}</div>}
                   </div>
-                )) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px" }}>Belum ada riwayat pemakaian.</div>}
+                )) : <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px" }}>Belum ada riwayat pemakaian.</div>}
               </div>
             )}
 
             {riwayatTab === "INSPEKSI" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "450px", overflowY: "auto" }}>
-                <div style={{ fontSize: "11px", color: "#a0aec0", marginBottom: "5px" }}>Diisi driver setiap minggu — data ini tidak diinput dari halaman ini.</div>
+                <div style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "5px" }}>Diisi driver setiap minggu — data ini tidak diinput dari halaman ini.</div>
                 {inspeksiLogs.length > 0 ? inspeksiLogs.map((log) => {
                   const items = Object.entries(log.checklist || {});
                   const bermasalah = items.filter(([, v]) => v !== "Baik");
                   return (
-                    <div key={log.id} style={{ padding: "14px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #edf2f7", fontSize: "13px" }}>
+                    <div key={log.id} style={{ padding: "14px", background: "var(--bg)", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "13px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                        <span style={{ fontWeight: "bold", color: "#2d3748" }}>👤 {log.driver}</span>
-                        <span style={{ color: "#a0aec0" }}>{log.tanggal}</span>
+                        <span style={{ fontWeight: "bold", color: "var(--ink)" }}>👤 {log.driver}</span>
+                        <span style={{ color: "var(--muted)" }}>{log.tanggal}</span>
                       </div>
                       {bermasalah.length === 0 ? (
-                        <div style={{ color: "#38a169", fontWeight: "bold", fontSize: "12px" }}>✅ Semua item kondisi Baik</div>
+                        <div style={{ color: "var(--ok)", fontWeight: "bold", fontSize: "12px" }}>✅ Semua item kondisi Baik</div>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                           {bermasalah.map(([key, status]) => (
-                            <div key={key} style={{ fontSize: "12px", color: status === "Rusak" ? "#c53030" : "#c05621" }}>
+                            <div key={key} style={{ fontSize: "12px", color: status === "Rusak" ? "var(--red-600)" : "var(--warn)" }}>
                               {status === "Rusak" ? "🔴" : "🟡"} {CHECKLIST_LABELS[key] || key}: <b>{status}</b>
                             </div>
                           ))}
                         </div>
                       )}
-                      {log.catatan && <div style={{ color: "#718096", marginTop: "8px", fontStyle: "italic" }}>&quot;{log.catatan}&quot;</div>}
+                      {log.catatan && <div style={{ color: "var(--muted)", marginTop: "8px", fontStyle: "italic" }}>&quot;{log.catatan}&quot;</div>}
                       {log.foto_url && (
                         <a href={log.foto_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: "8px" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -921,7 +967,7 @@ export default function ManajemenKendaraanPage() {
                       )}
                     </div>
                   );
-                }) : <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px" }}>Belum ada riwayat inspeksi.</div>}
+                }) : <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px" }}>Belum ada riwayat inspeksi.</div>}
               </div>
             )}
           </div>
