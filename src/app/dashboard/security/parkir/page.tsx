@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useToast } from "../../../../components/ui/ToastProvider";
@@ -34,8 +34,8 @@ const IconPlaneTakeoff = ({ size = 14, color = "currentColor" }: IconProps) => (
 const IconPlaneLand = ({ size = 14, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="m7 15 12-3-1.5-2.6-4 .5-4.3-6-2 .5 2 6.3L4 12l-.7-1.7-1.3.3.7 3.4z" /></svg>
 );
-const IconDisc = ({ size = 14, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2" /></svg>
+const IconHome = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /></svg>
 );
 const IconGauge = ({ size = 11, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15a8 8 0 1 1 16 0" /><path d="M12 15 15 10" /><path d="M4 15h1M19 15h1M12 5v1" /></svg>
@@ -52,11 +52,8 @@ const IconSearch = ({ size = 14, color = "currentColor" }: IconProps) => (
 const IconInboxEmpty = ({ size = 26, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
 );
-const IconCheckCircle = ({ size = 14, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 5-5" /></svg>
-);
-const IconRefresh = ({ size = 15, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" /><path d="M3 21v-5h5" /></svg>
+const IconX = ({ size = 16, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
 );
 const IconSave = ({ size = 15, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h11l3 3v15H5z" /><path d="M8 3v6h8V3" /><path d="M8 21v-7h8v7" /></svg>
@@ -87,6 +84,8 @@ interface DriverStatusLog {
 interface KendaraanMaster {
   id: string;
   kendaraan: string;
+  jenis?: string;
+  pic_kendaraan?: string;
 }
 
 interface Employee {
@@ -97,14 +96,37 @@ interface Employee {
 // ==========================================
 // MASTER DATA
 // ==========================================
-// Pilihan "siapa yang membawa kendaraan" — dulu ada 2 opsi generik yang tumpang tindih
-// ("Penanggung Jawab Kendaraan (PIC)" & "Karyawan / PIC Kendaraan"), sekarang disederhanakan
-// jadi 1 opsi "Karyawan" yang begitu dipilih, wajib isi nama karyawan spesifiknya (lihat state
-// `namaKaryawan` & field kondisional di form).
+// Pilihan "siapa yang membawa kendaraan" — begitu dipilih "Karyawan", wajib isi nama karyawan
+// spesifiknya (lihat state `namaKaryawan` & field kondisional di modal aksi).
 const DAFTAR_DRIVER = ["Amal Setiawan", "Muhammad Renaldy", "Karyawan"];
 
-// Daftar Driver Murni untuk Card Manajemen Absensi Driver
+// Driver murni yang status kesiagaannya di-tracking otomatis (driver_status_logs)
 const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
+
+// 4 aksi pergerakan armada di Tab 1 — menggantikan form dropdown status lama.
+// String status_kendaraan SENGAJA dipertahankan sama seperti sebelumnya untuk "Standby",
+// "Keluar", & "Bengkel/Service" supaya kompatibel dengan logika di halaman lain (portal utama &
+// admin/kendaraan) yang mendeteksi status via substring ("keluar", "tiba", "standby", "bengkel").
+const STATUS_AKSI = [
+  { key: "standby", label: "Parkir/Standby", status: "Tiba di Kantor (Standby)", icon: IconPlaneLand, tone: "ok" as const },
+  { key: "pulang", label: "Pulang", status: "Pulang (Selesai Tugas Hari Ini)", icon: IconHome, tone: "accent" as const },
+  { key: "keluar", label: "Keluar", status: "Keluar Beroperasi", icon: IconPlaneTakeoff, tone: "red" as const },
+  { key: "service", label: "Service", status: "Masuk Bengkel / Service", icon: IconWrench, tone: "warn" as const },
+];
+
+// Otomatisasi status driver berdasarkan aksi kendaraan yang dipilih.
+function autoDriverStatus(statusKendaraan: string): string {
+  if (statusKendaraan === "Keluar Beroperasi" || statusKendaraan === "Masuk Bengkel / Service") return "Keluar Beroperasi";
+  if (statusKendaraan === "Pulang (Selesai Tugas Hari Ini)") return "Off Duty / Izin";
+  return "Standby"; // Tiba di Kantor (Standby)
+}
+
+function classifyStatus(status: string): { label: string; bg: string; color: string } {
+  if (status.includes("Bengkel") || status.includes("Service")) return { label: "SERVICE", bg: "var(--line)", color: "var(--ink-soft)" };
+  if (status.includes("Pulang")) return { label: "PULANG", bg: "rgba(124,58,237,0.12)", color: "var(--accent)" };
+  if (status.includes("Standby") || status.includes("Tiba")) return { label: "STANDBY", bg: "var(--ok-50)", color: "var(--ok)" };
+  return { label: "KELUAR POOL", bg: "var(--red-50)", color: "var(--red-600)" };
+}
 
 export default function LogOperasionalPage() {
   const router = useRouter();
@@ -114,34 +136,28 @@ export default function LogOperasionalPage() {
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
   const [isReady, setIsReady] = useState<boolean>(false);
 
-  // Loading & Success States
-  const [isLoadingMobil, setIsLoadingMobil] = useState<boolean>(false);
-  const [isLoadingDriver, setIsLoadingDriver] = useState<boolean>(false);
-  const [isSuccessMobil, setIsSuccessMobil] = useState<boolean>(false);
-  const [isSuccessDriver, setIsSuccessDriver] = useState<boolean>(false);
+  // TAB AKTIF: "kendaraan" = daftar armada + aksi cepat, "log" = riwayat pergerakan
+  const [activeTab, setActiveTab] = useState<"kendaraan" | "log">("kendaraan");
 
-  // 🚙 STATE FORM KENDARAAN — daftar armada ditarik live dari master_kendaraan (bukan hardcode lagi,
-  // biar gak ada lagi drift kayak PIC/unit yang udah ganti di admin tapi dropdown ini masih versi lama)
+  // 🚙 MASTER KENDARAAN — daftar armada ditarik live dari master_kendaraan
   const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
-  const [kendaraan, setKendaraan] = useState<string>("");
-  const [statusMobil, setStatusMobil] = useState<string>("Keluar Beroperasi");
-  const [driverMobil, setDriverMobil] = useState<string>(DAFTAR_DRIVER[0]);
-  const [namaKaryawan, setNamaKaryawan] = useState<string>("");
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [tujuan, setTujuan] = useState<string>("");
-  const [kilometer, setKilometer] = useState<string>("");
 
-  // Kalau belum ada yang dipilih manual, jatuhkan ke kendaraan pertama begitu master data kebaca
-  const kendaraanEfektif = kendaraan || kendaraanMaster[0]?.kendaraan || "";
+  // STATE PENCARIAN (masing-masing tab punya pencarian sendiri)
+  const [searchKendaraan, setSearchKendaraan] = useState<string>("");
+  const [searchLog, setSearchLog] = useState<string>("");
 
-  // 🧑‍✈️ STATE FORM STATUS DRIVER MURNI
-  const [targetDriver, setTargetDriver] = useState<string>(DRIVER_ONLY[0]);
-  const [statusDriver, setStatusDriver] = useState<string>("Standby");
-
-  // STATE MONITORING (KANAN)
-  const [searchTabel, setSearchTabel] = useState<string>("");
+  // STATE DATA REAL-TIME
   const [daftarLogMobil, setDaftarLogMobil] = useState<KendaraanLog[]>([]);
   const [driverStatusTerkini, setDriverStatusTerkini] = useState<Record<string, DriverStatusLog>>({});
+
+  // 🪟 MODAL AKSI CEPAT (dibuka dari salah satu dari 4 tombol per baris kendaraan)
+  const [modalAksi, setModalAksi] = useState<{ kendaraan: KendaraanMaster; status: string; label: string } | null>(null);
+  const [driverMobil, setDriverMobil] = useState<string>(DAFTAR_DRIVER[0]);
+  const [namaKaryawan, setNamaKaryawan] = useState<string>("");
+  const [tujuan, setTujuan] = useState<string>("");
+  const [kilometer, setKilometer] = useState<string>("");
+  const [isLoadingAksi, setIsLoadingAksi] = useState<boolean>(false);
 
   // 1. Inisialisasi Jam Live & PIC
   useEffect(() => {
@@ -173,9 +189,8 @@ export default function LogOperasionalPage() {
     return () => { unsubKendaraan(); unsubEmployees(); };
   }, []);
 
-  // 2. Tarik Data Real-time (Mobil & Driver)
+  // 2. Tarik Data Real-time (Log Mobil & Status Driver)
   useEffect(() => {
-    // Stream Log Mobil
     const qMobil = query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"));
     const unsubMobil = onSnapshot(qMobil, (snapshot) => {
       const logsArr: KendaraanLog[] = [];
@@ -195,7 +210,6 @@ export default function LogOperasionalPage() {
       setDaftarLogMobil(logsArr);
     });
 
-    // Stream Status Driver
     const qDriver = query(collection(db, "driver_status_logs"), orderBy("waktu_ubah", "desc"));
     const unsubDriver = onSnapshot(qDriver, (snapshot) => {
       const statusMap: Record<string, DriverStatusLog> = {};
@@ -218,10 +232,30 @@ export default function LogOperasionalPage() {
     return () => { unsubMobil(); unsubDriver(); };
   }, []);
 
-  // 3. Submit Log Mobil (DENGAN OTOMATISASI STATUS DRIVER)
-  const handleSubmitMobil = async (e: React.FormEvent) => {
+  // Status pergerakan terkini per kendaraan — dipetakan dari log terbaru (daftarLogMobil sudah urut desc)
+  const statusPerKendaraan = useMemo(() => {
+    const map: Record<string, KendaraanLog> = {};
+    daftarLogMobil.forEach((log) => {
+      if (!map[log.kendaraan]) map[log.kendaraan] = log;
+    });
+    return map;
+  }, [daftarLogMobil]);
+
+  // Buka modal aksi cepat untuk 1 kendaraan + 1 status tujuan
+  const bukaModalAksi = (kendaraan: KendaraanMaster, status: string, label: string) => {
+    setDriverMobil(DAFTAR_DRIVER[0]);
+    setNamaKaryawan("");
+    setTujuan("");
+    setKilometer("");
+    setModalAksi({ kendaraan, status, label });
+  };
+
+  // Submit Aksi Cepat (DENGAN OTOMATISASI STATUS DRIVER — menggantikan koreksi manual absensi)
+  const handleSubmitAksi = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (statusMobil === "Keluar Beroperasi" && !tujuan.trim()) {
+    if (!modalAksi) return;
+
+    if (modalAksi.status === "Keluar Beroperasi" && !tujuan.trim()) {
       showToast("Tujuan/Keperluan wajib diisi jika kendaraan keluar!", "warning");
       return;
     }
@@ -230,75 +264,37 @@ export default function LogOperasionalPage() {
       return;
     }
 
-    // Kalau yang bawa "Karyawan", simpan NAMA KARYAWAN-nya langsung ke field driver_bertugas
-    // (bukan label generik "Karyawan") — biar kolom Driver Pengendara di tabel ini & kolom
-    // PIC/Driver di Riwayat admin/kendaraan langsung kebaca siapa orangnya, tanpa kolom baru.
     const driverBertugasFinal = driverMobil === "Karyawan" ? namaKaryawan.trim() : driverMobil;
 
-    setIsLoadingMobil(true);
-    setIsSuccessMobil(false);
-
+    setIsLoadingAksi(true);
     try {
-      // A. Simpan log kendaraan ke Firestore
       await addDoc(collection(db, "operational_vehicle_logs"), {
         petugas_security: picName,
         waktu_catat: serverTimestamp(),
-        kendaraan: kendaraanEfektif,
-        status_kendaraan: statusMobil,
+        kendaraan: modalAksi.kendaraan.kendaraan,
+        status_kendaraan: modalAksi.status,
         driver_bertugas: driverBertugasFinal,
         tujuan_keperluan: tujuan || "-",
         kilometer_kendaraan: kilometer || "Tidak dicatat",
       });
 
-      // 💡 B. AUTO-UPDATE STATUS DRIVER (Hanya jika driver yang dipilih adalah Amal/Renaldy)
+      // 💡 AUTO-UPDATE STATUS DRIVER — hanya untuk driver tetap (Amal/Renaldy), bukan Karyawan umum
       if (DRIVER_ONLY.includes(driverMobil)) {
-        let otomatisStatusDriver = "Standby";
-        if (statusMobil === "Keluar Beroperasi" || statusMobil === "Masuk Bengkel / Service") {
-          otomatisStatusDriver = "Keluar Beroperasi";
-        }
-
         await addDoc(collection(db, "driver_status_logs"), {
           nama_driver: driverMobil,
-          status: otomatisStatusDriver,
+          status: autoDriverStatus(modalAksi.status),
           waktu_ubah: serverTimestamp(),
           petugas_security: picName + " (Sistem Auto-Sync)"
         });
       }
 
-      setIsSuccessMobil(true);
-      setTujuan("");
-      setKilometer("");
-      setNamaKaryawan("");
-      setTimeout(() => setIsSuccessMobil(false), 4000);
+      showToast(`Berhasil dicatat: ${modalAksi.kendaraan.kendaraan.split(" - ")[0]} — ${modalAksi.label}`, "success");
+      setModalAksi(null);
     } catch (error) {
       console.error(error);
       showToast("Gagal menyimpan data kendaraan.", "error");
     } finally {
-      setIsLoadingMobil(false);
-    }
-  };
-
-  // 4. Submit Status Driver Murni (Manual via Card Bawah)
-  const handleSubmitDriver = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoadingDriver(true);
-    setIsSuccessDriver(false);
-
-    try {
-      await addDoc(collection(db, "driver_status_logs"), {
-        nama_driver: targetDriver,
-        status: statusDriver,
-        waktu_ubah: serverTimestamp(),
-        petugas_security: picName
-      });
-
-      setIsSuccessDriver(true);
-      setTimeout(() => setIsSuccessDriver(false), 4000);
-    } catch (error) {
-      console.error(error);
-      showToast("Gagal mengubah status driver.", "error");
-    } finally {
-      setIsLoadingDriver(false);
+      setIsLoadingAksi(false);
     }
   };
 
@@ -307,9 +303,15 @@ export default function LogOperasionalPage() {
     return timestamp.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
+  const kendaraanTerfilter = kendaraanMaster.filter((k) =>
+    k.kendaraan.toLowerCase().includes(searchKendaraan.toLowerCase()) ||
+    (k.jenis || "").toLowerCase().includes(searchKendaraan.toLowerCase()) ||
+    (k.pic_kendaraan || "").toLowerCase().includes(searchKendaraan.toLowerCase())
+  );
+
   const logMobilTerfilter = daftarLogMobil.filter((log) =>
-    log.kendaraan.toLowerCase().includes(searchTabel.toLowerCase()) ||
-    log.driver_bertugas.toLowerCase().includes(searchTabel.toLowerCase())
+    log.kendaraan.toLowerCase().includes(searchLog.toLowerCase()) ||
+    log.driver_bertugas.toLowerCase().includes(searchLog.toLowerCase())
   );
 
   if (!isReady) return null;
@@ -365,28 +367,43 @@ export default function LogOperasionalPage() {
         .field-input { width: 100%; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; box-sizing: border-box; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s; color: var(--ink-soft); font-family: inherit; }
         .field-input:focus { border-color: var(--info); background: var(--surface); }
 
-        .choice-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-        .choice-item { padding: 10px 5px; border-radius: 10px; cursor: pointer; text-align: center; font-weight: 700; font-size: 11px; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); }
-
         .status-card { padding: 15px; border-radius: 14px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; transition: 0.3s; }
-        .status-pill { font-size: 10px; font-weight: bold; padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; }
+        .status-pill { font-size: 10px; font-weight: bold; padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 
         .responsive-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
         .responsive-table thead tr { background: var(--bg); color: var(--ink-soft); }
-        .responsive-table th { padding: 12px 15px; border-bottom: 2px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
-        .responsive-table td { padding: 12px 15px; border-bottom: 1px solid var(--line); }
-        .table-search { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 0 15px; width: 220px; }
+        .responsive-table th { padding: 12px 15px; border-bottom: 2px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+        .responsive-table td { padding: 12px 15px; border-bottom: 1px solid var(--line); vertical-align: top; }
+        .table-search { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 0 15px; width: 240px; flex-shrink: 0; }
         .table-search input { border: none; outline: none; background: transparent; padding: 10px 0; font-size: 14px; flex: 1; font-family: inherit; }
 
-        @media (max-width: 900px) {
-          .parkir-layout { flex-direction: column !important; }
-          .parkir-layout > * { flex: 1 1 auto !important; width: 100% !important; }
+        .tab-nav { display: flex; gap: 8px; background: var(--surface); padding: 6px; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .tab-btn {
+          flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 10px;
+          border-radius: 12px; border: none; background: transparent; color: var(--muted); font-weight: 800;
+          font-size: 13px; cursor: pointer; font-family: inherit; transition: 0.2s;
         }
+        .tab-btn.active { background: var(--red-600); color: #fff; box-shadow: 0 6px 14px -6px rgba(220,38,38,0.6); }
+
+        .aksi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-width: 200px; }
+        .aksi-btn {
+          display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 6px;
+          border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink-soft);
+          font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: 0.2s; white-space: nowrap;
+        }
+        .aksi-btn:hover { filter: brightness(0.97); transform: translateY(-1px); }
+        .aksi-btn.ok { color: var(--ok); border-color: rgba(22,163,74,0.3); }
+        .aksi-btn.red { color: var(--red-600); border-color: rgba(220,38,38,0.3); }
+        .aksi-btn.warn { color: var(--warn); border-color: rgba(217,119,6,0.3); }
+        .aksi-btn.accent { color: var(--accent); border-color: rgba(124,58,237,0.3); }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .modal-box { background: var(--surface); width: 100%; max-width: 440px; border-radius: 22px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); max-height: 90vh; overflow-y: auto; }
+
         @media (max-width: 640px) {
           .table-search { width: 100% !important; }
           .parkir-header-row { flex-direction: column; align-items: stretch !important; }
-          .choice-grid { gap: 6px; }
-          .choice-item { font-size: 10px; padding: 8px 3px; }
+          .aksi-grid { grid-template-columns: 1fr 1fr; min-width: 170px; }
         }
       `}} />
 
@@ -403,176 +420,140 @@ export default function LogOperasionalPage() {
       <div className="page-hero">
         <div className="page-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>LOG OPERASIONAL GERBANG</h1>
-          <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Manajemen terpisah status pergerakan armada dan kesiagaan team driver SIBM</p>
+          <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Kelola armada & status kesiagaan driver — otomatis tersinkron dari 1 tombol aksi</p>
           <div className="page-hero-badge">
             <IconClock size={14} /> {waktuSekarang || "Memuat waktu..."}
           </div>
         </div>
       </div>
 
-      {/* WRAPPER UTAMA SPLIT SCREEN */}
-      <div className="parkir-layout" style={{ maxWidth: "1250px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
+      {/* WRAPPER UTAMA */}
+      <div style={{ maxWidth: "1100px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", flexDirection: "column", gap: "20px" }}>
 
-        {/* SISI KIRI: KUMPULAN FORM INPUT */}
-        <div style={{ flex: "1 1 380px", display: "flex", flexDirection: "column", gap: "25px" }}>
+        {/* STATUS KESIAGAAN DRIVER — persisten, tampil di kedua tab */}
+        <div className="panel-flat">
+          <h4 style={{ margin: "0 0 15px 0", color: "var(--ink)", fontSize: "14px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconUsers size={16} color="var(--muted)" /> STATUS KESIAGAAN DRIVER TERKINI (REAL-TIME)</h4>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "15px" }}>
+            {DRIVER_ONLY.map(nama => {
+              const liveStatus = driverStatusTerkini[nama];
+              const statusStr = liveStatus ? liveStatus.status : "Standby";
+              const isStandby = statusStr === "Standby";
+              const isKeluar = statusStr === "Keluar Beroperasi";
 
-          {/* CARD 1: FORM KENDARAAN */}
-          <div className="panel">
-            <h3 className="panel-title">
-              <span className="panel-title-icon" style={{ background: "var(--red-50)", color: "var(--red-600)" }}><IconCar size={16} /></span> LOG PERGERAKAN ARMADA
-            </h3>
-            {isSuccessMobil && (
-              <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}><IconCheckCircle size={14} /> Log armada dan status driver berhasil sinkron!</div>
-            )}
-            <form onSubmit={handleSubmitMobil} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div>
-                <label className="field-label">PILIH ARMADA GEDUNG *</label>
-                {kendaraanMaster.length === 0 ? (
-                  <div style={{ fontSize: "12px", color: "var(--muted)", padding: "13px 15px", background: "var(--bg)", borderRadius: "12px", border: "1px dashed var(--line)" }}>
-                    Belum ada data kendaraan di Master Data.
+              return (
+                <div key={nama} className="status-card" style={{ background: isStandby ? "var(--ok-50)" : isKeluar ? "var(--red-50)" : "var(--bg)" }}>
+                  <div style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}><IconSteeringWheel size={14} color="var(--muted)" /> {nama}</div>
+                  <div style={{ marginTop: "2px" }}>
+                    <span className="status-pill" style={{
+                      background: isStandby ? "var(--ok-50)" : isKeluar ? "rgba(220,38,38,0.15)" : "var(--line)",
+                      color: isStandby ? "var(--ok)" : isKeluar ? "var(--red-600)" : "var(--ink-soft)"
+                    }}>
+                      {isStandby ? "STANDBY DI POS" : isKeluar ? "SEDANG KELUAR" : "OFF DUTY / IZIN"}
+                    </span>
                   </div>
-                ) : (
-                  <select value={kendaraanEfektif} onChange={(e) => setKendaraan(e.target.value)} className="field-input" style={{ fontWeight: "bold", fontSize: "13px" }}>
-                    {kendaraanMaster.map(mobil => <option key={mobil.id} value={mobil.kendaraan}>{mobil.kendaraan}</option>)}
-                  </select>
-                )}
-              </div>
-              <div>
-                <label className="field-label">AKTIVITAS MOBIL *</label>
-                <div className="choice-grid">
-                  {["Keluar Beroperasi", "Tiba di Kantor (Standby)", "Masuk Bengkel / Service"].map((st) => {
-                    const active = statusMobil === st;
-                    const StIcon = st === "Keluar Beroperasi" ? IconPlaneTakeoff : st === "Tiba di Kantor (Standby)" ? IconPlaneLand : IconWrench;
-                    return (
-                      <div
-                        key={st} onClick={() => setStatusMobil(st)}
-                        className="choice-item"
-                        style={active ? { border: "2px solid var(--info)", background: "var(--info-50)", color: "var(--info)" } : {}}
-                      >
-                        <StIcon size={14} />
-                        {st === "Keluar Beroperasi" ? "Keluar" : st === "Tiba di Kantor (Standby)" ? "Standby" : "Service"}
-                      </div>
-                    );
-                  })}
+                  <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "5px", fontWeight: "bold" }}>
+                    Diperbarui: {liveStatus ? formatWaktu(liveStatus.waktu_ubah) : "Bawaan Sistem"}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="field-label">SIAPA YANG MEMBAWA KENDARAAN? *</label>
-                <select value={driverMobil} onChange={(e) => setDriverMobil(e.target.value)} className="field-input">
-                  {DAFTAR_DRIVER.map(drv => <option key={drv} value={drv}>{drv}</option>)}
-                </select>
-                {DRIVER_ONLY.includes(driverMobil) && (
-                  <div style={{ fontSize: "10px", color: "var(--ok)", marginTop: "5px", fontWeight: "bold" }}>Info: Status absensi driver ini akan ikut ter-update otomatis.</div>
-                )}
-              </div>
-              {driverMobil === "Karyawan" && (
-                <div>
-                  <label className="field-label">NAMA KARYAWAN YANG MEMBAWA *</label>
-                  <input
-                    type="text" list="daftar-nama-karyawan" placeholder="Ketik nama — bisa pilih dari master karyawan"
-                    value={namaKaryawan} onChange={(e) => setNamaKaryawan(e.target.value)} className="field-input"
-                  />
-                  <datalist id="daftar-nama-karyawan">
-                    {employees.map((emp) => <option key={emp.id} value={emp.nama} />)}
-                  </datalist>
-                </div>
-              )}
-              <div>
-                <label className="field-label">TUJUAN / KEPERLUAN PERJALANAN</label>
-                <textarea placeholder="Contoh: Mengantar dokumen ke Pelabuhan..." value={tujuan} onChange={(e) => setTujuan(e.target.value)} className="field-input" style={{ height: "60px", resize: "none" }} />
-              </div>
-              <div>
-                <label className="field-label">SPEEDOMETER (KM)</label>
-                <input type="number" placeholder="KM saat ini (Opsional)" value={kilometer} onChange={(e) => setKilometer(e.target.value)} className="field-input" />
-              </div>
-              <button type="submit" disabled={isLoadingMobil} style={{ width: "100%", padding: "14px", background: "var(--info)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
-                <IconSave size={15} /> {isLoadingMobil ? "Menyimpan..." : "Kirim Log Armada"}
-              </button>
-            </form>
+              );
+            })}
           </div>
-
-          {/* CARD 2: FORM STATUS DRIVER MURNI */}
-          <div className="panel">
-            <h3 className="panel-title">
-              <span className="panel-title-icon" style={{ background: "var(--info-50)", color: "var(--info)" }}><IconSteeringWheel size={16} /></span> KOREKSI MANUAL ABSENSI DRIVER
-            </h3>
-            {isSuccessDriver && (
-              <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "10px", borderRadius: "8px", marginBottom: "15px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}><IconCheckCircle size={14} /> Status kesiagaan Driver diperbarui!</div>
-            )}
-            <form onSubmit={handleSubmitDriver} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div>
-                <label className="field-label">PILIH NAMA DRIVER *</label>
-                <select value={targetDriver} onChange={(e) => setTargetDriver(e.target.value)} className="field-input" style={{ fontWeight: "bold" }}>
-                  {DRIVER_ONLY.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">KONDISI DRIVER SAAT INI *</label>
-                <div className="choice-grid">
-                  {["Standby", "Keluar Beroperasi", "Off Duty / Izin"].map((sd) => {
-                    const active = statusDriver === sd;
-                    const SdIcon = sd === "Standby" ? IconPlaneLand : sd === "Keluar Beroperasi" ? IconPlaneTakeoff : IconDisc;
-                    return (
-                      <div
-                        key={sd} onClick={() => setStatusDriver(sd)}
-                        className="choice-item"
-                        style={active ? { border: "2px solid var(--ok)", background: "var(--ok-50)", color: "var(--ok)" } : {}}
-                      >
-                        <SdIcon size={14} />
-                        {sd === "Standby" ? "Standby" : sd === "Keluar Beroperasi" ? "Keluar" : "Off / Izin"}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <button type="submit" disabled={isLoadingDriver} style={{ width: "100%", padding: "14px", background: "var(--ok)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginTop: "5px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
-                <IconRefresh size={14} /> {isLoadingDriver ? "Memperbarui..." : "Update Manual Personel"}
-              </button>
-            </form>
-          </div>
-
         </div>
 
-        {/* SISI KANAN: MONITORING MONITOR REAL-TIME */}
-        <div style={{ flex: "2 1 550px", display: "flex", flexDirection: "column", gap: "25px", boxSizing: "border-box" }}>
+        {/* TAB NAV */}
+        <div className="tab-nav">
+          <button className={`tab-btn ${activeTab === "kendaraan" ? "active" : ""}`} onClick={() => setActiveTab("kendaraan")}>
+            <IconCar size={15} /> Daftar Kendaraan
+          </button>
+          <button className={`tab-btn ${activeTab === "log" ? "active" : ""}`} onClick={() => setActiveTab("log")}>
+            <IconClipboardList size={15} /> Log Pergerakan Armada
+          </button>
+        </div>
 
-          {/* PANEL KANAN ATAS: MONITOR STATUS SIAGA DRIVER TERKINI */}
-          <div className="panel-flat">
-            <h4 style={{ margin: "0 0 15px 0", color: "var(--ink)", fontSize: "14px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconUsers size={16} color="var(--muted)" /> STATUS KESIAGAAN DRIVER TERKINI (REAL-TIME)</h4>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "15px" }}>
-              {DRIVER_ONLY.map(nama => {
-                const liveStatus = driverStatusTerkini[nama];
-                const statusStr = liveStatus ? liveStatus.status : "Standby";
-                const isStandby = statusStr === "Standby";
-                const isKeluar = statusStr === "Keluar Beroperasi";
-
-                return (
-                  <div key={nama} className="status-card" style={{ background: isStandby ? "var(--ok-50)" : isKeluar ? "var(--red-50)" : "var(--bg)" }}>
-                    <div style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}><IconSteeringWheel size={14} color="var(--muted)" /> {nama}</div>
-                    <div style={{ marginTop: "2px" }}>
-                      <span className="status-pill" style={{
-                        background: isStandby ? "var(--ok-50)" : isKeluar ? "rgba(220,38,38,0.15)" : "var(--line)",
-                        color: isStandby ? "var(--ok)" : isKeluar ? "var(--red-600)" : "var(--ink-soft)"
-                      }}>
-                        {isStandby ? "STANDBY DI POS" : isKeluar ? "SEDANG KELUAR" : "OFF DUTY / IZIN"}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "5px", fontWeight: "bold" }}>
-                      Diperbarui: {liveStatus ? formatWaktu(liveStatus.waktu_ubah) : "Bawaan Sistem"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* PANEL KANAN BAWAH: TABEL MONITOR PERGERAKAN MOBIL */}
+        {/* TAB 1: DAFTAR KENDARAAN */}
+        {activeTab === "kendaraan" && (
           <div className="panel-flat">
             <div className="parkir-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "15px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconClipboardList size={16} color="var(--muted)" /> LOG AKTIVITAS MOBIL HARI INI</h3>
+              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "15px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconCar size={16} color="var(--muted)" /> DAFTAR ARMADA GEDUNG</h3>
               <div className="table-search">
                 <IconSearch size={13} color="var(--muted)" />
-                <input type="text" placeholder="Cari mobil / driver..." value={searchTabel} onChange={(e) => setSearchTabel(e.target.value)} />
+                <input type="text" placeholder="Cari kendaraan / jenis / PIC..." value={searchKendaraan} onChange={(e) => setSearchKendaraan(e.target.value)} />
+              </div>
+            </div>
+
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+              <table className="responsive-table">
+                <thead>
+                  <tr>
+                    <th>Kendaraan</th>
+                    <th>Jenis</th>
+                    <th>PIC Kendaraan</th>
+                    <th>Status Terkini</th>
+                    <th>Aksi Cepat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kendaraanMaster.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--muted)", padding: "40px 20px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                          <IconInboxEmpty size={26} color="var(--muted)" /> Belum ada data kendaraan di Master Data.
+                        </div>
+                      </td>
+                    </tr>
+                  ) : kendaraanTerfilter.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--muted)", padding: "40px 20px" }}>Tidak ada kendaraan yang cocok dengan pencarian.</td>
+                    </tr>
+                  ) : (
+                    kendaraanTerfilter.map((k) => {
+                      const logTerkini = statusPerKendaraan[k.kendaraan];
+                      const statusStr = logTerkini?.status_kendaraan || "Tiba di Kantor (Standby)";
+                      const cls = classifyStatus(statusStr);
+
+                      return (
+                        <tr key={k.id}>
+                          <td>
+                            <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{k.kendaraan.split(" - ")[0]}</div>
+                            {logTerkini && (
+                              <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "3px" }}>Terakhir: {formatWaktu(logTerkini.waktu_catat)}</div>
+                            )}
+                          </td>
+                          <td style={{ color: "var(--ink-soft)" }}>{k.jenis || "-"}</td>
+                          <td style={{ color: "var(--ink-soft)", fontWeight: "600" }}>{k.pic_kendaraan || <span style={{ opacity: 0.5 }}>Belum diisi</span>}</td>
+                          <td>
+                            <span className="status-pill" style={{ background: cls.bg, color: cls.color }}>{cls.label}</span>
+                          </td>
+                          <td>
+                            <div className="aksi-grid">
+                              {STATUS_AKSI.map((aksi) => {
+                                const AksiIcon = aksi.icon;
+                                return (
+                                  <button key={aksi.key} className={`aksi-btn ${aksi.tone}`} onClick={() => bukaModalAksi(k, aksi.status, aksi.label)}>
+                                    <AksiIcon size={12} /> {aksi.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: LOG PERGERAKAN ARMADA */}
+        {activeTab === "log" && (
+          <div className="panel-flat">
+            <div className="parkir-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
+              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "15px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}><IconClipboardList size={16} color="var(--muted)" /> LOG AKTIVITAS MOBIL</h3>
+              <div className="table-search">
+                <IconSearch size={13} color="var(--muted)" />
+                <input type="text" placeholder="Cari mobil / driver..." value={searchLog} onChange={(e) => setSearchLog(e.target.value)} />
               </div>
             </div>
 
@@ -591,26 +572,20 @@ export default function LogOperasionalPage() {
                     <tr>
                       <td colSpan={4} style={{ textAlign: "center", color: "var(--muted)", padding: "40px 20px" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                          <IconInboxEmpty size={26} color="var(--muted)" /> Belum ada riwayat pergerakan hari ini.
+                          <IconInboxEmpty size={26} color="var(--muted)" /> Belum ada riwayat pergerakan.
                         </div>
                       </td>
                     </tr>
                   ) : (
                     logMobilTerfilter.map((log) => {
-                      const isStandby = log.status_kendaraan.includes("Standby");
-                      const isBengkel = log.status_kendaraan.includes("Bengkel");
+                      const cls = classifyStatus(log.status_kendaraan);
 
                       return (
                         <tr key={log.id}>
                           <td>
                             <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{log.kendaraan.split(" - ")[0]}</div>
                             <div style={{ marginTop: "4px" }}>
-                              <span className="status-pill" style={{
-                                background: isStandby ? "var(--ok-50)" : isBengkel ? "var(--line)" : "var(--red-50)",
-                                color: isStandby ? "var(--ok)" : isBengkel ? "var(--ink-soft)" : "var(--red-600)"
-                              }}>
-                                {isStandby ? "STANDBY" : isBengkel ? "SERVICE" : "KELUAR POOL"}
-                              </span>
+                              <span className="status-pill" style={{ background: cls.bg, color: cls.color }}>{cls.label}</span>
                             </div>
                           </td>
                           <td style={{ color: "var(--info)", fontWeight: "800" }}>{log.driver_bertugas}</td>
@@ -630,10 +605,60 @@ export default function LogOperasionalPage() {
               </table>
             </div>
           </div>
-
-        </div>
+        )}
 
       </div>
+
+      {/* 🪟 MODAL AKSI CEPAT — dipicu dari salah satu tombol Parkir/Standby, Pulang, Keluar, Service */}
+      {modalAksi && (
+        <div className="modal-overlay" onClick={() => !isLoadingAksi && setModalAksi(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: "800", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.4px" }}>{modalAksi.label}</div>
+                <h3 style={{ margin: "4px 0 0", fontSize: "17px", fontWeight: "900", color: "var(--ink)" }}>{modalAksi.kendaraan.kendaraan.split(" - ")[0]}</h3>
+              </div>
+              <button onClick={() => !isLoadingAksi && setModalAksi(null)} style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "10px", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--ink-soft)" }}><IconX size={14} /></button>
+            </div>
+
+            <form onSubmit={handleSubmitAksi} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label className="field-label">SIAPA YANG MEMBAWA KENDARAAN? *</label>
+                <select value={driverMobil} onChange={(e) => setDriverMobil(e.target.value)} className="field-input">
+                  {DAFTAR_DRIVER.map(drv => <option key={drv} value={drv}>{drv}</option>)}
+                </select>
+                {DRIVER_ONLY.includes(driverMobil) && (
+                  <div style={{ fontSize: "10px", color: "var(--ok)", marginTop: "5px", fontWeight: "bold" }}>Info: Status kesiagaan driver ini akan otomatis ikut ter-update.</div>
+                )}
+              </div>
+              {driverMobil === "Karyawan" && (
+                <div>
+                  <label className="field-label">NAMA KARYAWAN YANG MEMBAWA *</label>
+                  <input
+                    type="text" list="daftar-nama-karyawan" placeholder="Ketik nama — bisa pilih dari master karyawan"
+                    value={namaKaryawan} onChange={(e) => setNamaKaryawan(e.target.value)} className="field-input"
+                  />
+                  <datalist id="daftar-nama-karyawan">
+                    {employees.map((emp) => <option key={emp.id} value={emp.nama} />)}
+                  </datalist>
+                </div>
+              )}
+              <div>
+                <label className="field-label">TUJUAN / KEPERLUAN {modalAksi.status === "Keluar Beroperasi" ? "*" : ""}</label>
+                <textarea placeholder="Contoh: Mengantar dokumen ke Pelabuhan..." value={tujuan} onChange={(e) => setTujuan(e.target.value)} className="field-input" style={{ height: "60px", resize: "none" }} />
+              </div>
+              <div>
+                <label className="field-label">SPEEDOMETER (KM)</label>
+                <input type="number" placeholder="KM saat ini (Opsional)" value={kilometer} onChange={(e) => setKilometer(e.target.value)} className="field-input" />
+              </div>
+              <button type="submit" disabled={isLoadingAksi} style={{ width: "100%", padding: "14px", background: "var(--info)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+                <IconSave size={15} /> {isLoadingAksi ? "Menyimpan..." : "Konfirmasi & Kirim"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

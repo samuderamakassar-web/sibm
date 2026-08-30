@@ -1,7 +1,7 @@
 "use client";
 
-import DriverDashboardPage from "@/components/pages/DriverDashboardPage";
+import DriverMenuPage from "@/components/pages/driver/DriverMenuPage";
 
 export default function Page() {
-  return <DriverDashboardPage />;
+  return <DriverMenuPage />;
 }

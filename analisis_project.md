@@ -1,35 +1,41 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 30 Agustus 2026 (lanjutan §17: fix roster security exclude anak Magang, email HTML rapi untuk SEMUA jalur notif (ATK/Helpdesk/request baru ke Admin GA, sebelumnya cuma paket & overtime), alarm suara untuk banner pengingat persisten, contoh kode template EmailJS Code Editor — SUDAH DI-COMMIT & DI-DEPLOY, lihat §18)
+Update terakhir: 30 Agustus 2026 (lanjutan §18: `dashboard/security/parkir` dirombak jadi 2 tab (Daftar Kendaraan + 4 tombol aksi cepat / Log Pergerakan Armada), absensi manual driver dihapus total — semua status driver sekarang auto-sync dari tombol aksi kendaraan, `DriverDashboardPage` (1 halaman panjang) dipecah jadi 5 halaman terpisah (menu + armada/inspeksi/servis/riwayat) — SUDAH DI-COMMIT & DI-DEPLOY, lihat §19)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §18)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §19)
 
-Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini lanjutan langsung dari §17 (masih hari yang sama) — 3 hal: (1) fix roster security biar gak ikut nyertain anak Magang, (2) lengkapi email HTML rapi untuk SEMUA jalur notif yang masih tersisa (§17 baru sempat paket & overtime), dipicu user ngetes kirim email nyata dan nemu template EmailJS masih nge-render HTML sebagai teks mentah, (3) tambah alarm suara ke banner pengingat persisten dari §17. Detail teknis lengkap ada di **§18**.
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini lanjutan langsung dari §18 (masih hari yang sama) — request baru dari user: (1) `dashboard/security/parkir` dipecah jadi 2 tab (daftar kendaraan dengan 4 tombol aksi cepat + log pergerakan armada terpisah), (2) hapus form absensi manual driver — status driver HARUS otomatis ikut ter-update dari tombol aksi kendaraan (termasuk aturan eksplisit: kendaraan di-set Parkir → driver jadi Standby), (3) `DriverDashboardPage` (1 halaman super panjang, semua fitur nyatu) dipecah jadi menu-menu terpisah, baik tampilan web maupun mobile. Detail teknis lengkap ada di **§19**.
 
-### A. Apa yang dikerjakan sesi ini (§18)
+### A. Apa yang dikerjakan sesi ini (§19)
 
-1. **Fix roster security**: `dashboard/security/jadwal/page.tsx` (halaman create roster Danru) sebelumnya narik SEMUA staf `departemen=="Security"` tanpa saring role — anak Magang ikut keplot shift 2-2-2 padahal gak seharusnya. Diperbaiki pakai pola exclude yang sudah ada persis di `dashboard/security/page.tsx` (`role.toLowerCase().includes("magang")`). Pola generate 2-2-2 & auto-lanjut antar periode TIDAK disentuh (memang sudah sesuai maunya user).
-2. **Ketemu bug nyata dari testing user**: screenshot email yang diterima nunjukin tag HTML (`<b>`, `<br>`) tampil sebagai TEKS MENTAH, bukan dirender — karena template EmailJS ("Design Editor" mode) meng-escape variabel `{{message}}`, DAN variabel yang dipakai template (`{{name}}`, `{{time}}`) gak cocok sama yang dikirim app (`to_name`, tanpa `time`). Solusinya BUKAN di kode app (HTML yang dikirim sudah benar sejak §17), tapi di template EmailJS-nya — lihat §18C untuk kode HTML persis yang perlu di-paste ke Code Editor EmailJS.
-3. **Email HTML rapi untuk 3 jalur notif yang masih tersisa** (sebelumnya cuma paket & overtime yang dapat di §17, sisanya masih teks WA mentah/konversi kasar): ATK siap diambil, update tiket Helpdesk, dan notifikasi "request baru masuk" ke Admin GA (ATK/Overtime Gedung/Helpdesk — ini yang di-screenshot user, "Request Baru Masuk: Overtime Gedung"). Builder baru di `src/lib/emailTemplates.ts`: `buildRequestBaruEmailHtml`, `buildAtkSiapEmailHtml`, `buildHelpdeskUpdateEmailHtml`.
-4. **Alarm suara buat banner pengingat** (`src/lib/soundAlert.ts`, baru) — chime 2 nada (bikin lewat Web Audio API osilator, bukan file audio, jadi gak perlu nambah aset & tetap jalan offline) bunyi begitu `StickyBanner` (dari §17: patroli/APAR/checklist) pertama muncul, lalu berulang tiap 10 menit selama tugasnya masih belum selesai — termasuk pas lagi "disembunyikan" (collapsed), soalnya yang berhenti alarm cuma kalau tugasnya beneran kelar (banner ke-unmount).
+1. **`dashboard/security/parkir` dirombak total jadi 2 tab**: Tab 1 "Daftar Kendaraan" — tabel semua unit dari `master_kendaraan` (Kendaraan, Jenis, PIC, Status Terkini) + 4 tombol aksi cepat per baris (**Parkir/Standby, Pulang, Keluar, Service**) yang buka modal kecil (pilih siapa yang bawa + tujuan + KM) lalu langsung nulis log. Tab 2 "Log Pergerakan Armada" — tabel riwayat (ini yang lama, dipindah apa adanya). Panel "Status Kesiagaan Driver" tetap tampil di ATAS kedua tab (bukan cuma 1 tab), karena relevan buat keduanya.
+2. **Card "Koreksi Manual Absensi Driver" DIHAPUS TOTAL** (beserta state `targetDriver`/`statusDriver`/`handleSubmitDriver`) — sesuai instruksi eksplisit user. Sebagai gantinya, status driver 100% otomatis: tiap salah satu dari 4 tombol aksi ditekan (untuk driver tetap `DRIVER_ONLY` — Amal/Renaldy, BUKAN "Karyawan" umum), `driver_status_logs` ikut ditulis lewat fungsi mapping baru `autoDriverStatus()`: Parkir/Standby & Keluar & Service persis pola auto-sync LAMA yang sudah ada (Keluar/Service → driver "Keluar Beroperasi", Standby → driver "Standby"); **Pulang → status driver baru "Off Duty / Izin"** (mengisi slot yang dulu cuma bisa diisi manual, sekarang otomatis pas driver pulang di akhir tugas).
+3. **String `status_kendaraan` SENGAJA dipertahankan sama** buat 3 status lama (`"Tiba di Kantor (Standby)"`, `"Keluar Beroperasi"`, `"Masuk Bengkel / Service"`) — supaya TETAP kompatibel dengan logika substring-match (`"standby"`/`"tiba"`/`"keluar"`/`"bengkel"`) yang sudah dipakai di `app/page.tsx` (portal, widget status armada) dan `admin/kendaraan/page.tsx` (`getPergerakanTone`). Cuma 1 status baru ditambah: `"Pulang (Selesai Tugas Hari Ini)"` — di halaman yang belum eksplisit menangani kata "Pulang" (portal & admin/kendaraan), string ini degrade dengan aman ke jalur "default"/fallback yang sudah ada (bukan error, cuma badge/kalimatnya kurang spesifik) — TIDAK diubah di sesi ini, dicatat sebagai lanjutan di §19E.
+4. **`DriverDashboardPage.tsx` (1 file, ~985 baris, semua fitur nyatu 1 halaman scroll panjang) dipecah jadi 5 halaman terpisah**, pola sama persis dengan migrasi `components/pages/` yang sudah jadi standar project ini (§4):
+   - `components/pages/driver/DriverMenuPage.tsx` → `/dashboard/driver` (menu utama: status kesiagaan instan + grid 4 menu + tombol klaim lembur/modal, gaya grid sama seperti `dashboard/security/page.tsx`)
+   - `DriverArmadaPage.tsx` → `/dashboard/driver/armada` (form bawa kendaraan)
+   - `DriverInspeksiPage.tsx` → `/dashboard/driver/inspeksi` (checklist inspeksi mingguan)
+   - `DriverServisPage.tsx` → `/dashboard/driver/servis` (servis/uji emisi + catat odometer cepat)
+   - `DriverRiwayatPage.tsx` → `/dashboard/driver/riwayat` (riwayat 30 log terakhir milik driver yang login)
+   - File lama `components/pages/DriverDashboardPage.tsx` **DIHAPUS** (sudah dicek dulu tidak ada referensi tersisa).
+5. **Helper baru `src/lib/uploadFoto.ts`** (`uploadFotoToCloudinary` + `handleFotoUpload`) — diekstrak dari `DriverDashboardPage.tsx` lama yang punya 2 salinan identik fungsi upload+kompres foto (buat foto inspeksi & foto bukti servis/emisi); sekarang dipakai bareng oleh `DriverInspeksiPage.tsx` & `DriverServisPage.tsx`, gak digandakan lagi pas dipecah ke file terpisah.
 
 ### B. Status: SUDAH di-commit & di-deploy
 
-- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error, 104 warning (jumlah sama kayak §17, gak nambah).
-- `npm run build`: sukses, 32 route.
-- Diverifikasi di dev server pakai data production real: `admin/atk` & `admin/helpdesk` render normal (tabel resi/tiket real kebaca), gak ada error console dari perubahan sinyal (2 error 404 yang sempat muncul ternyata bug LAMA gak terkait — `admin/atk` redirect ke `/shift-checkin` yang emang gak ada route-nya kalau dept gak cocok, ke-trigger karena sesi test browser masih nyimpen dept lama, bukan regresi dari perubahan sesi ini).
-- **Belum bisa dites dari sini**: kirim email sungguhan pakai template EmailJS yang baru (perlu user sendiri yang paste kode ke Code Editor EmailJS, gak bisa diakses dari sesi ini) — instruksi persis ada di §18C.
+- `npx tsc --noEmit`: 0 error. `npx eslint` (file yang disentuh sesi ini): 0 error, 0 warning baru.
+- `npm run build`: sukses, semua route ter-generate termasuk 4 route baru (`dashboard/driver/armada`, `/inspeksi`, `/servis`, `/riwayat`).
+- **Diverifikasi LANGSUNG di browser pakai data production real** (bukan cuma baca kode): login-simulasi Driver → menu 5-card kebaca benar, form "Bawa Armada" nampilin daftar kendaraan real dari `master_kendaraan`. Login-simulasi Security → `parkir` 2 tab kebaca benar, klik tombol "Keluar" pada 1 kendaraan beneran nulis ke Firestore (`operational_vehicle_logs` + `driver_status_logs`), status driver di panel atas & badge status kendaraan di tabel LANGSUNG update real-time tanpa refresh — mengonfirmasi auto-sync jalan persis seperti diminta.
+- **Data test dibersihkan lagi**: karena project ini cuma punya 1 Firestore project (`sibm-app`, gak ada environment staging terpisah — dikonfirmasi dari `src/lib/firebase.ts`), 2 dokumen test yang tercipta pas verifikasi klik tombol (1 di `operational_vehicle_logs`, 1 di `driver_status_logs`, auto-sync Amal Setiawan) langsung DIHAPUS lagi lewat Firestore REST API (`runQuery` buat cari doc ID by field, lalu `DELETE`) begitu verifikasi selesai — gak ada UI hapus log di app ini (cuma `master_kendaraan` yang bisa dihapus dari admin), jadi cara ini dipakai supaya data production gak ketinggalan sampah test. Dicek ulang setelah hapus: status driver & badge kendaraan balik ke kondisi semula persis.
 
 ### C. Yang perlu dilanjutkan
 
-1. **User perlu paste kode HTML di §18C ke EmailJS Code Editor** (buka template "Contact Us" di dashboard EmailJS → tab Content → Code Editor, ganti seluruh isi) + ganti field "From Name" di panel kanan dari `{{to_name}}` (salah — itu nama PENERIMA, bukan pengirim) jadi teks statis semacam "SIBM - PT Samudera". Tanpa ini, SEMUA email (paket/overtime/ATK/helpdesk/request baru) masih akan tampil sebagai tag HTML mentah, terlepas dari kode app sudah benar.
-2. **Alarm suara mungkin gak kedengaran di kunjungan pertama** — browser modern blokir autoplay audio sebelum ada interaksi user di halaman (klik apapun). Ini batasan platform, bukan bug — begitu user klik sekali di app, alarm berikutnya akan kedengaran normal.
-3. Poin lama dari §17 yang masih sama (belum berubah): `GROUPED_PATROLI`/`DATA_SECURITY` hardcode duplikat, `PengaturanJadwalSecurity.tsx`/`PaketPage.tsx` dead code di `components/pages/`, `NotifikasiChecklistListener.tsx` dead code (digantikan `ChecklistOBBanner`), `security_magang_directory` belum ada halaman admin, bug filter logo `admin/qr-manager`, kolom Odo Meter `admin/uji-emisi`, `DriverDashboardPage` konten form belum dimodernisasi, CS belum punya halaman terpisah dari OB, audit performa `onSnapshot` tanpa `limit()`, bug leak `DeepCleaningPage.tsx`, migrasi struktur folder `admin/*` & portal utama.
-4. **Bug lama (baru ke-notice sesi ini, belum difix)**: `admin/atk/page.tsx` redirect akses-ditolak ke `/shift-checkin` — route itu gak ada secara fisik di app ini (404). Sama kelas bug dengan yang sudah didokumentasikan di header comment `useAuthGuard.ts` (redirect ke route yang gak ada). `admin/atk` belum migrasi ke `useAuthGuard`, masih pakai cek manual sendiri.
+1. **Status "Pulang" belum ditangani eksplisit di portal (`app/page.tsx`) & `admin/kendaraan/page.tsx`** (lihat §19A poin 3) — masih fallback ke jalur default (aman, gak error, cuma kurang deskriptif: portal nampilin kalimat generik "kendaraan — Pulang (Selesai Tugas Hari Ini) — driver X" alih-alih kalimat khusus kayak status "keluar"/"tiba"/"bengkel"; `admin/kendaraan` badge-nya jadi warna "success" default). Kalau mau lebih rapi, tambah 1 cabang `status.includes("pulang")` di `buatKalimatRiwayat()` (portal) & pertimbangkan tone khusus di `getPergerakanTone()` (admin/kendaraan).
+2. Poin lama dari §17/§18 yang masih sama (belum berubah): `GROUPED_PATROLI`/`DATA_SECURITY` hardcode duplikat, `PengaturanJadwalSecurity.tsx`/`PaketPage.tsx` dead code di `components/pages/`, `NotifikasiChecklistListener.tsx` dead code (digantikan `ChecklistOBBanner`), `security_magang_directory` belum ada halaman admin, bug filter logo `admin/qr-manager`, kolom Odo Meter `admin/uji-emisi`, CS belum punya halaman terpisah dari OB, audit performa `onSnapshot` tanpa `limit()`, bug leak `DeepCleaningPage.tsx`, migrasi struktur folder `admin/*` & portal utama, `admin/atk` redirect ke route 404 (`/shift-checkin`).
+3. **User perlu paste kode HTML EmailJS Code Editor** (§18C) & cek alarm suara banner (§18D) — 2 poin lanjutan dari §18 ini BELUM dikonfirmasi user, masih menunggu.
 
 Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
@@ -82,7 +88,12 @@ sibm-app/
         report/            ← isi belum diperiksa
         users/page.tsx
       dashboard/
-        driver/page.tsx      ← sudah migrasi ke components/pages/ (#4), tidak ada bug ditemukan (sudah pakai useAuthGuard & helper tanggal WITA)
+        driver/              ← DIPECAH TOTAL sesi §19 (dari 1 file jadi 5 halaman) — lihat §19A
+          page.tsx             ← menu utama, render components/pages/driver/DriverMenuPage.tsx
+          armada/page.tsx      ← BARU §19, render DriverArmadaPage.tsx
+          inspeksi/page.tsx    ← BARU §19, render DriverInspeksiPage.tsx
+          servis/page.tsx      ← BARU §19, render DriverServisPage.tsx
+          riwayat/page.tsx     ← BARU §19, render DriverRiwayatPage.tsx
         ob/
           layout.tsx           ← BARU §17 (mount ChecklistOBBanner)
           checklist/page.tsx   ← sudah migrasi ke components/pages/ (#1)
@@ -98,7 +109,7 @@ sibm-app/
           jadwal/page.tsx  ← **BUKAN wrapper tipis** (ketemu sesi §17 — implementasi penuh 552 baris ada di sini, `components/pages/PengaturanJadwalSecurity.tsx` adalah dead code/tidak ke-routing); UPDATE §17 (sapu bersih alert)
           patroli/       ← sudah migrasi ke components/pages/ (#4); UPDATE §17 (3 sesi patroli, lihat §17A) di components/pages/PatroliSecurityPage.tsx
           paket/page.tsx  ← UPDATE §17 (email HTML + foto, WA/Email independen) — juga BUKAN wrapper tipis, implementasi penuh 721 baris (components/pages/PaketPage.tsx dead code)
-          parkir/page.tsx ← UPDATE §17 (sapu bersih alert)
+          parkir/page.tsx ← DIROMBAK §19 (2 tab: Daftar Kendaraan + 4 tombol aksi cepat / Log Pergerakan Armada, absensi manual driver dihapus — lihat §19A)
       layout.tsx                ← UPDATE §17 (mount NotifikasiKendaraanListener)
       page.tsx                ← portal publik utama, DIUPDATE sesi 24 & 25 Agustus (lihat §3 & §3B), belum dipecah ke components/pages/
     components/
@@ -123,8 +134,13 @@ sibm-app/
         PengaturanJadwalSecurity.tsx ← **DEAD CODE** (ketemu sesi §17 — bukan yang di-routing, lihat catatan di app/dashboard/security/jadwal/page.tsx di atas)
         PatroliSecurityPage.tsx ← migrasi #4; UPDATE §17 (3 sesi patroli, §17A)
         PaketPage.tsx           ← **DEAD CODE** (ketemu sesi §17 — bukan yang di-routing, lihat catatan di app/dashboard/security/paket/page.tsx di atas)
-        DriverDashboardPage.tsx ← migrasi #4; UPDATE §17 (logout + ~24 titik alert disapu bersih)
         DashboardQHSEPage.tsx   ← migrasi #4; UPDATE §17 (logout)
+        driver/                 ← BARU §19, gantiin DriverDashboardPage.tsx (DIHAPUS) — lihat §19A
+          DriverMenuPage.tsx      ← menu utama + status kesiagaan instan + modal klaim lembur
+          DriverArmadaPage.tsx    ← form bawa kendaraan
+          DriverInspeksiPage.tsx  ← checklist inspeksi mingguan
+          DriverServisPage.tsx    ← servis/uji emisi + odometer cepat
+          DriverRiwayatPage.tsx   ← riwayat 30 log terakhir
     hooks/
       useAuthGuard.ts          ← UPDATE §17 (logoutWithConfirm() baru, gate akses pakai showToast bukan alert)
       useFcmSetup.ts
@@ -136,6 +152,7 @@ sibm-app/
       notify.ts
       shift.ts                 ← BARU §17 (kalkulator shift/sesi patroli)
       soundAlert.ts             ← BARU §18 (alarm suara buat StickyBanner, Web Audio API)
+      uploadFoto.ts             ← BARU §19 (upload+kompres foto Cloudinary, diekstrak dari DriverDashboardPage lama, dipakai DriverInspeksiPage & DriverServisPage)
 ```
 
 **Catatan:** restrukturisasi folder (Fin-Samudera style, `components/pages/` per halaman) sudah selesai tahap #3 penuh dan **#4 penuh** (dashboard/ob semua, dashboard/security semua, dashboard/driver, dashboard/qhse) — lihat §4. Sisa: #5 (`admin/*`) dan #6 (portal utama `app/page.tsx`), keduanya belum disentuh migrasi strukturnya. Sesi 24 & 25 Agustus sempat loncat ke portal utama & admin/kendaraan buat kerjain fitur baru & perbaikan tampilan duluan (bukan urutan migrasi foldernya), jadi `page.tsx` portal & `admin/kendaraan/page.tsx` **masih dalam bentuk lama** (belum dipecah ke `components/pages/`), isinya aja yang diupdate berkali-kali.
@@ -952,3 +969,67 @@ Dipasang di `StickyBanner.tsx` (jadi otomatis berlaku ke SEMUA 3 banner dari §1
 - **Gak bisa dites dari sini**: kirim email sungguhan pakai template EmailJS baru (§18C) — perlu user sendiri paste kode ke dashboard EmailJS eksternal.
 
 **Sudah di-commit + push (dev→main) + build + deploy** sesuai instruksi eksplisit user ("langsung saja commit dulu sampai deploy").
+
+---
+
+## 19. Rombak `dashboard/security/parkir` (2 tab + 4 tombol aksi cepat, hapus absensi manual) + Pecah `DriverDashboardPage` jadi 5 Halaman Terpisah (30 Agustus 2026, lanjutan langsung sesi §18)
+
+Diminta user secara eksplisit (kutipan inti): "mari lanjutkan ... dashboard/security/parkir ... bagi jadi 2 tab, tab 1 > Table daftar kendaraan lengkap dengan nama jenis dan pic kendaraan lengkap dan di akhir ada 4 tombol yaitu Parkir/Standby, Pulang, Keluar, Service dan tab kedua log pergerakan armada dan hilangkan saja absensi manual driver karena jika log pergerakan di update maka otomatis driver yang dipilih juga terupdate dan jika kendaraan di set parkir maka driver statusnya berubah jadi standby ubah juga tampilan pada halaman driver karena saat ini hanya ada 1 dashboard semua nyatu, buat jadi masing-masing menu agar lebih rapih baik itu tampilan web atau mobilenya dan langsung update commit, project analisis md dan deploy". 2 pekerjaan independen dalam 1 sesi: rombak `parkir`, dan pecah `DriverDashboardPage`.
+
+### 19A. `dashboard/security/parkir/page.tsx` — 2 tab + 4 tombol aksi cepat per kendaraan
+
+Sebelumnya: 1 form dropdown "PILIH ARMADA GEDUNG" (pilih 1 kendaraan dari select, lalu isi status/tujuan/KM/siapa yang bawa dalam 1 form panjang) + 1 card terpisah "Koreksi Manual Absensi Driver" (form manual set status Amal/Renaldy: Standby/Keluar Beroperasi/Off Duty-Izin) + tabel log di sisi kanan. Diganti total:
+
+- **Tab 1 "Daftar Kendaraan"**: tabel SEMUA unit dari `master_kendaraan` (bukan cuma 1 dropdown) — kolom Kendaraan (plat), Jenis (`k.jenis`), PIC Kendaraan (`k.pic_kendaraan`), Status Terkini (dihitung dari log `operational_vehicle_logs` terbaru per kendaraan lewat `statusPerKendaraan` — `useMemo` yang map `daftarLogMobil` yang sudah urut desc, ambil kemunculan pertama per `kendaraan`), dan kolom Aksi Cepat berisi 4 tombol kecil (grid 2×2): **Parkir/Standby, Pulang, Keluar, Service**.
+- Klik salah satu dari 4 tombol → buka **modal** (`modalAksi` state, bukan navigasi halaman) judulnya nama aksi + plat kendaraan yang dipilih, isi form: "Siapa yang membawa kendaraan" (dropdown `DAFTAR_DRIVER` — Amal/Renaldy/Karyawan, sama persis pola §16A termasuk field kondisional nama karyawan + datalist), Tujuan/Keperluan (wajib HANYA kalau aksinya "Keluar"), KM (opsional). Submit → `addDoc` ke `operational_vehicle_logs` (kendaraan diambil dari BARIS yang diklik, bukan dropdown terpisah lagi) + auto-sync `driver_status_logs` kalau drivernya `DRIVER_ONLY`.
+- **Tab 2 "Log Pergerakan Armada"**: tabel riwayat lengkap — konten & kolomnya SAMA PERSIS dengan tabel kanan yang lama (Mobil Operasional, Driver Pengendara, Tujuan & KM, Waktu & Petugas), cuma dipindah ke tab terpisah + search box sendiri (`searchLog`, terpisah dari `searchKendaraan` di tab 1).
+- **Panel "Status Kesiagaan Driver Terkini"** (Amal/Renaldy real-time) TETAP tampil di ATAS kedua tab (persisten, bukan bagian dari salah satu tab) — relevan buat konteks keduanya.
+- **Card "Koreksi Manual Absensi Driver" DIHAPUS TOTAL** sesuai instruksi eksplisit ("hilangkan saja absensi manual driver") — state `targetDriver`/`statusDriver`/`isLoadingDriver`/`isSuccessDriver` dan fungsi `handleSubmitDriver` semuanya dihapus, bukan cuma disembunyikan dari UI.
+
+**Fungsi mapping baru `autoDriverStatus(statusKendaraan)`** — pusat logika auto-sync (dulu inline di dalam `handleSubmitMobil`, sekarang fungsi terpisah biar jelas & gampang di-audit):
+```
+Keluar Beroperasi        → driver "Keluar Beroperasi"
+Masuk Bengkel / Service  → driver "Keluar Beroperasi"   (pola lama, dipertahankan)
+Pulang (...)              → driver "Off Duty / Izin"     (BARU — mengisi slot yang dulu cuma manual)
+Tiba di Kantor (Standby) → driver "Standby"              (= permintaan eksplisit "kendaraan di-set parkir → driver jadi standby")
+```
+Auto-sync CUMA jalan kalau `driverMobil` ada di `DRIVER_ONLY` (Amal/Renaldy) — pilihan "Karyawan" tetap gak nulis ke `driver_status_logs` (karyawan umum bukan driver tetap yang di-tracking kesiagaannya), sama persis batasan yang sudah ada sejak §16A.
+
+**Keputusan kompatibilitas string status** (penting buat halaman lain yang baca `status_kendaraan` via substring match — `app/page.tsx` & `admin/kendaraan/page.tsx`, lihat §19C poin lanjutan): 3 dari 4 tombol PAKAI ULANG string status LAMA persis (`"Tiba di Kantor (Standby)"`, `"Keluar Beroperasi"`, `"Masuk Bengkel / Service"`) — supaya widget status armada di portal & badge tone di `admin/kendaraan` TETAP jalan benar tanpa disentuh sama sekali. Cuma "Pulang" yang statusnya baru: `"Pulang (Selesai Tugas Hari Ini)"` — sengaja mengandung kata "Selesai Tugas" biar tetap informatif walau halaman lain belum eksplisit menangani kata "Pulang" (fallback ke jalur default yang sudah ada, aman, gak error).
+
+### 19B. `DriverDashboardPage.tsx` dipecah jadi 5 halaman (`components/pages/driver/`)
+
+File lama (`components/pages/DriverDashboardPage.tsx`, ~985 baris) berisi SEMUA fitur driver digabung 1 halaman scroll panjang: Status Kesiagaan Instan, Form Bawa Armada, Inspeksi Mingguan, Servis/Uji Emisi/Odometer, Riwayat Armada, plus modal Klaim Lembur — navigasi mobile-nya cuma `scrollIntoView` ke section (bukan pindah halaman beneran, dicatat di §16C). Diminta eksplisit dipecah jadi menu-menu terpisah (web & mobile).
+
+**Struktur baru** — pola migrasi §4 yang sudah jadi standar (page.tsx tipis, isi penuh di `components/pages/`), tapi kali ini 1 folder LAMA (`dashboard/driver/`) dipecah jadi 5 ROUTE:
+
+1. **`DriverMenuPage.tsx`** (`/dashboard/driver`) — landing/menu, gaya grid card persis `dashboard/security/page.tsx` (`admin-grid`/`admin-card` pattern, di sini dinamai `driver-menu-grid`/`driver-menu-card`). Isi: hero profil (nama+jam, TIDAK berubah dari versi lama), card "Status Anda Saat Ini" (2 tombol Keluar Pos/Kembali Standby — dipertahankan APA ADANYA karena ini quick-action lintas-modul, bukan bagian 1 fitur spesifik), grid 4 menu (Bawa Armada/Inspeksi Mingguan/Servis,Emisi & Odometer/Riwayat Armada Saya) + 1 card "Klaim Lembur" yang buka modal (bukan link), modal lembur multi-row TIDAK diubah logikanya sama sekali (copy apa adanya dari file lama).
+2. **`DriverArmadaPage.tsx`** (`/dashboard/driver/armada`) — form "Bawa Armada" (pilih kendaraan dari `master_kendaraan` live, aktivitas Keluar/Tiba, tujuan, KM) + auto-sync status driver, logic-nya IDENTIK sama file lama (`handleSubmitMobil`), cuma dipindah lokasi + tombol "Lihat Riwayat Armada Saya" di bawah yang link ke halaman riwayat (dulu di file yang sama, sekarang beda route).
+3. **`DriverInspeksiPage.tsx`** (`/dashboard/driver/inspeksi`) — checklist 8 item (Ban, Rem, Lampu, dst) + catatan + upload foto, logic IDENTIK (`handleSubmitInspeksi`, badge "Sudah/Belum Minggu Ini"), **BEDA satu hal**: karena sekarang halaman terpisah (bukan share state dari form armada di atasnya), driver harus pilih ULANG kendaraan targetnya lewat dropdown sendiri di halaman ini (dropdown `master_kendaraan` yang sama, cuma state-nya independen per halaman) — perubahan perilaku kecil yang tak terhindarkan dari pemisahan route, dicatat eksplisit di sini.
+4. **`DriverServisPage.tsx`** (`/dashboard/driver/servis`) — sama pola dengan Inspeksi: dropdown kendaraan sendiri + form catat odometer cepat + form laporan servis/uji emisi (jenis/deskripsi/biaya/foto bukti), logic IDENTIK (`handleSubmitServis`/`handleSubmitOdometer`).
+5. **`DriverRiwayatPage.tsx`** (`/dashboard/driver/riwayat`) — BEDA dari versi lama: dulu cuma nampilin 5 log terakhir sebagai card kecil di bagian bawah halaman utama (`limit(5)`), sekarang halaman FULL sendiri dengan `limit(30)` (lebih lengkap, karena sekarang punya ruang halaman sendiri, bukan numpang di bawah form).
+
+Semua 5 halaman pakai `useAuthGuard({depts:["Driver"], adminBypass:false, ...})` (dipanggil terpisah di tiap halaman — TIDAK ada shared context/state lintas-route, sesuai cara kerja Next.js App Router: tiap route mount ulang komponennya sendiri) dan top-bar pola sama seperti `dashboard/security/parkir` (tombol back kembali ke `/dashboard/driver`, badge nama driver login). Halaman menu (`DriverMenuPage`) TETAP pakai bottom-nav floating-pill gaya lama (brand visual driver, dipertahankan) — TAPI subhalaman (armada/inspeksi/servis/riwayat) SENGAJA TIDAK dikasih bottom-nav sendiri, cukup tombol back — pola ini disamakan dengan konvensi subhalaman `dashboard/security/*` (buku-tamu, paket, dst — dicek langsung `BukuTamuSecurity.tsx`, cuma top-bar+back, gak ada bottom-nav berulang di tiap subhalaman).
+
+**Helper diekstrak, bukan diduplikasi**: fungsi `uploadFotoToCloudinary()` (upload ke Cloudinary) ada 2 salinan IDENTIK di file lama (dipakai foto inspeksi & foto servis/emisi, masing-masing punya `handleFotoXxxUpload` sendiri yang isinya sama — resize canvas ke max 600px lebar, `toBlob` JPEG 0.8 quality, lalu upload). Daripada disalin lagi jadi 2× di 2 file baru (`DriverInspeksiPage.tsx`/`DriverServisPage.tsx`), diekstrak ke `src/lib/uploadFoto.ts` (`uploadFotoToCloudinary` + `handleFotoUpload` generik yang terima callback `onStart`/`onSuccess`/`onError`/`onFinally`), dipakai bareng oleh keduanya.
+
+`components/pages/DriverDashboardPage.tsx` (file lama) **DIHAPUS** — dicek dulu pakai grep `DriverDashboardPage` di seluruh `src/` buat pastikan gak ada referensi lain yang bakal patah (cuma 1 hasil: file itu sendiri).
+
+### 19C. Verifikasi
+
+- `npx tsc --noEmit` (project-wide): 0 error.
+- `npx eslint` (file yang disentuh sesi ini): sempat 1 warning `no-unused-vars` (`IconLogOut` yang gak kepake di `DriverMenuPage.tsx`, sisa refactor — tombol logout dari file lama tetap pakai teks "Keluar ➔" biasa, bukan versi ikon), langsung dihapus. Setelah itu: 0 error, 0 warning.
+- `npm run build`: sukses — route baru `dashboard/driver/armada`, `/inspeksi`, `/servis`, `/riwayat` semua ke-generate sebagai static page, route lama `dashboard/driver` (sekarang render `DriverMenuPage`) tetap ada.
+- **Diverifikasi LANGSUNG di browser** (dev server nyambung ke Firestore production REAL, `sibm-app`) pakai `localStorage` disuntik manual buat simulasi login (bukan lewat form login sungguhan — cuma buat ngetes UI/data, gak nyentuh `users_master`):
+  - Login-simulasi Driver (`pic_dept=Driver`) → `/dashboard/driver` nampilin menu 5-card + status "KELUAR" (data real Amal Setiawan) dengan benar. Klik "Bawa Armada" → form nampilin 6 kendaraan real dari `master_kendaraan` (nama PIC asli: Mathias, Mildawaty Kahar, dst) di dropdown, sesuai ekspektasi.
+  - Login-simulasi Security (`pic_dept=Security`) → `/dashboard/security/parkir` nampilin 2 tab dengan benar, tabel Tab 1 nampilin ~10+ kendaraan real dengan Jenis/PIC/Status Terkini kebaca benar, banner reminder patroli lain (dari §17, gak terkait) tetap tampil normal di atas (dikonfirmasi TIDAK bentrok/rusak layout).
+  - **Tes end-to-end auto-sync**: klik tombol "Keluar" pada kendaraan "B 1629 RKP" → modal muncul, isi Tujuan, submit → modal nutup, badge status baris itu LANGSUNG berubah jadi "KELUAR POOL" (real-time, tanpa refresh manual), DAN panel "Status Kesiagaan Driver" di atas ikut berubah "Amal Setiawan" jadi "SEDANG KELUAR" dengan jam update yang baru — mengonfirmasi persis alur yang diminta user (1 tombol aksi kendaraan → otomatis update driver). Cek juga Tab 2 "Log Pergerakan Armada" — entry baru muncul di baris teratas dengan tujuan yang diketik tadi.
+- **Data test dibersihkan**: karena `sibm-app` cuma 1 project Firestore (gak ada staging terpisah) dan app ini gak punya UI hapus log manapun (`operational_vehicle_logs`/`driver_status_logs` append-only dari sisi app), 2 dokumen test dari langkah verifikasi di atas dihapus lewat Firestore REST API langsung (`documents:runQuery` cari doc pakai field unik teks tes, lalu `DELETE` per doc ID) — BUKAN lewat UI aplikasi (memang gak ada). Dicek ulang setelah hapus: badge kembali "STANDBY", panel driver kembali ke jam update semula (12.46, sebelum sesi tes) — state production bersih kembali seperti sebelum verifikasi.
+
+### 19D. Yang perlu dilanjutkan
+
+1. Status "Pulang" belum eksplisit ditangani di `app/page.tsx` (`buatKalimatRiwayat`/`isStandbyLabel`) & `admin/kendaraan/page.tsx` (`getPergerakanTone`) — lihat detail di §19A & §0C. Aman (fallback default), tapi kurang deskriptif kalau mau dirapikan lebih lanjut.
+2. `DriverInspeksiPage.tsx`/`DriverServisPage.tsx` sekarang masing-masing punya dropdown pilih kendaraan SENDIRI (independen dari halaman Armada) — kalau ternyata driver di lapangan sering lupa/salah pilih kendaraan beda antar halaman (karena harus pilih ulang tiap pindah menu), bisa dipertimbangkan simpan "kendaraan terakhir dipilih" di `localStorage` per device biar default-nya nyambung antar halaman (belum diimplementasi sesi ini, cuma opsi kalau jadi masalah nyata di pemakaian).
+3. Poin lama dari §17/§18 (lihat §0C) belum ada yang berubah dari sesi ini.
+
+**Sudah di-commit + push (dev→main) + build + deploy** sesuai instruksi eksplisit user ("langsung update commit, project analisis md dan deploy").
