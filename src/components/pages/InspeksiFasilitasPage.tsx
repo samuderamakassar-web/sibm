@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, doc, getDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useToast } from "@/components/ui/ToastProvider";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain
@@ -108,6 +109,7 @@ function formatRentangMinggu(seninISO: string): string {
 
 export default function InspeksiFasilitasPage() {
   const router = useRouter();
+  const showToast = useToast();
 
   const [picName, setPicName] = useState("");
   const [activeTab, setActiveTab] = useState<"form" | "history">("form");
@@ -138,8 +140,8 @@ export default function InspeksiFasilitasPage() {
       const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
 
       if (!nama || !dept.includes("ob & cs")) {
-        alert("Akses Ditolak! Halaman ini khusus staf OB & CS.");
-        router.push("/dashboard/ob");
+        showToast("Akses Ditolak! Halaman ini khusus staf OB & CS.", "error");
+        setTimeout(() => router.push("/dashboard/ob"), 1200);
         return;
       }
       setPicName(nama);
@@ -216,7 +218,7 @@ export default function InspeksiFasilitasPage() {
             setHasilList((prev) => { const next = [...prev]; next[index] = { ...next[index], foto: url }; return next; });
           } catch (err) {
             console.error(err);
-            alert("Gagal upload foto, coba lagi.");
+            showToast("Gagal upload foto, coba lagi.", "error");
           } finally {
             setUploadingIdx(null);
           }
@@ -259,12 +261,12 @@ export default function InspeksiFasilitasPage() {
     const itemCustomTerisi = hasilList.slice(jumlahStandar).filter((h) => h.nama.trim() && h.kondisi);
 
     if (itemStandar.some((h) => !h.kondisi)) {
-      return alert("Mohon nilai kondisi (Baik/Rusak/Tidak Ada) untuk semua fasilitas standar sebelum mengirim.");
+      return showToast("Mohon nilai kondisi (Baik/Rusak/Tidak Ada) untuk semua fasilitas standar sebelum mengirim.", "warning");
     }
     const semuaDinilai = [...itemStandar, ...itemCustomTerisi] as { nama: string; kondisi: Kondisi; catatan: string; foto: string }[];
     const rusakTanpaCatatan = semuaDinilai.find((h) => h.kondisi === "Rusak" && !h.catatan.trim());
     if (rusakTanpaCatatan) {
-      return alert(`Mohon isi keterangan kerusakan untuk "${rusakTanpaCatatan.nama}" sebelum mengirim.`);
+      return showToast(`Mohon isi keterangan kerusakan untuk "${rusakTanpaCatatan.nama}" sebelum mengirim.`, "warning");
     }
 
     setIsLoading(true);
@@ -290,15 +292,15 @@ export default function InspeksiFasilitasPage() {
         status: "Menunggu",
       })));
 
-      alert(rusak.length > 0
+      showToast(rusak.length > 0
         ? `Inspeksi terkirim! ${rusak.length} temuan rusak sudah diteruskan ke Admin GA.`
-        : "Inspeksi terkirim! Semua fasilitas dalam kondisi baik. 🎉");
+        : "Inspeksi terkirim! Semua fasilitas dalam kondisi baik.", "success");
       resetForm();
       setActiveTab("history");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan sistem saat mengirim inspeksi.");
+      showToast("Terjadi kesalahan sistem saat mengirim inspeksi.", "error");
     } finally {
       setIsLoading(false);
     }

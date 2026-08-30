@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useToast } from "@/components/ui/ToastProvider";
+import { useConfirm } from "@/components/ui/ConfirmProvider";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain (DashboardOBPage/ChecklistOBPage)
@@ -117,6 +119,8 @@ function hitungAnalisaPemakaian(item: StockItem, semuaLog: StockLog[]): AnalisaP
 
 export default function StockOpnamePage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
 
   const [picName, setPicName] = useState("");
   const [isReady, setIsReady] = useState(false);
@@ -145,8 +149,8 @@ export default function StockOpnamePage() {
       const isAuthorized = role.includes("admin") || role.includes("koordinator") || dept.includes("ob & cs");
 
       if (!isAuthorized || !nama) {
-        alert("Akses Ditolak! Halaman ini khusus tim operasional OB & CS.");
-        router.push("/dashboard/ob");
+        showToast("Akses Ditolak! Halaman ini khusus tim operasional OB & CS.", "error");
+        setTimeout(() => router.push("/dashboard/ob"), 1200);
         return;
       }
 
@@ -199,7 +203,7 @@ export default function StockOpnamePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nama_barang.trim()) return alert("Nama barang wajib diisi!");
+    if (!formData.nama_barang.trim()) return showToast("Nama barang wajib diisi!", "warning");
 
     setIsLoading(true);
     try {
@@ -217,7 +221,7 @@ export default function StockOpnamePage() {
       setEditId(null);
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan sistem saat menyimpan data.");
+      showToast("Terjadi kesalahan sistem saat menyimpan data.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -234,13 +238,19 @@ export default function StockOpnamePage() {
       });
     } catch (error) {
       console.error(error);
-      alert("Gagal memproses transaksi stok.");
+      showToast("Gagal memproses transaksi stok.", "error");
     }
   };
 
   const handleDelete = async (id: string, nama_barang: string) => {
-    if (!window.confirm(`Hapus permanen item "${nama_barang}" dari daftar inventori?`)) return;
-    try { await deleteDoc(doc(db, "ob_stock", id)); } catch (error) { console.error(error); }
+    const yakin = await confirm({
+      title: "Hapus Item Inventori",
+      message: `Hapus permanen item "${nama_barang}" dari daftar inventori?`,
+      confirmText: "Ya, Hapus",
+      variant: "danger",
+    });
+    if (!yakin) return;
+    try { await deleteDoc(doc(db, "ob_stock", id)); } catch (error) { console.error(error); showToast("Gagal menghapus item.", "error"); }
   };
 
   const handleEdit = (item: StockItem) => {

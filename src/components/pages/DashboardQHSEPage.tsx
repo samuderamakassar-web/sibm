@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useConfirm } from "../ui/ConfirmProvider";
+import { logoutWithConfirm } from "../../hooks/useAuthGuard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -31,6 +33,7 @@ const IconCar = ({ size = 18, color = "currentColor" }: IconProps) => (
 
 export default function DashboardQHSEPage() {
   const router = useRouter();
+  const confirm = useConfirm();
   const [picName, setPicName] = useState("");
   const [isReady, setIsReady] = useState(false);
 
@@ -46,12 +49,7 @@ export default function DashboardQHSEPage() {
     setTimeout(() => { setPicName(nama || "Staf QHSE"); setIsReady(true); }, 0);
   }, [router]);
 
-  const handleKeluar = () => {
-    if (window.confirm("Apakah Anda yakin ingin keluar/logout?")) {
-      localStorage.clear();
-      router.push("/");
-    }
-  };
+  const handleKeluar = () => logoutWithConfirm(confirm, router);
 
   // MENU UTAMA QHSE — warna dipetakan ke token desain (lihat tokenColors di bawah)
   const menuQHSE = [

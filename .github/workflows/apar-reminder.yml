@@ -1,0 +1,25 @@
+name: APAR Inspection Reminder
+
+on:
+  schedule:
+    - cron: "7 0 * * *" # ~08:00 WITA -- skrip sendiri yang memutuskan kirim/tidak (window H-3 s.d. deadline)
+  workflow_dispatch: {}
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Jalankan reminder
+        run: node scripts/apar-reminder.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          FONNTE_TOKEN: ${{ secrets.FONNTE_TOKEN }}

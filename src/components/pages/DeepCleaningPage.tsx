@@ -10,6 +10,8 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
 import Badge from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/ToastProvider";
+import { useConfirm } from "@/components/ui/ConfirmProvider";
 
 interface DeepCleaningTask {
   id: string;
@@ -44,6 +46,8 @@ function getTaskStatusInfo(tanggalTugas: string, status: string) {
 
 export default function DeepCleaningPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
 
   const [picName, setPicName] = useState("");
   const [isReady, setIsReady] = useState(false);
@@ -71,8 +75,8 @@ export default function DeepCleaningPage() {
         role.includes("koordinator");
 
       if (!isAuthorized) {
-        alert("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.");
-        router.push("/dashboard/ob");
+        showToast("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.", "error");
+        setTimeout(() => router.push("/dashboard/ob"), 1200);
         return;
       }
       setPicName(nama);
@@ -101,7 +105,7 @@ export default function DeepCleaningPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.tugas.trim()) return alert("Deskripsi tugas wajib diisi!");
+    if (!formData.tugas.trim()) return showToast("Deskripsi tugas wajib diisi!", "warning");
 
     setIsLoading(true);
     try {
@@ -117,7 +121,7 @@ export default function DeepCleaningPage() {
       setFormData((prev) => ({ ...prev, tugas: "" }));
     } catch (error) {
       console.error("Gagal menyimpan tugas:", error);
-      alert("Terjadi kesalahan sistem.");
+      showToast("Terjadi kesalahan sistem.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -133,11 +137,18 @@ export default function DeepCleaningPage() {
   };
 
   const handleDelete = async (id: string, namaTugas: string) => {
-    if (!window.confirm(`Hapus jadwal tugas: ${namaTugas}?`)) return;
+    const yakin = await confirm({
+      title: "Hapus Jadwal Tugas",
+      message: `Hapus jadwal tugas: ${namaTugas}?`,
+      confirmText: "Ya, Hapus",
+      variant: "danger",
+    });
+    if (!yakin) return;
     try {
       await deleteDoc(doc(db, "deep_cleaning_tasks", id));
     } catch (error) {
       console.error("Gagal menghapus:", error);
+      showToast("Gagal menghapus jadwal tugas.", "error");
     }
   };
 

@@ -6,6 +6,7 @@ import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc } fro
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
+import { logoutWithConfirm } from "../../hooks/useAuthGuard";
 
 interface ReportSBO {
   id: string;
@@ -226,7 +227,7 @@ export default function QhseSboPage() {
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           <div style={{ background: "#f0fff4", color: "#22543d", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #c6f6d5" }}>👷 {picName}</div>
-          <button onClick={() => { localStorage.clear(); router.push("/"); }} style={{ background: "#e53e3e", color: "white", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Logout</button>
+          <button onClick={() => logoutWithConfirm(confirm, router)} style={{ background: "#e53e3e", color: "white", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Logout</button>
         </div>
       </div>
 

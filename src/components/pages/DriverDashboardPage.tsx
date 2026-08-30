@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, limit, Timestamp, where } from "firebase/firestore";
 import { db } from "../../lib/firebase";
-import { useAuthGuard, logout } from "../../hooks/useAuthGuard";
+import { useAuthGuard, logoutWithConfirm } from "../../hooks/useAuthGuard";
+import { useToast } from "../ui/ToastProvider";
+import { useConfirm } from "../ui/ConfirmProvider";
 
 // ==========================================
 // INTERFACES
@@ -85,6 +87,8 @@ async function uploadFotoToCloudinary(blob: Blob, folder: string): Promise<strin
 
 export default function DriverDashboardPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
 
   // Akses & sesi login sekarang dari hook terpusat (menggantikan blok localStorage manual)
   const { session, isReady } = useAuthGuard({
@@ -225,7 +229,7 @@ export default function DriverDashboardPage() {
   const kendaraan = kendaraanTerpilih?.kendaraan || "";
   const sudahInspeksiMingguIni = inspeksiTerakhir?.minggu_of === getMondayOfWeek();
 
-  const handleLogout = () => logout(router, "/");
+  const handleLogout = () => logoutWithConfirm(confirm, router);
 
   // Bottom-nav mobile cuma scroll ke section terkait — halaman ini 1 kolom panjang, bukan multi-route
   const scrollKeSection = (id: string) => {
@@ -242,10 +246,10 @@ export default function DriverDashboardPage() {
         waktu_ubah: serverTimestamp(),
         petugas_security: "Aplikasi Driver"
       });
-      alert(`✅ Status Anda berhasil diubah menjadi: ${statusBaru}`);
+      showToast(`Status Anda berhasil diubah menjadi: ${statusBaru}`, "success");
     } catch (error) {
       console.error(error);
-      alert("Gagal mengupdate status.");
+      showToast("Gagal mengupdate status.", "error");
     } finally {
       setIsLoadingPersonel(false);
     }
@@ -255,10 +259,10 @@ export default function DriverDashboardPage() {
   const handleSubmitMobil = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kendaraan) {
-      return alert("Belum ada kendaraan terdaftar. Hubungi Admin untuk menambahkan data kendaraan.");
+      return showToast("Belum ada kendaraan terdaftar. Hubungi Admin untuk menambahkan data kendaraan.", "warning");
     }
     if (statusMobil === "Keluar Beroperasi" && !tujuan.trim()) {
-      return alert("Tujuan/Keperluan wajib diisi jika membawa mobil keluar!");
+      return showToast("Tujuan/Keperluan wajib diisi jika membawa mobil keluar!", "warning");
     }
 
     setIsLoadingMobil(true);
@@ -287,12 +291,12 @@ export default function DriverDashboardPage() {
         petugas_security: "Aplikasi Driver (Auto-Sync)"
       });
 
-      alert("✅ Log Perjalanan & KM berhasil disimpan!");
+      showToast("Log Perjalanan & KM berhasil disimpan!", "success");
       setTujuan("");
       setKilometer("");
     } catch (error) {
       console.error(error);
-      alert("Gagal menyimpan data kendaraan.");
+      showToast("Gagal menyimpan data kendaraan.", "error");
     } finally {
       setIsLoadingMobil(false);
     }
@@ -321,7 +325,7 @@ export default function DriverDashboardPage() {
             setFotoInspeksi(url);
           } catch (err) {
             console.error(err);
-            alert("Gagal upload foto inspeksi, coba lagi.");
+            showToast("Gagal upload foto inspeksi, coba lagi.", "error");
           } finally {
             setIsUploadingFotoInspeksi(false);
           }
@@ -336,10 +340,10 @@ export default function DriverDashboardPage() {
   const handleSubmitInspeksi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kendaraanId) {
-      return alert("Pilih kendaraan dulu di form Bawa Armada di atas.");
+      return showToast("Pilih kendaraan dulu di form Bawa Armada di atas.", "warning");
     }
     if (isUploadingFotoInspeksi) {
-      return alert("Tunggu foto selesai diunggah dulu.");
+      return showToast("Tunggu foto selesai diunggah dulu.", "warning");
     }
     setIsSavingInspeksi(true);
     try {
@@ -354,13 +358,13 @@ export default function DriverDashboardPage() {
         foto_url: fotoInspeksi || "",
         waktu_catat: serverTimestamp(),
       });
-      alert("✅ Inspeksi mingguan berhasil disimpan!");
+      showToast("Inspeksi mingguan berhasil disimpan!", "success");
       setInspeksiChecklist(checklistDefault());
       setCatatanInspeksi("");
       setFotoInspeksi("");
     } catch (error) {
       console.error(error);
-      alert("Gagal menyimpan inspeksi.");
+      showToast("Gagal menyimpan inspeksi.", "error");
     } finally {
       setIsSavingInspeksi(false);
     }
@@ -389,7 +393,7 @@ export default function DriverDashboardPage() {
             setFotoEmisi(url);
           } catch (err) {
             console.error(err);
-            alert("Gagal upload foto uji emisi, coba lagi.");
+            showToast("Gagal upload foto uji emisi, coba lagi.", "error");
           } finally {
             setIsUploadingFotoEmisi(false);
           }
@@ -404,13 +408,13 @@ export default function DriverDashboardPage() {
   const handleSubmitServis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kendaraanId) {
-      return alert("Pilih kendaraan dulu di form Bawa Armada di atas.");
+      return showToast("Pilih kendaraan dulu di form Bawa Armada di atas.", "warning");
     }
     if (!servisJenis.trim()) {
-      return alert("Jenis servis wajib diisi (misal: Ganti Oli, Uji Emisi, Servis Berkala).");
+      return showToast("Jenis servis wajib diisi (misal: Ganti Oli, Uji Emisi, Servis Berkala).", "warning");
     }
     if (isUploadingFotoEmisi) {
-      return alert("Tunggu foto selesai diunggah dulu.");
+      return showToast("Tunggu foto selesai diunggah dulu.", "warning");
     }
     setIsSavingServis(true);
     try {
@@ -425,14 +429,14 @@ export default function DriverDashboardPage() {
         dicatat_oleh: activeDriver,
         waktu_catat: serverTimestamp(),
       });
-      alert("✅ Laporan servis/uji emisi berhasil disimpan! Bisa dicek Admin di Riwayat Kendaraan.");
+      showToast("Laporan servis/uji emisi berhasil disimpan! Bisa dicek Admin di Riwayat Kendaraan.", "success");
       setServisJenis("");
       setServisDeskripsi("");
       setServisBiaya("");
       setFotoEmisi("");
     } catch (error) {
       console.error(error);
-      alert("Gagal menyimpan laporan servis.");
+      showToast("Gagal menyimpan laporan servis.", "error");
     } finally {
       setIsSavingServis(false);
     }
@@ -442,10 +446,10 @@ export default function DriverDashboardPage() {
   const handleSubmitOdometer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kendaraanId) {
-      return alert("Pilih kendaraan dulu di form Bawa Armada di atas.");
+      return showToast("Pilih kendaraan dulu di form Bawa Armada di atas.", "warning");
     }
     if (!odometerInput.trim()) {
-      return alert("Isi angka odometer dulu.");
+      return showToast("Isi angka odometer dulu.", "warning");
     }
     setIsSavingOdometer(true);
     try {
@@ -457,11 +461,11 @@ export default function DriverDashboardPage() {
         dicatat_oleh: activeDriver,
         waktu_catat: serverTimestamp(),
       });
-      alert("✅ Odometer berhasil dicatat!");
+      showToast("Odometer berhasil dicatat!", "success");
       setOdometerInput("");
     } catch (error) {
       console.error(error);
-      alert("Gagal mencatat odometer.");
+      showToast("Gagal mencatat odometer.", "error");
     } finally {
       setIsSavingOdometer(false);
     }
@@ -487,7 +491,7 @@ export default function DriverDashboardPage() {
   const handleSubmitLemburKolektif = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formLemburItems.some(i => !i.tanggal || !i.jam_mulai || !i.jam_selesai || !i.area_ruangan || !i.alasan)) {
-      return alert("Mohon lengkapi seluruh kolom tanggal, jam, dan keterangan lembur yang Anda tambahkan!");
+      return showToast("Mohon lengkapi seluruh kolom tanggal, jam, dan keterangan lembur yang Anda tambahkan!", "warning");
     }
     setIsLemburLoading(true);
     try {
@@ -500,12 +504,12 @@ export default function DriverDashboardPage() {
         status: "Menunggu Approval GA",
         waktu_request: serverTimestamp()
       });
-      alert(`✅ Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`);
+      showToast(`Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`, "success");
       setFormLemburItems([{ tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Perjalanan Dinas Luar Kota / Lembur", alasan: "Antar Jemput Manajemen" }]);
       setActiveModal("none");
     } catch (error) {
       console.error(error);
-      alert("❌ Gagal mengirim rekapan klaim lembur.");
+      showToast("Gagal mengirim rekapan klaim lembur.", "error");
     } finally {
       setIsLemburLoading(false);
     }

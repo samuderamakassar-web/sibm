@@ -1,43 +1,39 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 30 Agustus 2026 (rombak total `admin/kendaraan` — modal input, tab Daftar/Riwayat, riwayat gabungan + integrasi log pergerakan driver/security, multi-select kendaraan, status Aset/Sewa; simplifikasi "siapa yang bawa kendaraan" jadi Karyawan+nama spesifik di `dashboard/security/parkir` + live master data; redesign `DriverDashboardPage` — SUDAH DI-COMMIT & DI-DEPLOY, lihat §15 & §16)
+Update terakhir: 30 Agustus 2026 (overhaul notifikasi — patroli 3 sesi/shift dengan minimal 2x wajib, reminder APAR H-3 sebelum tgl 30, email paket+overtime dirapikan jadi HTML form, banner pengingat persisten (bukan toast sekali muncul) buat patroli/APAR/checklist OB, konsolidasi 6 modal logout jadi 1 komponen, sapu bersih ~60 titik `alert()`/`window.confirm()` jadi `showToast()`/`useConfirm()` di seluruh app — BELUM DI-COMMIT, lihat §17)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §15 & §16)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §17)
 
-Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini (lanjutan dari sesi §14 di hari yang sama) fokus total ke **modul kendaraan**, dikerjakan bertahap dalam beberapa giliran chat berurutan: (1) rombak total `admin/kendaraan` jadi 2 tab modern + modal, (2) integrasi log pergerakan armada dari driver/security ke riwayat, (3) multi-select kendaraan + status Aset/Sewa, (4) simplifikasi form "siapa yang bawa kendaraan" + redesign `DriverDashboardPage`. Detail teknis lengkap ada di **§15** (poin 1) dan **§16** (poin 2-4).
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini fokus total ke **notifikasi & pengingat** — diminta user secara eksplisit "selesaikan semua dan rapihkan semua notif". Sempat kepotong di tengah jalan karena laptop mati (baterai habis), dilanjutkan otomatis begitu sesi resume dan diverifikasi ulang dari awal (bukan cuma lanjut buta) buat mastiin gak ada yang keskip/setengah jadi. Detail teknis lengkap ada di **§17**.
 
-### A. Apa yang dikerjakan sesi ini
+### A. Apa yang dikerjakan sesi ini (§17)
 
-1. **`admin/kendaraan` dirombak total** (§15) — form input/edit jadi Modal (bukan card permanen di sidebar), 2 tab level-halaman (Daftar Kendaraan & Riwayat Kendaraan), riwayat odometer+servis+inspeksi+uji-emisi+**pergerakan armada** digabung jadi 1 tabel kronologis (bukan 4 tab terpisah kayak sebelumnya), filter Bulan/Tahun + Export **Excel (.xlsx, pakai SheetJS)** + Export **PDF (window.print)**.
-2. **Log pergerakan armada** (dari `operational_vehicle_logs`, diisi driver via app driver ATAU security via `dashboard/security/parkir`) ditarik masuk ke riwayat kendaraan — dicocokkan lewat **awalan plat nomor** (bukan string `kendaraan` penuh) karena nama PIC di master data bisa berubah sementara log lama nyimpen versi lama, jadi exact-match bakal ketinggalan histori.
-3. **Multi-select checklist kendaraan** ditambahkan di tab Daftar (filter mana yang ditampilkan) DAN tab Riwayat (bisa lihat riwayat gabungan beberapa kendaraan sekaligus, dengan kolom "Kendaraan" tambahan pas lebih dari 1 dipilih).
-4. **Status Kepemilikan Aset/Sewa** ditambahkan ke `master_kendaraan` (field baru `status_kepemilikan`, `tanggal_akhir_sewa`) — kolom baru di tabel Daftar, badge otomatis hitung sisa hari / berapa hari sudah lewat kalau Sewa.
-5. **`dashboard/security/parkir`** (§16): pilihan "siapa yang membawa kendaraan" disederhanakan dari 2 opsi generik yang tumpang tindih ("Penanggung Jawab Kendaraan (PIC)" & "Karyawan / PIC Kendaraan") jadi 1 opsi **"Karyawan"** — begitu dipilih, muncul field wajib isi nama karyawan spesifik (datalist dari `employees_directory`, pola sama kayak PIC Kendaraan di `admin/kendaraan`). Nama itu langsung disimpan ke field `driver_bertugas` yang sudah ada (bukan kolom baru) — otomatis kebaca di tabel log parkir DAN kolom "Karyawan / Driver" (nama kolom diganti dari "PIC / Driver") di Riwayat `admin/kendaraan`, tanpa migrasi apa-apa.
-6. **Daftar armada di `dashboard/security/parkir` diganti dari hardcode ke live `master_kendaraan`** — sebelumnya pakai array hardcode `KENDARAAN_OPERASIONAL` yang udah drift (PIC/unit beda sama data admin terkini), sama kayak bug lama yang udah difix di `DriverDashboardPage` sesi-sesi sebelumnya.
-7. **Redesign `DriverDashboardPage.tsx`** — hero biru + top bar polos diganti jadi tema merah standar seluruh app (gradient + grid overlay, referensi persis dari hero `src/app/page.tsx`), ditambah **bottom-nav mobile mengambang** (pola sama portal utama: pill blur + FAB merah di tengah) dengan 5 tombol yang scroll ke section terkait (Portal/Armada/**Inspeksi**-FAB/Servis/Riwayat) — sebelumnya halaman ini 1 kolom panjang tanpa navigasi cepat sama sekali di mobile. Semua form/logic yang sudah ada (Bawa Armada, Inspeksi Mingguan, Servis/Odometer, Riwayat) TIDAK diubah, cuma dikasih `id` buat anchor scroll.
+1. **Patroli Security jadi 3 sesi per shift** (Sesi 1/2/3, masing-masing 4 jam), wajib minimal 2 dari 3 sesi per shift (Shift 1 & Shift 2). Field baru `tanggal_shift`/`shift`/`sesi` di `security_patrols`, kartu progres sesi real-time di halaman patroli, tabel "Rekap Kepatuhan Sesi Patroli" baru di `admin/monitor-security`, dan `scripts/patroli-reminder.mjs` sekarang cek kepatuhan sebelum kirim WA reminder (berhenti otomatis begitu syarat terpenuhi, eskalasi pesan kalau shift mau habis tapi belum terpenuhi).
+2. **Reminder Inspeksi APAR dari nol** — sebelumnya sama sekali gak ada reminder buat fitur ini. Script baru `scripts/apar-reminder.mjs` + workflow `apar-reminder.yml`, fire H-3 sebelum deadline (tgl 30, atau akhir bulan untuk Februari), kirim ke Security bertugas (WA + banner in-app) DAN Admin GA/QHSE (WA monitoring).
+3. **Email paket & overtime dirapikan jadi HTML form** (`src/lib/emailTemplates.ts`, baru) — sebelumnya email overtime cuma teks WhatsApp mentah (`*DISETUJUI*` bintang literal kebawa ke email), dan paket SAMA SEKALI gak pernah kirim email (cuma WA, dan kalau WA kosong notifnya hilang total walau ada email). Sekarang keduanya HTML tabel rapi (nama jelas, jam, tanggal, status badge berwarna) + foto bukti paket ikut ter-embed.
+4. **Banner pengingat PERSISTEN** (`StickyBanner` + `usePendingTask`, generik, dipakai 3 fitur: `PatroliShiftBanner`, `AparInspectionBanner`, `ChecklistOBBanner`) — beda dari toast lama yang sekali muncul lalu hilang selamanya (`dibaca:true`), banner ini query LANGSUNG ke data sumber (bukan flag notif) jadi otomatis hilang pas tugas selesai, dan otomatis balik muncul kalau belum. Dipasang lewat layout baru `dashboard/security/layout.tsx` & `dashboard/ob/layout.tsx`.
+5. **Konsolidasi 6 modal logout jadi 1** (`logoutWithConfirm()` di `useAuthGuard.ts`, pakai `useConfirm()` yang sudah ada) — sebelumnya 2 modal custom copy-paste, 2 `window.confirm()` native, 2 tanpa konfirmasi sama sekali.
+6. **Sapu bersih semua `alert()`/`window.confirm()` bawaan browser** di seluruh app (~24 file, ~65 titik) diganti `showToast()`/`useConfirm()` — termasuk gate akses (`useAuthGuard.ts` sekarang toast+redirect tertunda, bukan `alert()` blocking).
 
-### B. Status: SUDAH di-commit & di-deploy
+### B. Status: BELUM di-commit
 
-- `npx tsc --noEmit` (seluruh project): 0 error. `npx eslint .` (seluruh project): 0 error, 98 warning — semua pre-existing di file yang gak disentuh sesi ini (service worker generated files + beberapa `react-hooks/exhaustive-deps`/`no-unused-vars` lama), bukan warning baru.
-- `npm run build` (static export, 35 route): sukses tanpa error.
-- Diverifikasi visual di dev server pakai data production real (bukan data dummy): multi-select Daftar Kendaraan (uncheck kendaraan langsung filter tabel), modal Tambah/Edit + field Status Kepemilikan/Tanggal Sewa (submit dibatalkan sebelum save pas testing, gak nulis data test ke prod), tab Riwayat 1 kendaraan (27-41 entri riwayat pergerakan real kebaca benar, termasuk tujuan/driver/petugas) & multi-kendaraan (kolom Kendaraan muncul, kartu ringkasan per-unit), Export Excel jalan tanpa error, form "Karyawan" di `dashboard/security/parkir` (dropdown armada live, datalist nama karyawan real kebaca), hero+bottom-nav `DriverDashboardPage` di viewport mobile 375×812 (scroll-to-section dites via `scrollIntoView` langsung, bukan lewat klik tombol — ada gangguan tooling browser pane pas sesi ini yang bikin klik pada 1 elemen spesifik timeout berulang, tapi elemen & fungsinya sendiri kekonfirmasi benar).
-- **Catatan integritas data**: pas verifikasi tabel Daftar Kendaraan, ternyata SEMUA 10 kendaraan di Firestore production sudah punya `status_kepemilikan: "Sewa"` dengan tanggal beragam yang masuk akal (bukan dari testing sesi ini — sesi ini cuma sempat buka 1 modal edit & langsung Batal tanpa submit). Kemungkinan besar data ini sudah diisi manual oleh Reza/tim GA di luar sesi chat ini. Tidak diutak-atik.
-- Dicommit bareng dengan pekerjaan §14 yang sebelumnya masih "BELUM DI-COMMIT" (role Magang, tab Hasil Inspeksi APAR, akses QHSE ke `admin/apar`, redesign hub QHSE, `admin/uji-emisi`, filter+export) — semuanya numpuk di working tree yang sama, jadi ikut ke-commit+deploy dalam 1 paket sesuai instruksi eksplisit "langsung push/commit hingga deploy".
+- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error, 104 warning (naik dari 98 — semuanya `missing dependency: showToast` di `useEffect`/`useCallback`, jenis warning yang sama dengan yang sudah banyak ada sebelumnya di project ini, bukan masalah baru).
+- `npm run build` (static export): sukses, 32 route ter-generate.
+- Diverifikasi di dev server pakai data production real: halaman `dashboard/security/patroli` (banner sesi + APAR muncul benar sesuai waktu WITA & tanggal hari ini, kartu progres sesi kebaca benar), `admin/monitor-security` tab PATROLI (tabel "Rekap Kepatuhan Sesi Patroli" muncul & keisi dari roster+log real, termasuk baris "Tidak Ada Laporan" buat jadwal ke depan yang belum ada log). Console browser bersih, gak ada error Firestore index (query 3-`where` equality di `security_patrols` gak butuh composite index).
+- **Belum sempat dites langsung**: kirim email sungguhan (paket & overtime) — HTML dibangun & dikirim lewat `kirimEmail()` yang sudah ada, tapi rendering HTML-di-inbox tergantung setting template EmailJS di dashboard eksternal (gak bisa diinspeksi dari sini). Lihat §17E untuk detail risiko.
 
 ### C. Yang perlu dilanjutkan
 
-1. `admin/monitor-security` masih belum ditambah tab monitoring APAR (poin lama, belum berubah).
-2. `security_magang_directory` masih belum ada halaman admin buat kelola manual (poin lama, belum berubah).
-3. Bug filter logo `admin/qr-manager/page.tsx` (`invert(1) brightness(0)`) masih belum difix (poin lama, belum berubah).
-4. Kolom "Odo Meter Terakhir/KM" di `admin/uji-emisi` kemungkinan masih nampilin "-" buat sebagian kendaraan — tergantung apakah driver/admin udah mulai catat odometer lewat fitur yang ada.
-5. `DriverDashboardPage` baru dikasih polish visual (hero/top bar/bottom-nav) — konten form/logic di dalamnya BELUM di-modernisasi ke pola shared component (`Card`/`Button`/`Input` dari `components/ui/`), masih inline style manual kayak sebelumnya. Kalau mau konsisten penuh sama `admin/kendaraan`, ini next step-nya.
-6. Bottom-nav baru di `DriverDashboardPage` cuma scroll-to-section (halaman ini masih 1 route, bukan multi-halaman) — kalau ke depannya driver butuh sub-halaman terpisah (misal Inspeksi jadi route sendiri kayak `dashboard/driver/inspeksi`), bottom-nav ini perlu diubah dari scroll jadi navigasi route beneran.
-7. Poin lama yang masih relevan (belum berubah): CS masih belum punya halaman terpisah dari OB; audit performa Firestore listener (`onSnapshot` tanpa `limit()`) di sisa file belum dieksekusi — modul kendaraan sesi ini sengaja TANPA `limit()` di semua query riwayat (biar filter Bulan/Tahun bisa jangkau histori penuh), jadi kalau fleet makin besar & histori makin numpuk, ini kandidat pertama buat dioptimasi; bug leak `DeepCleaningPage.tsx` belum difix; migrasi struktur folder `admin/*` ke `components/pages/` (§4 poin 5) masih belum disentuh untuk `admin/kendaraan` (masih 1 file utuh di `app/admin/kendaraan/page.tsx`, sekarang ~1250 baris).
-8. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`. (Query pergerakan armada sesi ini pakai range query `where(">=")`+`where("<")`+`orderBy` di field YANG SAMA — `kendaraan` — jadi otomatis kepakai single-field index bawaan Firestore, gak butuh index manual baru.)
+1. **Commit + deploy** kalau sudah oke — belum dijalankan sesi ini (tunggu instruksi eksplisit user, sesuai konvensi sesi-sesi sebelumnya).
+2. **Verifikasi email sungguhan** — kirim 1 paket & 1 approval overtime nyata, cek inbox beneran buat pastikan HTML-nya render bagus (bukan tag mentah). Kalau ternyata render sebagai teks, perlu masuk ke dashboard EmailJS dan ubah setting variabel `message` jadi "HTML" (bukan default plain-text-escaped).
+3. **`GROUPED_PATROLI`/`DATA_SECURITY` masih hardcode duplikat** di `PatroliSecurityPage.tsx` & `admin/qr-manager/page.tsx` (poin lama, ditemukan lagi sesi ini, belum disentuh).
+4. **File mati/duplikat baru ketemu**: `src/components/pages/PengaturanJadwalSecurity.tsx` ternyata BUKAN yang dipakai routing (`src/app/dashboard/security/jadwal/page.tsx` itu sendiri yang berisi implementasi penuh, bukan wrapper tipis kayak dicatat di §2/§4) — sama persis pola dead-code yang sudah ada di `PaketPage.tsx`. Dua-duanya dibiarkan (gak dihapus, belum dikonfirmasi ke user), tapi kalau mau beres-beres, ini kandidatnya.
+5. **`NotifikasiChecklistListener.tsx`** jadi berlebih (digantikan `ChecklistOBBanner` yang polanya lebih tepat buat "reminder terus sampai selesai") — belum dihapus, dibiarkan sebagai dead code, aman karena memang gak pernah di-mount dari awal.
+6. Poin lama yang masih relevan (belum berubah, lihat §0 versi sebelumnya buat detail): tab monitoring APAR di `admin/monitor-security` (SEKARANG SUDAH ADA, lihat §17A poin 1 — poin lama ini closed), `security_magang_directory` belum ada halaman admin, bug filter logo `admin/qr-manager`, kolom Odo Meter `admin/uji-emisi`, `DriverDashboardPage` konten form belum dimodernisasi ke `components/ui/`, CS belum punya halaman terpisah dari OB, audit performa `onSnapshot` tanpa `limit()`, bug leak `DeepCleaningPage.tsx` (`onSnapshot` gak ke-unsubscribe), migrasi struktur folder `admin/*` & portal utama ke `components/pages/`.
 
 Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
@@ -62,74 +58,87 @@ Open questions lama yang masih nunggu (belum berubah): lihat §6.
 ```
 sibm-app/
   .github/workflows/
+    apar-reminder.yml        ← BARU sesi 30 Agustus §17 (H-3 sebelum deadline tgl 30, 1 cron harian)
     checklist-reminder.yml
     fcm-reminder.yml
     kendaraan-reminder.yml
-    patroli-reminder.yml
+    patroli-reminder.yml     ← UPDATE sesi 30 Agustus §17 (cek kepatuhan sesi sebelum kirim, eskalasi pre-shift)
   scripts/
+    apar-reminder.mjs        ← BARU sesi 30 Agustus §17
     checklist-reminder.mjs
     fcm-reminder.mjs
     kendaraan-reminder.mjs
-    patroli-reminder.mjs
+    patroli-reminder.mjs     ← UPDATE sesi 30 Agustus §17
   src/
     app/
       admin/
+        apar/page.tsx          ← UPDATE §17 (mount AparInspectionBanner)
         atk/page.tsx
-        broadcast/          ← isi belum diperiksa
+        broadcast/          ← UPDATE §17 (sapu bersih alert/confirm)
         helpdesk/            ← isi belum diperiksa
         karyawan/            ← isi belum diperiksa
         kendaraan/page.tsx    ← DIROMBAK sesi 24 Agustus (lihat §3)
-        monitor-ob/            ← isi belum diperiksa
-        monitor-security/            ← isi belum diperiksa
-        overtime/            ← isi belum diperiksa
+        monitor-ob/            ← UPDATE §17 (sapu bersih alert)
+        monitor-security/            ← UPDATE §17 (tabel Rekap Kepatuhan Sesi Patroli baru, sapu bersih alert)
+        overtime/            ← UPDATE §17 (email HTML rapi, logout/alert/confirm konsisten)
+        page.tsx              ← UPDATE §17 (konsolidasi modal logout), dashboard admin utama
         qr-manager/            ← isi belum diperiksa
         report/            ← isi belum diperiksa
         users/page.tsx
-        page.tsx              ← dashboard admin utama
       dashboard/
         driver/page.tsx      ← sudah migrasi ke components/pages/ (#4), tidak ada bug ditemukan (sudah pakai useAuthGuard & helper tanggal WITA)
         ob/
+          layout.tsx           ← BARU §17 (mount ChecklistOBBanner)
           checklist/page.tsx   ← sudah migrasi ke components/pages/ (#1)
-          deep-cleaning/       ← sudah migrasi ke components/pages/ (#3) + fix bug timezone
+          deep-cleaning/       ← sudah migrasi ke components/pages/ (#3) + fix bug timezone; UPDATE §17 (sapu bersih alert/confirm) di components/pages/DeepCleaningPage.tsx
           laporan/       ← sudah migrasi ke components/pages/ (#3)
           plotting/       ← sudah migrasi ke components/pages/ (#3) + fix bug timezone `toISO`
-          stok/       ← sudah migrasi ke components/pages/ (#3), tidak ada bug ditemukan
-          page.tsx              ← sudah migrasi ke components/pages/ (#2)
-        qhse/       ← sudah migrasi ke components/pages/ (#4) + fix bug timezone (`tanggal_closed` & nama file CSV pakai `toISOString()` → diganti `getTodayISOLocal()`)
+          stok/       ← sudah migrasi ke components/pages/ (#3); UPDATE §17 (sapu bersih alert/confirm) di components/pages/StockOpnamePage.tsx
+          page.tsx              ← sudah migrasi ke components/pages/ (#2); UPDATE §17 (logout/alert)
+        qhse/       ← sudah migrasi ke components/pages/ (#4) + fix bug timezone (`tanggal_closed` & nama file CSV pakai `toISOString()` → diganti `getTodayISOLocal()`); UPDATE §17 (logout)
         security/
+          layout.tsx           ← BARU §17 (mount PatroliShiftBanner + AparInspectionBanner)
           buku-tamu/       ← sudah migrasi ke components/pages/ (#4) + fix bug timezone kecil (nama file export CSV)
-          jadwal/       ← sudah migrasi ke components/pages/ (#4), tidak ada bug ditemukan (sudah pakai helper tanggal lokal & useAuthGuard)
-          patroli/       ← sudah migrasi ke components/pages/ (#4), tidak ada bug ditemukan
-          paket/       ← sudah migrasi ke components/pages/ (#4) (dikerjakan sesi sebelumnya, ketemu dalam kondisi sudah selesai), tidak ada bug ditemukan
-      layout.tsx
+          jadwal/page.tsx  ← **BUKAN wrapper tipis** (ketemu sesi §17 — implementasi penuh 552 baris ada di sini, `components/pages/PengaturanJadwalSecurity.tsx` adalah dead code/tidak ke-routing); UPDATE §17 (sapu bersih alert)
+          patroli/       ← sudah migrasi ke components/pages/ (#4); UPDATE §17 (3 sesi patroli, lihat §17A) di components/pages/PatroliSecurityPage.tsx
+          paket/page.tsx  ← UPDATE §17 (email HTML + foto, WA/Email independen) — juga BUKAN wrapper tipis, implementasi penuh 721 baris (components/pages/PaketPage.tsx dead code)
+          parkir/page.tsx ← UPDATE §17 (sapu bersih alert)
+      layout.tsx                ← UPDATE §17 (mount NotifikasiKendaraanListener)
       page.tsx                ← portal publik utama, DIUPDATE sesi 24 & 25 Agustus (lihat §3 & §3B), belum dipecah ke components/pages/
     components/
+      AparInspectionBanner.tsx    ← BARU §17
+      ChecklistOBBanner.tsx       ← BARU §17
+      PatroliShiftBanner.tsx      ← BARU §17
       VehicleIcon3D.tsx        ← dibuat sesi 24 Agustus, shared component (lihat §3), dipakai lagi di redesign §3B
-      ui/                     ← library komponen (Button, Card, Input, dll) — JANGAN diubah
+      ui/                     ← library komponen (Button, Card, Input, dll) — JANGAN diubah, KECUALI StickyBanner.tsx (BARU §17, generik buat 3 banner pengingat)
       InstallPrompt.tsx
-      NotifikasiChecklistListener.tsx
-      NotifikasiKendaraanListener.tsx
+      NotifikasiChecklistListener.tsx  ← dead code, DIGANTIKAN ChecklistOBBanner (§17D), tidak dihapus
+      NotifikasiKendaraanListener.tsx  ← sekarang DI-MOUNT (§17D bonus fix), sebelumnya dead code
       NotifikasiPatroliListener.tsx
       pages/
-        ChecklistOBPage.tsx     ← migrasi #1
-        DashboardOBPage.tsx     ← migrasi #2
-        DeepCleaningPage.tsx    ← migrasi #3
+        ChecklistOBPage.tsx     ← migrasi #1; UPDATE §17 (sapu bersih alert)
+        DashboardOBPage.tsx     ← migrasi #2; UPDATE §17 (logout/alert)
+        DeepCleaningPage.tsx    ← migrasi #3; UPDATE §17 (sapu bersih alert/confirm)
         LaporanKerusakanPage.tsx ← migrasi #3
         PlottingOBPage.tsx      ← migrasi #3
-        StockOpnamePage.tsx     ← migrasi #3
+        StockOpnamePage.tsx     ← migrasi #3; UPDATE §17 (sapu bersih alert/confirm)
+        InspeksiFasilitasPage.tsx ← UPDATE §17 (sapu bersih alert)
         BukuTamuSecurity.tsx    ← migrasi #4
-        PengaturanJadwalSecurity.tsx ← migrasi #4
-        PatroliSecurityPage.tsx ← migrasi #4
-        PaketPage.tsx           ← migrasi #4
-        DriverDashboardPage.tsx ← migrasi #4
-        DashboardQHSEPage.tsx   ← migrasi #4
+        PengaturanJadwalSecurity.tsx ← **DEAD CODE** (ketemu sesi §17 — bukan yang di-routing, lihat catatan di app/dashboard/security/jadwal/page.tsx di atas)
+        PatroliSecurityPage.tsx ← migrasi #4; UPDATE §17 (3 sesi patroli, §17A)
+        PaketPage.tsx           ← **DEAD CODE** (ketemu sesi §17 — bukan yang di-routing, lihat catatan di app/dashboard/security/paket/page.tsx di atas)
+        DriverDashboardPage.tsx ← migrasi #4; UPDATE §17 (logout + ~24 titik alert disapu bersih)
+        DashboardQHSEPage.tsx   ← migrasi #4; UPDATE §17 (logout)
     hooks/
-      useAuthGuard.ts
+      useAuthGuard.ts          ← UPDATE §17 (logoutWithConfirm() baru, gate akses pakai showToast bukan alert)
       useFcmSetup.ts
+      usePendingTask.ts        ← BARU §17 (hook generik buat banner pengingat)
       lib/                    ← isi belum diperiksa
     lib/
+      emailTemplates.ts        ← BARU §17 (HTML email paket & overtime)
       firebase.ts
       notify.ts
+      shift.ts                 ← BARU §17 (kalkulator shift/sesi patroli)
 ```
 
 **Catatan:** restrukturisasi folder (Fin-Samudera style, `components/pages/` per halaman) sudah selesai tahap #3 penuh dan **#4 penuh** (dashboard/ob semua, dashboard/security semua, dashboard/driver, dashboard/qhse) — lihat §4. Sisa: #5 (`admin/*`) dan #6 (portal utama `app/page.tsx`), keduanya belum disentuh migrasi strukturnya. Sesi 24 & 25 Agustus sempat loncat ke portal utama & admin/kendaraan buat kerjain fitur baru & perbaikan tampilan duluan (bukan urutan migrasi foldernya), jadi `page.tsx` portal & `admin/kendaraan/page.tsx` **masih dalam bentuk lama** (belum dipecah ke `components/pages/`), isinya aja yang diupdate berkali-kali.
@@ -802,3 +811,82 @@ Diminta "perbaiki tampilannya", referensi tampilan `src/app/page.tsx` (portal ut
 `npx tsc --noEmit`/`npx eslint` (project-wide): 0 error. `npm run build`: sukses, 35 route ter-generate. Dicek di browser: dropdown "Karyawan" di `parkir` nampilin field nama + datalist keisi nama karyawan real (Irene Yuliasri, Suaib, dst dari `employees_directory`), dropdown armada nampilin nama kendaraan terkini yang bener (sinkron sama `admin/kendaraan`), kolom "Karyawan / Driver" ter-rename di `admin/kendaraan`. `DriverDashboardPage`: hero merah + top bar sticky kebaca benar di desktop, bottom-nav pill+FAB kebaca benar di viewport mobile 375×812. Klik tombol nav sempat kena timeout tooling browser pane berulang kali (bukan indikasi bug — dikonfirmasi via `scrollIntoView` langsung lewat JS bahwa target elemen & scroll behavior-nya benar).
 
 **Sudah di-commit + push (dev→main) + build + deploy** sesuai instruksi eksplisit — dijalankan tanpa jeda konfirmasi tambahan setelah verifikasi di atas kelar, bareng sisa pekerjaan §14 yang masih numpuk belum ke-commit. Lihat §0B untuk ringkasan status akhir.
+
+---
+
+## 17. Overhaul Notifikasi: Sesi Patroli 3x, Reminder APAR, Email Rapi, Banner Persisten, Konsolidasi Modal Logout & Sapu Bersih alert()/confirm() (30 Agustus 2026, sesi baru)
+
+Diminta user secara eksplisit (kutipan inti): patroli jadi 3 sesi dengan minimal 2x wajib per shift + notif reminder terus muncul kalau belum selesai; reminder APAR H-3 sebelum tgl 30 tiap bulan; email notif paket diterima (dengan foto) dan overtime dirapikan jadi bentuk form yang jelas (nama penerima, penginput, jam, tanggal); "rapihkan semua notif yang punya info ke email dan yang punya notif reminder termasuk checklist kebersihan, buat agar notifnya terus masuk ke aplikasi sebagai pop notif pengingat"; modal logout diseragamkan; notif lain yang masih pakai dialog default browser diganti modal cantik.
+
+Sesi ini sempat terputus di tengah jalan (laptop mati kehabisan baterai) tepat saat mengerjakan file terakhir dari daftar sapu-bersih (`admin/broadcast/page.tsx`, baru separuh). Begitu resume, working tree dicek ulang dari nol (`git status`/`git diff --stat`) buat konfirmasi persis progress terakhir sebelum lanjut — bukan asumsi dari memori chat.
+
+### 17A. Patroli Security — 3 sesi, minimal 2x per shift
+
+**Kalkulator baru `src/lib/shift.ts`** — `hitungShiftSesi(now)` menghitung `{tanggal_shift, shift, sesi}` dari waktu WITA (`waktuWITASekarang()`, pola `toLocaleString("en-US",{timeZone:"Asia/Makassar"})` yang sudah dipakai `patroli-reminder.mjs`, bukan `+8h` manual). Aturan: Shift 1 (08-20 WITA) → Sesi 1 (08-12)/Sesi 2 (12-16)/Sesi 3 (16-20); Shift 2 (20-08) → Sesi 1 (20-00)/Sesi 2 (00-04)/Sesi 3 (04-08). Minimal 2 sesi BERBEDA per shift (`sesiMinimumTerpenuhi()`). **Catatan penting**: `scripts/patroli-reminder.mjs` gak bisa import file TypeScript ini (plain Node ESM, tanpa build step) — logikanya diduplikasi manual di sana dengan komentar penanda, kalau aturan sesi berubah HARUS diubah di 2 tempat.
+
+- **`PatroliSecurityPage.tsx`**: `handleSubmitFinal` sekarang menyimpan `tanggal_shift`/`shift`/`sesi` (dihitung SAAT SUBMIT, bukan saat mulai scan) ke `security_patrols`. Kartu baru "Kepatuhan Sesi Patroli" di atas form — 3 kotak Sesi 1/2/3 dengan jam masing-masing, warna hijau (sudah lapor)/kuning (sesi aktif)/abu (lain), progres "X/2 Sesi Minimum" dihitung dari `riwayatSaya` yang sudah ditarik (gak perlu query Firestore baru). Layar sukses submit juga nampilin sesi yang baru tercatat.
+- **`admin/monitor-security/page.tsx`**: tabel baru "Rekap Kepatuhan Sesi Patroli" di tab PATROLI — grup `(tanggal_shift, shift, petugas)` dari `security_patrols` (`fPatrols`, sudah kena filter Bulan/Tahun yang ada), DIGABUNG dengan jadwal roster periode aktif (`rosterData`/`daftarTanggalPeriode` yang sudah ada buat tab ROSTER) supaya kombinasi yang DIJADWALKAN tapi nihil laporan sama sekali ikut kelihatan sebagai "Tidak Ada Laporan" (bukan cuma yang laporannya kurang). Status: Memenuhi Minimum (≥2 sesi, hijau) / Kurang (1 sesi, kuning) / Tidak Ada Laporan (0 sesi, merah). Data lama (sebelum fitur ini) otomatis dilewati di rekap (gak ada `tanggal_shift`), ditandai lewat catatan teks, bukan dianggap error.
+  - **Bug ke-trigger pas nulis**: awalnya blok rekap ditaruh SEBELUM deklarasi `daftarTanggalPeriode` (dipakai duluan sebelum `const`-nya ada) → `tsc --noEmit` nangkep 2 error (`used before its declaration`/`used before being assigned`). Diperbaiki dengan mindahin blok rekap ke SETELAH deklarasi `daftarTanggalPeriode`+`fVisitors`/`fPackages`. Pelajaran: kalau nambah derivasi baru yang gabungin 2 state yang udah ada, cek urutan deklarasi dulu, jangan asumsi React component body bebas urutan kayak JSX.
+- **`scripts/patroli-reminder.mjs`**: sebelum kirim WA reminder, sekarang query `security_patrols` (petugas+tanggal_shift+shift) buat cek udah 2 sesi atau belum (`hitungSesiTerpenuhi`/`saringBelumPatuh`) — kalau sudah, reminder di-skip (gak nyerocos terus walau jadwal cron masih jalan). Slot "pre-shift" (30 menit sebelum shift ganti) sekarang beda pesan tergantung status: kalau belum 2 sesi, pesannya jadi eskalasi ("⚠️ shift hampir berakhir, sesi patroli belum terpenuhi") bukan pesan netral biasa. 10 slot cron & anti-double-kirim (`reminder_patroli_log`) yang sudah ada TIDAK diubah.
+- **Banner baru `PatroliShiftBanner.tsx`** (pakai `usePendingTask`, lihat §17D) — sticky, query `security_patrols` utk sesi berjalan, hilang otomatis begitu 2/3 sesi terpenuhi.
+
+### 17B. Reminder Inspeksi APAR — fitur baru total (sebelumnya gak ada sama sekali)
+
+- **Script baru `scripts/apar-reminder.mjs`** (mirror struktur `patroli-reminder.mjs`) — hitung `deadlineDay = min(30, akhir_bulan)` (Februari otomatis kepakai tanggal 28/29 lewat `new Date(y, m+1, 0).getDate()`), fire kalau `sisaHari` (deadline - hari ini) antara 0-3. Baca `apar_units`, filter yang `terakhir_inspeksi.bulan_tahun !== bulanIni` — kalau semua udah selesai, skip (gak nge-spam). Kirim ke 2 audiens: Security bertugas hari ini (Shift 1 & 2 digabung dari `security_monthly_schedules`+`users_master`, pesan aksi "segera selesaikan") dan Admin GA/QHSE (`users_master where departemen in ["Admin GA","QHSE"]`, pesan monitoring). Guard anti-double-kirim per hari (`reminder_apar_log/{tanggal}`).
+- **Workflow baru `.github/workflows/apar-reminder.yml`** — 1 cron harian (~08:00 WITA), logika H-3 di dalam script yang nentuin kirim/skip (beda dari patroli yang 10 slot/hari, karena APAR gak terikat sesi/shift tertentu).
+- **Temuan penting**: `kirimEmail()` (`src/lib/notify.ts`) pakai `@emailjs/browser` — SDK ini cuma jalan di browser, gak bisa dipanggil dari script Node/GitHub Actions. Jadi reminder APAR (sama kayak semua reminder cron lain di project ini) cuma WA + banner in-app, TANPA email dari cron. Ini sesuai juga sama permintaan awal user (APAR gak diminta email, cuma "notif akan masuk").
+- **Banner baru `AparInspectionBanner.tsx`** — query `apar_units` langsung (bukan koleksi notif), tampil sticky HANYA dalam window H-3 sampai deadline, warna kuning di H-3/H-2/H-1, MERAH (urgent) persis di hari deadline atau lewat. Dipasang di `dashboard/security/layout.tsx` (Security) DAN `admin/apar/page.tsx` (biar Admin GA/QHSE juga lihat).
+
+### 17C. Email Paket & Overtime — HTML form rapi (`src/lib/emailTemplates.ts`, baru)
+
+Helper `emailShell()`/`fieldRow()`/`statusBadge()` — HTML inline-styled berbentuk tabel (bukan `<style>` terpisah, biar aman di email client), header merah gradient khas SIBM, badge status warna hijau/merah gantiin `*bintang*` gaya WhatsApp.
+
+- **`buildPaketEmailHtml()`** — field: Penerima, Diinput oleh (Security), Tanggal, Jam Diterima, Jenis Barang+Keterangan, Kurir, plus foto bukti (`foto_bukti_url`, base64 data URI langsung di-`<img>`-kan, gak perlu upload terpisah).
+  - **`dashboard/security/paket/page.tsx`**: `kirimNotifikasiPaketDiterima` dirombak — sebelumnya kalau `kontak.no_wa` kosong, SELURUH notifikasi (termasuk email walau `kontak.email` ada) ke-skip total. Sekarang WA dan Email dicek & dikirim INDEPENDEN. Ini juga menjawab langsung permintaan user "paket diterima masuk ke email serta fotonya" — sebelumnya paket SAMA SEKALI gak pernah kirim email, cuma WA.
+- **`buildOvertimeEmailHtml()`** — field: Nama Yang Lembur, Departemen, Tanggal, Jam Mulai, Jam Selesai, badge status DISETUJUI/DITOLAK, alasan penolakan kalau ada.
+  - **`admin/overtime/page.tsx`**: `kirimNotifikasiOvertime` — jalur WA TETAP pakai teks `*bold*` (itu format WhatsApp yang benar, bukan bug), tapi jalur EMAIL sekarang pakai `buildOvertimeEmailHtml()`. Ini sekaligus MEMPERBAIKI BUG: sebelumnya teks WA mentah (termasuk bintang literal `*DISETUJUI*`) langsung dikirim apa adanya ke email, jadi bintangnya kebaca sebagai karakter biasa di inbox, bukan bold.
+- **Risiko yang perlu diverifikasi manual** (gak bisa dicek dari sini): `kirimEmail()` cuma kirim 4 variabel (`to_email`,`to_name`,`subject`,`message`) ke template EmailJS yang di-desain lewat dashboard EmailJS eksternal. Diasumsikan template itu merender `message` sebagai HTML mentah (berdasar pola `formatPesanUntukEmail` yang sudah ada di `src/app/page.tsx`, dipakai buat notif Admin GA), tapi belum pernah dites kirim email SUNGGUHAN buat paket/overtime dengan HTML baru ini. Kalau ternyata template EmailJS meng-escape HTML (nampilin tag mentah, bukan dirender), perlu masuk ke dashboard EmailJS dan ganti setting variabel `message` jadi tipe HTML.
+
+### 17D. Banner Pengingat PERSISTEN — beda arsitektur dari toast lama
+
+**Masalah lama**: `NotifikasiPatroliListener.tsx` (satu-satunya yang benar-benar di-mount, di `layout.tsx`) pakai pola fire-once — begitu toast tampil sekali, doc Firestore langsung ditandai `dibaca:true` (mau usernya beneran baca atau kagak), abis itu gak ada jejak lagi walau tugasnya masih belum selesai. `NotifikasiChecklistListener.tsx` & `NotifikasiKendaraanListener.tsx` (pola sama) ternyata malah gak pernah ke-mount sama sekali (dead code, walau `NotifikasiKendaraanListener.tsx` sendiri punya komentar bilang "harus di-mount di layout.tsx").
+
+**Solusi baru** — bukan nambal pola lama, tapi arsitektur beda: banner query LANGSUNG ke koleksi SUMBER DATA (`security_patrols`, `apar_units`, `ob_checklists`+`daily_plots`), bukan ke koleksi notif terpisah yang punya flag `dibaca`. Jadi otomatis reaktif — hilang begitu tugas kelar, muncul lagi kalau ternyata belum, TANPA perlu nulis/update doc apapun ke Firestore.
+
+- **`src/hooks/usePendingTask.ts`** (baru) — hook generik, terima `queryBuilder()` + `deps` + `isComplete(docs)`, bungkus `onSnapshot`, return `{pending, loading}`.
+- **`src/components/ui/StickyBanner.tsx`** (baru) — presentational, sticky di atas halaman, tone `warning`(kuning)/`urgent`(merah), TIDAK bisa ditutup permanen — cuma bisa "disembunyikan" jadi pill kecil (`Sembunyikan`), dan otomatis kembali muncul PENUH kalau `resetKey` berubah (ganti sesi/hari) — supaya user gak bisa matiin pengingat selama tugas beneran belum selesai.
+- **`ChecklistOBBanner.tsx`** (baru, buat "checklist kebersihan" yang diminta eksplisit user) — baca `daily_plots/{tanggal}.plot_lantai` (penugasan area hari ini) buat area yang di-assign ke user, lalu cek `ob_checklists where pic_bertugas==nama && waktu_selesai >= now-3jam` (threshold SAMA PERSIS dengan yang sudah dipakai `scripts/checklist-reminder.mjs`, biar konsisten). Dipasang di `dashboard/ob/layout.tsx` (baru).
+- **Layout baru**: `dashboard/security/layout.tsx` (mount `PatroliShiftBanner`+`AparInspectionBanner`) dan `dashboard/ob/layout.tsx` (mount `ChecklistOBBanner`) — sebelumnya KEDUA folder ini gak punya `layout.tsx` sama sekali, cuma `page.tsx` per route.
+- **Bonus fix (di luar scope inti, tapi murah & aman)**: `NotifikasiKendaraanListener.tsx` (pola watermark localStorage-nya sebenarnya paling bagus dari 3 listener lama) di-mount ke `layout.tsx` root, sejajar `NotifikasiPatroliListener` — restorasi fungsi yang sebelumnya gak jalan sama sekali. `NotifikasiChecklistListener.tsx` DIBIARKAN tidak di-mount (digantikan `ChecklistOBBanner` yang arsitekturnya lebih tepat), gak dihapus filenya.
+
+### 17E. Konsolidasi Modal Logout
+
+`useAuthGuard.ts` dapat fungsi baru `logoutWithConfirm(confirmFn, router, redirectTo?)` — pakai `useConfirm()` yang SUDAH ADA (`ConfirmProvider.tsx`, sudah jadi standar di 10+ tempat lain), variant `danger`, judul "Keluar dari Akun". Menggantikan 6 implementasi beda-beda:
+
+1. `admin/page.tsx` — modal custom (`showLogoutModal` state + `<Modal>`) dihapus total, ganti 1 baris `logoutWithConfirm(confirm, router)`.
+2. `dashboard/security/page.tsx` — sama (ini emang copy-paste dari #1, komentarnya sendiri bilang begitu).
+3. `DashboardQHSEPage.tsx` — `window.confirm()` native → `logoutWithConfirm`.
+4. `DashboardOBPage.tsx` — sama.
+5. `QhseSboPage.tsx` — SEBELUMNYA TANPA KONFIRMASI SAMA SEKALI (`localStorage.clear(); router.push("/")` langsung di `onClick`) → ditambah `logoutWithConfirm` (perubahan perilaku yang disengaja).
+6. `DriverDashboardPage.tsx` — sama, sebelumnya `logout(router,"/")` tanpa konfirmasi.
+
+`Modal.tsx` sendiri TIDAK dihapus/diubah — masih dipakai di banyak tempat lain (uji-emisi, kendaraan, apar, overtime, dll), cuma 2 pemakaian logout-nya (#1, #2) yang diganti.
+
+### 17F. Sapu Bersih `alert()` / `window.confirm()` — mekanis, app-wide
+
+Pola: `alert(x)` → `showToast(x, "error"|"success"|"warning"|"info")` (dibaca konteks tiap titik — jalur gagal/validasi = error/warning, jalur berhasil = success); `window.confirm(x)` → `await confirm({...})` dari `useConfirm()`. Gate akses (`if (!authorized) { alert(...); router.push(...); }`) diubah jadi `showToast(...); setTimeout(() => router.push(...), 1200);` — toast non-blocking butuh jeda dikit sebelum redirect biar sempat kebaca, beda dari `alert()` lama yang blocking (user harus klik OK dulu baru lanjut).
+
+File yang disentuh (24 file): `useAuthGuard.ts` (gate akses terpusat — otomatis benerin banyak halaman lain yang makai hook ini), `PatroliSecurityPage.tsx`, `admin/overtime/page.tsx` (+ `window.prompt()` buat alasan penolakan SENGAJA DIBIARKAN — gak ada pola pengganti prompt-dengan-teks di `Modal.tsx`/`ConfirmProvider.tsx`, di luar scope), `dashboard/security/page.tsx`, `DriverDashboardPage.tsx` (paling banyak, ~24 titik — status personel, log kendaraan, inspeksi mingguan, servis/emisi, odometer, klaim lembur), `admin/broadcast/page.tsx`, `admin/monitor-security/page.tsx`, `admin/monitor-ob/page.tsx`, `dashboard/security/jadwal/page.tsx`, `dashboard/security/parkir/page.tsx`, `DeepCleaningPage.tsx`, `InspeksiFasilitasPage.tsx`, `StockOpnamePage.tsx`, `ChecklistOBPage.tsx`. Titik yang SUDAH BENAR sebelumnya (dijadikan acuan pola, TIDAK disentuh): `admin/atk/page.tsx`, `admin/apar/page.tsx`, `QhseSboPage.tsx` (bagian non-logout), `PlottingOBPage.tsx`, `BukuTamuSecurity.tsx`.
+
+**Temuan sampingan**: `src/components/pages/PengaturanJadwalSecurity.tsx` ternyata dead code (bukan yang di-routing — `src/app/dashboard/security/jadwal/page.tsx` sendiri berisi implementasi penuh 552 baris, BUKAN wrapper tipis kayak yang dicatat di §2/§4 sebagai "sudah migrasi"). File dead code ini masih punya `alert()`/`window.confirm()` lama yang TIDAK ikut diperbaiki (karena gak pernah jalan) — kalau nanti mau dipakai lagi atau dihapus, perlu diperiksa ulang.
+
+### 17G. Verifikasi
+
+- `npx tsc --noEmit`: 0 error (sempat ada 2 error urutan-deklarasi di `admin/monitor-security/page.tsx`, sudah diperbaiki — lihat §17A).
+- `npx eslint .`: 0 error (sempat ada 6 error BARU `react-hooks/set-state-in-effect` dari komponen banner baru — `AparInspectionBanner`, `ChecklistOBBanner`×2, `PatroliShiftBanner`, `StickyBanner`, `usePendingTask` — semuanya diperbaiki pakai pola `setTimeout(() => setState(...), 0)` yang emang sudah jadi konvensi project ini buat setState-di-effect, lihat `useAuthGuard.ts`/`PatroliSecurityPage.tsx` versi lama). 104 warning (naik dari 98, semuanya `missing dependency: showToast`, bukan error).
+- `npm run build`: sukses, 32 route.
+- `node --check` buat 2 script baru (`apar-reminder.mjs`, `patroli-reminder.mjs`): OK.
+- Verifikasi visual di dev server (data production REAL, gak ada tulis/submit data test): `dashboard/security/patroli` — banner "Sesi patroli minimum belum terpenuhi — Shift 1 · Sesi 3 sedang berjalan" DAN banner "Inspeksi APAR sudah jatuh tempo (tanggal 30)!" muncul benar (waktu WITA & tanggal hari ini persis 30 Agustus = deadline APAR bulan ini, jadi status "urgent" kebaca tepat); kartu progres sesi di form patroli nampilin 3 kotak jam yang benar. `admin/monitor-security` tab PATROLI — tabel "Rekap Kepatuhan Sesi Patroli" muncul & keisi (baris "Tidak Ada Laporan" buat jadwal roster ke depan yang belum ada log — sesuai ekspektasi karena field sesi baru dirilis sesi ini). Console browser bersih kedua halaman, gak ada error index Firestore (query 3× `where` equality di `security_patrols` otomatis kepakai index bawaan, gak butuh composite index manual).
+- **Belum dites**: kirim email sungguhan (lihat risiko di §17C).
+
+**BELUM di-commit** — nunggu instruksi eksplisit user sebelum commit+push+deploy, sesuai pola kerja project ini.

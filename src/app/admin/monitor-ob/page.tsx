@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { useToast } from "../../../components/ui/ToastProvider";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -166,6 +167,7 @@ function getTahunBulanInspeksi(item: InspeksiLog): { tahun: number; bulan: numbe
 
 export default function MonitorOBPage() {
   const router = useRouter();
+  const showToast = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminName, setAdminName] = useState("Admin");
   const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "INSPEKSI" | "PLOT">("CHECKLIST");
@@ -197,8 +199,8 @@ export default function MonitorOBPage() {
     const nama = localStorage.getItem("pic_nama");
 
     if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      alert("Akses Ditolak! Halaman ini khusus Administrator.");
-      router.push("/dashboard");
+      showToast("Akses Ditolak! Halaman ini khusus Administrator.", "error");
+      setTimeout(() => router.push("/dashboard"), 1200);
       return;
     }
     setTimeout(() => setAdminName(nama || "Admin"), 0);

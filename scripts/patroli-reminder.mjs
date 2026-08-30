@@ -78,6 +78,26 @@ const kemarin = formatTanggal(new Date(now.getTime() - 24 * 60 * 60 * 1000));
 // (Bug lama: reminder 23:00 selalu pakai "kemarin" padahal seharusnya "hari ini".)
 const tanggalShiftMalamAktif = now.getHours() >= 12 ? hariIni : kemarin;
 
+// ==========================================
+// SESI PATROLI -- duplikat manual dari src/lib/shift.ts (scripts/ plain Node ESM,
+// tidak bisa import TypeScript/path alias). Kalau aturan sesi berubah, ubah juga di sana.
+// Shift 1 (08-20): Sesi1 08-12, Sesi2 12-16, Sesi3 16-20
+// Shift 2 (20-08): Sesi1 20-00, Sesi2 00-04, Sesi3 04-08
+// Minimal 2 dari 3 sesi per shift harus ada laporan patroli.
+// ==========================================
+const MINIMUM_SESI_PER_SHIFT = 2;
+
+async function hitungSesiTerpenuhi(tanggalShift, shiftLabel, namaPetugas) {
+  const snap = await db
+    .collection("security_patrols")
+    .where("petugas", "==", namaPetugas)
+    .where("tanggal_shift", "==", tanggalShift)
+    .where("shift", "==", shiftLabel)
+    .get();
+  const sesiUnik = new Set(snap.docs.map((d) => d.data().sesi).filter(Boolean));
+  return sesiUnik.size >= MINIMUM_SESI_PER_SHIFT;
+}
+
 // Guard anti-double-kirim: kalau workflow ke-trigger dua kali dan sama-sama nyangkut ke
 // slot yang sama di hari yang sama, jangan kirim WA dua kali ke orang yang sama.
 const idLogHariIni = `${hariIni}_${slotAktif.id}`;
@@ -150,6 +170,18 @@ async function kirimKeSemua(picList, pesan, jenis) {
   picList.forEach(pic => console.log(`Terkirim ke ${pic.nama} (${pic.whatsapp})`));
 }
 
+// Saring PIC yang SUDAH memenuhi minimal sesi patroli shift ini -- supaya reminder berhenti
+// otomatis begitu syarat terpenuhi, bukan terus nyerocos sampai jadwal cron habis.
+async function saringBelumPatuh(picList, tanggalShift, shiftLabel) {
+  const hasil = [];
+  for (const pic of picList) {
+    const sudahPatuh = await hitungSesiTerpenuhi(tanggalShift, shiftLabel, pic.nama);
+    if (!sudahPatuh) hasil.push(pic);
+    else console.log(`${pic.nama} sudah memenuhi minimal ${MINIMUM_SESI_PER_SHIFT} sesi (${tanggalShift} ${shiftLabel}), skip reminder.`);
+  }
+  return hasil;
+}
+
 // ==========================================
 // EKSEKUSI SESUAI JENIS SLOT
 // ==========================================
@@ -167,21 +199,23 @@ async function jalankan() {
   });
 
   if (slotAktif.jenis === "reminder") {
-    const list =
-      slotAktif.shift === "pagi"
-        ? await ambilPicShift(hariIni, "Shift 1")
-        : await ambilPicShift(tanggalShiftMalamAktif, "Shift 2");
+    const shiftLabel = slotAktif.shift === "pagi" ? "Shift 1" : "Shift 2";
+    const tanggalShift = slotAktif.shift === "pagi" ? hariIni : tanggalShiftMalamAktif;
+    const listSemua = await ambilPicShift(tanggalShift, shiftLabel);
+    const listBelumPatuh = await saringBelumPatuh(listSemua, tanggalShift, shiftLabel);
     await kirimKeSemua(
-      list,
+      listBelumPatuh,
       "⏰ Reminder: waktunya patroli keliling. Jangan lupa scan & catat semua titik ya.",
       "reminder"
     );
   } else if (slotAktif.jenis === "pre-shift") {
     if (slotAktif.shift === "pagi") {
+      const listBerakhir = await ambilPicShift(hariIni, "Shift 1");
+      const listBelumPatuh = await saringBelumPatuh(listBerakhir, hariIni, "Shift 1");
       await kirimKeSemua(
-        await ambilPicShift(hariIni, "Shift 1"),
-        "🔔 30 menit lagi shift kamu selesai. Pastikan patroli terakhir & laporan lengkap sebelum handover.",
-        "pre-shift"
+        listBelumPatuh,
+        `⚠️ Shift kamu hampir berakhir dan sesi patroli minimum (${MINIMUM_SESI_PER_SHIFT} dari 3 sesi) BELUM terpenuhi. Segera patroli sebelum handover!`,
+        "pre-shift-escalasi"
       );
       await kirimKeSemua(
         await ambilPicShift(hariIni, "Shift 2"),
@@ -189,10 +223,12 @@ async function jalankan() {
         "pre-shift"
       );
     } else {
+      const listBerakhir = await ambilPicShift(kemarin, "Shift 2");
+      const listBelumPatuh = await saringBelumPatuh(listBerakhir, kemarin, "Shift 2");
       await kirimKeSemua(
-        await ambilPicShift(kemarin, "Shift 2"),
-        "🔔 30 menit lagi shift kamu selesai. Pastikan patroli terakhir & laporan lengkap sebelum handover.",
-        "pre-shift"
+        listBelumPatuh,
+        `⚠️ Shift kamu hampir berakhir dan sesi patroli minimum (${MINIMUM_SESI_PER_SHIFT} dari 3 sesi) BELUM terpenuhi. Segera patroli sebelum handover!`,
+        "pre-shift-escalasi"
       );
       await kirimKeSemua(
         await ambilPicShift(hariIni, "Shift 1"),

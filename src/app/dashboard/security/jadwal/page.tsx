@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useAuthGuard } from "../../../../hooks/useAuthGuard";
+import { useToast } from "../../../../components/ui/ToastProvider";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -110,6 +111,7 @@ const labelShift = (s: string) => (s === "Shift 1" ? "S1" : s === "Shift 2" ? "S
 
 export default function PengaturanJadwalSecurity() {
   const router = useRouter();
+  const showToast = useToast();
 
   // Akses & sesi login sekarang dari hook terpusat (menggantikan blok localStorage manual)
   const { session, isReady: isAuthReady } = useAuthGuard({
@@ -204,7 +206,14 @@ export default function PengaturanJadwalSecurity() {
         const q = query(collection(db, "users_master"), where("departemen", "==", "Security"));
         const snap = await getDocs(q);
         const staffList: string[] = [];
-        snap.forEach(docSnap => staffList.push(docSnap.data().nama));
+        snap.forEach(docSnap => {
+          const data = docSnap.data();
+          const staffRole: string = data.role || "Staff";
+          const isMagangStaff = staffRole.toLowerCase().includes("magang");
+          // Anak magang gak ikut plotting jadwal shift (sama seperti dashboard/security/page.tsx),
+          // jadi gak dimasukin ke roster -- gak perlu dijadwalkan shift/off dan gak ikut pola 2-2-2.
+          if (!isMagangStaff) staffList.push(data.nama);
+        });
         // Urutan kolom: Danru/Awaluddin dulu, lalu Ibrahim, lalu Agus, sisanya alfabetis
         const prioritasNama = (nama: string): number => {
           const n = nama.toLowerCase();
@@ -280,7 +289,7 @@ export default function PengaturanJadwalSecurity() {
     if (matriksJadwal.length === 0) return;
     const update = isiPolaRotasi(matriksJadwal, timpaData);
     setMatriksJadwal(update);
-    alert(`✨ Pola 2-2-2 terisi untuk ${update.length} hari (${timpaData ? "SEMUA data ditimpa" : "hanya sel kosong yang diisi, data lama tetap aman"}). Cek dulu sebelum diterbitkan.`);
+    showToast(`Pola 2-2-2 terisi untuk ${update.length} hari (${timpaData ? "SEMUA data ditimpa" : "hanya sel kosong yang diisi, data lama tetap aman"}). Cek dulu sebelum diterbitkan.`, "info");
   };
 
   // =========================================================================
@@ -338,7 +347,7 @@ export default function PengaturanJadwalSecurity() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error(error);
-      alert("Gagal menyimpan jadwal.");
+      showToast("Gagal menyimpan jadwal.", "error");
     } finally {
       setIsLoading(false);
     }

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useToast } from "../components/ui/ToastProvider";
 
 // =============================================================================
 // SATU-SATUNYA SUMBER LOGIKA ROLE/AKSES DI SELURUH APLIKASI.
@@ -91,6 +92,7 @@ export interface AuthGuardResult {
  */
 export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
   const router = useRouter();
+  const showToast = useToast();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -103,9 +105,9 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
     const sudahLogin = nama.trim().length > 0;
 
     if (!sudahLogin || !roleOk || !deptOk) {
-      alert(options.deniedMessage || "Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman ini.");
-      router.push(options.redirectTo || "/");
-      return;
+      showToast(options.deniedMessage || "Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman ini.", "error");
+      const t = setTimeout(() => router.push(options.redirectTo || "/"), 1200);
+      return () => clearTimeout(t);
     }
 
     // setState langsung di body effect kena lint react-hooks/set-state-in-effect -> bungkus setTimeout(...,0)
@@ -126,4 +128,39 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
 export function logout(router: { push: (path: string) => void }, redirectTo: string = "/") {
   localStorage.clear();
   router.push(redirectTo);
+}
+
+/** Opsi dialog konfirmasi, cocok dengan bentuk yang diminta useConfirm() (ConfirmProvider.tsx). */
+interface KonfirmasiLogoutOptions {
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+  variant: "danger";
+}
+
+/**
+ * Tombol Keluar/Logout dengan modal konfirmasi SERAGAM di seluruh halaman —
+ * menggantikan 6 implementasi berbeda yang sebelumnya ada (modal custom
+ * copy-paste, window.confirm() native, atau tanpa konfirmasi sama sekali).
+ *
+ * Cara pakai di halaman manapun:
+ *   const confirm = useConfirm();
+ *   const router = useRouter();
+ *   <button onClick={() => logoutWithConfirm(confirm, router)}>Keluar</button>
+ */
+export async function logoutWithConfirm(
+  confirmFn: (options: KonfirmasiLogoutOptions) => Promise<boolean>,
+  router: { push: (path: string) => void },
+  redirectTo: string = "/"
+): Promise<boolean> {
+  const yakin = await confirmFn({
+    title: "Keluar dari Akun",
+    message: "Yakin ingin keluar? Anda perlu login kembali untuk mengakses halaman ini.",
+    confirmText: "Ya, Keluar",
+    cancelText: "Batal",
+    variant: "danger",
+  });
+  if (yakin) logout(router, redirectTo);
+  return yakin;
 }

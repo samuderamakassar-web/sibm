@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useToast } from "@/components/ui/ToastProvider";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -310,6 +311,7 @@ interface ChecklistLog {
 
 export default function ChecklistOBPage() {
   const router = useRouter();
+  const showToast = useToast();
 
   // Identitas & Navigasi Utama
   const [picName, setPicName] = useState("");
@@ -358,8 +360,8 @@ export default function ChecklistOBPage() {
       const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
 
       if (!nama || !dept.includes("ob & cs")) {
-        alert("Akses Ditolak! Halaman ini khusus staf OB & CS.");
-        router.push("/dashboard/ob");
+        showToast("Akses Ditolak! Halaman ini khusus staf OB & CS.", "error");
+        setTimeout(() => router.push("/dashboard/ob"), 1200);
         return;
       }
       setPicName(nama);
@@ -479,7 +481,7 @@ export default function ChecklistOBPage() {
             });
           } catch (err) {
             console.error(err);
-            alert("Gagal upload foto, coba lagi.");
+            showToast("Gagal upload foto, coba lagi.", "error");
           } finally {
             setUploadingTask(null);
           }
@@ -523,7 +525,7 @@ export default function ChecklistOBPage() {
     // Guard: kalau selectedArea adalah area bersama (Lantai 5) dan barusan diselesaikan
     // staf lain (race condition — user udah mulai isi sebelum rekannya submit duluan).
     if (plotMapHariIni?.[selectedArea] === NILAI_BERSAMA && areaBersamaSelesai.has(selectedArea)) {
-      alert(`✅ ${selectedArea} baru saja diselesaikan oleh rekan tim lain. Cukup 1x per hari, tidak perlu dikerjakan ulang.`);
+      showToast(`${selectedArea} baru saja diselesaikan oleh rekan tim lain. Cukup 1x per hari, tidak perlu dikerjakan ulang.`, "info");
       setStep(1);
       return;
     }
@@ -533,7 +535,7 @@ export default function ChecklistOBPage() {
 
     const belumDijawab = semuaPertanyaan.some(p => !jawabanTugas[p.id]);
     if (belumDijawab) {
-      return alert("✅ Mohon isi checklist Ya/Tidak untuk semua item di setiap segment sebelum mengirim laporan!");
+      return showToast("Mohon isi checklist Ya/Tidak untuk semua item di setiap segment sebelum mengirim laporan!", "warning");
     }
 
     const fotoValid = fotoList.filter(f => f.before && f.after) as FotoPasangan[];
@@ -563,7 +565,7 @@ export default function ChecklistOBPage() {
         foto_bukti: fotoValid,
       });
 
-      alert("Laporan Kebersihan berhasil dikirim! Riwayat visual Anda telah terekam di sistem.");
+      showToast("Laporan Kebersihan berhasil dikirim! Riwayat visual Anda telah terekam di sistem.", "success");
       setJawabanTugas({});
       setFotoList([{}]);
       setStep(1);
@@ -571,7 +573,7 @@ export default function ChecklistOBPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan sistem saat mengirim laporan.");
+      showToast("Terjadi kesalahan sistem saat mengirim laporan.", "error");
     } finally {
       setIsLoading(false);
     }

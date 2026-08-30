@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
-import Modal from "../../../components/ui/Modal";
+import { useConfirm } from "../../../components/ui/ConfirmProvider";
+import { useToast } from "../../../components/ui/ToastProvider";
+import { logoutWithConfirm } from "../../../hooks/useAuthGuard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -69,11 +71,12 @@ interface OvertimeItemRequest {
 
 export default function SecurityDashboard() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const showToast = useToast();
 
   const [picName, setPicName] = useState<string>("");
   const [picRole, setPicRole] = useState<string>("");
   const [isReady, setIsReady] = useState<boolean>(false);
-  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
 
   const [securityStaff, setSecurityStaff] = useState<string[]>([]);
   const [hariIniShift, setHariIniShift] = useState<string>("Tidak Ada Shift / Belum Diplot");
@@ -210,14 +213,7 @@ export default function SecurityDashboard() {
     return () => { unsub1(); unsub2(); };
   }, [picName]);
 
-  const handleKeluar = () => setShowLogoutModal(true);
-
-  const confirmLogout = () => {
-    localStorage.removeItem("pic_nama");
-    localStorage.removeItem("pic_dept");
-    localStorage.removeItem("pic_role");
-    router.push("/");
-  };
+  const handleKeluar = () => logoutWithConfirm(confirm, router);
 
   const handlePrint = () => {
     setWaktuCetak(new Date().toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
@@ -260,7 +256,7 @@ export default function SecurityDashboard() {
   const handleSubmitLemburKolektif = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formLemburItems.some(i => !i.tanggal || !i.jam_mulai || !i.jam_selesai || !i.area_ruangan || !i.alasan)) {
-      return alert("Mohon lengkapi seluruh kolom tanggal, jam, dan lokasi lembur yang Anda tambahkan!");
+      return showToast("Mohon lengkapi seluruh kolom tanggal, jam, dan lokasi lembur yang Anda tambahkan!", "warning");
     }
 
     setIsLemburLoading(true);
@@ -277,12 +273,12 @@ export default function SecurityDashboard() {
         waktu_request: serverTimestamp()
       });
 
-      alert(`✅ Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`);
+      showToast(`Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`, "success");
       setFormLemburItems([{ tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Area Pos Security", alasan: "Lembur Back-up Shift" }]);
       setActiveModal("none");
     } catch (error) {
       console.error(error);
-      alert("❌ Gagal mengirim rekapan klaim lembur.");
+      showToast("Gagal mengirim rekapan klaim lembur.", "error");
     } finally {
       setIsLemburLoading(false);
     }
@@ -656,24 +652,6 @@ export default function SecurityDashboard() {
         </button>
       </div>
 
-      {/* 🔹 MODAL KONFIRMASI LOGOUT — ganti window.confirm() native biar lebih modern & konsisten sama admin/page.tsx */}
-      <Modal open={showLogoutModal} onClose={() => setShowLogoutModal(false)} maxWidth="380px">
-        <div style={{ textAlign: "center", padding: "10px 0" }}>
-          <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "var(--red-50)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-            <IconLogOut size={26} color="var(--red-600)" />
-          </div>
-          <h3 style={{ margin: "0 0 8px 0", fontSize: "17px", fontWeight: 800, color: "var(--ink)" }}>Keluar dari Sesi Security?</h3>
-          <p style={{ margin: "0 0 22px 0", fontSize: "13px", color: "var(--muted)" }}>Anda perlu login ulang untuk mengakses Command Center setelah ini.</p>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-soft)", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
-              Batal
-            </button>
-            <button onClick={confirmLogout} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "none", background: "var(--red-600)", color: "white", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
-              Ya, Keluar
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* ========================================== */}
       {/* 💡 MODAL PENGAJUAN LEMBUR MULTI-ROW BERDASARKAN PERIODE */}

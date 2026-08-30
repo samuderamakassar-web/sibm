@@ -6,7 +6,10 @@ import { collection, onSnapshot, query, orderBy, updateDoc, doc, Timestamp } fro
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+import { buildOvertimeEmailHtml } from "../../../lib/emailTemplates";
 import Modal from "../../../components/ui/Modal";
+import { useToast } from "../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../components/ui/ConfirmProvider";
 
 type IconProps = { size?: number; color?: string };
 const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -54,6 +57,8 @@ interface KontakKaryawan {
 
 export default function AdminOvertimePage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
   const [adminName, setAdminName] = useState<string>("");
   const [isReady, setIsReady] = useState(false);
 
@@ -138,11 +143,15 @@ export default function AdminOvertimePage() {
   // ==========================================
   const handleProcessDecision = async (id: string, nama: string, keputusan: "Approved" | "Rejected") => {
     const namaAman = nama || "Pemohon";
-    const pesanKonfirmasi = keputusan === "Approved" 
-      ? `Apakah Anda yakin ingin MENYETUJUI permohonan overtime dari ${namaAman}?`
-      : `Apakah Anda yakin ingin MENOLAK permohonan overtime dari ${namaAman}?`;
-
-    if (!window.confirm(pesanKonfirmasi)) return;
+    const yakin = await confirm({
+      title: keputusan === "Approved" ? "Setujui Overtime" : "Tolak Overtime",
+      message: keputusan === "Approved"
+        ? `Apakah Anda yakin ingin MENYETUJUI permohonan overtime dari ${namaAman}?`
+        : `Apakah Anda yakin ingin MENOLAK permohonan overtime dari ${namaAman}?`,
+      confirmText: keputusan === "Approved" ? "Ya, Setujui" : "Ya, Tolak",
+      variant: keputusan === "Approved" ? "default" : "danger",
+    });
+    if (!yakin) return;
 
     // Alasan penolakan opsional, ikut dikirim di pesan notifikasi
     let alasanTolak: string | undefined;
@@ -156,7 +165,7 @@ export default function AdminOvertimePage() {
       });
     } catch (error) {
       console.error(error);
-      alert("Gagal memperbarui status permohonan lembur.");
+      showToast("Gagal memperbarui status permohonan lembur.", "error");
       return; // Jangan lanjut kirim notifikasi jika update status saja sudah gagal
     }
 
@@ -166,8 +175,11 @@ export default function AdminOvertimePage() {
       const req = overtimeRequests.find(r => r.id === id);
       const tanggalLembur = req?.tanggal || req?.items?.[0]?.tanggal || "-";
       const tanggalFormat = tanggalLembur !== "-" ? new Date(tanggalLembur).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
+      const jamMulai = req?.jam_mulai || req?.items?.[0]?.jam_mulai || "-";
+      const jamSelesai = req?.jam_selesai || req?.items?.[0]?.jam_selesai || "-";
+      const departemen = req?.departemen || "";
 
-      await kirimNotifikasiOvertime(namaAman, keputusan, tanggalFormat, alasanTolak);
+      await kirimNotifikasiOvertime(namaAman, keputusan, tanggalFormat, alasanTolak, jamMulai, jamSelesai, departemen);
     } finally {
       setSedangKirimNotif(null);
     }
@@ -180,7 +192,15 @@ export default function AdminOvertimePage() {
   };
 
   // Kirim WA + Email ke pemohon overtime sesuai hasil keputusan
-  const kirimNotifikasiOvertime = async (nama: string, keputusan: "Approved" | "Rejected", tanggal: string, alasanTolak?: string) => {
+  const kirimNotifikasiOvertime = async (
+    nama: string,
+    keputusan: "Approved" | "Rejected",
+    tanggal: string,
+    alasanTolak: string | undefined,
+    jamMulai: string,
+    jamSelesai: string,
+    departemen: string
+  ) => {
     const kontak = cariKontakKaryawan(nama);
 
     if (!kontak || (!kontak.no_wa && !kontak.email)) {
@@ -190,18 +210,26 @@ export default function AdminOvertimePage() {
       return;
     }
 
-    const pesan = keputusan === "Approved"
-      ? template.overtimeDisetujui(nama, tanggal)
-      : template.overtimeDitolak(nama, tanggal, alasanTolak);
-
     if (kontak.no_wa) {
-      const hasilWA = await kirimWA(kontak.no_wa, pesan);
+      const pesanWA = keputusan === "Approved"
+        ? template.overtimeDisetujui(nama, tanggal)
+        : template.overtimeDitolak(nama, tanggal, alasanTolak);
+      const hasilWA = await kirimWA(kontak.no_wa, pesanWA);
       if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA overtime:", hasilWA.pesanError);
     }
 
     if (kontak.email) {
       const subjek = `Update Overtime Gedung: ${keputusan === "Approved" ? "Disetujui" : "Ditolak"}`;
-      const hasilEmail = await kirimEmail(kontak.email, subjek, pesan, nama);
+      const htmlEmail = buildOvertimeEmailHtml({
+        namaPemohon: nama,
+        departemen: departemen || undefined,
+        tanggal,
+        jamMulai,
+        jamSelesai,
+        status: keputusan,
+        alasanTolak: keputusan === "Rejected" ? alasanTolak : undefined,
+      });
+      const hasilEmail = await kirimEmail(kontak.email, subjek, htmlEmail, nama);
       if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email overtime:", hasilEmail.pesanError);
     }
   };
@@ -247,7 +275,7 @@ export default function AdminOvertimePage() {
 
   const handleExportGedung = () => {
     const filtered = dataGedung.filter(req => checkFilter(req, false));
-    if (filtered.length === 0) return alert("Data lembur Gedung masih kosong / tidak ada yang cocok dengan filter!");
+    if (filtered.length === 0) return showToast("Data lembur Gedung masih kosong / tidak ada yang cocok dengan filter!", "warning");
 
     const headers = ["Nama Pemohon", "Aktivitas / Keterangan Lembur", "Tanggal Lembur", "Hari", "Jam Mulai", "Jam Selesai", "Jumlah Jam", "Unit Bisnis / Departemen", "Lantai / Lokasi", "Waktu Pengajuan"];
     const rows = filtered.map(req => [
@@ -268,7 +296,7 @@ export default function AdminOvertimePage() {
 
   const handleExportTim = () => {
     const filtered = dataTim.filter(req => checkFilter(req, true));
-    if (filtered.length === 0) return alert("Data permohonan Tim Operasional masih kosong / tidak ada yang cocok dengan filter!");
+    if (filtered.length === 0) return showToast("Data permohonan Tim Operasional masih kosong / tidak ada yang cocok dengan filter!", "warning");
 
     const headers = ["Siklus / Periode", "Nama Staf", "Departemen", "Tanggal Lembur", "Hari", "Jam Mulai", "Jam Selesai", "Jumlah Jam", "Lokasi/Tugas", "Keterangan Lembur", "Status Approval", "Waktu Diajukan"];
     const rows: (string | number)[][] = [];
@@ -311,11 +339,11 @@ export default function AdminOvertimePage() {
   // diunduh duluan dan admin tinggal drag file itu ke email yang sudah terbuka.
   const handleKirimEmailRekap = () => {
     const periode = periodeAktifUntukEmail;
-    if (!periode) return alert("Belum ada periode lembur Tim yang bisa direkap.");
-    if (!semuaPeriodeSelesai(periode)) return alert(`Masih ada pengajuan periode "${periode}" yang belum diputuskan (Setujui/Tolak). Selesaikan dulu semua approval sebelum kirim rekap.`);
+    if (!periode) return showToast("Belum ada periode lembur Tim yang bisa direkap.", "warning");
+    if (!semuaPeriodeSelesai(periode)) return showToast(`Masih ada pengajuan periode "${periode}" yang belum diputuskan (Setujui/Tolak). Selesaikan dulu semua approval sebelum kirim rekap.`, "warning");
 
     const requestDisetujui = dataTim.filter(req => req.periode === periode && req.status === "Approved");
-    if (requestDisetujui.length === 0) return alert(`Tidak ada pengajuan yang Disetujui di periode "${periode}" untuk direkap.`);
+    if (requestDisetujui.length === 0) return showToast(`Tidak ada pengajuan yang Disetujui di periode "${periode}" untuk direkap.`, "warning");
 
     setSedangSiapkanRekap(true);
     try {

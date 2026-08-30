@@ -8,6 +8,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
+import AparInspectionBanner from "../../../components/AparInspectionBanner";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan shell admin (src/app/admin/page.tsx)
@@ -272,6 +273,8 @@ export default function AdminAparPage() {
         </button>
         <div className="admin-badge"><IconUserCircle size={14} /> {adminName}</div>
       </div>
+
+      <AparInspectionBanner />
 
       <div className="admin-hero no-print">
         <div className="admin-hero-content">

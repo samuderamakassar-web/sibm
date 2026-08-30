@@ -7,6 +7,7 @@ import { db } from "../../lib/firebase";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
+import { hitungShiftSesi, waktuWITASekarang, sesiMinimumTerpenuhi, BATAS_SESI, MINIMUM_SESI_PER_SHIFT, ShiftSesiInfo } from "../../lib/shift";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -122,6 +123,9 @@ interface PatroliLog {
   status: string;
   catatan_shift: string;
   titik_patroli: TitikAman[];
+  tanggal_shift?: string;
+  shift?: string;
+  sesi?: string;
 }
 
 export default function PatroliSecurityPage() {
@@ -148,6 +152,7 @@ export default function PatroliSecurityPage() {
 
   const [photoTarget, setPhotoTarget] = useState<{ id: string, nama: string } | null>(null);
   const [currentTime, setCurrentTime] = useState<string>("");
+  const [shiftSesiInfo, setShiftSesiInfo] = useState<ShiftSesiInfo | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -160,6 +165,26 @@ export default function PatroliSecurityPage() {
     [scannedItems, semuaTitikPatroli]
   );
   const belumLengkapAlasan = titikTerlewat.some((t) => !(alasanTerlewat[t.id] || "").trim());
+
+  // ==========================================
+  // KEPATUHAN SESI PATROLI (Shift & Sesi aktif + progres minimal 2/3 sesi)
+  // ==========================================
+  useEffect(() => {
+    const perbaruiSesi = () => setShiftSesiInfo(hitungShiftSesi(waktuWITASekarang()));
+    perbaruiSesi();
+    const interval = setInterval(perbaruiSesi, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const sesiSudahLapor = useMemo(() => {
+    if (!shiftSesiInfo) return [];
+    return riwayatSaya
+      .filter((log) => log.tanggal_shift === shiftSesiInfo.tanggal_shift && log.shift === shiftSesiInfo.shift && log.sesi)
+      .map((log) => log.sesi as string);
+  }, [riwayatSaya, shiftSesiInfo]);
+  const sesiUnikSudahLapor = useMemo(() => Array.from(new Set(sesiSudahLapor)), [sesiSudahLapor]);
+  const kepatuhanSesiTerpenuhi = sesiMinimumTerpenuhi(sesiSudahLapor);
+  const daftarBatasSesi = shiftSesiInfo ? BATAS_SESI[shiftSesiInfo.shift] : [];
 
   // ==========================================
   // FUNGSI KAMERA
@@ -312,9 +337,13 @@ export default function PatroliSecurityPage() {
   const handleSubmitFinal = async () => {
     setIsLoading(true);
     try {
+      const sesiSaatSubmit = hitungShiftSesi(waktuWITASekarang());
       await addDoc(collection(db, "security_patrols"), {
         petugas: picName,
         waktu_laporan: serverTimestamp(),
+        tanggal_shift: sesiSaatSubmit.tanggal_shift,
+        shift: sesiSaatSubmit.shift,
+        sesi: sesiSaatSubmit.sesi,
         titik_patroli: scannedItems,
         area_terlewat: titikTerlewat.map((t) => ({ id: t.id, nama: t.nama, alasan: alasanTerlewat[t.id] || "" })),
         catatan_shift: catatanUmum,
@@ -431,6 +460,41 @@ export default function PatroliSecurityPage() {
         {/* ========================================================= */}
         {activeTab === "FORM" && (
           <div style={{ animation: "fadeIn 0.3s" }}>
+            {/* KARTU KEPATUHAN SESI PATROLI */}
+            {shiftSesiInfo && (
+              <div className="panel" style={{ marginBottom: "25px", border: kepatuhanSesiTerpenuhi ? "2px solid rgba(22,163,74,0.3)" : "1px solid var(--line)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                  <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "16px" }}>{shiftSesiInfo.shift} &middot; {shiftSesiInfo.sesi} Berjalan</h2>
+                  <span style={{ fontWeight: 900, fontSize: "13px", color: kepatuhanSesiTerpenuhi ? "var(--ok)" : "var(--warn)" }}>
+                    {sesiUnikSudahLapor.length} / {MINIMUM_SESI_PER_SHIFT} Sesi Minimum
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {daftarBatasSesi.map((b) => {
+                    const sudah = sesiUnikSudahLapor.includes(b.sesi);
+                    const aktif = shiftSesiInfo.sesi === b.sesi;
+                    return (
+                      <div key={b.sesi} style={{
+                        flex: 1, textAlign: "center", padding: "10px 6px", borderRadius: "10px",
+                        background: sudah ? "var(--ok-50)" : aktif ? "var(--warn-50)" : "var(--bg)",
+                        border: sudah ? "1px solid rgba(22,163,74,0.35)" : aktif ? "1px solid rgba(217,119,6,0.35)" : "1px solid var(--line)",
+                      }}>
+                        <div style={{ fontSize: "11px", fontWeight: 800, color: sudah ? "var(--ok)" : aktif ? "var(--warn)" : "var(--muted)" }}>
+                          {sudah ? "✓ " : ""}{b.sesi}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>{b.jam}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!kepatuhanSesiTerpenuhi && (
+                  <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "var(--warn)" }}>
+                    Selesaikan minimal {MINIMUM_SESI_PER_SHIFT} sesi patroli sebelum shift Anda berakhir.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* KARTU PROGRESS */}
             <div className="panel" style={{ marginBottom: "25px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
@@ -441,7 +505,9 @@ export default function PatroliSecurityPage() {
                 <div style={{ height: "100%", background: progressPersen === 100 ? "var(--ok)" : "linear-gradient(90deg, var(--red-600), var(--warn))", width: `${progressPersen}%`, transition: "width 0.5s ease-in-out" }}></div>
               </div>
               {isSuccess && (
-                <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "12px", borderRadius: "10px", marginTop: "15px", fontSize: "13px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}><IconCheck size={14} /> Laporan patroli berhasil dikirim! Mengalihkan...</div>
+                <div style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "12px", borderRadius: "10px", marginTop: "15px", fontSize: "13px", fontWeight: "bold", border: "1px solid rgba(22,163,74,0.25)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <IconCheck size={14} /> Laporan patroli berhasil dikirim{shiftSesiInfo ? ` — tercatat sebagai ${shiftSesiInfo.shift} · ${shiftSesiInfo.sesi}` : ""}! Mengalihkan...
+                </div>
               )}
             </div>
 
@@ -505,7 +571,7 @@ export default function PatroliSecurityPage() {
                 </div>
 
                 <button onClick={() => {
-                  if (scannedItems.length === 0) return alert("Belum ada titik yang dipatroli!");
+                  if (scannedItems.length === 0) return showToast("Belum ada titik yang dipatroli!", "warning");
                   setShowReview(true);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }} style={{ width: "100%", padding: "18px", background: scannedItems.length === 0 ? "#a0aec0" : "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: scannedItems.length === 0 ? "not-allowed" : "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>

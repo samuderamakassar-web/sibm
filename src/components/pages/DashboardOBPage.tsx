@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, query, where, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useFcmSetup } from "@/hooks/useFcmSetup";
+import { logoutWithConfirm } from "@/hooks/useAuthGuard";
+import { useConfirm } from "@/components/ui/ConfirmProvider";
+import { useToast } from "@/components/ui/ToastProvider";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -91,6 +94,8 @@ function getTodayISOLocal(): string {
 
 export default function DashboardOBPage() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const showToast = useToast();
   const todayISO = getTodayISOLocal();
   const [picRole, setPicRole] = useState<string>("");
   const [picName, setPicName] = useState<string>("");
@@ -182,14 +187,7 @@ export default function DashboardOBPage() {
     };
   }, [picName, todayISO]);
 
-  const handleKeluar = () => {
-    if(window.confirm("Apakah Anda yakin ingin keluar/logout?")) {
-      localStorage.removeItem("pic_nama");
-      localStorage.removeItem("pic_dept");
-      localStorage.removeItem("pic_role");
-      router.push("/");
-    }
-  };
+  const handleKeluar = () => logoutWithConfirm(confirm, router);
 
   // 💡 MULTI-ROW OVERTIME LOGIC HANDLERS
   const handleAddLemburRow = () => {
@@ -211,7 +209,7 @@ export default function DashboardOBPage() {
   const handleSubmitLemburKolektif = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formLemburItems.some(i => !i.tanggal || !i.jam_mulai || !i.jam_selesai || !i.area_ruangan || !i.alasan)) {
-      return alert("Mohon lengkapi seluruh kolom tanggal, jam, dan lokasi lembur yang Anda tambahkan!");
+      return showToast("Mohon lengkapi seluruh kolom tanggal, jam, dan lokasi lembur yang Anda tambahkan!", "warning");
     }
 
     setIsLemburLoading(true);
@@ -229,12 +227,12 @@ export default function DashboardOBPage() {
         waktu_request: serverTimestamp()
       });
 
-      alert(`✅ Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`);
+      showToast(`Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`, "success");
       setFormLemburItems([{ tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "", alasan: "" }]);
       setActiveModal("none");
     } catch (error) {
       console.error(error);
-      alert("❌ Gagal mengirim rekapan klaim lembur.");
+      showToast("Gagal mengirim rekapan klaim lembur.", "error");
     } finally {
       setIsLemburLoading(false);
     }

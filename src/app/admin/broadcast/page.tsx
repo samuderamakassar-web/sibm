@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { useToast } from "../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../components/ui/ConfirmProvider";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -16,6 +18,8 @@ const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
 
 export default function BroadcastAdminPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirm = useConfirm();
   const [adminName, setAdminName] = useState<string>("");
   const [isReady, setIsReady] = useState(false);
 
@@ -76,17 +80,23 @@ export default function BroadcastAdminPage() {
         updated_at: serverTimestamp(),
         updated_by: adminName
       });
-      alert("✅ Pengumuman berhasil diupdate dan disiarkan ke Ticker Utama!");
+      showToast("Pengumuman berhasil diupdate dan disiarkan ke Ticker Utama!", "success");
     } catch (error) {
       console.error(error);
-      alert("❌ Gagal menyimpan pengumuman.");
+      showToast("Gagal menyimpan pengumuman.", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleMatikan = async () => {
-    if (!window.confirm("Yakin ingin mematikan pengumuman saat ini?")) return;
+    const yakin = await confirm({
+      title: "Matikan Pengumuman",
+      message: "Yakin ingin mematikan pengumuman saat ini?",
+      confirmText: "Ya, Matikan",
+      variant: "danger",
+    });
+    if (!yakin) return;
     setIsLoading(true);
     try {
       await setDoc(doc(db, "settings", "pengumuman"), {
@@ -97,7 +107,7 @@ export default function BroadcastAdminPage() {
       });
     } catch (error) {
       console.error(error);
-      alert("❌ Gagal mematikan pengumuman.");
+      showToast("Gagal mematikan pengumuman.", "error");
     } finally {
       setIsLoading(false);
     }

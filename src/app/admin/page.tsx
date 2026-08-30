@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Modal from "../../components/ui/Modal";
+import { useConfirm } from "../../components/ui/ConfirmProvider";
+import { logoutWithConfirm } from "../../hooks/useAuthGuard";
 
 // Ikon SVG garis — set sama dengan portal utama (src/app/page.tsx) & shell subhalaman admin
 type IconProps = { size?: number; color?: string };
@@ -57,9 +58,9 @@ const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) 
 
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const confirm = useConfirm();
   const [adminName, setAdminName] = useState<string>("Admin");
   const [isReady, setIsReady] = useState(false);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     // 💡 VALIDASI KEAMANAN TINGKAT TINGGI (STRICT MODE)
@@ -80,12 +81,7 @@ export default function AdminDashboardPage() {
     }, 0);
   }, [router]);
 
-  const handleLogout = () => setShowLogoutModal(true);
-
-  const confirmLogout = () => {
-    localStorage.clear();
-    router.replace("/");
-  };
+  const handleLogout = () => logoutWithConfirm(confirm, router);
 
   const menuAdmin = [
     {
@@ -347,25 +343,6 @@ export default function AdminDashboardPage() {
           <span>Keluar</span>
         </button>
       </div>
-
-      {/* 🔹 MODAL KONFIRMASI LOGOUT — ganti window.confirm() native biar lebih modern & konsisten sama UI lain */}
-      <Modal open={showLogoutModal} onClose={() => setShowLogoutModal(false)} maxWidth="380px">
-        <div style={{ textAlign: "center", padding: "10px 0" }}>
-          <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "var(--red-50)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-            <IconLogOut size={26} color="var(--red-600)" />
-          </div>
-          <h3 style={{ margin: "0 0 8px 0", fontSize: "17px", fontWeight: 800, color: "var(--ink)" }}>Keluar dari Sesi Admin?</h3>
-          <p style={{ margin: "0 0 22px 0", fontSize: "13px", color: "var(--muted)" }}>Anda perlu login ulang untuk mengakses Control Panel setelah ini.</p>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-soft)", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
-              Batal
-            </button>
-            <button onClick={confirmLogout} style={{ flex: 1, padding: "12px", borderRadius: "12px", border: "none", background: "var(--red-600)", color: "white", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
-              Ya, Keluar
-            </button>
-          </div>
-        </div>
-      </Modal>
 
     </div>
   );

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { MINIMUM_SESI_PER_SHIFT } from "../../../lib/shift";
+import { useToast } from "../../../components/ui/ToastProvider";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -36,6 +38,9 @@ interface PatroliLog {
   catatan_shift: string;
   titik_patroli: TitikPatroli[];
   area_terlewat?: AreaTerlewat[];
+  tanggal_shift?: string;
+  shift?: string;
+  sesi?: string;
 }
 
 interface VisitorLog {
@@ -115,7 +120,8 @@ function labelPeriodeOption(docId: string): string {
 
 export default function MonitorSecurityPage() {
   const router = useRouter();
-  
+  const showToast = useToast();
+
   const [adminName, setAdminName] = useState("Admin");
   const [activeTab, setActiveTab] = useState<"PATROLI" | "TAMU" | "PAKET" | "ROSTER">("PATROLI");
   const [searchQuery, setSearchQuery] = useState("");
@@ -144,8 +150,8 @@ export default function MonitorSecurityPage() {
     const nama = localStorage.getItem("pic_nama");
     
     if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      alert("Akses Ditolak! Halaman ini khusus Administrator.");
-      router.push("/");
+      showToast("Akses Ditolak! Halaman ini khusus Administrator.", "error");
+      setTimeout(() => router.push("/"), 1200);
       return;
     }
     setTimeout(() => {
@@ -231,6 +237,31 @@ export default function MonitorSecurityPage() {
       cur.setDate(cur.getDate() + 1);
     }
   }
+
+  // Rekap kepatuhan sesi -- gabungan dari log yang benar-benar ada (fPatrols) + jadwal roster periode
+  // aktif, supaya staf yang DIJADWALKAN tapi nihil laporan sama sekali ikut kelihatan (bukan cuma yang kurang).
+  // Data patroli sebelum fitur sesi dirilis tidak punya tanggal_shift/shift/sesi -- dilewati (bukan dianggap gagal).
+  const rekapSesiMap = new Map<string, { tanggal_shift: string; shift: string; petugas: string; sesiSet: Set<string> }>();
+  fPatrols.forEach((p) => {
+    if (!p.tanggal_shift || !p.shift || !p.sesi) return;
+    const key = `${p.tanggal_shift}|${p.shift}|${p.petugas}`;
+    if (!rekapSesiMap.has(key)) rekapSesiMap.set(key, { tanggal_shift: p.tanggal_shift, shift: p.shift, petugas: p.petugas, sesiSet: new Set() });
+    rekapSesiMap.get(key)!.sesiSet.add(p.sesi);
+  });
+  if (rosterRentang) {
+    daftarTanggalPeriode.forEach((tgl) => {
+      const hariData = rosterData[tgl] || {};
+      Object.entries(hariData).forEach(([staf, shiftLabel]) => {
+        if (shiftLabel !== "Shift 1" && shiftLabel !== "Shift 2") return;
+        const key = `${tgl}|${shiftLabel}|${staf}`;
+        if (!rekapSesiMap.has(key)) rekapSesiMap.set(key, { tanggal_shift: tgl, shift: shiftLabel, petugas: staf, sesiSet: new Set() });
+      });
+    });
+  }
+  const rekapSesiRows = Array.from(rekapSesiMap.values())
+    .filter((row) => filterBulanPatroli === "SEMUA" || Number(row.tanggal_shift.split("-")[1]) - 1 === Number(filterBulanPatroli))
+    .filter((row) => filterTahunPatroli === "SEMUA" || row.tanggal_shift.split("-")[0] === filterTahunPatroli)
+    .sort((a, b) => b.tanggal_shift.localeCompare(a.tanggal_shift) || a.petugas.localeCompare(b.petugas));
 
   const handlePrint = () => {
     setWaktuCetak(new Date().toLocaleString("id-ID"));
@@ -531,6 +562,53 @@ export default function MonitorSecurityPage() {
                   )) : <tr><td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log patroli yang cocok dengan pencarian.</td></tr>}
                 </tbody>
               </table>
+            </div>
+
+            {/* REKAP KEPATUHAN SESI PATROLI -- minimal 2 dari 3 sesi per shift */}
+            <div className="no-print" style={{ marginTop: "25px" }}>
+              <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "16px" }}>Rekap Kepatuhan Sesi Patroli</h3>
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--muted)" }}>
+                Setiap petugas wajib patroli minimal {MINIMUM_SESI_PER_SHIFT} dari 3 sesi per shift. Data sesi tersedia sejak fitur ini dirilis — laporan lama ditandai belum tersedia, bukan gagal.
+              </p>
+              <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                <table className="sec-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "16%" }}>Tanggal Shift</th>
+                      <th style={{ width: "14%" }}>Shift</th>
+                      <th style={{ width: "22%" }}>Petugas</th>
+                      <th style={{ width: "12%", textAlign: "center" }}>Sesi 1</th>
+                      <th style={{ width: "12%", textAlign: "center" }}>Sesi 2</th>
+                      <th style={{ width: "12%", textAlign: "center" }}>Sesi 3</th>
+                      <th style={{ width: "12%", textAlign: "center" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rekapSesiRows.length > 0 ? rekapSesiRows.map((row) => {
+                      const jumlah = row.sesiSet.size;
+                      const memenuhi = jumlah >= MINIMUM_SESI_PER_SHIFT;
+                      const statusLabel = memenuhi ? "Memenuhi Minimum" : jumlah === 0 ? "Tidak Ada Laporan" : "Kurang";
+                      const statusWarna = memenuhi ? "var(--ok)" : jumlah === 0 ? "var(--red-600)" : "var(--warn)";
+                      const statusBg = memenuhi ? "var(--ok-50)" : jumlah === 0 ? "var(--red-50)" : "var(--warn-50)";
+                      return (
+                        <tr key={`${row.tanggal_shift}|${row.shift}|${row.petugas}`}>
+                          <td style={{ color: "var(--muted)" }}>{row.tanggal_shift}</td>
+                          <td style={{ fontWeight: "bold" }}>{row.shift}</td>
+                          <td style={{ fontWeight: "bold", color: "var(--ink)" }}>👮 {row.petugas}</td>
+                          {["Sesi 1", "Sesi 2", "Sesi 3"].map((s) => (
+                            <td key={s} style={{ textAlign: "center", color: row.sesiSet.has(s) ? "var(--ok)" : "var(--muted)", fontWeight: "bold" }}>
+                              {row.sesiSet.has(s) ? "✓" : "—"}
+                            </td>
+                          ))}
+                          <td style={{ textAlign: "center" }}>
+                            <span style={{ background: statusBg, color: statusWarna, padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", display: "inline-block" }}>{statusLabel}</span>
+                          </td>
+                        </tr>
+                      );
+                    }) : <tr><td colSpan={7} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada data sesi patroli untuk periode ini.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
             </>
           )}

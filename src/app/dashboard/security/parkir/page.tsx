@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
+import { useToast } from "../../../../components/ui/ToastProvider";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -107,6 +108,7 @@ const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
 
 export default function LogOperasionalPage() {
   const router = useRouter();
+  const showToast = useToast();
 
   const [picName, setPicName] = useState<string>("");
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
@@ -220,11 +222,11 @@ export default function LogOperasionalPage() {
   const handleSubmitMobil = async (e: React.FormEvent) => {
     e.preventDefault();
     if (statusMobil === "Keluar Beroperasi" && !tujuan.trim()) {
-      alert("Tujuan/Keperluan wajib diisi jika kendaraan keluar!");
+      showToast("Tujuan/Keperluan wajib diisi jika kendaraan keluar!", "warning");
       return;
     }
     if (driverMobil === "Karyawan" && !namaKaryawan.trim()) {
-      alert("Nama karyawan yang membawa kendaraan wajib diisi!");
+      showToast("Nama karyawan yang membawa kendaraan wajib diisi!", "warning");
       return;
     }
 
@@ -270,7 +272,7 @@ export default function LogOperasionalPage() {
       setTimeout(() => setIsSuccessMobil(false), 4000);
     } catch (error) {
       console.error(error);
-      alert("Gagal menyimpan data kendaraan.");
+      showToast("Gagal menyimpan data kendaraan.", "error");
     } finally {
       setIsLoadingMobil(false);
     }
@@ -294,7 +296,7 @@ export default function LogOperasionalPage() {
       setTimeout(() => setIsSuccessDriver(false), 4000);
     } catch (error) {
       console.error(error);
-      alert("Gagal mengubah status driver.");
+      showToast("Gagal mengubah status driver.", "error");
     } finally {
       setIsLoadingDriver(false);
     }
