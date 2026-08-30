@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../lib/notify";
+import { buildRequestBaruEmailHtml } from "../lib/emailTemplates";
 import { useToast } from "../components/ui/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -435,24 +436,24 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const handleRemoveAtkItem = (index: number) => { const newItems = [...formAtkItems]; newItems.splice(index, 1); setFormAtkItems(newItems); };
   const handleAtkItemChange = (index: number, field: keyof AtkItemRequest, value: string) => { const newItems = [...formAtkItems]; newItems[index][field] = value; setFormAtkItems(newItems); };
 
-  // Ubah format pesan gaya WhatsApp (\n baris baru, *teks* bold) jadi HTML yang aman ditampilkan di email
-  const formatPesanUntukEmail = (pesanWA: string): string => {
-    return pesanWA
-      .replace(/\*(.+?)\*/g, "<b>$1</b>")
-      .replace(/\n/g, "<br>");
-  };
-
   // Broadcast notifikasi Email ke semua kontak Admin GA (dipakai saat ada request baru: ATK/Overtime/Helpdesk)
-  const kirimNotifikasiAdminGA = async (jenisRequest: string, namaPemohon: string, detail: string) => {
+  // -- HTML form rapi (buildRequestBaruEmailHtml), bukan lagi teks WA yang cuma di-convert kasar.
+  const kirimNotifikasiAdminGA = async (
+    jenisRequest: string,
+    namaPemohon: string,
+    departemen: string,
+    rows: { label: string; value: string }[],
+    itemsTable?: { headers: string[]; rows: string[][] },
+    fotoUrl?: string
+  ) => {
     if (daftarAdminGA.length === 0) {
       console.warn("[notify] Tidak ada kontak Admin GA (departemen 'Admin GA') di users_master. Notifikasi dilewati.");
       return;
     }
-    const pesanWA = template.requestBaruMasuk(jenisRequest, namaPemohon, detail);
-    const pesanEmail = formatPesanUntukEmail(pesanWA);
+    const htmlEmail = buildRequestBaruEmailHtml({ jenisRequest, namaPemohon, departemen, rows, itemsTable, fotoUrl });
     for (const admin of daftarAdminGA) {
       if (admin.email) {
-        const hasilEmail = await kirimEmail(admin.email, `Request Baru Masuk: ${jenisRequest}`, pesanEmail, admin.nama);
+        const hasilEmail = await kirimEmail(admin.email, `Request Baru Masuk: ${jenisRequest}`, htmlEmail, admin.nama);
         if (!hasilEmail.sukses) console.error(`[notify] Gagal kirim Email ke Admin GA (${admin.nama}):`, hasilEmail.pesanError);
       }
     }
@@ -493,11 +494,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     try {
       await addDoc(collection(db, "ga_atk_requests"), { resi: newResi, nama_pemohon: formAtkPemohon.nama, departemen: formAtkPemohon.dept, items: formAtkItems, status: "Menunggu Disiapkan", waktu_request: serverTimestamp() });
 
-      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — rincian per barang, bukan cuma jumlah
-      const daftarBarangText = formAtkItems
-        .map((it, idx) => `${idx + 1}. ${it.nama_barang} — ${it.jumlah}${it.deskripsi ? ` (${it.deskripsi})` : ""}`)
-        .join("\n");
-      kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, `Resi: ${newResi}\nDepartemen: ${formAtkPemohon.dept}\n\nDaftar Barang:\n${daftarBarangText}`);
+      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — rincian per barang dalam tabel
+      kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, formAtkPemohon.dept, [{ label: "Kode Resi", value: newResi }], {
+        headers: ["Barang", "Jumlah", "Keterangan"],
+        rows: formAtkItems.map((it) => [it.nama_barang, it.jumlah, it.deskripsi || "-"]),
+      });
 
       showToast(`Request ATK berhasil! Kode Resi: ${newResi} — simpan untuk melacak barang Anda.`, "success");
       setFormAtkPemohon({ nama: "", dept: "" }); setFormAtkItems([]); setSearchAtkResi(newResi); setAtkTab("LACAK"); handleCariAtk(newResi);
@@ -546,7 +547,13 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       });
 
       // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — sekarang sifatnya info, bukan permintaan approval
-      kirimNotifikasiAdminGA("Overtime Gedung", formOvertime.nama, `Tanggal: ${formOvertime.tanggal}, Area: ${formOvertime.area}, Jam: ${formOvertime.jam_mulai}-${formOvertime.jam_selesai}.`);
+      kirimNotifikasiAdminGA("Overtime Gedung", formOvertime.nama, formOvertime.dept, [
+        { label: "Tanggal", value: formOvertime.tanggal },
+        { label: "Area", value: formOvertime.area },
+        { label: "Jam Mulai", value: formOvertime.jam_mulai },
+        { label: "Jam Selesai", value: formOvertime.jam_selesai },
+        { label: "Alasan", value: formOvertime.alasan },
+      ]);
 
       showToast("Overtime Gedung berhasil dicatat. Akan masuk rekap tagihan.", "success");
       setFormOvertime({ nama: "", dept: "", area: "", tanggal: todayISO, jam_mulai: "", jam_selesai: "", alasan: "" }); setActiveModal("none");
@@ -647,7 +654,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       });
 
       // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon)
-      kirimNotifikasiAdminGA("Tiket Helpdesk", formHelpdesk.nama, `Lokasi: ${formHelpdesk.lokasi}, Masalah: ${formHelpdesk.deskripsi}`);
+      kirimNotifikasiAdminGA("Tiket Helpdesk", formHelpdesk.nama, formHelpdesk.dept, [
+        { label: "Lokasi", value: formHelpdesk.lokasi },
+        { label: "Deskripsi Masalah", value: formHelpdesk.deskripsi },
+      ], undefined, fotoAwal || undefined);
 
       showToast("Tiket kerusakan terkirim!", "success");
       setFormHelpdesk({ nama: "", dept: "", lokasi: "", deskripsi: "" }); setFotoAwal(""); setHelpdeskTab("LACAK");

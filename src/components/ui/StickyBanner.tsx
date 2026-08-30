@@ -13,10 +13,17 @@
  * `resetKey` berubah (mis. pindah ke sesi/periode berikutnya), supaya
  * user tidak bisa mematikan pengingat selama tugas belum benar-benar
  * selesai.
+ *
+ * Juga bunyi (chime, lihat src/lib/soundAlert.ts) setiap kali banner
+ * pertama muncul / resetKey berubah, lalu berulang tiap 10 menit selama
+ * masih pending -- supaya jadi "alarm" beneran, bukan cuma visual, dan
+ * TETAP bunyi walau lagi disembunyikan (collapsed) sampai tugasnya
+ * kelar (parent cuma me-render StickyBanner selama pending == true).
  * ------------------------------------------------------------------
  */
 
 import { useEffect, useState } from "react";
+import { bunyikanAlertPengingat } from "../../lib/soundAlert";
 
 interface StickyBannerProps {
   message: string;
@@ -39,6 +46,16 @@ export default function StickyBanner({ message, subMessage, tone = "warning", re
     const t = setTimeout(() => setCollapsed(false), 0);
     return () => clearTimeout(t);
   }, [resetKey]);
+
+  // Alarm suara: bunyi begitu banner ini pertama tampil (mount) atau resetKey berganti
+  // (sesi/hari baru), lalu berulang tiap 10 menit selama komponen masih ter-mount --
+  // parent (PatroliShiftBanner/AparInspectionBanner/ChecklistOBBanner) cuma me-render
+  // StickyBanner selama tugasnya masih pending, jadi unmount = otomatis berhenti bunyi.
+  useEffect(() => {
+    bunyikanAlertPengingat(tone);
+    const interval = setInterval(() => bunyikanAlertPengingat(tone), 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [resetKey, tone]);
 
   if (collapsed) {
     return (

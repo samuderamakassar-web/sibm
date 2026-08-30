@@ -1,39 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 30 Agustus 2026 (overhaul notifikasi — patroli 3 sesi/shift dengan minimal 2x wajib, reminder APAR H-3 sebelum tgl 30, email paket+overtime dirapikan jadi HTML form, banner pengingat persisten (bukan toast sekali muncul) buat patroli/APAR/checklist OB, konsolidasi 6 modal logout jadi 1 komponen, sapu bersih ~60 titik `alert()`/`window.confirm()` jadi `showToast()`/`useConfirm()` di seluruh app — BELUM DI-COMMIT, lihat §17)
+Update terakhir: 30 Agustus 2026 (lanjutan §17: fix roster security exclude anak Magang, email HTML rapi untuk SEMUA jalur notif (ATK/Helpdesk/request baru ke Admin GA, sebelumnya cuma paket & overtime), alarm suara untuk banner pengingat persisten, contoh kode template EmailJS Code Editor — SUDAH DI-COMMIT & DI-DEPLOY, lihat §18)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §17)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §18)
 
-Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini fokus total ke **notifikasi & pengingat** — diminta user secara eksplisit "selesaikan semua dan rapihkan semua notif". Sempat kepotong di tengah jalan karena laptop mati (baterai habis), dilanjutkan otomatis begitu sesi resume dan diverifikasi ulang dari awal (bukan cuma lanjut buta) buat mastiin gak ada yang keskip/setengah jadi. Detail teknis lengkap ada di **§17**.
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini lanjutan langsung dari §17 (masih hari yang sama) — 3 hal: (1) fix roster security biar gak ikut nyertain anak Magang, (2) lengkapi email HTML rapi untuk SEMUA jalur notif yang masih tersisa (§17 baru sempat paket & overtime), dipicu user ngetes kirim email nyata dan nemu template EmailJS masih nge-render HTML sebagai teks mentah, (3) tambah alarm suara ke banner pengingat persisten dari §17. Detail teknis lengkap ada di **§18**.
 
-### A. Apa yang dikerjakan sesi ini (§17)
+### A. Apa yang dikerjakan sesi ini (§18)
 
-1. **Patroli Security jadi 3 sesi per shift** (Sesi 1/2/3, masing-masing 4 jam), wajib minimal 2 dari 3 sesi per shift (Shift 1 & Shift 2). Field baru `tanggal_shift`/`shift`/`sesi` di `security_patrols`, kartu progres sesi real-time di halaman patroli, tabel "Rekap Kepatuhan Sesi Patroli" baru di `admin/monitor-security`, dan `scripts/patroli-reminder.mjs` sekarang cek kepatuhan sebelum kirim WA reminder (berhenti otomatis begitu syarat terpenuhi, eskalasi pesan kalau shift mau habis tapi belum terpenuhi).
-2. **Reminder Inspeksi APAR dari nol** — sebelumnya sama sekali gak ada reminder buat fitur ini. Script baru `scripts/apar-reminder.mjs` + workflow `apar-reminder.yml`, fire H-3 sebelum deadline (tgl 30, atau akhir bulan untuk Februari), kirim ke Security bertugas (WA + banner in-app) DAN Admin GA/QHSE (WA monitoring).
-3. **Email paket & overtime dirapikan jadi HTML form** (`src/lib/emailTemplates.ts`, baru) — sebelumnya email overtime cuma teks WhatsApp mentah (`*DISETUJUI*` bintang literal kebawa ke email), dan paket SAMA SEKALI gak pernah kirim email (cuma WA, dan kalau WA kosong notifnya hilang total walau ada email). Sekarang keduanya HTML tabel rapi (nama jelas, jam, tanggal, status badge berwarna) + foto bukti paket ikut ter-embed.
-4. **Banner pengingat PERSISTEN** (`StickyBanner` + `usePendingTask`, generik, dipakai 3 fitur: `PatroliShiftBanner`, `AparInspectionBanner`, `ChecklistOBBanner`) — beda dari toast lama yang sekali muncul lalu hilang selamanya (`dibaca:true`), banner ini query LANGSUNG ke data sumber (bukan flag notif) jadi otomatis hilang pas tugas selesai, dan otomatis balik muncul kalau belum. Dipasang lewat layout baru `dashboard/security/layout.tsx` & `dashboard/ob/layout.tsx`.
-5. **Konsolidasi 6 modal logout jadi 1** (`logoutWithConfirm()` di `useAuthGuard.ts`, pakai `useConfirm()` yang sudah ada) — sebelumnya 2 modal custom copy-paste, 2 `window.confirm()` native, 2 tanpa konfirmasi sama sekali.
-6. **Sapu bersih semua `alert()`/`window.confirm()` bawaan browser** di seluruh app (~24 file, ~65 titik) diganti `showToast()`/`useConfirm()` — termasuk gate akses (`useAuthGuard.ts` sekarang toast+redirect tertunda, bukan `alert()` blocking).
+1. **Fix roster security**: `dashboard/security/jadwal/page.tsx` (halaman create roster Danru) sebelumnya narik SEMUA staf `departemen=="Security"` tanpa saring role — anak Magang ikut keplot shift 2-2-2 padahal gak seharusnya. Diperbaiki pakai pola exclude yang sudah ada persis di `dashboard/security/page.tsx` (`role.toLowerCase().includes("magang")`). Pola generate 2-2-2 & auto-lanjut antar periode TIDAK disentuh (memang sudah sesuai maunya user).
+2. **Ketemu bug nyata dari testing user**: screenshot email yang diterima nunjukin tag HTML (`<b>`, `<br>`) tampil sebagai TEKS MENTAH, bukan dirender — karena template EmailJS ("Design Editor" mode) meng-escape variabel `{{message}}`, DAN variabel yang dipakai template (`{{name}}`, `{{time}}`) gak cocok sama yang dikirim app (`to_name`, tanpa `time`). Solusinya BUKAN di kode app (HTML yang dikirim sudah benar sejak §17), tapi di template EmailJS-nya — lihat §18C untuk kode HTML persis yang perlu di-paste ke Code Editor EmailJS.
+3. **Email HTML rapi untuk 3 jalur notif yang masih tersisa** (sebelumnya cuma paket & overtime yang dapat di §17, sisanya masih teks WA mentah/konversi kasar): ATK siap diambil, update tiket Helpdesk, dan notifikasi "request baru masuk" ke Admin GA (ATK/Overtime Gedung/Helpdesk — ini yang di-screenshot user, "Request Baru Masuk: Overtime Gedung"). Builder baru di `src/lib/emailTemplates.ts`: `buildRequestBaruEmailHtml`, `buildAtkSiapEmailHtml`, `buildHelpdeskUpdateEmailHtml`.
+4. **Alarm suara buat banner pengingat** (`src/lib/soundAlert.ts`, baru) — chime 2 nada (bikin lewat Web Audio API osilator, bukan file audio, jadi gak perlu nambah aset & tetap jalan offline) bunyi begitu `StickyBanner` (dari §17: patroli/APAR/checklist) pertama muncul, lalu berulang tiap 10 menit selama tugasnya masih belum selesai — termasuk pas lagi "disembunyikan" (collapsed), soalnya yang berhenti alarm cuma kalau tugasnya beneran kelar (banner ke-unmount).
 
-### B. Status: BELUM di-commit
+### B. Status: SUDAH di-commit & di-deploy
 
-- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error, 104 warning (naik dari 98 — semuanya `missing dependency: showToast` di `useEffect`/`useCallback`, jenis warning yang sama dengan yang sudah banyak ada sebelumnya di project ini, bukan masalah baru).
-- `npm run build` (static export): sukses, 32 route ter-generate.
-- Diverifikasi di dev server pakai data production real: halaman `dashboard/security/patroli` (banner sesi + APAR muncul benar sesuai waktu WITA & tanggal hari ini, kartu progres sesi kebaca benar), `admin/monitor-security` tab PATROLI (tabel "Rekap Kepatuhan Sesi Patroli" muncul & keisi dari roster+log real, termasuk baris "Tidak Ada Laporan" buat jadwal ke depan yang belum ada log). Console browser bersih, gak ada error Firestore index (query 3-`where` equality di `security_patrols` gak butuh composite index).
-- **Belum sempat dites langsung**: kirim email sungguhan (paket & overtime) — HTML dibangun & dikirim lewat `kirimEmail()` yang sudah ada, tapi rendering HTML-di-inbox tergantung setting template EmailJS di dashboard eksternal (gak bisa diinspeksi dari sini). Lihat §17E untuk detail risiko.
+- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error, 104 warning (jumlah sama kayak §17, gak nambah).
+- `npm run build`: sukses, 32 route.
+- Diverifikasi di dev server pakai data production real: `admin/atk` & `admin/helpdesk` render normal (tabel resi/tiket real kebaca), gak ada error console dari perubahan sinyal (2 error 404 yang sempat muncul ternyata bug LAMA gak terkait — `admin/atk` redirect ke `/shift-checkin` yang emang gak ada route-nya kalau dept gak cocok, ke-trigger karena sesi test browser masih nyimpen dept lama, bukan regresi dari perubahan sesi ini).
+- **Belum bisa dites dari sini**: kirim email sungguhan pakai template EmailJS yang baru (perlu user sendiri yang paste kode ke Code Editor EmailJS, gak bisa diakses dari sesi ini) — instruksi persis ada di §18C.
 
 ### C. Yang perlu dilanjutkan
 
-1. **Commit + deploy** kalau sudah oke — belum dijalankan sesi ini (tunggu instruksi eksplisit user, sesuai konvensi sesi-sesi sebelumnya).
-2. **Verifikasi email sungguhan** — kirim 1 paket & 1 approval overtime nyata, cek inbox beneran buat pastikan HTML-nya render bagus (bukan tag mentah). Kalau ternyata render sebagai teks, perlu masuk ke dashboard EmailJS dan ubah setting variabel `message` jadi "HTML" (bukan default plain-text-escaped).
-3. **`GROUPED_PATROLI`/`DATA_SECURITY` masih hardcode duplikat** di `PatroliSecurityPage.tsx` & `admin/qr-manager/page.tsx` (poin lama, ditemukan lagi sesi ini, belum disentuh).
-4. **File mati/duplikat baru ketemu**: `src/components/pages/PengaturanJadwalSecurity.tsx` ternyata BUKAN yang dipakai routing (`src/app/dashboard/security/jadwal/page.tsx` itu sendiri yang berisi implementasi penuh, bukan wrapper tipis kayak dicatat di §2/§4) — sama persis pola dead-code yang sudah ada di `PaketPage.tsx`. Dua-duanya dibiarkan (gak dihapus, belum dikonfirmasi ke user), tapi kalau mau beres-beres, ini kandidatnya.
-5. **`NotifikasiChecklistListener.tsx`** jadi berlebih (digantikan `ChecklistOBBanner` yang polanya lebih tepat buat "reminder terus sampai selesai") — belum dihapus, dibiarkan sebagai dead code, aman karena memang gak pernah di-mount dari awal.
-6. Poin lama yang masih relevan (belum berubah, lihat §0 versi sebelumnya buat detail): tab monitoring APAR di `admin/monitor-security` (SEKARANG SUDAH ADA, lihat §17A poin 1 — poin lama ini closed), `security_magang_directory` belum ada halaman admin, bug filter logo `admin/qr-manager`, kolom Odo Meter `admin/uji-emisi`, `DriverDashboardPage` konten form belum dimodernisasi ke `components/ui/`, CS belum punya halaman terpisah dari OB, audit performa `onSnapshot` tanpa `limit()`, bug leak `DeepCleaningPage.tsx` (`onSnapshot` gak ke-unsubscribe), migrasi struktur folder `admin/*` & portal utama ke `components/pages/`.
+1. **User perlu paste kode HTML di §18C ke EmailJS Code Editor** (buka template "Contact Us" di dashboard EmailJS → tab Content → Code Editor, ganti seluruh isi) + ganti field "From Name" di panel kanan dari `{{to_name}}` (salah — itu nama PENERIMA, bukan pengirim) jadi teks statis semacam "SIBM - PT Samudera". Tanpa ini, SEMUA email (paket/overtime/ATK/helpdesk/request baru) masih akan tampil sebagai tag HTML mentah, terlepas dari kode app sudah benar.
+2. **Alarm suara mungkin gak kedengaran di kunjungan pertama** — browser modern blokir autoplay audio sebelum ada interaksi user di halaman (klik apapun). Ini batasan platform, bukan bug — begitu user klik sekali di app, alarm berikutnya akan kedengaran normal.
+3. Poin lama dari §17 yang masih sama (belum berubah): `GROUPED_PATROLI`/`DATA_SECURITY` hardcode duplikat, `PengaturanJadwalSecurity.tsx`/`PaketPage.tsx` dead code di `components/pages/`, `NotifikasiChecklistListener.tsx` dead code (digantikan `ChecklistOBBanner`), `security_magang_directory` belum ada halaman admin, bug filter logo `admin/qr-manager`, kolom Odo Meter `admin/uji-emisi`, `DriverDashboardPage` konten form belum dimodernisasi, CS belum punya halaman terpisah dari OB, audit performa `onSnapshot` tanpa `limit()`, bug leak `DeepCleaningPage.tsx`, migrasi struktur folder `admin/*` & portal utama.
+4. **Bug lama (baru ke-notice sesi ini, belum difix)**: `admin/atk/page.tsx` redirect akses-ditolak ke `/shift-checkin` — route itu gak ada secara fisik di app ini (404). Sama kelas bug dengan yang sudah didokumentasikan di header comment `useAuthGuard.ts` (redirect ke route yang gak ada). `admin/atk` belum migrasi ke `useAuthGuard`, masih pakai cek manual sendiri.
 
 Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
@@ -139,6 +135,7 @@ sibm-app/
       firebase.ts
       notify.ts
       shift.ts                 ← BARU §17 (kalkulator shift/sesi patroli)
+      soundAlert.ts             ← BARU §18 (alarm suara buat StickyBanner, Web Audio API)
 ```
 
 **Catatan:** restrukturisasi folder (Fin-Samudera style, `components/pages/` per halaman) sudah selesai tahap #3 penuh dan **#4 penuh** (dashboard/ob semua, dashboard/security semua, dashboard/driver, dashboard/qhse) — lihat §4. Sisa: #5 (`admin/*`) dan #6 (portal utama `app/page.tsx`), keduanya belum disentuh migrasi strukturnya. Sesi 24 & 25 Agustus sempat loncat ke portal utama & admin/kendaraan buat kerjain fitur baru & perbaikan tampilan duluan (bukan urutan migrasi foldernya), jadi `page.tsx` portal & `admin/kendaraan/page.tsx` **masih dalam bentuk lama** (belum dipecah ke `components/pages/`), isinya aja yang diupdate berkali-kali.
@@ -889,4 +886,69 @@ File yang disentuh (24 file): `useAuthGuard.ts` (gate akses terpusat — otomati
 - Verifikasi visual di dev server (data production REAL, gak ada tulis/submit data test): `dashboard/security/patroli` — banner "Sesi patroli minimum belum terpenuhi — Shift 1 · Sesi 3 sedang berjalan" DAN banner "Inspeksi APAR sudah jatuh tempo (tanggal 30)!" muncul benar (waktu WITA & tanggal hari ini persis 30 Agustus = deadline APAR bulan ini, jadi status "urgent" kebaca tepat); kartu progres sesi di form patroli nampilin 3 kotak jam yang benar. `admin/monitor-security` tab PATROLI — tabel "Rekap Kepatuhan Sesi Patroli" muncul & keisi (baris "Tidak Ada Laporan" buat jadwal roster ke depan yang belum ada log — sesuai ekspektasi karena field sesi baru dirilis sesi ini). Console browser bersih kedua halaman, gak ada error index Firestore (query 3× `where` equality di `security_patrols` otomatis kepakai index bawaan, gak butuh composite index manual).
 - **Belum dites**: kirim email sungguhan (lihat risiko di §17C).
 
-**BELUM di-commit** — nunggu instruksi eksplisit user sebelum commit+push+deploy, sesuai pola kerja project ini.
+**Sudah di-commit + push (dev→main) + build + deploy** sesuai instruksi eksplisit user di akhir sesi ini ("langsung saja commit dulu sampai deploy"), sekaligus dengan fix roster Magang. Lihat §18 untuk lanjutannya (sesi yang sama, langsung nyambung).
+
+---
+
+## 18. Fix Roster Exclude Magang, Lengkapi Email HTML Semua Jalur Notif, Alarm Suara Banner Pengingat (30 Agustus 2026, lanjutan langsung sesi §17)
+
+User ngetes hasil kerja §17 dengan submit 1 overtime gedung nyata, dan kirim 2 screenshot: (1) editor template EmailJS ("Contact Us", Content tab, ada pilihan Design Editor/Code Editor), (2) email yang beneran diterima — isinya nampilin tag HTML mentah (`<b>Overtime Gedung</b>`, `<br>`) sebagai TEKS, bukan dirender jadi bold/baris baru. Diminta 3 hal: (1) perbaiki roster biar Magang gak ikut plot shift (pola 2-2-2 & auto-lanjutnya dipertahankan, memang sudah bagus), (2) buatkan kode HTML untuk di-paste ke Code Editor EmailJS, mencakup SEMUA jalur notif email (bukan cuma overtime & paket dari §17), (3) tambah alarm suara ke notif reminder. Lalu commit sampai deploy langsung.
+
+### 18A. Fix roster — exclude staf role "Magang"
+
+`src/app/dashboard/security/jadwal/page.tsx`, fungsi `tarikTimSecurity` (dipanggil begitu `useAuthGuard` sukses) — sebelumnya query cuma `where("departemen","==","Security")` lalu semua nama langsung dimasukkan ke `timSecurity` (daftar kolom staf di matriks roster). Diperbaiki dengan filter tambahan persis pola yang SUDAH ADA di `dashboard/security/page.tsx` (baris 116-123, komentarnya sendiri bilang "Anak magang gak ikut plotting jadwal shift"): baca field `role` tiap dokumen, `role.toLowerCase().includes("magang")` → skip, jangan dimasukkan ke `staffList`. Logika pola 2-2-2 (`isiPolaRotasi`), auto-sambung antar periode (`tentukanIndexLanjutan`), dan sistem 1-dokumen-per-bulan (`security_monthly_schedules`) TIDAK disentuh sama sekali — user eksplisit bilang itu udah bagus.
+
+### 18B. Email HTML rapi untuk jalur notif yang tersisa (`src/lib/emailTemplates.ts`)
+
+§17 baru sempat merapikan 2 dari 5 jalur email yang ada di app (paket & overtime-approval). 3 sisanya masih kirim teks WA mentah atau hasil konversi kasar (`*bold*`→`<b>`, `\n`→`<br>` tanpa styling lain). Ditambah 3 builder baru + 1 helper tabel (`simpleTable`, buat daftar barang ATK):
+
+- **`buildRequestBaruEmailHtml({jenisRequest, namaPemohon, departemen, rows, itemsTable?, fotoUrl?})`** — notif ke Admin GA saat ada pengajuan BARU masuk dari portal publik (`src/app/page.tsx`). 1 builder dipakai untuk 3 jenis request (ATK/Overtime Gedung/Tiket Helpdesk) karena bentuknya sama, cuma isi field beda:
+  - `kirimNotifikasiAdminGA()` di `src/app/page.tsx` dirombak — sebelumnya terima 1 string `detail` freeform (disusun manual pakai template literal `\n`/koma) lalu di-convert kasar via `formatPesanUntukEmail` (fungsi ini DIHAPUS, gak dipakai lagi). Sekarang terima `rows: {label,value}[]` terstruktur langsung dari field form asli (`formOvertime.tanggal`, `.area`, `.jam_mulai`, dst — bukan string gabungan), plus `itemsTable` khusus request ATK (tabel Barang/Jumlah/Keterangan dari `formAtkItems`) dan `fotoUrl` khusus Helpdesk (foto awal kerusakan, kalau ada — sebelumnya foto ini cuma tersimpan di Firestore, gak pernah ikut ke notifikasi).
+- **`buildAtkSiapEmailHtml({namaPemohon, kodeResi, departemen?, items})`** — notif ke pemohon saat ATK siap diambil (`admin/atk/page.tsx`), tabel daftar barang + kode resi ditonjolkan bold.
+- **`buildHelpdeskUpdateEmailHtml({namaPelapor, kodeTiket, statusBaru, lokasi?, deskripsi?})`** — notif ke pelapor saat status tiket helpdesk berubah (`admin/helpdesk/page.tsx`), badge hijau kalau status mengandung "selesai"/"close", merah selainnya.
+
+Pola yang sama dipertahankan di semua call site: jalur WA tetap pakai teks `template.xxx(...)` gaya WhatsApp asli (itu format yang benar buat WA), CUMA jalur email yang diganti ke builder HTML baru. Semua value user-input (nama barang, deskripsi, alasan, dst) di-`escapeHtml()` sebelum masuk ke tabel/field row, mencegah HTML lain ketimpa/rusak kalau user ngetik karakter aneh macam `<`/`>` di form.
+
+### 18C. Root cause email tampil sebagai teks mentah + kode template EmailJS
+
+**Ini BUKAN bug di kode aplikasi** — HTML yang dikirim `kirimEmail()` sudah benar sejak §17. Masalahnya ada di TEMPLATE EmailJS-nya sendiri (dashboard eksternal, di luar repo ini), 2 hal:
+1. Template "Contact Us" pakai mode **Design Editor** (WYSIWYG) — variabel `{{message}}` di mode ini di-treat sebagai teks biasa yang di-escape, bukan HTML mentah. Harus pindah ke **Code Editor** (edit HTML mentah langsung).
+2. Variabel yang dipakai template (`{{name}}`, `{{time}}`) gak cocok sama yang dikirim app — `kirimEmail()` (`src/lib/notify.ts`) cuma kirim 4 variabel: `to_email`, `to_name`, `subject`, `message`. Gak ada `name`/`time`. Itu sebabnya di screenshot baris "A message by [kosong] has been received" — `{{name}}` gak ke-isi karena app gak pernah kirim variabel bernama `name`.
+
+**Solusi**: karena `message` yang dikirim app SEKARANG SUDAH berupa HTML lengkap siap-pakai (header, body, footer — dibuat `emailShell()` di `emailTemplates.ts`), template EmailJS-nya cukup jadi wrapper TIPIS aja, gak perlu desain ulang apa-apa lagi di sana. Cara pakai:
+
+1. Buka EmailJS → Email Templates → "Contact Us" (template yang dipakai, sesuai `EMAILJS_TEMPLATE_ID` di `.env.local`) → tab **Content** → klik **Edit Content** → pilih **Code Editor** (bukan Design Editor).
+2. Hapus semua isi Content yang ada, ganti dengan persis kode ini:
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body style="margin:0; padding:0; background:#f4f4f5;">
+    {{message}}
+  </body>
+</html>
+```
+
+3. Di panel kanan (di luar Content), field **"From Name"** saat ini isinya `{{to_name}}` — ini SALAH (itu nama PENERIMA, bukan pengirim). Ganti jadi teks statis, contoh: `SIBM - PT Samudera`. Field **"Subject"** (`{{subject}}`) dan **"To Email"** (`{{to_email}}`) SUDAH BENAR, jangan diubah.
+4. Save, lalu tes kirim 1 email (approve overtime / catat paket baru di app) buat pastikan sekarang render HTML beneran, bukan tag mentah lagi.
+
+Karena SEMUA jenis notifikasi (paket, overtime, ATK, helpdesk, request baru) lewat 1 fungsi `kirimEmail()` yang sama, template ini CUMA PERLU DIUBAH SEKALI — otomatis berlaku buat semua jenis email sekarang dan yang bakal ditambah nanti, selama tetap kirim `message` berupa HTML lewat `kirimEmail()`.
+
+### 18D. Alarm suara untuk banner pengingat (`src/lib/soundAlert.ts`, baru)
+
+`bunyikanAlertPengingat(tone)` — bangkitkan 2 nada pendek lewat Web Audio API (`AudioContext` + oscillator sine wave), BUKAN file audio (gak perlu nambah aset ke `/public`, tetap jalan offline). Tone `"warning"` = 2 nada (784Hz→659Hz), `"urgent"` = 3 nada naik yang lebih mendesak (880→880→1046Hz). Dibungkus try/catch — kalau browser blokir autoplay (kebijakan standar browser sebelum ada interaksi user) atau `AudioContext` gak didukung, diam-diam gagal, banner visual tetap tampil normal.
+
+Dipasang di `StickyBanner.tsx` (jadi otomatis berlaku ke SEMUA 3 banner dari §17: `PatroliShiftBanner`, `AparInspectionBanner`, `ChecklistOBBanner`) — effect baru bunyi begitu banner mount / `resetKey` berganti (sesi/hari baru), lalu `setInterval` ulang tiap 10 menit selama komponen masih ter-mount. Karena parent cuma render `<StickyBanner>` selama `pending===true` (lihat `usePendingTask` di §17D), alarm otomatis berhenti begitu tugasnya kelar (component unmount, interval ke-`clearInterval`) — TIDAK perlu logic stop manual terpisah. Alarm tetap bunyi walau banner lagi "disembunyikan" (collapsed) — collapse cuma sembunyiin tampilan, bukan matiin reminder, sesuai maksud "notif terus muncul sampai tugas selesai" dari permintaan awal §17.
+
+### 18E. Verifikasi
+
+- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error, 104 warning (sama persis kayak §17, gak nambah).
+- `npm run build`: sukses, 32 route.
+- Verifikasi visual di dev server (data production real): `admin/atk` (tabel resi real kebaca, 27 item master data), `admin/helpdesk` (tabel tiket real kebaca) — render normal tanpa error. Sempat muncul 2 error 404 (`/shift-checkin`) di console pas pertama buka `admin/atk` — diinvestigasi, ternyata bug LAMA gak terkait perubahan sesi ini (`admin/atk/page.tsx` masih pakai cek akses manual sendiri, bukan `useAuthGuard`, dan redirect ke route `/shift-checkin` yang emang gak ada secara fisik kalau `pic_dept` gak cocok — ke-trigger karena sesi test browser masih nyimpen dept dari test sebelumnya). Setelah dept test disesuaikan, halaman render bersih tanpa error console sama sekali.
+- **Gak bisa dites dari sini**: kirim email sungguhan pakai template EmailJS baru (§18C) — perlu user sendiri paste kode ke dashboard EmailJS eksternal.
+
+**Sudah di-commit + push (dev→main) + build + deploy** sesuai instruksi eksplisit user ("langsung saja commit dulu sampai deploy").

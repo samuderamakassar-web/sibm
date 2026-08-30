@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, addDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+import { buildAtkSiapEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 
@@ -137,7 +138,7 @@ export default function AdminAtkPage() {
       try {
         const req = atkRequests.find(r => r.id === id);
         if (req) {
-          await kirimNotifikasiAtkSiap(req.nama_pemohon, req.resi);
+          await kirimNotifikasiAtkSiap(req);
         }
       } finally {
         setSedangUpdateId(null);
@@ -152,23 +153,28 @@ export default function AdminAtkPage() {
   };
 
   // Kirim WA + Email ke pemohon saat ATK siap diambil
-  const kirimNotifikasiAtkSiap = async (namaPemohon: string, kodeResi: string) => {
-    const kontak = cariKontakKaryawan(namaPemohon);
+  const kirimNotifikasiAtkSiap = async (req: AtkRequest) => {
+    const kontak = cariKontakKaryawan(req.nama_pemohon);
 
     if (!kontak || (!kontak.no_wa && !kontak.email)) {
-      console.warn(`[notify] Kontak untuk "${namaPemohon}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi ATK dilewati.`);
+      console.warn(`[notify] Kontak untuk "${req.nama_pemohon}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi ATK dilewati.`);
       return;
     }
 
-    const pesan = template.atkSiapDiambil(namaPemohon, kodeResi);
-
     if (kontak.no_wa) {
-      const hasilWA = await kirimWA(kontak.no_wa, pesan);
+      const pesanWA = template.atkSiapDiambil(req.nama_pemohon, req.resi);
+      const hasilWA = await kirimWA(kontak.no_wa, pesanWA);
       if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA ATK:", hasilWA.pesanError);
     }
 
     if (kontak.email) {
-      const hasilEmail = await kirimEmail(kontak.email, `ATK Siap Diambil - Resi ${kodeResi}`, pesan, namaPemohon);
+      const htmlEmail = buildAtkSiapEmailHtml({
+        namaPemohon: req.nama_pemohon,
+        kodeResi: req.resi,
+        departemen: req.departemen,
+        items: req.items,
+      });
+      const hasilEmail = await kirimEmail(kontak.email, `ATK Siap Diambil - Resi ${req.resi}`, htmlEmail, req.nama_pemohon);
       if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email ATK:", hasilEmail.pesanError);
     }
   };

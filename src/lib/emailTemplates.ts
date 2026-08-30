@@ -61,6 +61,14 @@ function statusBadge(text: string, tone: "ok" | "danger"): string {
   return `<span style="display:inline-block;padding:6px 14px;border-radius:20px;background:${bg};color:${color};font-size:12.5px;font-weight:800;border:1px solid ${border};">${text}</span>`;
 }
 
+function simpleTable(headers: string[], rows: string[][]): string {
+  const thead = headers.map((h) => `<th style="text-align:left;padding:8px 10px;font-size:11px;color:#71717a;background:#f7f6f5;border-bottom:1px solid #e7e5e4;">${escapeHtml(h)}</th>`).join("");
+  const tbody = rows
+    .map((r) => `<tr>${r.map((c) => `<td style="padding:8px 10px;font-size:12.5px;color:#18181b;border-bottom:1px solid #f0f0ef;">${c}</td>`).join("")}</tr>`)
+    .join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+}
+
 export function buildPaketEmailHtml(p: {
   namaPenerima: string;
   namaPetugas: string;
@@ -127,4 +135,95 @@ export function buildOvertimeEmailHtml(p: {
   `;
 
   return emailShell("&#128337; Update Pengajuan Overtime", body);
+}
+
+/**
+ * Notifikasi ke Admin GA saat ada pengajuan BARU masuk (ATK / Overtime Gedung / Tiket Helpdesk)
+ * dari portal publik (src/app/page.tsx). Satu builder dipakai untuk ketiganya -- bentuknya sama
+ * (judul + info pemohon + rincian field), cuma isi `rows`/`itemsTable`-nya beda per jenis.
+ */
+export function buildRequestBaruEmailHtml(p: {
+  jenisRequest: string;
+  namaPemohon: string;
+  departemen: string;
+  rows: { label: string; value: string }[];
+  itemsTable?: { headers: string[]; rows: string[][] };
+  fotoUrl?: string;
+}): string {
+  const infoRows = [
+    fieldRow("Jenis Request", escapeHtml(p.jenisRequest)),
+    fieldRow("Nama Pemohon", escapeHtml(p.namaPemohon)),
+    fieldRow("Departemen", escapeHtml(p.departemen)),
+    ...p.rows.map((r) => fieldRow(r.label, escapeHtml(r.value))),
+  ].join("");
+
+  const tabel = p.itemsTable
+    ? simpleTable(p.itemsTable.headers, p.itemsTable.rows.map((r) => r.map((c) => escapeHtml(c))))
+    : "";
+  const foto = p.fotoUrl
+    ? `<div style="margin-top:18px;"><div style="font-size:11.5px;color:#71717a;font-weight:700;margin-bottom:8px;">FOTO LAMPIRAN</div><img src="${p.fotoUrl}" alt="Lampiran" style="max-width:100%;border-radius:10px;border:1px solid #e7e5e4;display:block;" /></div>`
+    : "";
+
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      Ada pengajuan baru yang perlu diproses di Dashboard Admin GA:
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${infoRows}</table>
+    ${tabel}
+    ${foto}
+  `;
+
+  return emailShell(`&#128276; Request Baru: ${escapeHtml(p.jenisRequest)}`, body);
+}
+
+/** Notifikasi ke pemohon saat request ATK sudah siap diambil di gudang GA. */
+export function buildAtkSiapEmailHtml(p: {
+  namaPemohon: string;
+  kodeResi: string;
+  departemen?: string;
+  items: { nama_barang: string; jumlah: string; deskripsi?: string }[];
+}): string {
+  const rows = [
+    fieldRow("Nama Pemohon", escapeHtml(p.namaPemohon)),
+    ...(p.departemen ? [fieldRow("Departemen", escapeHtml(p.departemen))] : []),
+    fieldRow("Kode Resi", `<b>${escapeHtml(p.kodeResi)}</b>`),
+  ].join("");
+
+  const tabel = simpleTable(
+    ["Barang", "Jumlah", "Keterangan"],
+    p.items.map((it) => [escapeHtml(it.nama_barang), escapeHtml(it.jumlah), escapeHtml(it.deskripsi || "-")])
+  );
+
+  const body = `
+    <div style="margin-bottom:16px;">${statusBadge("&#10003; SIAP DIAMBIL", "ok")}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+    ${tabel}
+    <p style="margin:16px 0 0 0;font-size:13px;color:#3f3f46;">Silakan diambil di gudang GA dengan menunjukkan kode resi di atas.</p>
+  `;
+
+  return emailShell("&#128230; ATK Siap Diambil", body);
+}
+
+/** Notifikasi ke pelapor saat status tiket helpdesk berubah. */
+export function buildHelpdeskUpdateEmailHtml(p: {
+  namaPelapor: string;
+  kodeTiket: string;
+  statusBaru: string;
+  lokasi?: string;
+  deskripsi?: string;
+}): string {
+  const selesai = p.statusBaru.toLowerCase().includes("selesai") || p.statusBaru.toLowerCase().includes("close");
+  const rows = [
+    fieldRow("Nama Pelapor", escapeHtml(p.namaPelapor)),
+    fieldRow("Kode Tiket", `<b>${escapeHtml(p.kodeTiket)}</b>`),
+    ...(p.lokasi ? [fieldRow("Lokasi", escapeHtml(p.lokasi))] : []),
+    ...(p.deskripsi ? [fieldRow("Deskripsi Masalah", escapeHtml(p.deskripsi))] : []),
+  ].join("");
+
+  const body = `
+    <div style="margin-bottom:16px;">${statusBadge(escapeHtml(p.statusBaru.toUpperCase()), selesai ? "ok" : "danger")}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+  `;
+
+  return emailShell("&#128295; Update Tiket Helpdesk", body);
 }

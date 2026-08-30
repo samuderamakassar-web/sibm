@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Button from "../../../components/ui/Button";
@@ -165,7 +166,7 @@ export default function AdminHelpdeskPage() {
       });
 
       if (statusBerubah) {
-        await kirimNotifikasiHelpdesk(selectedTicket.nama_pelapor, statusUbah, selectedTicket.id);
+        await kirimNotifikasiHelpdesk(selectedTicket, statusUbah);
       }
 
       showToast("Status tiket berhasil diperbarui!", "success");
@@ -183,7 +184,8 @@ export default function AdminHelpdeskPage() {
     return daftarKontak.find((k) => (k.nama || "").trim().toLowerCase() === namaNormal);
   };
 
-  const kirimNotifikasiHelpdesk = async (namaPelapor: string, statusBaru: string, ticketId: string) => {
+  const kirimNotifikasiHelpdesk = async (ticket: HelpdeskTicket, statusBaru: string) => {
+    const namaPelapor = ticket.nama_pelapor;
     const kontak = cariKontakKaryawan(namaPelapor);
 
     if (!kontak || (!kontak.no_wa && !kontak.email)) {
@@ -191,16 +193,23 @@ export default function AdminHelpdeskPage() {
       return;
     }
 
-    const kodeTiket = ticketId.slice(0, 8).toUpperCase();
-    const pesan = template.helpdeskUpdate(namaPelapor, statusBaru, kodeTiket);
+    const kodeTiket = ticket.id.slice(0, 8).toUpperCase();
 
     if (kontak.no_wa) {
-      const hasilWA = await kirimWA(kontak.no_wa, pesan);
+      const pesanWA = template.helpdeskUpdate(namaPelapor, statusBaru, kodeTiket);
+      const hasilWA = await kirimWA(kontak.no_wa, pesanWA);
       if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA helpdesk:", hasilWA.pesanError);
     }
 
     if (kontak.email) {
-      const hasilEmail = await kirimEmail(kontak.email, `Update Tiket Helpdesk ${kodeTiket}: ${statusBaru}`, pesan, namaPelapor);
+      const htmlEmail = buildHelpdeskUpdateEmailHtml({
+        namaPelapor,
+        kodeTiket,
+        statusBaru,
+        lokasi: ticket.lokasi,
+        deskripsi: ticket.deskripsi,
+      });
+      const hasilEmail = await kirimEmail(kontak.email, `Update Tiket Helpdesk ${kodeTiket}: ${statusBaru}`, htmlEmail, namaPelapor);
       if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email helpdesk:", hasilEmail.pesanError);
     }
   };
