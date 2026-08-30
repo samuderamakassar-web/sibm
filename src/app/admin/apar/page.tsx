@@ -40,8 +40,15 @@ const IconCheckCircle = ({ size = 14, color = "currentColor" }: IconProps) => (
 const IconInbox = ({ size = 30, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
 );
+const IconCalendar = ({ size = 15, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M8 3v4" /><path d="M16 3v4" /></svg>
+);
+const IconXCircle = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m9.5 9.5 5 5" /><path d="m14.5 9.5-5 5" /></svg>
+);
 
 const DAFTAR_LANTAI = ["Ground (Basement)", "Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Lantai 5"];
+const NAMA_BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
 
 interface TerakhirInspeksi {
   petugas: string;
@@ -61,6 +68,20 @@ interface AparUnit {
   terakhir_inspeksi: TerakhirInspeksi | null;
 }
 
+interface AparInspection {
+  id: string;
+  apar_id: string;
+  kode: string;
+  lantai: string;
+  bulan_tahun: string;
+  petugas: string;
+  waktu_inspeksi: Timestamp | null;
+  kondisi_tabung: string;
+  tekanan: string;
+  segel_utuh: boolean;
+  catatan: string;
+}
+
 const bulanTahunSekarang = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -71,9 +92,9 @@ export default function AdminAparPage() {
   const showToast = useToast();
   const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({
-    roles: ["Admin"],
+    depts: ["Admin GA", "QHSE"],
     redirectTo: "/",
-    deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA & QHSE.",
   });
   const adminName = session?.nama || "Admin";
 
@@ -85,6 +106,11 @@ export default function AdminAparPage() {
 
   const [form, setForm] = useState({ lantai: DAFTAR_LANTAI[0], kode: "", lokasi: "", kadaluarsa: "" });
 
+  // 🔹 TAB & RIWAYAT INSPEKSI
+  const [activeTab, setActiveTab] = useState<"MASTER" | "RIWAYAT">("MASTER");
+  const [aparInspections, setAparInspections] = useState<AparInspection[]>([]);
+  const [filterTahun, setFilterTahun] = useState<string>(String(new Date().getFullYear()));
+
   useEffect(() => {
     if (!isReady) return;
     const q = query(collection(db, "apar_units"), orderBy("lantai", "asc"));
@@ -92,6 +118,16 @@ export default function AdminAparPage() {
       const arr: AparUnit[] = [];
       snap.forEach((d) => arr.push({ id: d.id, ...d.data() } as AparUnit));
       setUnitApar(arr);
+    });
+    return () => unsub();
+  }, [isReady]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    const unsub = onSnapshot(collection(db, "apar_inspections"), (snap) => {
+      const arr: AparInspection[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...d.data() } as AparInspection));
+      setAparInspections(arr);
     });
     return () => unsub();
   }, [isReady]);
@@ -156,6 +192,25 @@ export default function AdminAparPage() {
   const bulanIni = bulanTahunSekarang();
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
+  // 🔹 Daftar tahun untuk filter riwayat inspeksi (tahun sekarang selalu ada walau belum ada data)
+  const tahunSekarang = new Date().getFullYear();
+  const tahunTersedia = Array.from(new Set([
+    tahunSekarang,
+    ...aparInspections.filter(i => i.bulan_tahun).map(i => Number(i.bulan_tahun.split("-")[0]))
+  ])).sort((a, b) => b - a);
+
+  // 🔹 Status inspeksi per unit APAR per bulan (Jan-Des) untuk tahun yang difilter
+  const riwayatPerUnit = unitApar.map(unit => {
+    const bulanStatus = NAMA_BULAN_SINGKAT.map((_, idx) => {
+      const bulanTahunKey = `${filterTahun}-${String(idx + 1).padStart(2, "0")}`;
+      const records = aparInspections
+        .filter(i => i.apar_id === unit.id && i.bulan_tahun === bulanTahunKey)
+        .sort((a, b) => (b.waktu_inspeksi?.toMillis() || 0) - (a.waktu_inspeksi?.toMillis() || 0));
+      return records[0] || null;
+    });
+    return { unit, bulanStatus };
+  });
+
   if (!isReady) return null;
 
   return (
@@ -212,7 +267,7 @@ export default function AdminAparPage() {
       `}} />
 
       <div className="site-header no-print">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
+        <button className="back-btn" onClick={() => router.push(session?.dept === "QHSE" ? "/dashboard/qhse" : "/admin")}>
           <IconArrowLeft size={16} /> Kembali ke Control Panel
         </button>
         <div className="admin-badge"><IconUserCircle size={14} /> {adminName}</div>
@@ -227,6 +282,24 @@ export default function AdminAparPage() {
 
       <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 20px 30px", position: "relative", zIndex: 10 }}>
 
+        {/* 🔹 TAB NAVIGASI */}
+        <div className="no-print" style={{ display: "flex", gap: "4px", marginBottom: "20px", background: "rgba(255,255,255,0.5)", padding: "5px", borderRadius: "14px", border: "1px solid var(--line)", width: "fit-content" }}>
+          <button
+            onClick={() => setActiveTab("MASTER")}
+            style={{ padding: "10px 18px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 800, fontSize: "13px", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px", background: activeTab === "MASTER" ? "var(--surface)" : "transparent", color: activeTab === "MASTER" ? "var(--red-600)" : "var(--ink-soft)", boxShadow: activeTab === "MASTER" ? "0 2px 8px rgba(0,0,0,0.08)" : "none" }}
+          >
+            <IconFireExtinguisher size={15} /> Master Data
+          </button>
+          <button
+            onClick={() => setActiveTab("RIWAYAT")}
+            style={{ padding: "10px 18px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 800, fontSize: "13px", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px", background: activeTab === "RIWAYAT" ? "var(--surface)" : "transparent", color: activeTab === "RIWAYAT" ? "var(--red-600)" : "var(--ink-soft)", boxShadow: activeTab === "RIWAYAT" ? "0 2px 8px rgba(0,0,0,0.08)" : "none" }}
+          >
+            <IconCalendar size={15} /> Hasil Inspeksi
+          </button>
+        </div>
+
+        {activeTab === "MASTER" && (
+        <>
         <div className="panel no-print" style={{ marginBottom: "25px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -290,6 +363,74 @@ export default function AdminAparPage() {
               );
             })}
           </div>
+        )}
+        </>
+        )}
+
+        {activeTab === "RIWAYAT" && (
+        <div className="panel no-print">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "20px" }}>
+            <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <IconCalendar size={18} color="var(--red-600)" /> Hasil Inspeksi APAR
+            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink-soft)" }}>Filter Tahun:</span>
+              <select value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} className="field-input" style={{ width: "auto", fontWeight: "bold" }}>
+                {tahunTersedia.map(th => <option key={th} value={th}>{th}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {riwayatPerUnit.length === 0 ? (
+            <div style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+              <IconInbox size={30} color="var(--muted)" />
+              Belum ada unit APAR terdaftar.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <thead>
+                  <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
+                    <th style={{ padding: "12px 15px", textAlign: "left", borderBottom: "2px solid var(--line)", position: "sticky", left: 0, background: "var(--bg)", minWidth: "210px" }}>Detail APAR & Lokasi</th>
+                    {NAMA_BULAN_SINGKAT.map(b => (
+                      <th key={b} style={{ padding: "10px 6px", textAlign: "center", borderBottom: "2px solid var(--line)", minWidth: "62px" }}>{b}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {riwayatPerUnit.map(({ unit, bulanStatus }) => (
+                    <tr key={unit.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                      <td style={{ padding: "12px 15px", position: "sticky", left: 0, background: "var(--surface)" }}>
+                        <div style={{ fontWeight: 800, color: "var(--ink)" }}>{unit.kode}</div>
+                        <div style={{ color: "var(--muted)", fontSize: "12px", marginTop: "2px" }}>{unit.lokasi}</div>
+                        <div style={{ display: "inline-block", marginTop: "5px", fontSize: "10px", color: "white", background: "var(--ink-soft)", padding: "2px 9px", borderRadius: "20px", fontWeight: "bold" }}>{unit.lantai}</div>
+                      </td>
+                      {bulanStatus.map((rec, idx) => {
+                        const waktu = rec?.waktu_inspeksi?.toDate() || null;
+                        return (
+                          <td key={idx} style={{ padding: "8px 4px", textAlign: "center", verticalAlign: "middle" }}>
+                            {waktu ? (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                                <IconCheckCircle size={16} color="var(--ok)" />
+                                <div style={{ fontSize: "9.5px", color: "var(--ink-soft)", fontWeight: "bold", lineHeight: 1.3 }}>
+                                  {waktu.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit" })}
+                                  <br />
+                                  {waktu.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                                </div>
+                              </div>
+                            ) : (
+                              <IconXCircle size={16} color="var(--red-500)" />
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         )}
       </div>
 

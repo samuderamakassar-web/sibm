@@ -227,6 +227,11 @@ export default function DriverDashboardPage() {
 
   const handleLogout = () => logout(router, "/");
 
+  // Bottom-nav mobile cuma scroll ke section terkait — halaman ini 1 kolom panjang, bukan multi-route
+  const scrollKeSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  };
+
   // 5. Fungsi Update Status Personel Cepat (Jika keluar tanpa mobil kantor)
   const handleUpdateStatusPersonel = async (statusBaru: string) => {
     setIsLoadingPersonel(true);
@@ -520,32 +525,82 @@ export default function DriverDashboardPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f1f5f9", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "100px" }}>
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "110px" }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        .driver-site-header {
+          position: sticky; top: 0; z-index: 50;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 20px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .driver-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
+          padding: 30px 20px 55px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .driver-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .driver-hero-content { position: relative; }
+
+        .driver-bottom-nav { display: none; }
+        @media (max-width: 768px) {
+          .driver-bottom-nav {
+            display: flex; align-items: center; justify-content: space-around;
+            position: fixed; left: 14px; right: 14px; bottom: 14px; height: 66px; z-index: 90;
+            background: rgba(255,255,255,0.97); backdrop-filter: blur(14px);
+            border-radius: 24px; box-shadow: 0 15px 35px -10px rgba(0,0,0,0.25); border: 1px solid var(--line);
+          }
+          .driver-nav-item {
+            display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none;
+            cursor: pointer; color: #a1a1aa; font-size: 9.5px; font-weight: 700; font-family: inherit; flex: 1;
+          }
+          .driver-nav-item.active { color: var(--red-600); }
+          .driver-nav-fab {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+            width: 52px; height: 52px; border-radius: 50%; transform: translateY(-16px);
+            background: linear-gradient(150deg, var(--red-600), var(--red-700)); color: #fff; border: 4px solid var(--bg);
+            box-shadow: 0 10px 20px -6px rgba(220,38,38,0.6); cursor: pointer; font-size: 9px; font-weight: 800; font-family: inherit;
+          }
+        }
+      `}} />
 
       {/* 🔹 TOP BAR NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ fontWeight: "900", color: "#e53e3e", fontSize: "18px", letterSpacing: "1px" }}>SIBM <span style={{color:"#2d3748"}}>DRIVER</span></div>
+      <div className="driver-site-header">
+        <div style={{ fontWeight: "900", color: "var(--red-600)", fontSize: "18px", letterSpacing: "1px" }}>SIBM <span style={{color:"var(--ink)"}}>DRIVER</span></div>
         <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={handleLogout} style={{ background: "#fff5f5", color: "#e53e3e", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "1px solid #fed7d7", cursor: "pointer" }}>
+          <button onClick={handleLogout} style={{ background: "var(--red-50)", color: "var(--red-600)", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(220,38,38,0.2)", cursor: "pointer", fontFamily: "inherit" }}>
             Keluar ➔
           </button>
         </div>
       </div>
 
       {/* 🔹 HERO SECTION PROFILE */}
-      <div style={{ background: "linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%)", padding: "30px 20px 60px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(43, 108, 176, 0.2)" }}>
-        <div style={{ fontSize: "50px", marginBottom: "10px" }}>🧑‍✈️</div>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "22px", fontWeight: "900" }}>Halo, {activeDriver.split(" ")[0]}!</h1>
-        <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Dashboard Operasional Pengemudi</p>
-        <div style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(5px)", padding: "8px 20px", borderRadius: "50px", fontSize: "12px", fontWeight: "bold", display: "inline-block", border: "1px solid rgba(255,255,255,0.3)" }}>
-          {waktuSekarang}
+      <div className="driver-hero">
+        <div className="driver-hero-content">
+          <div style={{ fontSize: "50px", marginBottom: "10px" }}>🧑‍✈️</div>
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "22px", fontWeight: "900" }}>Halo, {activeDriver.split(" ")[0]}!</h1>
+          <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Dashboard Operasional Pengemudi</p>
+          <div style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(5px)", padding: "8px 20px", borderRadius: "50px", fontSize: "12px", fontWeight: "bold", display: "inline-block", border: "1px solid rgba(255,255,255,0.3)" }}>
+            {waktuSekarang}
+          </div>
         </div>
       </div>
 
       <div style={{ maxWidth: "500px", margin: "-30px auto 0", padding: "0 15px", display: "flex", flexDirection: "column", gap: "20px", position: "relative", zIndex: 10 }}>
 
         {/* 🔹 CARD 1: STATUS KESIAGAAN INSTAN */}
-        <div style={{ background: "white", padding: "20px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+        <div id="card-status" style={{ background: "white", padding: "20px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", scrollMarginTop: "80px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
             <h3 style={{ margin: 0, color: "#2d3748", fontSize: "15px", fontWeight: "800" }}>📡 Status Anda Saat Ini:</h3>
             <span style={{ fontSize: "11px", fontWeight: "bold", padding: "6px 12px", borderRadius: "8px", background: statusTerkini === "Standby" ? "#c6f6d5" : statusTerkini === "Keluar Beroperasi" ? "#fed7d7" : "#e2e8f0", color: statusTerkini === "Standby" ? "#22543d" : statusTerkini === "Keluar Beroperasi" ? "#9b2c2c" : "#4a5568" }}>
@@ -566,7 +621,7 @@ export default function DriverDashboardPage() {
         </div>
 
         {/* 🔹 CARD 2: FORM BAWA KENDARAAN */}
-        <div style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+        <div id="card-armada" style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", scrollMarginTop: "80px" }}>
           <h3 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "16px", fontWeight: "900", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
             <span style={{background: "#ebf8ff", padding: "6px", borderRadius: "8px"}}>🚙</span> Form Bawa Armada
           </h3>
@@ -615,7 +670,7 @@ export default function DriverDashboardPage() {
 
         {/* 🔹 CARD BARU: INSPEKSI MINGGUAN KENDARAAN */}
         {kendaraanId && (
-          <div style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+          <div id="card-inspeksi" style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", scrollMarginTop: "80px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", marginBottom: "15px" }}>
               <h3 style={{ margin: 0, color: "#2d3748", fontSize: "16px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px" }}>
                 <span style={{background: "#f0fff4", padding: "6px", borderRadius: "8px"}}>🔍</span> Inspeksi Mingguan
@@ -686,7 +741,7 @@ export default function DriverDashboardPage() {
 
         {/* 🔹 CARD BARU: SERVIS, UJI EMISI & CATAT ODOMETER — biar Driver bisa lapor langsung, gak semua beban nyatet ke Security */}
         {kendaraanId && (
-          <div style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+          <div id="card-servis" style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", scrollMarginTop: "80px" }}>
             <h3 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "16px", fontWeight: "900", borderBottom: "2px solid #edf2f7", paddingBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ background: "#ebf8ff", padding: "6px", borderRadius: "8px" }}>🛠️</span> Servis, Uji Emisi &amp; Odometer
             </h3>
@@ -755,7 +810,7 @@ export default function DriverDashboardPage() {
         )}
 
         {/* 🔹 CARD 3: RIWAYAT SAYA HARI INI */}
-        <div style={{ background: "white", padding: "20px", borderRadius: "24px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" }}>
+        <div id="card-riwayat" style={{ background: "white", padding: "20px", borderRadius: "24px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", scrollMarginTop: "80px" }}>
           <h3 style={{ margin: "0 0 15px 0", color: "#2d3748", fontSize: "14px", fontWeight: "800" }}>🕒 Riwayat Armada Terakhir Anda</h3>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -901,6 +956,25 @@ export default function DriverDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* 🔹 BOTTOM NAV MOBILE — reference tampilan halaman utama (src/app/page.tsx): pill mengambang, blur, FAB merah di tengah */}
+      <nav className="driver-bottom-nav">
+        <button className="driver-nav-item" onClick={() => router.push("/")}>
+          <span style={{ fontSize: "18px" }}>🏠</span> Portal
+        </button>
+        <button className="driver-nav-item" onClick={() => scrollKeSection("card-armada")}>
+          <span style={{ fontSize: "18px" }}>🚙</span> Armada
+        </button>
+        <button className="driver-nav-fab" onClick={() => scrollKeSection("card-inspeksi")} title="Inspeksi Kendaraan">
+          <span style={{ fontSize: "18px" }}>🔍</span> Inspeksi
+        </button>
+        <button className="driver-nav-item" onClick={() => scrollKeSection("card-servis")}>
+          <span style={{ fontSize: "18px" }}>🛠️</span> Servis
+        </button>
+        <button className="driver-nav-item" onClick={() => scrollKeSection("card-riwayat")}>
+          <span style={{ fontSize: "18px" }}>🕒</span> Riwayat
+        </button>
+      </nav>
 
     </div>
   );

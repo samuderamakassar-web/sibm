@@ -111,12 +111,17 @@ export default function SecurityDashboard() {
 
         snap.forEach(doc => {
           const data = doc.data();
-          staffList.push(data.nama);
+          const staffRole: string = data.role || "Staff";
+          const isMagangStaff = staffRole.toLowerCase().includes("magang");
+
+          // Anak magang gak ikut plotting jadwal shift, jadi gak dimasukin ke kolom roster
+          if (!isMagangStaff) {
+            staffList.push(data.nama);
+          }
 
           if (data.nama === nama) {
-            const actualRole = data.role || "Staff";
-            role = actualRole;
-            localStorage.setItem("pic_role", actualRole);
+            role = staffRole;
+            localStorage.setItem("pic_role", staffRole);
           }
         });
 
@@ -309,6 +314,12 @@ export default function SecurityDashboard() {
 
   const roleLower = picRole.toLowerCase();
   const isKoordinatorArea = roleLower.includes("danru") || roleLower.includes("koordinator") || roleLower.includes("admin");
+  const isMagang = roleLower.includes("magang");
+
+  // Anak magang cuma bantu-bantu Buku Tamu & Paket, menu lain (patroli, parkir, APAR, lembur) disembunyikan
+  const menuUntukDitampilkan = isMagang
+    ? menuSecurity.filter(menu => menu.path === "/dashboard/security/buku-tamu" || menu.path === "/dashboard/security/paket")
+    : menuSecurity;
 
   const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
 
@@ -482,24 +493,26 @@ export default function SecurityDashboard() {
       {/* 🔹 MAIN CONTENT WRAPPER */}
       <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
 
-        {/* 📢 KARTU SHIFT HARI INI */}
-        <div className="shift-card no-print">
-          <div>
-            <p style={{ margin: "0 0 5px 0", color: "var(--muted)", fontSize: "13px", fontWeight: "bold", textTransform: "uppercase" }}>Jadwal Anda Hari Ini</p>
-            <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>
-              {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-            </h2>
+        {/* 📢 KARTU SHIFT HARI INI — gak relevan buat magang karena gak ikut plotting shift */}
+        {!isMagang && (
+          <div className="shift-card no-print">
+            <div>
+              <p style={{ margin: "0 0 5px 0", color: "var(--muted)", fontSize: "13px", fontWeight: "bold", textTransform: "uppercase" }}>Jadwal Anda Hari Ini</p>
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>
+                {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+              </h2>
+            </div>
+            <div className="shift-badge" style={isOff
+              ? { background: "var(--red-50)", color: "var(--red-600)", borderColor: "rgba(220,38,38,0.3)" }
+              : { background: "var(--ok-50)", color: "var(--ok)", borderColor: "rgba(22,163,74,0.3)" }}>
+              {isOff ? (
+                <><IconAlertTriangle size={16} /> {hariIniShift.toUpperCase()}</>
+              ) : (
+                <><IconMapPin size={16} /> ON DUTY : {hariIniShift.toUpperCase()} {waktuTeks ? `(${waktuTeks})` : ""}</>
+              )}
+            </div>
           </div>
-          <div className="shift-badge" style={isOff
-            ? { background: "var(--red-50)", color: "var(--red-600)", borderColor: "rgba(220,38,38,0.3)" }
-            : { background: "var(--ok-50)", color: "var(--ok)", borderColor: "rgba(22,163,74,0.3)" }}>
-            {isOff ? (
-              <><IconAlertTriangle size={16} /> {hariIniShift.toUpperCase()}</>
-            ) : (
-              <><IconMapPin size={16} /> ON DUTY : {hariIniShift.toUpperCase()} {waktuTeks ? `(${waktuTeks})` : ""}</>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* 👑 MENU KHUSUS DANRU */}
         {isKoordinatorArea && (
@@ -518,7 +531,7 @@ export default function SecurityDashboard() {
 
         {/* 🔹 GRID MENU UTAMA SECURITY */}
         <div className="admin-grid no-print">
-          {menuSecurity.map((menu, index) => {
+          {menuUntukDitampilkan.map((menu, index) => {
             const tc = tokenColors[menu.token];
             const MenuIcon = menu.icon;
             return (
@@ -541,7 +554,8 @@ export default function SecurityDashboard() {
           })}
         </div>
 
-        {/* 🗓️ PAPAN MONITORING ROSTER BULANAN */}
+        {/* 🗓️ PAPAN MONITORING ROSTER BULANAN — gak relevan buat magang, gak ikut sistem plotting shift */}
+        {!isMagang && (
         <div className="print-area" style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid var(--line)" }}>
           <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
             <div className="section-title" style={{ marginBottom: 0 }}>
@@ -619,6 +633,7 @@ export default function SecurityDashboard() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) — cukup 4 menu paling sering dipakai + Keluar, biar gak ramai */}

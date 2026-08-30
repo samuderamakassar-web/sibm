@@ -2,61 +2,37 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc } from "firebase/firestore";
-import { db } from "../../lib/firebase";
-import { useToast } from "../ui/ToastProvider";
-import { useConfirm } from "../ui/ConfirmProvider";
 
-interface ReportSBO {
-  id: string;
-  nama_pelapor: string;
-  tanggal_kejadian: string;
-  unit_bisnis: string;
-  lokasi: string;
-  kategori_temuan: string;
-  detail_temuan: string;
-  penyebab: string;
-  action_taken: string;
-  komitmen_pelaku?: string;
-  konsekuensi?: string;
-  status_temuan: string;
-  foto_bukti: string;
-  foto_after?: string;
-  tanggal_closed?: string;
-  waktu_lapor: Timestamp | null;
-}
-
-// Fix bug timezone: sebelumnya pakai new Date().toISOString().split("T")[0] (basis UTC) —
-// sama kelas bug dengan yang sudah difix di halaman lain (ChecklistOBPage, DeepCleaningPage,
-// PlottingOBPage, BukuTamuSecurity). Dipakai di 2 tempat: tanggal_closed (data tersimpan!) &
-// nama file export CSV. Sekarang pakai komponen tanggal lokal.
-const getTodayISOLocal = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
+// ==========================================
+// IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
+// ==========================================
+type IconProps = { size?: number; color?: string };
+const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+);
+const IconLogOut = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
+);
+const IconChevronRight = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+);
+const IconHome = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11 12 4l8 7" /><path d="M6 10v10h12V10" /><path d="M10 20v-6h4v6" /></svg>
+);
+const IconClipboard = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 11h6" /><path d="M9 15h6" /><path d="M9 19h3" /></svg>
+);
+const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v2" /><path d="M8 5h6l1 2H7z" /><path d="M9 7v3" /><path d="M15 7l4-2" /><path d="M9 10h4a3 3 0 0 1 3 3v8H8v-8a3 3 0 0 1 1-2z" /><path d="M8 15h8" /></svg>
+);
+const IconCar = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14" /><path d="M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /><path d="M23 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /><path d="M3 17v-4l2-5a2 2 0 0 1 2-1.4h10A2 2 0 0 1 19 8l2 5v4" /><path d="M3 13h18" /></svg>
+);
 
 export default function DashboardQHSEPage() {
   const router = useRouter();
   const [picName, setPicName] = useState("");
   const [isReady, setIsReady] = useState(false);
-
-  // State Tabel & Laporan
-  const [reports, setReports] = useState<ReportSBO[]>([]);
-  const [filterStatus, setFilterStatus] = useState("Semua");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-
-  // State Modal Closing
-  const [selectedReport, setSelectedReport] = useState<ReportSBO | null>(null);
-  const [fotoAfter, setFotoAfter] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const showToast = useToast();
-  const confirm = useConfirm();
-  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
 
   useEffect(() => {
     const role = localStorage.getItem("pic_role");
@@ -64,335 +40,205 @@ export default function DashboardQHSEPage() {
     const dept = localStorage.getItem("pic_dept");
 
     if (!role || dept !== "QHSE") {
-      showToast("Akses Ditolak! Halaman ini khusus divisi QHSE.", "error");
       router.push("/");
       return;
     }
     setTimeout(() => { setPicName(nama || "Staf QHSE"); setIsReady(true); }, 0);
-
-    const q = query(collection(db, "qhse_sbo_reports"), orderBy("waktu_lapor", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as ReportSBO)));
-    });
-    return () => unsub();
   }, [router]);
 
-  // ===============================================
-  // FUNGSI KOMPRESI FOTO AFTER
-  // ==============================================
-
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-    formData.append("folder", "sibm/qhse-sbo");
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData }
-    );
-    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-    const data = await res.json();
-    return data.secure_url as string;
-  }
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 600;
-        const scaleSize = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scaleSize;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        canvas.toBlob(async (blob) => {
-          if (!blob) return;
-          setIsUploadingFoto(true);
-          try {
-            const url = await uploadToCloudinary(blob);
-            setFotoAfter(url);
-          } catch (err) {
-            console.error(err);
-            showToast("Gagal upload foto, coba lagi.", "error");
-          } finally {
-            setIsUploadingFoto(false);
-          }
-        }, "image/jpeg", 0.6);
-      };
-      if (typeof ev.target?.result === 'string') img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+  const handleKeluar = () => {
+    if (window.confirm("Apakah Anda yakin ingin keluar/logout?")) {
+      localStorage.clear();
+      router.push("/");
+    }
   };
 
-  // ===============================================
-  // FUNGSI EXPORT EXCEL (CSV FORMAT)
-  // ===============================================
-  const handleExportExcel = () => {
-    let filtered = reports;
-    if (startDate) filtered = filtered.filter(r => r.tanggal_kejadian >= startDate);
-    if (endDate) filtered = filtered.filter(r => r.tanggal_kejadian <= endDate);
-    if (filterStatus !== "Semua") filtered = filtered.filter(r => r.status_temuan === filterStatus);
+  // MENU UTAMA QHSE — warna dipetakan ke token desain (lihat tokenColors di bawah)
+  const menuQHSE = [
+    { title: "Safety Behavior Observation", desc: "Database temuan bahaya & tindak lanjut SBO.", path: "/dashboard/qhse/sbo", token: "ok", icon: IconClipboard },
+    { title: "Inspeksi APAR", desc: "Riwayat & status inspeksi APAR per lantai gedung.", path: "/admin/apar", token: "red", icon: IconFireExtinguisher },
+    { title: "Hasil Inspeksi Kendaraan", desc: "Rekap hasil uji emisi & jadwal servis armada.", path: "/admin/uji-emisi", token: "info", icon: IconCar },
+  ];
 
-    if (filtered.length === 0) return showToast("Tidak ada data di rentang waktu/status tersebut untuk diexport.", "warning");
-
-    const headers = ["ID Laporan", "Tanggal Kejadian", "Pelapor", "Lokasi", "Kategori", "Detail Issue", "Penyebab", "Tindakan Awal (Action Taken)", "Status", "Tanggal Selesai (Closed)"];
-
-    // Gabungkan Header & Data dengan pemisah Koma (standar Excel CSV)
-    const csvContent = [
-      headers.join(","),
-      ...filtered.map(r => [
-        `SBO-${r.id.substring(0,5)}`,
-        r.tanggal_kejadian,
-        `"${r.nama_pelapor}"`,
-        `"${r.lokasi}"`,
-        r.kategori_temuan,
-        `"${r.detail_temuan.replace(/"/g, '""')}"`, // Mencegah bentrok koma/kutip
-        `"${r.penyebab.replace(/"/g, '""')}"`,
-        `"${r.action_taken.replace(/"/g, '""')}"`,
-        r.status_temuan,
-        r.tanggal_closed || "Belum Selesai"
-      ].join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Laporan_SBO_QHSE_${getTodayISOLocal()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const tokenColors: Record<string, { bg: string; color: string }> = {
+    info: { bg: "var(--info-50)", color: "var(--info)" },
+    warn: { bg: "var(--warn-50)", color: "var(--warn)" },
+    ok: { bg: "var(--ok-50)", color: "var(--ok)" },
+    red: { bg: "var(--red-50)", color: "var(--red-600)" },
+    accent: { bg: "#f5f3ff", color: "var(--accent)" },
   };
-
-  // ===============================================
-  // FUNGSI UPDATE TIKET MENJADI CLOSED
-  // ===============================================
-  const handleCloseTicket = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!selectedReport) return;
-  if (isUploadingFoto) return showToast("Tunggu foto selesai diunggah dulu.", "warning");
-
-  const yakin = await confirm({
-    title: "Tutup Laporan SBO",
-    message: "Laporan yang sudah ditutup tidak bisa dibuka kembali. Lanjutkan?",
-    confirmText: "Ya, Tutup Laporan",
-    variant: "danger"
-  });
-  if (!yakin) return;
-
-  setIsUpdating(true);
-  try {
-    const reportRef = doc(db, "qhse_sbo_reports", selectedReport.id);
-    await updateDoc(reportRef, {
-      status_temuan: "Close",
-      tanggal_closed: getTodayISOLocal(),
-      foto_after: fotoAfter || null
-    });
-
-    showToast("Laporan berhasil ditutup!", "success");
-    setSelectedReport(null);
-    setFotoAfter("");
-  } catch (error) {
-    console.error(error);
-    showToast("Gagal memperbarui status.", "error");
-  } finally {
-    setIsUpdating(false);
-  }
-};
-
-  // FILTERING LOGIC
-  const displayedReports = reports.filter(r => filterStatus === "Semua" || r.status_temuan === filterStatus);
 
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* 🔹 NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <h2 style={{ margin: 0, color: "#22543d", fontSize: "18px", display: "flex", alignItems: "center", gap: "8px" }}><span>🛡️</span> QHSE Command Center</h2>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <div style={{ background: "#f0fff4", color: "#22543d", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #c6f6d5" }}>👷 {picName}</div>
-          <button onClick={() => { localStorage.clear(); router.push("/"); }} style={{ background: "#e53e3e", color: "white", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Logout</button>
+      {/* 💡 TOKEN DESAIN & CSS RESPONSIVE — satu ekosistem dengan portal (src/app/page.tsx) & dashboard/ob (components/pages/DashboardOBPage.tsx) */}
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
+          --bg: #f7f6f5; --surface: #ffffff;
+          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
+          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
+          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+        }
+        * { box-sizing: border-box; }
+        .main-container { padding-bottom: 50px; }
+
+        .site-header {
+          position: sticky; top: 0; z-index: 50;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .site-header-brand { display: flex; align-items: center; gap: 10px; }
+        .logout-btn {
+          display: flex; align-items: center; gap: 6px; background: var(--red-50); color: var(--red-600);
+          border: 1px solid rgba(220,38,38,0.2); padding: 8px 15px; border-radius: 8px; font-size: 13px;
+          font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s;
+        }
+        .logout-btn:hover { background: var(--red-600); color: white; }
+
+        .admin-hero {
+          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
+          padding: 40px 20px 80px; text-align: center;
+          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
+          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+        }
+        .admin-hero::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
+        }
+        .admin-hero-content { position: relative; }
+        .admin-hero-badge {
+          display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
+          backdrop-filter: blur(5px); padding: 8px 22px; border-radius: 50px; font-size: 14px; font-weight: 700;
+          border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .admin-card {
+          background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+          cursor: pointer; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 15px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;
+        }
+        .admin-card:hover { transform: translateY(-5px); border-color: var(--hover-color); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        .admin-card-icon { width: 55px; height: 55px; border-radius: 16px; display: flex; justify-content: center; align-items: center; }
+        .admin-card-title { margin: 0 0 5px 0; color: var(--ink); font-size: 17px; font-weight: bold; }
+        .admin-card-desc { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+        .admin-card-arrow { margin-top: auto; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 4px; }
+
+        .mobile-nav { display: none; }
+        .hide-on-mobile { display: flex; }
+
+        /* 📱 MEDIA QUERY UNTUK HP */
+        @media (max-width: 768px) {
+          .main-container { padding-bottom: 90px !important; }
+          .hide-on-mobile { display: none !important; }
+
+          .admin-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .admin-card { flex-direction: row !important; align-items: center !important; padding: 15px 20px !important; gap: 15px !important; border-radius: 16px !important; }
+          .admin-card:hover { transform: translateY(-2px); }
+          .admin-card:active { transform: scale(0.98); }
+          .admin-card-icon { width: 48px !important; height: 48px !important; border-radius: 12px !important; flex-shrink: 0; }
+          .admin-card-title { font-size: 15px !important; margin-bottom: 2px !important; }
+          .admin-card-desc { font-size: 11px !important; line-height: 1.4 !important; }
+          .admin-card-arrow { display: none !important; }
+
+          /* DESAIN BOTTOM NAV KHUSUS STAF LAPANGAN */
+          .mobile-nav {
+            display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-top: 1px solid var(--line);
+            z-index: 90; padding: 12px 10px; justify-content: space-between; box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
+            overflow-x: auto; scroll-snap-type: x mandatory;
+          }
+          .mobile-nav::-webkit-scrollbar { display: none; }
+          .m-nav-item {
+            display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink-soft);
+            font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; background: none; border: none; font-family: inherit;
+            flex: 0 0 auto; min-width: 65px; scroll-snap-align: start; text-align: center;
+          }
+          .m-nav-item:active { transform: scale(0.9); }
+        }
+      `}} />
+
+      {/* 🔹 TOP BAR NAVBAR (desktop) */}
+      <div className="hide-on-mobile site-header">
+        <div className="site-header-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-samudera.png" alt="Logo" style={{ height: "30px" }} />
+          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "16px", borderLeft: "2px solid var(--line)", paddingLeft: "10px" }}>QHSE Desk</span>
         </div>
+        <button className="logout-btn" onClick={handleKeluar}>
+          <IconLogOut size={15} /> Keluar
+        </button>
       </div>
 
       {/* 🔹 HERO SECTION */}
-      <div style={{ background: "linear-gradient(135deg, #1c4532 0%, #2f855a 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(47, 133, 90, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>SAFETY BEHAVIOR OBSERVATION</h1>
-        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Database Pemantauan Keselamatan Kerja Gedung (SBO)</p>
+      <div className="admin-hero">
+        <div className="admin-hero-content">
+          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>QHSE COMMAND CENTER</h1>
+          <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Sistem Pemantauan Keselamatan & Lingkungan Kerja Gedung</p>
+          <div className="admin-hero-badge">
+            <IconUserCircle size={16} /> PIC: {picName}
+          </div>
+        </div>
       </div>
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
 
-        {/* KONTROL PANEL (FILTER & EXPORT) */}
-        <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", marginBottom: "20px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: "15px" }}>
-
-          <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#718096", marginBottom: "5px", textTransform: "uppercase" }}>Filter Status</label>
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", fontWeight: "bold", color: "#2d3748", outline: "none", cursor: "pointer" }}>
-                <option value="Semua">Tampilkan Semua Status</option>
-                <option value="Open">🔴 Status: OPEN (Menunggu Tindakan)</option>
-                <option value="Close">🟢 Status: CLOSE (Selesai)</option>
-              </select>
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#718096", marginBottom: "5px", textTransform: "uppercase" }}>Dari Tanggal</label>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: "8px 10px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", outline: "none" }} />
+        {/* 🔹 GRID MENU UTAMA QHSE */}
+        <div className="admin-grid">
+          {menuQHSE.map((menu, index) => {
+            const tc = tokenColors[menu.token];
+            const MenuIcon = menu.icon;
+            return (
+              <div
+                key={index}
+                className="admin-card"
+                onClick={() => router.push(menu.path)}
+                style={{ "--hover-color": tc.color } as React.CSSProperties}
+              >
+                <div className="admin-card-icon" style={{ background: tc.bg, color: tc.color }}>
+                  <MenuIcon size={26} />
+                </div>
+                <div>
+                  <h2 className="admin-card-title">{menu.title}</h2>
+                  <p className="admin-card-desc">{menu.desc}</p>
+                </div>
+                <div className="admin-card-arrow" style={{ color: tc.color }}>Buka Modul <IconChevronRight size={14} /></div>
               </div>
-              <span style={{ marginTop: "20px", fontWeight: "bold", color: "#a0aec0" }}>-</span>
-              <div>
-                <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#718096", marginBottom: "5px", textTransform: "uppercase" }}>Sampai</label>
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: "8px 10px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", outline: "none" }} />
-              </div>
-            </div>
-          </div>
-
-          <button onClick={handleExportExcel} style={{ background: "#276749", color: "white", padding: "12px 20px", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(39, 103, 73, 0.3)" }}>
-            📊 Export Data Laporan (.CSV)
-          </button>
-        </div>
-
-        {/* TABEL SBO */}
-        <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0", overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-            <thead>
-              <tr style={{ background: "#f8fafc", color: "#4a5568" }}>
-                <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Tgl Kejadian & Lokasi</th>
-                <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Kategori & Issue</th>
-                <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0" }}>Pelapor</th>
-                <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Status Issue</th>
-                <th style={{ padding: "15px", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>Aksi Tinjauan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedReports.length > 0 ? displayedReports.map(r => (
-                <tr key={r.id} style={{ borderBottom: "1px solid #edf2f7" }}>
-                  <td style={{ padding: "12px 15px" }}>
-                    <div style={{ fontWeight: "bold", color: "#2d3748" }}>{r.tanggal_kejadian}</div>
-                    <div style={{ color: "#718096", fontSize: "11px", marginTop: "4px" }}>📍 {r.lokasi}</div>
-                  </td>
-                  <td style={{ padding: "12px 15px" }}>
-                    <span style={{ background: r.kategori_temuan.includes("Unsafe Act") ? "#fed7d7" : "#feebc8", color: r.kategori_temuan.includes("Unsafe Act") ? "#9b2c2c" : "#9c4221", padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "bold" }}>{r.kategori_temuan}</span>
-                    <div style={{ color: "#4a5568", marginTop: "6px", fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "250px" }}>{r.detail_temuan}</div>
-                  </td>
-                  <td style={{ padding: "12px 15px", color: "#4a5568", fontWeight: "bold" }}>👤 {r.nama_pelapor}</td>
-                  <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                    <span style={{ background: r.status_temuan === "Close" ? "#c6f6d5" : "#fed7d7", color: r.status_temuan === "Close" ? "#22543d" : "#c53030", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" }}>{r.status_temuan}</span>
-                    {r.tanggal_closed && <div style={{ fontSize: "10px", color: "#38a169", marginTop: "5px" }}>Selesai: {r.tanggal_closed}</div>}
-                  </td>
-                  <td style={{ padding: "12px 15px", textAlign: "center" }}>
-                    <button onClick={() => setSelectedReport(r)} style={{ background: "#ebf8ff", color: "#3182ce", border: "1px solid #bee3f8", padding: "6px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-                      🔍 Tinjau Detail
-                    </button>
-                  </td>
-                </tr>
-              )) : <tr><td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#a0aec0" }}>Tidak ada laporan SBO yang ditemukan pada filter ini.</td></tr>}
-            </tbody>
-          </table>
+            );
+          })}
         </div>
 
       </div>
 
-      {/* ============================================================== */}
-      {/* MODAL TINJAUAN DETAIL & CLOSE TIKET SBO */}
-      {/* ============================================================== */}
-      {selectedReport && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(5px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
-          <div style={{ background: "white", width: "100%", maxWidth: "800px", borderRadius: "24px", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
-
-            <div style={{ background: "#22543d", color: "white", padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <h2 style={{ margin: "0 0 5px 0", fontSize: "18px" }}>Detail Laporan SBO</h2>
-                <div style={{ fontSize: "12px", opacity: 0.8 }}>ID: SBO-{selectedReport.id.substring(0,8).toUpperCase()}</div>
-              </div>
-              <button onClick={() => setSelectedReport(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "35px", height: "35px", borderRadius: "50%", cursor: "pointer" }}>✖</button>
-            </div>
-
-            <div style={{ padding: "25px", overflowY: "auto", flex: 1, background: "#f8fafc" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
-                <div>
-                  <div style={{ fontSize: "11px", color: "#718096", fontWeight: "bold" }}>NAMA PELAPOR</div>
-                  <div style={{ fontSize: "14px", fontWeight: "bold", color: "#2d3748" }}>{selectedReport.nama_pelapor}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: "11px", color: "#718096", fontWeight: "bold" }}>LOKASI & TANGGAL</div>
-                  <div style={{ fontSize: "14px", fontWeight: "bold", color: "#2d3748" }}>{selectedReport.lokasi} • {selectedReport.tanggal_kejadian}</div>
-                </div>
-              </div>
-
-              <div style={{ background: "white", border: "1px solid #e2e8f0", padding: "15px", borderRadius: "12px", marginBottom: "20px" }}>
-                <div style={{ fontSize: "11px", color: "#718096", fontWeight: "bold", marginBottom: "5px" }}>KATEGORI & DETAIL ISSUE</div>
-                <span style={{ background: "#feebc8", color: "#9c4221", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", marginBottom: "10px", display: "inline-block" }}>{selectedReport.kategori_temuan}</span>
-                <p style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#2d3748" }}>{selectedReport.detail_temuan}</p>
-                <div style={{ fontSize: "11px", color: "#718096", fontWeight: "bold", marginBottom: "2px", marginTop: "15px" }}>PENYEBAB:</div>
-                <div style={{ fontSize: "13px", color: "#4a5568" }}>{selectedReport.penyebab}</div>
-              </div>
-
-              {selectedReport.kategori_temuan.includes("Unsafe Act") && selectedReport.komitmen_pelaku && (
-                <div style={{ background: "#fff5f5", border: "1px solid #fed7d7", padding: "15px", borderRadius: "12px", marginBottom: "20px" }}>
-                  <div style={{ fontSize: "11px", color: "#c53030", fontWeight: "bold", marginBottom: "5px" }}>KOMITMEN & KONSEKUENSI PELANGGAR</div>
-                  <p style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#2d3748" }}><strong>Komitmen:</strong> {selectedReport.komitmen_pelaku}</p>
-                  <p style={{ margin: "0", fontSize: "13px", color: "#2d3748" }}><strong>Konsekuensi:</strong> {selectedReport.konsekuensi}</p>
-                </div>
-              )}
-
-              {/* SECTION FOTO BUKTI SEBELUM vs SESUDAH */}
-              <div style={{ display: "flex", gap: "15px", marginBottom: "20px" }}>
-                <div style={{ flex: 1, background: "white", padding: "10px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#e53e3e", fontWeight: "bold", marginBottom: "8px", textAlign: "center" }}>FOTO BUKTI BAHAYA</div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={selectedReport.foto_bukti} alt="Bukti Bahaya" style={{ width: "100%", height: "200px", objectFit: "contain", borderRadius: "8px", background: "#edf2f7" }} />
-                </div>
-
-                <div style={{ flex: 1, background: "white", padding: "10px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#38a169", fontWeight: "bold", marginBottom: "8px", textAlign: "center" }}>FOTO AFTER (TELAH AMAN)</div>
-                  {selectedReport.foto_after ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={selectedReport.foto_after} alt="Bukti Aman" style={{ width: "100%", height: "200px", objectFit: "contain", borderRadius: "8px", background: "#edf2f7" }} />
-                  ) : (
-                    <div style={{ width: "100%", height: "200px", background: "#f8fafc", borderRadius: "8px", display: "flex", justifyContent: "center", alignItems: "center", color: "#a0aec0", fontSize: "12px", border: "1px dashed #cbd5e0" }}>Belum ada foto perbaikan.</div>
-                  )}
-                </div>
-              </div>
-
-              {/* AREA UPDATE STATUS OLEH QHSE */}
-              {selectedReport.status_temuan === "Open" ? (
-                <form onSubmit={handleCloseTicket} style={{ background: "white", border: "1px solid #9ae6b4", padding: "20px", borderRadius: "12px", marginTop: "10px" }}>
-                  <h3 style={{ margin: "0 0 15px 0", color: "#22543d", fontSize: "15px" }}>🟢 Tindakan Penyelesaian (Close Report)</h3>
-
-                  <div style={{ marginBottom: "15px" }}>
-                    <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "5px", display: "block" }}>Unggah Foto Kondisi Terkini (After) *</label>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploadingFoto} required style={{ padding: "10px", border: "1px solid #cbd5e0", borderRadius: "8px", width: "100%", fontSize: "12px" }} />
-                    {isUploadingFoto && <div style={{ fontSize: "11px", color: "#d69e2e", marginTop: "5px", fontWeight: "bold" }}>⏳ Sedang mengunggah foto...</div>}
-                    {fotoAfter && !isUploadingFoto && <div style={{ fontSize: "11px", color: "#38a169", marginTop: "5px", fontWeight: "bold" }}>✓ Foto siap diunggah</div>}
-                  </div>
-
-                  <button type="submit" disabled={isUpdating} style={{ width: "100%", padding: "15px", background: isUpdating ? "#a0aec0" : "#2f855a", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isUpdating ? "not-allowed" : "pointer" }}>
-                    {isUpdating ? "Memproses..." : "Tutup Laporan Bahaya Ini"}
-                  </button>
-                </form>
-              ) : (
-                <div style={{ background: "#f0fff4", color: "#22543d", padding: "15px", borderRadius: "12px", textAlign: "center", border: "1px solid #c6f6d5", fontWeight: "bold" }}>
-                  ✅ Laporan ini telah ditutup/diselesaikan pada {selectedReport.tanggal_closed}.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) */}
+      <div className="mobile-nav">
+        <button className="m-nav-item" onClick={() => router.push("/")}>
+          <IconHome size={20} />
+          <span>Portal Utama</span>
+        </button>
+        <button className="m-nav-item" onClick={() => router.push("/dashboard/qhse/sbo")} style={{ color: "var(--ok)" }}>
+          <IconClipboard size={20} />
+          <span>SBO</span>
+        </button>
+        <button className="m-nav-item" onClick={() => router.push("/admin/apar")} style={{ color: "var(--red-600)" }}>
+          <IconFireExtinguisher size={20} />
+          <span>APAR</span>
+        </button>
+        <button className="m-nav-item" onClick={() => router.push("/admin/uji-emisi")} style={{ color: "var(--info)" }}>
+          <IconCar size={20} />
+          <span>Kendaraan</span>
+        </button>
+        <button className="m-nav-item" onClick={handleKeluar} style={{ color: "var(--red-600)" }}>
+          <IconLogOut size={20} />
+          <span>Keluar</span>
+        </button>
+      </div>
 
     </div>
   );

@@ -388,6 +388,7 @@ export default function UserManagementPage() {
                     <option value="Staff">Staff</option>
                     <option value="Koordinator / Danru">Koordinator</option>
                     <option value="Administrator">Administrator</option>
+                    <option value="Magang">Magang</option>
                   </select>
                 </div>
               </div>
