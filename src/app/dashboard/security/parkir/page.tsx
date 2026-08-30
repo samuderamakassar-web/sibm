@@ -83,30 +83,24 @@ interface DriverStatusLog {
   petugas_security: string;
 }
 
-// ==========================================
-// MASTER DATA (DATA ACTUAL ARMADA)
-// ==========================================
-const KENDARAAN_OPERASIONAL = [
-  "BB 1164 XBC - Muhammad Yusuf (PT Makassar Jaya Samudera)",
-  "B 2306 PZQ - Bernard Hutagaol (PT Makassar Jaya Samudera)",
-  "B 2137 PZA - Joko Susilo (PT Makassar Jaya Samudera)",
-  "B 2737 PIW - Agussalim (PT Samudera Agencies Indonesia)",
-  "DD 1591 XBG - Saipul Mirah (PT SILkargo Indonesia)",
-  "DD 1278 XCS - SML Operational (PT Samudera Makassar Logistik)",
-  "DD 1412 XBO - Marketing/UMUM (PT Makassar Jaya Samudera)",
-  "DD 1273 XBO - Wahyu Hermawan (PT Makassar Jaya Samudera)",
-  "B 5597 KDB - Agusri (PT Samudera Makassar Logistik)",
-  "B 1828 DYKI - Mildawaty (PT Samudera Perdana)",
-  "DD 1384 XBN - PPNP OPS (PT Perusahaan Pelayaran Nusantara Panurjwan)",
-  "B 1629 RKP - Mattias Hotma (PT Perusahaan Pelayaran Nusantara Panurjwan)"
-];
+interface KendaraanMaster {
+  id: string;
+  kendaraan: string;
+}
 
-const DAFTAR_DRIVER = [
-  "Penanggung Jawab Kendaraan (PIC)",
-  "Amal Setiawan",
-  "Muhammad Renaldy",
-  "Karyawan / PIC Kendaraan"
-];
+interface Employee {
+  id: string;
+  nama: string;
+}
+
+// ==========================================
+// MASTER DATA
+// ==========================================
+// Pilihan "siapa yang membawa kendaraan" — dulu ada 2 opsi generik yang tumpang tindih
+// ("Penanggung Jawab Kendaraan (PIC)" & "Karyawan / PIC Kendaraan"), sekarang disederhanakan
+// jadi 1 opsi "Karyawan" yang begitu dipilih, wajib isi nama karyawan spesifiknya (lihat state
+// `namaKaryawan` & field kondisional di form).
+const DAFTAR_DRIVER = ["Amal Setiawan", "Muhammad Renaldy", "Karyawan"];
 
 // Daftar Driver Murni untuk Card Manajemen Absensi Driver
 const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
@@ -124,12 +118,19 @@ export default function LogOperasionalPage() {
   const [isSuccessMobil, setIsSuccessMobil] = useState<boolean>(false);
   const [isSuccessDriver, setIsSuccessDriver] = useState<boolean>(false);
 
-  // 🚙 STATE FORM KENDARAAN
-  const [kendaraan, setKendaraan] = useState<string>(KENDARAAN_OPERASIONAL[0]);
+  // 🚙 STATE FORM KENDARAAN — daftar armada ditarik live dari master_kendaraan (bukan hardcode lagi,
+  // biar gak ada lagi drift kayak PIC/unit yang udah ganti di admin tapi dropdown ini masih versi lama)
+  const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
+  const [kendaraan, setKendaraan] = useState<string>("");
   const [statusMobil, setStatusMobil] = useState<string>("Keluar Beroperasi");
   const [driverMobil, setDriverMobil] = useState<string>(DAFTAR_DRIVER[0]);
+  const [namaKaryawan, setNamaKaryawan] = useState<string>("");
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [tujuan, setTujuan] = useState<string>("");
   const [kilometer, setKilometer] = useState<string>("");
+
+  // Kalau belum ada yang dipilih manual, jatuhkan ke kendaraan pertama begitu master data kebaca
+  const kendaraanEfektif = kendaraan || kendaraanMaster[0]?.kendaraan || "";
 
   // 🧑‍✈️ STATE FORM STATUS DRIVER MURNI
   const [targetDriver, setTargetDriver] = useState<string>(DRIVER_ONLY[0]);
@@ -158,6 +159,17 @@ export default function LogOperasionalPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, [router]);
+
+  // 1B. Tarik Master Data Kendaraan (live dari admin/kendaraan) & Karyawan (buat datalist saran nama)
+  useEffect(() => {
+    const unsubKendaraan = onSnapshot(query(collection(db, "master_kendaraan"), orderBy("kendaraan", "asc")), (snap) => {
+      setKendaraanMaster(snap.docs.map((d) => ({ id: d.id, ...d.data() } as KendaraanMaster)));
+    });
+    const unsubEmployees = onSnapshot(collection(db, "employees_directory"), (snap) => {
+      setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee)));
+    });
+    return () => { unsubKendaraan(); unsubEmployees(); };
+  }, []);
 
   // 2. Tarik Data Real-time (Mobil & Driver)
   useEffect(() => {
@@ -211,6 +223,15 @@ export default function LogOperasionalPage() {
       alert("Tujuan/Keperluan wajib diisi jika kendaraan keluar!");
       return;
     }
+    if (driverMobil === "Karyawan" && !namaKaryawan.trim()) {
+      alert("Nama karyawan yang membawa kendaraan wajib diisi!");
+      return;
+    }
+
+    // Kalau yang bawa "Karyawan", simpan NAMA KARYAWAN-nya langsung ke field driver_bertugas
+    // (bukan label generik "Karyawan") — biar kolom Driver Pengendara di tabel ini & kolom
+    // PIC/Driver di Riwayat admin/kendaraan langsung kebaca siapa orangnya, tanpa kolom baru.
+    const driverBertugasFinal = driverMobil === "Karyawan" ? namaKaryawan.trim() : driverMobil;
 
     setIsLoadingMobil(true);
     setIsSuccessMobil(false);
@@ -220,9 +241,9 @@ export default function LogOperasionalPage() {
       await addDoc(collection(db, "operational_vehicle_logs"), {
         petugas_security: picName,
         waktu_catat: serverTimestamp(),
-        kendaraan: kendaraan,
+        kendaraan: kendaraanEfektif,
         status_kendaraan: statusMobil,
-        driver_bertugas: driverMobil,
+        driver_bertugas: driverBertugasFinal,
         tujuan_keperluan: tujuan || "-",
         kilometer_kendaraan: kilometer || "Tidak dicatat",
       });
@@ -245,6 +266,7 @@ export default function LogOperasionalPage() {
       setIsSuccessMobil(true);
       setTujuan("");
       setKilometer("");
+      setNamaKaryawan("");
       setTimeout(() => setIsSuccessMobil(false), 4000);
     } catch (error) {
       console.error(error);
@@ -403,9 +425,15 @@ export default function LogOperasionalPage() {
             <form onSubmit={handleSubmitMobil} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label className="field-label">PILIH ARMADA GEDUNG *</label>
-                <select value={kendaraan} onChange={(e) => setKendaraan(e.target.value)} className="field-input" style={{ fontWeight: "bold", fontSize: "13px" }}>
-                  {KENDARAAN_OPERASIONAL.map(mobil => <option key={mobil} value={mobil}>{mobil}</option>)}
-                </select>
+                {kendaraanMaster.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "var(--muted)", padding: "13px 15px", background: "var(--bg)", borderRadius: "12px", border: "1px dashed var(--line)" }}>
+                    Belum ada data kendaraan di Master Data.
+                  </div>
+                ) : (
+                  <select value={kendaraanEfektif} onChange={(e) => setKendaraan(e.target.value)} className="field-input" style={{ fontWeight: "bold", fontSize: "13px" }}>
+                    {kendaraanMaster.map(mobil => <option key={mobil.id} value={mobil.kendaraan}>{mobil.kendaraan}</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="field-label">AKTIVITAS MOBIL *</label>
@@ -435,6 +463,18 @@ export default function LogOperasionalPage() {
                   <div style={{ fontSize: "10px", color: "var(--ok)", marginTop: "5px", fontWeight: "bold" }}>Info: Status absensi driver ini akan ikut ter-update otomatis.</div>
                 )}
               </div>
+              {driverMobil === "Karyawan" && (
+                <div>
+                  <label className="field-label">NAMA KARYAWAN YANG MEMBAWA *</label>
+                  <input
+                    type="text" list="daftar-nama-karyawan" placeholder="Ketik nama — bisa pilih dari master karyawan"
+                    value={namaKaryawan} onChange={(e) => setNamaKaryawan(e.target.value)} className="field-input"
+                  />
+                  <datalist id="daftar-nama-karyawan">
+                    {employees.map((emp) => <option key={emp.id} value={emp.nama} />)}
+                  </datalist>
+                </div>
+              )}
               <div>
                 <label className="field-label">TUJUAN / KEPERLUAN PERJALANAN</label>
                 <textarea placeholder="Contoh: Mengantar dokumen ke Pelabuhan..." value={tujuan} onChange={(e) => setTujuan(e.target.value)} className="field-input" style={{ height: "60px", resize: "none" }} />

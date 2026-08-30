@@ -1,37 +1,43 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 30 Agustus 2026 (redesign penuh `dashboard/security` + rombak `buku-tamu` + fitur baru Inspeksi APAR + serah-terima foto paket — SUDAH DI-DEPLOY, lihat §13)
+Update terakhir: 30 Agustus 2026 (rombak total `admin/kendaraan` — modal input, tab Daftar/Riwayat, riwayat gabungan + integrasi log pergerakan driver/security, multi-select kendaraan, status Aset/Sewa; simplifikasi "siapa yang bawa kendaraan" jadi Karyawan+nama spesifik di `dashboard/security/parkir` + live master data; redesign `DriverDashboardPage` — SUDAH DI-COMMIT & DI-DEPLOY, lihat §15 & §16)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §13)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 30 Agustus 2026 — §15 & §16)
 
-Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini fokus penuh ke `dashboard/security` (halaman utama + semua sub-modul: buku-tamu, paket, parkir, jadwal, patroli) plus 1 fitur baru dari nol (Inspeksi APAR). Detail teknis lengkap ada di **§13** (cari nomor section-nya).
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini (lanjutan dari sesi §14 di hari yang sama) fokus total ke **modul kendaraan**, dikerjakan bertahap dalam beberapa giliran chat berurutan: (1) rombak total `admin/kendaraan` jadi 2 tab modern + modal, (2) integrasi log pergerakan armada dari driver/security ke riwayat, (3) multi-select kendaraan + status Aset/Sewa, (4) simplifikasi form "siapa yang bawa kendaraan" + redesign `DriverDashboardPage`. Detail teknis lengkap ada di **§15** (poin 1) dan **§16** (poin 2-4).
 
 ### A. Apa yang dikerjakan sesi ini
 
-1. **Redesign visual penuh `dashboard/security`** — halaman utama (Command Center) + 4 sub-halaman (buku-tamu, paket, parkir, jadwal) + `PatroliSecurityPage.tsx`, semua dipindah ke sistem token/ikon SVG yang sama kayak `dashboard/ob` & portal (lihat §8B/§8E). Termasuk fix bug logo hitam (`invert(1) brightness(0.2)`, item lama yang dicatat sebagai utang di §0/§12C sesi sebelumnya), modal logout custom (ganti `window.confirm()`), dan roster shift dipadatkan (chip warna) + cetak A4 landscape 1 halaman dengan kop logo.
-2. **`buku-tamu` — migrasi struktur folder BENERAN diselesaikan** (koreksi: §2 dokumen ini sempat nyatat halaman ini "sudah migrasi ke `components/pages/`" padahal kenyataannya kode lengkap masih di `app/dashboard/security/buku-tamu/page.tsx` (675 baris) dan `components/pages/BukuTamuSecurity.tsx` isinya duplikat basi yang gak dipakai — sekarang beneran cuma 1 sumber, `page.tsx` jadi thin wrapper 5 baris).
-3. **Buku Tamu — fitur baru**: kategori "Magang" (sub-pilihan dalam tab Tamu Eksternal, dipindah ke ATAS sebelum Nama sesuai revisi Reza — form Magang dipangkas cuma Nama+Unit Bisnis+Foto ID Card, tujuan otomatis "Magang Kerja"), riwayat nama+PT Magang tersimpan di collection baru `security_magang_directory` (autocomplete + auto-upsert), validasi keras nama Karyawan (harus cocok Master Data Karyawan, kalau tidak ditolak submit + modal "Nama Karyawan Tidak Sesuai"), filter tab Riwayat (Kategori/Bulan/Tahun/PT) + tombol Export Excel yang ngikut filter aktif (bukan cuma export semua data).
-4. **Mobile bottom-nav disederhanakan**: dari 7 tombol jadi 4 (Home/Tamu/Paket/Keluar) di halaman utama security — card "Buku Tamu Digital" & "Manajemen Paket" di grid menu disembunyikan KHUSUS di mobile (`hide-card-mobile`, karena sudah ada shortcut permanen di nav), tetap tampil normal di desktop.
-5. **Fitur baru dari nol: Inspeksi APAR** — 3 halaman baru: `admin/apar` (Admin GA kelola master data APAR per lantai + cetak QR), `dashboard/security/inspeksi-apar` (Security lihat APAR per lantai, scan QR → form inspeksi bulanan), `qr-apar` (halaman PUBLIK tanpa login — QR yang sama kalau discan kamera biasa di luar app langsung nampilin status "sudah/belum diinspeksi bulan ini + oleh siapa + kapan"). QR di-generate sebagai URL penuh (beda dari QR Patroli/Checklist OB yang cuma plain-text payload), karena harus bisa dibuka browser biasa.
-6. **Manajemen Paket — serah terima wajib foto bukti**: tombol "Serahkan" gak langsung `window.confirm()` lagi, sekarang buka modal yang WAJIB ambil/upload foto dulu sebelum status berubah jadi "Sudah Diambil". Tabel nampilin thumbnail foto before (diterima) + after (diambil) bertumpuk. Baris tabel bisa diklik buat buka modal Detail lengkap: kapan tiba + diinput petugas siapa + foto diterima, kapan diambil + diserahkan petugas siapa + penerima siapa + foto diambil.
+1. **`admin/kendaraan` dirombak total** (§15) — form input/edit jadi Modal (bukan card permanen di sidebar), 2 tab level-halaman (Daftar Kendaraan & Riwayat Kendaraan), riwayat odometer+servis+inspeksi+uji-emisi+**pergerakan armada** digabung jadi 1 tabel kronologis (bukan 4 tab terpisah kayak sebelumnya), filter Bulan/Tahun + Export **Excel (.xlsx, pakai SheetJS)** + Export **PDF (window.print)**.
+2. **Log pergerakan armada** (dari `operational_vehicle_logs`, diisi driver via app driver ATAU security via `dashboard/security/parkir`) ditarik masuk ke riwayat kendaraan — dicocokkan lewat **awalan plat nomor** (bukan string `kendaraan` penuh) karena nama PIC di master data bisa berubah sementara log lama nyimpen versi lama, jadi exact-match bakal ketinggalan histori.
+3. **Multi-select checklist kendaraan** ditambahkan di tab Daftar (filter mana yang ditampilkan) DAN tab Riwayat (bisa lihat riwayat gabungan beberapa kendaraan sekaligus, dengan kolom "Kendaraan" tambahan pas lebih dari 1 dipilih).
+4. **Status Kepemilikan Aset/Sewa** ditambahkan ke `master_kendaraan` (field baru `status_kepemilikan`, `tanggal_akhir_sewa`) — kolom baru di tabel Daftar, badge otomatis hitung sisa hari / berapa hari sudah lewat kalau Sewa.
+5. **`dashboard/security/parkir`** (§16): pilihan "siapa yang membawa kendaraan" disederhanakan dari 2 opsi generik yang tumpang tindih ("Penanggung Jawab Kendaraan (PIC)" & "Karyawan / PIC Kendaraan") jadi 1 opsi **"Karyawan"** — begitu dipilih, muncul field wajib isi nama karyawan spesifik (datalist dari `employees_directory`, pola sama kayak PIC Kendaraan di `admin/kendaraan`). Nama itu langsung disimpan ke field `driver_bertugas` yang sudah ada (bukan kolom baru) — otomatis kebaca di tabel log parkir DAN kolom "Karyawan / Driver" (nama kolom diganti dari "PIC / Driver") di Riwayat `admin/kendaraan`, tanpa migrasi apa-apa.
+6. **Daftar armada di `dashboard/security/parkir` diganti dari hardcode ke live `master_kendaraan`** — sebelumnya pakai array hardcode `KENDARAAN_OPERASIONAL` yang udah drift (PIC/unit beda sama data admin terkini), sama kayak bug lama yang udah difix di `DriverDashboardPage` sesi-sesi sebelumnya.
+7. **Redesign `DriverDashboardPage.tsx`** — hero biru + top bar polos diganti jadi tema merah standar seluruh app (gradient + grid overlay, referensi persis dari hero `src/app/page.tsx`), ditambah **bottom-nav mobile mengambang** (pola sama portal utama: pill blur + FAB merah di tengah) dengan 5 tombol yang scroll ke section terkait (Portal/Armada/**Inspeksi**-FAB/Servis/Riwayat) — sebelumnya halaman ini 1 kolom panjang tanpa navigasi cepat sama sekali di mobile. Semua form/logic yang sudah ada (Bawa Armada, Inspeksi Mingguan, Servis/Odometer, Riwayat) TIDAK diubah, cuma dikasih `id` buat anchor scroll.
 
-### B. Status: SUDAH commit, merge, push, build, DAN deploy — **dilakukan otomatis sesuai instruksi eksplisit Reza di akhir sesi ini** (lihat §13G untuk detail commit hash & output)
+### B. Status: SUDAH di-commit & di-deploy
 
-- `npx tsc --noEmit`: 0 error (dicek berkali-kali sepanjang sesi, tiap selesai 1 fitur). `npx eslint`: 0 error/warning baru dari perubahan sesi ini.
-- Diverifikasi visual di dev server buat hampir semua fitur (redesign tiap halaman, modal logout, roster compact+print, buku tamu kategori Magang+validasi karyawan+filter riwayat, admin/apar CRUD+QR, inspeksi-apar scan+form, qr-apar publik, paket detail modal). **Satu pengecualian**: alur create-paket-baru + serah-terima foto gak sempat dites end-to-end interaktif (tool browser sesi ini sempat gak stabil pas isi form multi-field — klik/fokus kadang gak nyangkut), tapi modal Detail-nya sendiri sudah dikonfirmasi render benar pakai data real yang sudah ada, dan `tsc`/`eslint` bersih untuk semua kode baru. **Perlu dicoba manual sekali sama Security sungguhan** buat mastiin alur serah-terima+foto jalan mulus di device asli.
+- `npx tsc --noEmit` (seluruh project): 0 error. `npx eslint .` (seluruh project): 0 error, 98 warning — semua pre-existing di file yang gak disentuh sesi ini (service worker generated files + beberapa `react-hooks/exhaustive-deps`/`no-unused-vars` lama), bukan warning baru.
+- `npm run build` (static export, 35 route): sukses tanpa error.
+- Diverifikasi visual di dev server pakai data production real (bukan data dummy): multi-select Daftar Kendaraan (uncheck kendaraan langsung filter tabel), modal Tambah/Edit + field Status Kepemilikan/Tanggal Sewa (submit dibatalkan sebelum save pas testing, gak nulis data test ke prod), tab Riwayat 1 kendaraan (27-41 entri riwayat pergerakan real kebaca benar, termasuk tujuan/driver/petugas) & multi-kendaraan (kolom Kendaraan muncul, kartu ringkasan per-unit), Export Excel jalan tanpa error, form "Karyawan" di `dashboard/security/parkir` (dropdown armada live, datalist nama karyawan real kebaca), hero+bottom-nav `DriverDashboardPage` di viewport mobile 375×812 (scroll-to-section dites via `scrollIntoView` langsung, bukan lewat klik tombol — ada gangguan tooling browser pane pas sesi ini yang bikin klik pada 1 elemen spesifik timeout berulang, tapi elemen & fungsinya sendiri kekonfirmasi benar).
+- **Catatan integritas data**: pas verifikasi tabel Daftar Kendaraan, ternyata SEMUA 10 kendaraan di Firestore production sudah punya `status_kepemilikan: "Sewa"` dengan tanggal beragam yang masuk akal (bukan dari testing sesi ini — sesi ini cuma sempat buka 1 modal edit & langsung Batal tanpa submit). Kemungkinan besar data ini sudah diisi manual oleh Reza/tim GA di luar sesi chat ini. Tidak diutak-atik.
+- Dicommit bareng dengan pekerjaan §14 yang sebelumnya masih "BELUM DI-COMMIT" (role Magang, tab Hasil Inspeksi APAR, akses QHSE ke `admin/apar`, redesign hub QHSE, `admin/uji-emisi`, filter+export) — semuanya numpuk di working tree yang sama, jadi ikut ke-commit+deploy dalam 1 paket sesuai instruksi eksplisit "langsung push/commit hingga deploy".
 
 ### C. Yang perlu dilanjutkan
 
-1. Alur serah-terima paket (foto wajib) — lihat catatan verifikasi di atas, minta feedback user asli setelah deploy.
-2. `admin/monitor-security` belum ditambah tab buat monitoring Inspeksi APAR (saat ini Admin GA cuma bisa lihat status per-unit di `admin/apar`, belum ada rekap/export PDF khusus APAR kayak Log Patroli).
-3. `security_magang_directory` masih koleksi baru tanpa halaman admin buat kelola manual (hapus/edit nama magang yang typo) — kalau ada nama salah ketik, sementara harus dibenerin langsung dari Firestore console.
-4. Bug filter logo yang sama sempat dicatat di 2 file (`dashboard/security/page.tsx` sudah DIPERBAIKI sesi ini; `admin/qr-manager/page.tsx` **masih belum**, `invert(1) brightness(0)` — kemungkinan logo di situ juga tampil item legam).
-5. Poin lama yang masih relevan (belum berubah): CS masih belum punya halaman terpisah dari OB; audit performa Firestore listener (`onSnapshot` tanpa `limit()`) belum dieksekusi; bug leak `DeepCleaningPage.tsx` (`onSnapshot` gak ke-unsubscribe) belum difix; migrasi struktur folder `admin/*` ke `components/pages/` (§4 poin 5) masih belum disentuh.
-6. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`.
+1. `admin/monitor-security` masih belum ditambah tab monitoring APAR (poin lama, belum berubah).
+2. `security_magang_directory` masih belum ada halaman admin buat kelola manual (poin lama, belum berubah).
+3. Bug filter logo `admin/qr-manager/page.tsx` (`invert(1) brightness(0)`) masih belum difix (poin lama, belum berubah).
+4. Kolom "Odo Meter Terakhir/KM" di `admin/uji-emisi` kemungkinan masih nampilin "-" buat sebagian kendaraan — tergantung apakah driver/admin udah mulai catat odometer lewat fitur yang ada.
+5. `DriverDashboardPage` baru dikasih polish visual (hero/top bar/bottom-nav) — konten form/logic di dalamnya BELUM di-modernisasi ke pola shared component (`Card`/`Button`/`Input` dari `components/ui/`), masih inline style manual kayak sebelumnya. Kalau mau konsisten penuh sama `admin/kendaraan`, ini next step-nya.
+6. Bottom-nav baru di `DriverDashboardPage` cuma scroll-to-section (halaman ini masih 1 route, bukan multi-halaman) — kalau ke depannya driver butuh sub-halaman terpisah (misal Inspeksi jadi route sendiri kayak `dashboard/driver/inspeksi`), bottom-nav ini perlu diubah dari scroll jadi navigasi route beneran.
+7. Poin lama yang masih relevan (belum berubah): CS masih belum punya halaman terpisah dari OB; audit performa Firestore listener (`onSnapshot` tanpa `limit()`) di sisa file belum dieksekusi — modul kendaraan sesi ini sengaja TANPA `limit()` di semua query riwayat (biar filter Bulan/Tahun bisa jangkau histori penuh), jadi kalau fleet makin besar & histori makin numpuk, ini kandidat pertama buat dioptimasi; bug leak `DeepCleaningPage.tsx` belum difix; migrasi struktur folder `admin/*` ke `components/pages/` (§4 poin 5) masih belum disentuh untuk `admin/kendaraan` (masih 1 file utuh di `app/admin/kendaraan/page.tsx`, sekarang ~1250 baris).
+8. Kalau nambah query Firestore baru yang gabungin `where` + `orderBy` field beda, inget bikin index-nya juga: edit `firestore.indexes.json` → `firebase deploy --only firestore:indexes`. (Query pergerakan armada sesi ini pakai range query `where(">=")`+`where("<")`+`orderBy` di field YANG SAMA — `kendaraan` — jadi otomatis kepakai single-field index bawaan Firestore, gak butuh index manual baru.)
 
 Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
@@ -657,3 +663,142 @@ Masalah yang mau diselesaikan Reza: kadang ada kesalahpahaman soal paket — sia
 Urutan sesuai instruksi eksplisit Reza, dijalankan tanpa jeda konfirmasi tambahan (sudah given eksplisit di prompt): `git checkout dev` → `git add .` → `git commit` → `git push origin dev` → `git checkout main` → `git merge dev` → `git push origin main` → `npm run build` → `firebase deploy`. Hash commit & hasil masing-masing langkah dicatat di riwayat command Bash sesi ini (lihat transcript kalau butuh hash persis).
 
 **Belum dikerjakan (di luar scope literal sesi ini)**: lihat poin C di §0 di atas.
+
+---
+
+## 14. Role "Magang" (Security) + Modul QHSE: tab riwayat APAR, redesign hub, fitur Uji Emisi, filter+export (30 Agustus 2026, sesi baru)
+
+Sesi baru, dua topik terpisah diminta berurutan dalam chat yang sama: (1) role baru untuk anak magang di Security, (2) serangkaian penambahan di sisi QHSE.
+
+### 14A. Role baru "Magang" — khusus 2 menu (Buku Tamu Digital & Paket)
+
+Konteks: sistem akses SIBM **berbasis departemen buat routing** (`pic_dept` nentuin dashboard mana yang kebuka), sementara **role cuma nentuin wewenang DI DALAM dept yang sama** (lihat `src/hooks/useAuthGuard.ts`, komentar di file itu sendiri jadi "satu-satunya sumber logika role/akses"). Jadi solusinya bukan bikin dept baru, tapi role baru dalam dept "Security" yang sudah ada.
+
+- **`admin/users/page.tsx`**: tambah `<option value="Magang">Magang</option>` di select Role/Jabatan (sebelumnya cuma Staff/Koordinator/Administrator).
+- **`dashboard/security/page.tsx`**: `menuSecurity` (array 6 kartu) difilter jadi `menuUntukDitampilkan` — kalau role user mengandung "magang", cuma tampil kartu "Buku Tamu Digital" & "Manajemen Paket". Kartu "Jadwal Anda Hari Ini" (shift-card) dan panel "Roster Shift Security" (papan monitoring bulanan) juga disembunyikan buat role Magang — dianggap gak relevan karena Magang gak ikut sistem plotting shift 2-2-2.
+- **Query `securityStaff`** (dipakai buat kolom roster & fungsi "shift hari ini") diubah: staf dengan role mengandung "magang" di-exclude dari `staffList` — supaya gak nongol jadi kolom kosong tak berguna di roster milik Danru/staf security beneran. Self-check role tetap jalan normal (kalau user yang login sendiri Magang, role-nya tetap ke-detect benar buat filter kartu di atas).
+- **Halaman tujuan** (`buku-tamu`, `paket`) TIDAK disentuh sama sekali — karena akses ke situ udah cuma cek `pic_nama` ada (sudah login), bukan cek role/dept spesifik, jadi otomatis "detailnya sama persis dengan Security" tanpa kerja tambahan.
+- Ditemukan (bukan dibikin sesi ini): sudah ada 1 akun nyata "Magang - Resepsionis" (magang@sibm.com, dept Security) dengan role masih "Staff" — perlu diubah manual ke role "Magang" lewat `admin/users` kalau mau restriksi menunya aktif.
+
+### 14B. `admin/apar` — tab baru "Hasil Inspeksi" (matrix 12 bulan + filter tahun)
+
+Tab kedua ditambahkan di `admin/apar/page.tsx` (sebelumnya cuma 1 tampilan: Master Data APAR + cetak QR, gak ada tab sama sekali — dibikin pola tab dari nol, bukan nambah ke tab yang sudah ada). State `activeTab: "MASTER" | "RIWAYAT"`.
+
+- Tab "Hasil Inspeksi": untuk tiap unit APAR (baris) × 12 bulan (kolom, Jan-Des) tahun yang difilter — kalau ada record `apar_inspections` yang `bulan_tahun`-nya cocok (format `"YYYY-MM"` yang udah ada di skema lama), tampil ✓ hijau + tanggal&jam (2 baris kecil di bawah ikon); kalau enggak, ✗ merah (silang). Kolom Detail APAR (kode+lokasi+badge lantai) dibikin `position: sticky` di kiri biar tetap kebaca pas scroll horizontal 12 kolom bulan.
+- Filter tahun: dropdown, opsi di-generate dari `bulan_tahun` semua record `apar_inspections` yang ada + tahun berjalan (selalu ada minimal 1 opsi walau data kosong).
+- Data ditarik full collection (`onSnapshot(collection(db,"apar_inspections"))`, gak pakai `where`) — jumlah data realistis buat 1 gedung, filter tahun/bulan dilakuin client-side, konsisten sama pola yang udah dipakai di file lain buat log historis skala kecil.
+
+### 14C. Akses `admin/apar` dibuka untuk QHSE + fix bug force-logout tombol kembali
+
+- Guard `useAuthGuard` di `admin/apar/page.tsx` diganti dari `roles:["Admin"]` (cuma lolos kalau role mengandung "admin", gak peduli dept apa) jadi `depts:["Admin GA","QHSE"]` — selaras juga sama `deniedMessage` yang dari awal udah bilang "khusus Admin GA" (kode lama sebenernya gak match sama pesannya sendiri: staf Admin GA biasa yang role-nya cuma "Staff" harusnya kebaca gagal akses juga, cuma gak ketauan karena belum ada yang nyoba).
+- **Bug ditemukan pas nambah akses QHSE**: tombol "Kembali ke Control Panel" di `admin/apar` selalu `router.push("/admin")` — halaman `admin/page.tsx` (shell Control Panel) punya guard STRICT: `dept !== "Admin GA"` → `localStorage.clear()` + redirect (force-logout total, bukan cuma "akses ditolak"). Kalau gak difix, staf QHSE yang buka APAR dari dashboard-nya bakal ke-logout paksa begitu klik tombol kembali. **Fix**: `onClick={() => router.push(session?.dept === "QHSE" ? "/dashboard/qhse" : "/admin")}` — pola yang sama juga dipakai di halaman baru `admin/uji-emisi` (§14E).
+
+### 14D. Redesign `DashboardQHSEPage.tsx` jadi hub menu + pisah SBO ke sub-halaman
+
+Reza minta tampilan QHSE "lebih modern sama seperti dashboard OB/CS", plus alasan konkret: sekarang ada 3 modul (SBO, Inspeksi APAR, Hasil Inspeksi Kendaraan) yang perlu ditampung sebagai menu, bukan 1 tabel yang langsung ngambil seluruh halaman kayak sebelumnya.
+
+- **`components/pages/DashboardQHSEPage.tsx`** ditulis ulang total: pola sama persis `DashboardOBPage.tsx` (§8E) — token `:root`, `.site-header`/`.logout-btn`, `.admin-hero` (gradient merah, judul "QHSE COMMAND CENTER"), `.admin-grid`/`.admin-card` (3 kartu: Safety Behavior Observation/hijau, Inspeksi APAR/merah, Hasil Inspeksi Kendaraan/biru), `.mobile-nav`/`.m-nav-item` (bottom-nav mobile: Portal Utama/SBO/APAR/Kendaraan/Keluar — sebelumnya dashboard QHSE SAMA SEKALI GAK PUNYA bottom-nav mobile). Guard akses (dept harus persis "QHSE") gak diubah, cuma dipindah polanya.
+- **Tabel SBO** (kontrol panel filter+tabel+modal detail/close-tiket, sebelumnya ISI PENUH `DashboardQHSEPage.tsx`) dipindah utuh (logic gak diubah sama sekali, cuma navbar-nya ditambah tombol "← Kembali") ke **`components/pages/QhseSboPage.tsx`** + thin wrapper baru **`app/dashboard/qhse/sbo/page.tsx`** — pola migrasi yang sama kayak §4 (folder `page.tsx` tipis, isi lengkap di `components/pages/`).
+
+### 14E. Fitur baru dari nol: Hasil Inspeksi Kendaraan / Uji Emisi (`admin/uji-emisi`)
+
+Reza kasih contoh tabel Excel (Unit Bisnis, Car Holder, Nomor Polisi, Odo Meter Terakhir/KM, Odo Meter Jadwal Uji Emisi/KM, Tanggal Pengujian, Hasil Pengujian — blok CO/HC/CO2/O2/LAMBDA/AFR/FUEL/H-C/O-C, Status, Next Service+Pengujian, Keterangan) dan minta dibikinkan tabelnya, dengan catatan "sudah tahu harus ambil data kendaraan dari mana" (mengarah ke `master_kendaraan`/`admin/kendaraan` yang sudah ada).
+
+- **Sumber data gabungan 3 tempat** — `master_kendaraan` (Unit Bisnis/Car Holder/Nomor Polisi, koleksi lama), `kendaraan_odometer_logs` (Odo Meter Terakhir — diambil SELURUH collection lalu di-grouping client-side ambil yang paling baru per `kendaraan_id`, karena gak ada field odometer langsung di `master_kendaraan`), dan **collection BARU `kendaraan_uji_emisi`** (1 dokumen per kendaraan, id dokumen = id kendaraan — bukan log historis kayak `kendaraan_service_logs`, tapi "status terkini" per unit, karena tabel yang diminta Reza itu bentuknya 1 baris = kondisi terakhir, bukan riwayat berlapis) buat field yang belum ada field-nya sama sekali di skema lama: `odo_jadwal_emisi`, `tanggal_pengujian`, `hasil_pengujian` (textarea multi-baris, nampung blok CO/HC/dst apa adanya — bukan dipecah 9 field terpisah, biar form-nya simpel & fleksibel), `status` (select: Belum Diuji/Good/Perlu Perhatian/Tidak Lolos), `next_service`, `keterangan`.
+- **Halaman `admin/uji-emisi/page.tsx`** (baru, pola sama `admin/apar`: 1 file utuh, gak dipisah ke `components/pages/`) — tabel header kuning (niru tampilan Excel yang dikasih Reza), guard `depts:["Admin GA","QHSE"]`, tombol edit per baris buka Modal input/update, `setDoc(...,{merge:true})` biar gak nimpa field lain yang gak diisi ulang.
+- **Revisi Reza (giliran ke-2, sesi sama)**: "belum pernah input, harusnya belum ada" — data testing yang sempat diisi pas verifikasi (DD 1278 XCS) dihapus lagi lewat UI (tombol Hapus baru, lihat poin berikut). "Aksi tidak perlu buat HSE karena cuma menerima hasilnya" — kolom "Aksi" (tombol edit) di-render kondisional: `{!isQHSE && <th>...}` / `{!isQHSE && <td>...}`, `isQHSE = session?.dept === "QHSE"`. Jadi QHSE liat tabel FULL READ-ONLY, cuma Admin GA yang punya tombol edit.
+- **Tombol Hapus** ditambahkan di modal edit (`deleteDoc` + `useConfirm`, khusus muncul kalau kendaraan itu udah punya data `kendaraan_uji_emisi` — biar Admin GA bisa koreksi/reset ke "Belum Diuji" kalau salah input, sekaligus ini yang dipakai buat bersihin data testing di atas).
+
+### 14F. Filter Bulan/Tahun + Export Excel (.CSV) — `admin/uji-emisi` & modal Riwayat `admin/kendaraan`
+
+Reza minta pola filter bulan/tahun + export yang sama dipasang di 2 tempat: halaman uji-emisi yang baru dibikin (§14E), dan modal Riwayat kendaraan yang udah lama ada (4 tab: Odometer/Servis/Pemakaian/Inspeksi) "buat pengecekan".
+
+- **`admin/uji-emisi`**: filter Bulan+Tahun (berdasar `tanggal_pengujian`) di atas tabel, baris yang gak cocok filter disembunyikan dari tampilan DAN dari hasil export. Tombol "Export ke Excel (.CSV)" — build CSV manual (`Blob` + `<a download>`, BOM `﻿` di depan biar Excel baca UTF-8/karakter non-ASCII dengan benar — pola yang sama kayak export CSV SBO/buku-tamu yang udah ada di file lain, project ini emang gak pakai library xlsx, "export Excel" selalu berarti CSV yang Excel-compatible).
+- **Modal Riwayat `admin/kendaraan`**: filter Bulan+Tahun baru (state `riwayatFilterBulan`/`riwayatFilterTahun`, reset ke "Semua" tiap buka kendaraan baru) dipasang SEKALI di atas 4 tab (bukan duplikat per-tab), berlaku ke tab yang lagi aktif. Tombol "Export CSV" nyusun kolom beda-beda tergantung `riwayatTab` yang aktif (Odometer: tanggal/odometer/pencatat; Servis: tanggal/jenis/deskripsi/biaya; Pemakaian: tanggal/status/driver/tujuan; Inspeksi: tanggal/driver/item bermasalah/catatan).
+- **`limit(15)` dihapus** dari ke-4 query riwayat kendaraan (`kendaraan_odometer_logs`, `kendaraan_service_logs`, `operational_vehicle_logs`, `kendaraan_inspeksi_logs`) — sebelumnya dibatasi 15 dokumen terakhir per kategori per kendaraan, yang bakal bikin filter bulan/tahun ke periode lama gak nemu apa-apa walau datanya sebenernya ADA di Firestore (kepotong limit sebelum sempat difilter). Query tetap per-kendaraan (`where kendaraan_id ==`), jadi volume tetap wajar (bukan tarik seluruh collection).
+
+### 14G. Verifikasi
+
+`npx tsc --noEmit` dicek berkali-kali sepanjang sesi (tiap 1-2 fitur selesai) — 0 error konsisten. `npx eslint` pada semua file yang disentuh — 0 error, cuma 1 warning (`react-hooks/exhaustive-deps` di `QhseSboPage.tsx`) yang dikonfirmasi PRE-EXISTING (ada di kode aslinya sebelum dipindah, bukan warning baru).
+
+Dicek langsung di dev server lewat Browser pane, bergantian login sebagai Administrator/Admin GA dan Staff/QHSE (`localStorage` di-swap manual tiap ganti peran):
+- Role Magang: dropdown di `admin/users` muncul, grid `dashboard/security` cuma 2 kartu.
+- Tab "Hasil Inspeksi" APAR: render matrix 12 bulan, semua ✗ (belum ada data inspeksi tersimpan di collection).
+- QHSE bisa buka `admin/apar` (sebelumnya ke-block), tombol kembali balik ke `/dashboard/qhse` tanpa logout paksa.
+- Hub QHSE: 3 kartu tampil desktop & mobile (viewport 375×812), bottom-nav 5 tombol muncul cuma di mobile.
+- Sub-halaman SBO: data laporan real (Muhammad Halim, Reza Rahmat dkk) kebaca normal, tombol kembali jalan.
+- `admin/uji-emisi`: submit form DD 1278 XCS ke Firestore beneran berhasil (dicek balik di tabel, semua kolom sesuai input) → setelah dikonfirmasi Reza belum pernah input beneran, data itu **dihapus lagi via tombol Hapus baru** → tabel balik ke "Belum Diuji" semua. Login sebagai QHSE: kolom Aksi hilang, filter+export tetap ada.
+- Modal Riwayat `admin/kendaraan`: filter Bulan/Tahun + tombol Export CSV muncul di atas ke-4 tab, dicoba buka salah satu kendaraan (B 1629 RKP) — filter & export render benar walau datanya masih kosong (belum ada riwayat tersimpan buat kendaraan itu).
+
+**Belum di-commit** — lihat §0B/§0C untuk status & langkah lanjutan (update: SUDAH di-commit+deploy bareng §15/§16, lihat §0B versi terbaru).
+
+---
+
+## 15. Rombak total `admin/kendaraan` — modal input, 2 tab, riwayat gabungan + integrasi pergerakan armada, multi-select, status Aset/Sewa (30 Agustus 2026, lanjutan sesi §14)
+
+Diminta lewat beberapa giliran chat berurutan di hari yang sama. File `src/app/admin/kendaraan/page.tsx` ditulis ulang hampir total (dari ~1066 baris jadi ~1250 baris), tapi SEMUA logika Firestore lama (CRUD `master_kendaraan`, catat odometer/servis, migrasi data lama) dipertahankan persis — yang berubah besar-besaran adalah struktur halaman & sumber data riwayat.
+
+### 15A. Form input jadi Modal + 2 tab level-halaman
+
+Sebelumnya: form Tambah/Edit Kendaraan adalah Card permanen di sidebar kiri (selalu kelihatan), dan "Riwayat" per kendaraan dibuka lewat Modal dengan 4 tab internal (Odometer/Servis/Pemakaian/Inspeksi).
+
+Sekarang: form Tambah/Edit dipindah ke **Modal** (`showKendaraanModal`, tombol "➕ Tambah Kendaraan" di toolbar tabel) — sidebar kiri dihapus, tabel Daftar Kendaraan jadi lebar penuh. Riwayat dinaikkan jadi **tab level-halaman** ("📋 Daftar Kendaraan" / "🗂️ Riwayat Kendaraan", segmented control merah di bawah hero), bukan modal lagi.
+
+### 15B. Riwayat gabungan jadi 1 tabel (bukan 4 tab terpisah)
+
+Odometer + Servis + Inspeksi + Uji Emisi (dokumen `kendaraan_uji_emisi` yang dikelola di `admin/uji-emisi`, §14E — di sini cuma ditampilkan read-only) digabung jadi 1 array `RiwayatEntry[]` lewat fungsi builder `buildRiwayatEntries()`, disortir tanggal desc, ditampilkan 1 tabel dengan kolom Jenis (badge warna beda per jenis: 🛣️Odometer/🔧Servis/🔍Inspeksi/🌫️Uji Emisi/🚙Pergerakan). Filter Bulan/Tahun & Export Excel/PDF berlaku ke tabel gabungan ini sekaligus, bukan per-tab kayak sebelumnya. **Pemakaian (log status dari driver, collection `operational_vehicle_logs`) awalnya SEMPAT DIHAPUS dari gabungan ini** (gak disebut eksplisit di request pertama) — lalu di-request susulan (§15C) diminta balik dengan detail lebih lengkap dari sumber yang sama.
+
+Export Excel pakai library `xlsx` (SheetJS, sudah ada dependency-nya dari `admin/overtime`) — bukan CSV manual kayak `admin/uji-emisi`. Export PDF pakai `window.print()` + CSS `@media print` (`.no-print`/`.print-only`), pola yang sama kayak `admin/apar` — bukan library jsPDF baru (biar gak nambah dependency).
+
+### 15C. Integrasi log pergerakan armada dari driver & security — DAN bug pencocokan yang ditemukan
+
+Request susulan: "riwayat aktifitas bisa ditarik dari data yang diinput team driver ataupun security pada aktifitas armada, biar bisa pantau kendaraan kemana aja". Sumbernya: collection `operational_vehicle_logs`, ditulis dari 2 tempat — `DriverDashboardPage` (form "Bawa Armada" driver sendiri) dan `dashboard/security/parkir` ("LOG PERGERAKAN ARMADA").
+
+**Bug ditemukan pas investigasi**: log ini nyimpen field `kendaraan` sebagai STRING PENUH `"PLAT - PIC (UNIT)"` versi SAAT LOG DIBUAT. Begitu PIC di `master_kendaraan` diganti/rename (kejadian beneran di data production: "Muhammad Yusuf" → "Muh Yusuf Mangarengi", "Mattias Hotma" → "Mathias", dst), exact-match ke `kendaraan` kendaraan saat ini bakal GAK PERNAH cocok lagi ke log-log lama — riwayat pergerakan yang sebenarnya ada bakal keliatan kosong. **Fix**: dicocokkan lewat **awalan plat nomor** (field `plat_nomor`, yang stabil/gak pernah berubah) pakai Firestore range query (`where("kendaraan", ">=", plat)` + `where("kendaraan", "<", plat + "")` + `orderBy("kendaraan")`, lalu di-sort ulang client-side by `waktu_catat` karena Firestore makarena maunya order-by field yang sama dengan range) — BUKAN exact match maupun query berbasis `kendaraan_id` (field itu gak ada di collection ini). Range query kayak gini otomatis kepakai single-field index bawaan Firestore, gak perlu bikin index manual.
+
+Ditambahkan juga kartu ringkasan baru "POSISI / AKTIVITAS TERAKHIR" di atas tabel riwayat (status + tujuan + driver + waktu dari log pergerakan paling baru) — biar admin langsung tau kendaraan lagi di mana tanpa scroll ke tabel.
+
+### 15D. Multi-select checklist kendaraan (Daftar & Riwayat)
+
+Komponen baru `MultiSelectDropdown` (dropdown custom dengan checkbox list + tombol "Pilih Semua"/"Kosongkan", backdrop transparan buat close-on-click-outside) dipakai di 2 tempat:
+- **Tab Daftar**: filter kendaraan mana yang ditampilkan di tabel (state `daftarSelectedIds`, kosong = tampil semua — sentinel biar gak perlu effect buat set default).
+- **Tab Riwayat**: bisa pilih LEBIH DARI 1 kendaraan sekaligus buat lihat riwayat gabungan. Data per-kendaraan disimpan di `riwayatDataMap: Record<string, VehicleRiwayatData>` (bukan lagi state tunggal per-field), di-subscribe per kendaraan terpilih di 1 `useEffect` yang di-loop. Kalau cuma 1 kendaraan dipilih, tampilan sama kayak sebelumnya (5 kartu ringkasan: Posisi/Odometer/Servis/Pajak/Uji Emisi). Kalau lebih dari 1, kartu-kartu itu diganti strip ringkasan kecil per-kendaraan, dan tabel riwayat dapat kolom tambahan "Kendaraan" biar tetap jelas entri punya siapa. Tombol "+ Odometer"/"+ Servis" otomatis nambah dropdown pilih kendaraan target kalau lagi mode multi-select.
+
+### 15E. Status Kepemilikan Aset/Sewa
+
+Field baru di `master_kendaraan`: `status_kepemilikan` ("Aset"|"Sewa", default Aset) dan `tanggal_akhir_sewa`. Kolom baru "Status Kepemilikan" di tabel Daftar — badge "Aset" polos, atau badge "Sewa" + hitung otomatis sisa hari (`getKepemilikanInfo()`: ≤30 hari = warning/kuning, lewat = danger/merah, sisanya sukses/hijau) dan tanggal berakhirnya. Modal Tambah/Edit dapat field select Status Kepemilikan + input tanggal (muncul kondisional cuma kalau pilih Sewa).
+
+### 15F. Verifikasi §15
+
+`npx tsc --noEmit`/`npx eslint` bersih di setiap tahap. Dicek di browser pane pakai data production real (10 kendaraan asli, riwayat pergerakan asli dari Juli-Agustus 2026): multi-select filter jalan (uncheck 2 kendaraan → tabel jadi 8/10), riwayat 1 kendaraan (B 1629 RKP: 27 entri; DD 1412 XBO: 41 entri, termasuk tujuan asli kayak "Morowali"/"Pelabuhan"/"Pare Pare") DAN riwayat 2 kendaraan sekaligus (68 entri gabungan, kolom Kendaraan bener), Export Excel jalan tanpa error, modal edit dengan Status Kepemilikan=Sewa nampilin field tanggal (dibatalkan sebelum submit, gak nulis ke prod).
+
+---
+
+## 16. Simplifikasi form "siapa yang bawa kendaraan" + live master data `dashboard/security/parkir`, redesign `DriverDashboardPage` (30 Agustus 2026, lanjutan sesi §15)
+
+### 16A. `dashboard/security/parkir` — opsi "Karyawan" + nama spesifik
+
+Sebelumnya dropdown "SIAPA YANG MEMBAWA KENDARAAN?" punya 4 opsi: "Amal Setiawan", "Muhammad Renaldy" (2 driver tetap, ada di `DRIVER_ONLY` — otomatis sinkron ke `driver_status_logs`), plus 2 opsi generik yang tumpang tindih/membingungkan: "Penanggung Jawab Kendaraan (PIC)" dan "Karyawan / PIC Kendaraan". Diminta disederhanakan.
+
+**Fix**: `DAFTAR_DRIVER` jadi `["Amal Setiawan", "Muhammad Renaldy", "Karyawan"]`. Begitu pilih "Karyawan", muncul field wajib baru "NAMA KARYAWAN YANG MEMBAWA" (text input + `datalist` dari collection `employees_directory`, persis pola PIC Kendaraan di `admin/kendaraan`). Field baru `namaKaryawan` (state) + `employees` (state, di-subscribe onSnapshot).
+
+**Keputusan penyimpanan** (diberi kebebasan milih di request — "atau bebas anda ingin menyimpan dimana yang lebih enak dibaca"): nama karyawan yang diketik LANGSUNG disimpan ke field `driver_bertugas` yang SUDAH ADA (`driverBertugasFinal = driverMobil === "Karyawan" ? namaKaryawan.trim() : driverMobil`) — BUKAN kolom/field baru terpisah. Alasan: field ini udah dipakai buat nampilin "siapa yang bawa" di 2 tempat (tabel "LOG AKTIVITAS MOBIL HARI INI" di halaman parkir sendiri, DAN kolom "PIC/Driver" di Riwayat `admin/kendaraan`, lihat §15C) — jadi begitu isinya nama asli (bukan label generik "Penanggung Jawab Kendaraan (PIC)"), KEDUA tempat itu otomatis kebaca benar tanpa nyentuh kode render sama sekali. Kolom itu di `admin/kendaraan` juga di-rename dari "PIC / Driver" jadi **"Karyawan / Driver"** biar sesuai konteks barunya.
+
+### 16B. Daftar armada `parkir` diganti dari hardcode ke live `master_kendaraan`
+
+Ditemukan pas kerjain 16A: array `KENDARAAN_OPERASIONAL` di file ini masih HARDCODE (PIC/unit versi lama, contoh: "DD 1278 XCS - SML Operational (PT Samudera Makassar Logistik)" padahal data terkini di `master_kendaraan` udah "DD 1278 XCS - UMUM (PT Kendari Jaya Samudera)") — bug yang sama persis yang udah pernah difix di `DriverDashboardPage` sesi sebelumnya, tapi kelewatan di file ini. Difix pakai pola yang sama: `onSnapshot(query(collection(db,"master_kendaraan"), orderBy("kendaraan","asc")))`, dengan `kendaraanEfektif = kendaraan || kendaraanMaster[0]?.kendaraan || ""` (sentinel, hindari `setState` langsung di effect biar gak kena lint `react-hooks/set-state-in-effect`).
+
+### 16C. Redesign `DriverDashboardPage.tsx`
+
+Diminta "perbaiki tampilannya", referensi tampilan `src/app/page.tsx` (portal utama) buat mobile. Sebelumnya halaman ini pakai tema BIRU (`#1a365d`→`#2b6cb0`, satu-satunya halaman di app yang gak pakai tema merah standar) dan sama sekali gak ada bottom-nav mobile.
+
+- Hero diganti ke gradient merah standar (`--red-700`→`--red-600`→`#c62828`, 150deg) + overlay grid pattern, persis token & pola yang sama kayak `admin/kendaraan`/`dashboard/security/parkir`.
+- Top bar diganti ke pola `.site-header` sticky+blur standar (sebelumnya solid putih polos).
+- **Bottom-nav mobile baru** (`@media max-width:768px`) — pill mengambang blur + FAB merah di tengah, style DAN struktur (`.nav-item`/FAB raised circle border 4px) diambil dari riset langsung ke `src/app/page.tsx` (`.app-bottom-nav`, baris 970-988 & 1297-1317 versi saat diriset). 5 tombol: 🏠Portal (`router.push("/")`), 🚙Armada, 🔍**Inspeksi** (FAB, raised di tengah — ini yang jadi "menu inspeksi kendaraan" yang diminta lebih menonjol), 🛠️Servis, 🕒Riwayat. Karena halaman ini 1 route panjang (bukan multi-halaman), nav-nya scroll ke section (`scrollIntoView` + `id`+`scrollMarginTop` di tiap card), bukan pindah route.
+- Semua form/logic 5 card yang sudah ada (Status Kesiagaan, Bawa Armada, Inspeksi Mingguan — sudah ada dari sebelumnya, bukan fitur baru, cuma dikasih anchor `id`, Servis/Uji Emisi/Odometer, Riwayat Armada) TIDAK diubah sama sekali — cuma dikasih `id` buat target scroll. Konten internal cardnya (checklist warna, tombol pilihan, dll) masih inline style manual, belum dimodernisasi ke `components/ui/` (dicatat sebagai lanjutan di §0C).
+
+### 16D. Verifikasi §16
+
+`npx tsc --noEmit`/`npx eslint` (project-wide): 0 error. `npm run build`: sukses, 35 route ter-generate. Dicek di browser: dropdown "Karyawan" di `parkir` nampilin field nama + datalist keisi nama karyawan real (Irene Yuliasri, Suaib, dst dari `employees_directory`), dropdown armada nampilin nama kendaraan terkini yang bener (sinkron sama `admin/kendaraan`), kolom "Karyawan / Driver" ter-rename di `admin/kendaraan`. `DriverDashboardPage`: hero merah + top bar sticky kebaca benar di desktop, bottom-nav pill+FAB kebaca benar di viewport mobile 375×812. Klik tombol nav sempat kena timeout tooling browser pane berulang kali (bukan indikasi bug — dikonfirmasi via `scrollIntoView` langsung lewat JS bahwa target elemen & scroll behavior-nya benar).
+
+**Sudah di-commit + push (dev→main) + build + deploy** sesuai instruksi eksplisit — dijalankan tanpa jeda konfirmasi tambahan setelah verifikasi di atas kelar, bareng sisa pekerjaan §14 yang masih numpuk belum ke-commit. Lihat §0B untuk ringkasan status akhir.
