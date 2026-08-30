@@ -75,8 +75,10 @@ export default function DriverInspeksiPage() {
 
   const [inspeksiChecklist, setInspeksiChecklist] = useState<Record<string, string>>(checklistDefault());
   const [catatanInspeksi, setCatatanInspeksi] = useState("");
-  const [fotoInspeksi, setFotoInspeksi] = useState("");
-  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
+
+  // 📸 Foto WAJIB per bagian yang diinspeksi — key: CHECKLIST_ITEMS.key, value: url foto
+  const [fotoPerBagian, setFotoPerBagian] = useState<Record<string, string>>({});
+  const [uploadingPerBagian, setUploadingPerBagian] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -112,23 +114,30 @@ export default function DriverInspeksiPage() {
   const kendaraanTerpilih = kendaraanMaster.find((k) => k.id === kendaraanId);
   const kendaraan = kendaraanTerpilih?.kendaraan || "";
   const sudahInspeksiMingguIni = inspeksiTerakhir?.minggu_of === getMondayOfWeek();
+  const adaUploadBerjalan = Object.values(uploadingPerBagian).some(Boolean);
 
-  const handleFotoInspeksiUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFotoBagianUpload = (itemKey: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     handleFotoUpload(
       file, "sibm/inspeksi",
-      () => setIsUploadingFoto(true),
-      (url) => setFotoInspeksi(url),
-      (err) => { console.error(err); showToast("Gagal upload foto inspeksi, coba lagi.", "error"); },
-      () => setIsUploadingFoto(false)
+      () => setUploadingPerBagian((prev) => ({ ...prev, [itemKey]: true })),
+      (url) => setFotoPerBagian((prev) => ({ ...prev, [itemKey]: url })),
+      (err) => { console.error(err); showToast("Gagal upload foto, coba lagi.", "error"); },
+      () => setUploadingPerBagian((prev) => ({ ...prev, [itemKey]: false }))
     );
   };
 
   const handleSubmitInspeksi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kendaraanId) return showToast("Pilih kendaraan dulu.", "warning");
-    if (isUploadingFoto) return showToast("Tunggu foto selesai diunggah dulu.", "warning");
+    if (adaUploadBerjalan) return showToast("Tunggu semua foto selesai diunggah dulu.", "warning");
+
+    const itemBelumFoto = CHECKLIST_ITEMS.find((item) => !fotoPerBagian[item.key]);
+    if (itemBelumFoto) {
+      return showToast(`Foto untuk "${itemBelumFoto.label}" wajib dilampirkan.`, "warning");
+    }
+
     setIsSaving(true);
     try {
       await addDoc(collection(db, "kendaraan_inspeksi_logs"), {
@@ -139,13 +148,14 @@ export default function DriverInspeksiPage() {
         minggu_of: getMondayOfWeek(),
         checklist: inspeksiChecklist,
         catatan: catatanInspeksi.trim(),
-        foto_url: fotoInspeksi || "",
+        checklist_foto: fotoPerBagian,
+        foto_url: fotoPerBagian[CHECKLIST_ITEMS[0].key] || "",
         waktu_catat: serverTimestamp(),
       });
       showToast("Inspeksi mingguan berhasil disimpan!", "success");
       setInspeksiChecklist(checklistDefault());
       setCatatanInspeksi("");
-      setFotoInspeksi("");
+      setFotoPerBagian({});
     } catch (error) {
       console.error(error);
       showToast("Gagal menyimpan inspeksi.", "error");
@@ -196,7 +206,7 @@ export default function DriverInspeksiPage() {
 
       <div className="page-hero">
         <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(18px, 5vw, 24px)", fontWeight: "900" }}>🔍 INSPEKSI MINGGUAN</h1>
-        <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Cek kondisi kendaraan sebelum beroperasi</p>
+        <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Cek kondisi kendaraan & lampirkan foto tiap bagian sebelum beroperasi</p>
       </div>
 
       <div style={{ maxWidth: "500px", margin: "-25px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
@@ -223,54 +233,58 @@ export default function DriverInspeksiPage() {
               </div>
 
               <form onSubmit={handleSubmitInspeksi} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {CHECKLIST_ITEMS.map((item) => (
-                  <div key={item.key}>
-                    <label style={{ display: "block", fontWeight: "700", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>{item.label}</label>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
-                      {STATUS_OPSI.map((opsi) => {
-                        const dipilih = inspeksiChecklist[item.key] === opsi;
-                        const warna = opsi === "Baik" ? "#38a169" : opsi === "Perlu Perhatian" ? "#d69e2e" : "#e53e3e";
-                        return (
-                          <button
-                            type="button"
-                            key={opsi}
-                            onClick={() => setInspeksiChecklist((prev) => ({ ...prev, [item.key]: opsi }))}
-                            style={{
-                              padding: "8px 4px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer",
-                              border: dipilih ? `2px solid ${warna}` : "1px solid #e2e8f0",
-                              background: dipilih ? `${warna}1a` : "#f8fafc",
-                              color: dipilih ? warna : "#a0aec0",
-                            }}
-                          >
-                            {opsi}
-                          </button>
-                        );
-                      })}
+                {CHECKLIST_ITEMS.map((item) => {
+                  const fotoItem = fotoPerBagian[item.key];
+                  const uploadingItem = !!uploadingPerBagian[item.key];
+                  return (
+                    <div key={item.key} style={{ border: "1px solid #edf2f7", borderRadius: "14px", padding: "12px" }}>
+                      <label style={{ display: "block", fontWeight: "700", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>{item.label} *</label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginBottom: "10px" }}>
+                        {STATUS_OPSI.map((opsi) => {
+                          const dipilih = inspeksiChecklist[item.key] === opsi;
+                          const warna = opsi === "Baik" ? "#38a169" : opsi === "Perlu Perhatian" ? "#d69e2e" : "#e53e3e";
+                          return (
+                            <button
+                              type="button"
+                              key={opsi}
+                              onClick={() => setInspeksiChecklist((prev) => ({ ...prev, [item.key]: opsi }))}
+                              style={{
+                                padding: "8px 4px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer",
+                                border: dipilih ? `2px solid ${warna}` : "1px solid #e2e8f0",
+                                background: dipilih ? `${warna}1a` : "#f8fafc",
+                                color: dipilih ? warna : "#a0aec0",
+                              }}
+                            >
+                              {opsi}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", border: fotoItem ? "1px solid #cbd5e0" : "1px dashed #fc8181", borderRadius: "10px", padding: "10px" }}>
+                        {fotoItem ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={fotoItem} alt={`Foto ${item.label}`} style={{ width: "42px", height: "42px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                        ) : (
+                          <span style={{ fontSize: "18px" }}>📸</span>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <label style={{ display: "inline-block", padding: "6px 12px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+                            {uploadingItem ? "⏳ Mengunggah..." : (fotoItem ? "Ganti Foto" : "Wajib Upload Foto")}
+                            <input type="file" accept="image/*" capture="environment" onChange={(e) => handleFotoBagianUpload(item.key, e)} disabled={uploadingItem} style={{ display: "none" }} />
+                          </label>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div>
                   <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>CATATAN TAMBAHAN</label>
                   <textarea placeholder="Opsional — jelaskan kalau ada item Perlu Perhatian/Rusak" value={catatanInspeksi} onChange={(e) => setCatatanInspeksi(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none", fontSize: "13px" }} />
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "12px", padding: "12px" }}>
-                  {fotoInspeksi ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={fotoInspeksi} alt="Foto inspeksi" style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
-                  ) : (
-                    <span style={{ fontSize: "22px" }}>📸</span>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: "inline-block", padding: "8px 14px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
-                      {isUploadingFoto ? "⏳ Mengunggah..." : (fotoInspeksi ? "Ganti Foto" : "Upload Foto (opsional)")}
-                      <input type="file" accept="image/*" capture="environment" onChange={handleFotoInspeksiUpload} disabled={isUploadingFoto} style={{ display: "none" }} />
-                    </label>
-                  </div>
-                </div>
-
-                <button type="submit" disabled={isSaving || isUploadingFoto} style={{ width: "100%", padding: "16px", background: isSaving ? "#a0aec0" : "#38a169", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", boxShadow: isSaving ? "none" : "0 4px 15px rgba(56, 161, 105, 0.3)" }}>
+                <button type="submit" disabled={isSaving || adaUploadBerjalan} style={{ width: "100%", padding: "16px", background: isSaving ? "#a0aec0" : "#38a169", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", boxShadow: isSaving ? "none" : "0 4px 15px rgba(56, 161, 105, 0.3)" }}>
                   {isSaving ? "Menyimpan..." : "✅ Kirim Inspeksi Mingguan"}
                 </button>
               </form>

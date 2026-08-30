@@ -27,8 +27,11 @@ const IconClipboardList = ({ size = 22, color = "currentColor" }: IconProps) => 
 const IconClock = ({ size = 22, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
 );
-const IconHome = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /></svg>
+const IconLogOut = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
+);
+const IconBook = ({ size = 22, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
 );
 
 interface OvertimeItemRequest {
@@ -147,12 +150,14 @@ export default function DriverMenuPage() {
     boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)", transition: "all 0.2s", color: "#2d3748"
   };
 
+  // hideOnMobile: true = card disembunyikan di HP karena modulnya sudah ada shortcut permanen di bottom nav
   const menuDriver = [
-    { title: "Bawa Armada", desc: "Catat pergerakan kendaraan keluar/tiba & KM.", path: "/dashboard/driver/armada", action: "link", token: "info", icon: IconCar },
-    { title: "Inspeksi Mingguan", desc: "Checklist kondisi kendaraan tiap minggu.", path: "/dashboard/driver/inspeksi", action: "link", token: "ok", icon: IconSearch },
-    { title: "Servis, Emisi & Odometer", desc: "Laporan servis, uji emisi, & catat odometer.", path: "/dashboard/driver/servis", action: "link", token: "warn", icon: IconWrench },
-    { title: "Riwayat Armada Saya", desc: "Lihat semua log perjalanan Anda.", path: "/dashboard/driver/riwayat", action: "link", token: "accent", icon: IconClipboardList },
-    { title: "Klaim Lembur / Perjalanan Dinas", desc: "Rekap & input lemburan periode berjalan.", path: "", action: "modal_lembur", token: "red", icon: IconClock },
+    { title: "Bawa Armada", desc: "Catat pergerakan kendaraan keluar/tiba & KM.", path: "/dashboard/driver/armada", action: "link", token: "info", icon: IconCar, hideOnMobile: true },
+    { title: "Inspeksi Mingguan", desc: "Checklist kondisi kendaraan tiap minggu.", path: "/dashboard/driver/inspeksi", action: "link", token: "ok", icon: IconSearch, hideOnMobile: true },
+    { title: "Servis, Emisi & Odometer", desc: "Laporan servis, uji emisi, & catat odometer.", path: "/dashboard/driver/servis", action: "link", token: "warn", icon: IconWrench, hideOnMobile: true },
+    { title: "Riwayat Armada Saya", desc: "Lihat semua log perjalanan Anda.", path: "/dashboard/driver/riwayat", action: "link", token: "accent", icon: IconClipboardList, hideOnMobile: false },
+    { title: "Klaim Lembur / Perjalanan Dinas", desc: "Rekap & input lemburan periode berjalan.", path: "", action: "modal_lembur", token: "red", icon: IconClock, hideOnMobile: false },
+    { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim Driver.", path: "/dashboard/driver/sop", action: "link", token: "info", icon: IconBook, hideOnMobile: false },
   ];
 
   const tokenColors: Record<string, { bg: string; color: string }> = {
@@ -166,7 +171,7 @@ export default function DriverMenuPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <div className="driver-page-root" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
       <style dangerouslySetInnerHTML={{__html: `
         :root {
           --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
@@ -206,10 +211,29 @@ export default function DriverMenuPage() {
         .driver-menu-card-title { margin: 0 0 4px 0; color: #1a202c; font-size: 16px; font-weight: 800; }
         .driver-menu-card-desc { margin: 0; color: #718096; font-size: 12.5px; line-height: 1.5; }
 
+        .mobile-nav { display: none; }
+
         @media (max-width: 640px) {
+          .driver-page-root { padding-bottom: 90px !important; }
           .driver-menu-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .hide-card-mobile { display: none !important; }
           .driver-menu-card { flex-direction: row !important; align-items: center !important; padding: 16px 18px !important; border-radius: 18px !important; }
           .driver-menu-card-icon { width: 46px !important; height: 46px !important; flex-shrink: 0; }
+
+          /* 📱 DESAIN BOTTOM NAV MODERN — samain pola sama dashboard/security & dashboard/qhse */
+          .mobile-nav {
+            display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-top: 1px solid #e2e8f0;
+            z-index: 90; padding: 12px 10px; justify-content: space-between; box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
+            overflow-x: auto; scroll-snap-type: x mandatory;
+          }
+          .mobile-nav::-webkit-scrollbar { display: none; }
+          .m-nav-item {
+            display: flex; flex-direction: column; align-items: center; gap: 4px; color: #4a5568;
+            font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; background: none; border: none; font-family: inherit;
+            flex: 0 0 auto; min-width: 70px; scroll-snap-align: start; text-align: center;
+          }
+          .m-nav-item:active { transform: scale(0.9); }
         }
       `}} />
 
@@ -262,7 +286,7 @@ export default function DriverMenuPage() {
             const tc = tokenColors[menu.token];
             const MenuIcon = menu.icon;
             return (
-              <div key={index} className="driver-menu-card" onClick={() => menu.action === "modal_lembur" ? setActiveModal("lembur") : router.push(menu.path)}>
+              <div key={index} className={`driver-menu-card${menu.hideOnMobile ? " hide-card-mobile" : ""}`} onClick={() => menu.action === "modal_lembur" ? setActiveModal("lembur") : router.push(menu.path)}>
                 <div className="driver-menu-card-icon" style={{ background: tc.bg, color: tc.color }}>
                   <MenuIcon size={24} />
                 </div>
@@ -275,10 +299,28 @@ export default function DriverMenuPage() {
           })}
         </div>
 
-        <button onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #e2e8f0", padding: "14px", borderRadius: "16px", color: "#4a5568", fontWeight: "700", fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
-          <IconHome size={16} /> Kembali ke Portal Utama
-        </button>
+      </div>
 
+      {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) — 4 menu paling sering dipakai + Keluar.
+          Tidak ada shortcut langsung ke Portal Utama: keluar dari app Driver wajib lewat logout (tombol Keluar),
+          bukan pindah halaman sambil sesi login masih menempel di localStorage. */}
+      <div className="mobile-nav">
+        <button className="m-nav-item" onClick={() => router.push("/dashboard/driver/armada")} style={{ color: "var(--info)" }}>
+          <IconCar size={20} />
+          <span>Armada</span>
+        </button>
+        <button className="m-nav-item" onClick={() => router.push("/dashboard/driver/inspeksi")} style={{ color: "var(--ok)" }}>
+          <IconSearch size={20} />
+          <span>Inspeksi</span>
+        </button>
+        <button className="m-nav-item" onClick={() => router.push("/dashboard/driver/servis")} style={{ color: "var(--warn)" }}>
+          <IconWrench size={20} />
+          <span>Servis</span>
+        </button>
+        <button className="m-nav-item" onClick={handleLogout} style={{ color: "var(--red-600)" }}>
+          <IconLogOut size={20} />
+          <span>Keluar</span>
+        </button>
       </div>
 
       {/* ========================================== */}

@@ -21,11 +21,39 @@ interface KendaraanMaster {
   kendaraan: string;
 }
 
+// Jenis servis yang bisa dipilih (multi-select). "Ganti Oli" dianggap sudah termasuk bagian
+// Servis Berkala jadi tidak butuh foto sendiri. Selain itu & "Servis Berkala" (yang punya aturan
+// foto khusus 3 lembar), tiap jenis yang dipilih wajib lampirkan 1 foto buktinya masing-masing.
+const JENIS_OPSI = ["Ganti Oli", "Ganti Ban Luar", "Ganti Ban Dalam", "Tubles", "Uji Emisi", "Servis Berkala", "Rem", "Lainnya"];
+const JENIS_TANPA_FOTO = "Ganti Oli";
+const JENIS_SERVIS_BERKALA = "Servis Berkala";
+
 const sharedInputStyle = {
   width: "100%", padding: "16px", borderRadius: "14px", border: "1px solid #cbd5e0",
   fontSize: "15px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const,
   boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)", transition: "all 0.2s", color: "#2d3748"
 };
+
+// Kartu upload foto generik dipakai berulang (1 per jenis servis & 3 slot khusus Servis Berkala)
+function KartuUploadFoto({ label, url, isUploading, onUpload }: { label: string; url: string; isUploading: boolean; onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", border: url ? "1px solid #cbd5e0" : "1px dashed #fc8181", borderRadius: "10px", padding: "10px" }}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={label} style={{ width: "42px", height: "42px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+      ) : (
+        <span style={{ fontSize: "18px" }}>📸</span>
+      )}
+      <div style={{ flex: 1 }}>
+        <label style={{ display: "block", fontWeight: "700", marginBottom: "4px", fontSize: "11px", color: "#4a5568" }}>{label} *</label>
+        <label style={{ display: "inline-block", padding: "6px 12px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+          {isUploading ? "⏳ Mengunggah..." : (url ? "Ganti Foto" : "Wajib Upload Foto")}
+          <input type="file" accept="image/*" capture="environment" onChange={onUpload} disabled={isUploading} style={{ display: "none" }} />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 export default function DriverServisPage() {
   const router = useRouter();
@@ -43,15 +71,19 @@ export default function DriverServisPage() {
   const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
   const [kendaraanId, setKendaraanId] = useState<string>("");
 
-  const [servisJenis, setServisJenis] = useState("");
+  const [odometerInput, setOdometerInput] = useState("");
+  const [servisJenisTerpilih, setServisJenisTerpilih] = useState<string[]>([]);
   const [servisDeskripsi, setServisDeskripsi] = useState("");
   const [servisBiaya, setServisBiaya] = useState("");
-  const [fotoEmisi, setFotoEmisi] = useState("");
-  const [isUploadingFoto, setIsUploadingFoto] = useState(false);
   const [isSavingServis, setIsSavingServis] = useState(false);
 
-  const [odometerInput, setOdometerInput] = useState("");
-  const [isSavingOdometer, setIsSavingOdometer] = useState(false);
+  // 📸 1 foto wajib per jenis (kecuali Ganti Oli & Servis Berkala yang punya aturan sendiri)
+  const [fotoPerJenis, setFotoPerJenis] = useState<Record<string, string>>({});
+  const [uploadingPerJenis, setUploadingPerJenis] = useState<Record<string, boolean>>({});
+
+  // 📸 3 foto wajib khusus Servis Berkala: foto kendaraan, foto KM, foto buku servis
+  const [fotoBerkala, setFotoBerkala] = useState({ kendaraan: "", km: "", buku_service: "" });
+  const [uploadingBerkala, setUploadingBerkala] = useState({ kendaraan: false, km: false, buku_service: false });
 
   useEffect(() => {
     const q = query(collection(db, "master_kendaraan"), orderBy("kendaraan", "asc"));
@@ -72,55 +104,88 @@ export default function DriverServisPage() {
   const kendaraanTerpilih = kendaraanMaster.find((k) => k.id === kendaraanId);
   const kendaraan = kendaraanTerpilih?.kendaraan || "";
 
-  const handleFotoEmisiUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const toggleJenis = (jenis: string) => {
+    setServisJenisTerpilih((prev) => {
+      if (prev.includes(jenis)) {
+        // Hapus juga foto yang sudah diupload untuk jenis ini biar gak nyangkut data yatim
+        setFotoPerJenis((prevFoto) => {
+          const next = { ...prevFoto };
+          delete next[jenis];
+          return next;
+        });
+        return prev.filter((j) => j !== jenis);
+      }
+      return [...prev, jenis];
+    });
+  };
+
+  const handleFotoJenisUpload = (jenis: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     handleFotoUpload(
-      file, "sibm/emisi",
-      () => setIsUploadingFoto(true),
-      (url) => setFotoEmisi(url),
-      (err) => { console.error(err); showToast("Gagal upload foto uji emisi, coba lagi.", "error"); },
-      () => setIsUploadingFoto(false)
+      file, "sibm/servis",
+      () => setUploadingPerJenis((prev) => ({ ...prev, [jenis]: true })),
+      (url) => setFotoPerJenis((prev) => ({ ...prev, [jenis]: url })),
+      (err) => { console.error(err); showToast(`Gagal upload foto ${jenis}, coba lagi.`, "error"); },
+      () => setUploadingPerJenis((prev) => ({ ...prev, [jenis]: false }))
     );
   };
+
+  const handleFotoBerkalaUpload = (bagian: "kendaraan" | "km" | "buku_service", e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    handleFotoUpload(
+      file, "sibm/servis-berkala",
+      () => setUploadingBerkala((prev) => ({ ...prev, [bagian]: true })),
+      (url) => setFotoBerkala((prev) => ({ ...prev, [bagian]: url })),
+      (err) => { console.error(err); showToast("Gagal upload foto, coba lagi.", "error"); },
+      () => setUploadingBerkala((prev) => ({ ...prev, [bagian]: false }))
+    );
+  };
+
+  const adaUploadBerjalan = Object.values(uploadingPerJenis).some(Boolean) || Object.values(uploadingBerkala).some(Boolean);
+  const isServisBerkalaDipilih = servisJenisTerpilih.includes(JENIS_SERVIS_BERKALA);
+  const jenisButuhFotoSendiri = servisJenisTerpilih.filter((j) => j !== JENIS_TANPA_FOTO && j !== JENIS_SERVIS_BERKALA);
 
   const handleSubmitServis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kendaraanId) return showToast("Pilih kendaraan dulu.", "warning");
-    if (!servisJenis.trim()) return showToast("Jenis servis wajib diisi (misal: Ganti Oli, Uji Emisi, Servis Berkala).", "warning");
-    if (isUploadingFoto) return showToast("Tunggu foto selesai diunggah dulu.", "warning");
+    if (!odometerInput.trim()) return showToast("Odometer wajib diisi.", "warning");
+    if (servisJenisTerpilih.length === 0) return showToast("Pilih minimal 1 jenis servis.", "warning");
+    if (adaUploadBerjalan) return showToast("Tunggu semua foto selesai diunggah dulu.", "warning");
+
+    const jenisBelumFoto = jenisButuhFotoSendiri.find((j) => !fotoPerJenis[j]);
+    if (jenisBelumFoto) return showToast(`Foto untuk "${jenisBelumFoto}" wajib dilampirkan.`, "warning");
+
+    if (isServisBerkalaDipilih && (!fotoBerkala.kendaraan || !fotoBerkala.km || !fotoBerkala.buku_service)) {
+      return showToast("Servis Berkala wajib lampirkan 3 foto: Kendaraan, KM, & Buku Servis.", "warning");
+    }
+
     setIsSavingServis(true);
     try {
+      const fotoDetail: Record<string, string> = { ...fotoPerJenis };
+      if (isServisBerkalaDipilih) {
+        fotoDetail["Servis Berkala - Foto Kendaraan"] = fotoBerkala.kendaraan;
+        fotoDetail["Servis Berkala - Foto KM"] = fotoBerkala.km;
+        fotoDetail["Servis Berkala - Foto Buku Servis"] = fotoBerkala.buku_service;
+      }
+      const fotoUtama = Object.values(fotoDetail)[0] || "";
+
       await addDoc(collection(db, "kendaraan_service_logs"), {
         kendaraan_id: kendaraanId,
         kendaraan: kendaraan,
         tanggal: todayISO,
-        jenis_service: servisJenis.trim(),
+        jenis_service: servisJenisTerpilih.join(", "),
         deskripsi: servisDeskripsi.trim() || "-",
         biaya: servisBiaya.trim() || "-",
-        foto_emisi_url: fotoEmisi || "",
+        odometer: odometerInput.trim(),
+        foto_emisi_url: fotoUtama,
+        foto_detail: fotoDetail,
         dicatat_oleh: activeDriver,
         waktu_catat: serverTimestamp(),
       });
-      showToast("Laporan servis/uji emisi berhasil disimpan! Bisa dicek Admin di Riwayat Kendaraan.", "success");
-      setServisJenis("");
-      setServisDeskripsi("");
-      setServisBiaya("");
-      setFotoEmisi("");
-    } catch (error) {
-      console.error(error);
-      showToast("Gagal menyimpan laporan servis.", "error");
-    } finally {
-      setIsSavingServis(false);
-    }
-  };
 
-  const handleSubmitOdometer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!kendaraanId) return showToast("Pilih kendaraan dulu.", "warning");
-    if (!odometerInput.trim()) return showToast("Isi angka odometer dulu.", "warning");
-    setIsSavingOdometer(true);
-    try {
+      // Odometer otomatis ikut tercatat begitu laporan servis dikirim — gak perlu tombol "Catat" terpisah lagi
       await addDoc(collection(db, "kendaraan_odometer_logs"), {
         kendaraan_id: kendaraanId,
         kendaraan: kendaraan,
@@ -129,13 +194,19 @@ export default function DriverServisPage() {
         dicatat_oleh: activeDriver,
         waktu_catat: serverTimestamp(),
       });
-      showToast("Odometer berhasil dicatat!", "success");
+
+      showToast("Laporan servis & odometer berhasil disimpan! Bisa dicek Admin di Riwayat Kendaraan.", "success");
+      setServisJenisTerpilih([]);
+      setServisDeskripsi("");
+      setServisBiaya("");
       setOdometerInput("");
+      setFotoPerJenis({});
+      setFotoBerkala({ kendaraan: "", km: "", buku_service: "" });
     } catch (error) {
       console.error(error);
-      showToast("Gagal mencatat odometer.", "error");
+      showToast("Gagal menyimpan laporan servis.", "error");
     } finally {
-      setIsSavingOdometer(false);
+      setIsSavingServis(false);
     }
   };
 
@@ -192,72 +263,80 @@ export default function DriverServisPage() {
               Belum ada data kendaraan. Hubungi Admin untuk menambahkan kendaraan di Master Data.
             </div>
           ) : (
-            <>
-              <div style={{ marginBottom: "16px" }}>
+            <form onSubmit={handleSubmitServis} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div>
                 <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>PILIH KENDARAAN *</label>
                 <select value={kendaraanId} onChange={(e) => setKendaraanId(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold", border: "2px solid #cbd5e0"}}>
                   {kendaraanMaster.map(mobil => <option key={mobil.id} value={mobil.id}>{mobil.kendaraan}</option>)}
                 </select>
               </div>
 
-              {/* Catat Odometer Cepat */}
-              <form onSubmit={handleSubmitOdometer} style={{ display: "flex", gap: "10px", marginBottom: "20px", paddingBottom: "20px", borderBottom: "1px dashed #e2e8f0" }}>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>ODOMETER SAAT INI (KM) *</label>
                 <input
-                  type="number" placeholder="Catat odometer terkini (km)" value={odometerInput}
+                  type="number" required placeholder="Contoh: 45200" value={odometerInput}
                   onChange={(e) => setOdometerInput(e.target.value)}
-                  style={{ ...sharedInputStyle, flex: 1 }}
+                  style={{ ...sharedInputStyle, fontSize: "18px", fontWeight: "bold" }}
                 />
-                <button type="submit" disabled={isSavingOdometer} style={{ padding: "0 20px", background: isSavingOdometer ? "#a0aec0" : "#2b6cb0", color: "white", border: "none", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: isSavingOdometer ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
-                  {isSavingOdometer ? "..." : "📟 Catat"}
-                </button>
-              </form>
+              </div>
 
-              {/* Laporan Servis / Uji Emisi */}
-              <form onSubmit={handleSubmitServis} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                <div>
-                  <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>JENIS SERVIS *</label>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {["Ganti Oli", "Uji Emisi", "Servis Berkala", "Ban", "Rem", "Lainnya"].map(j => (
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>JENIS SERVIS * (bisa pilih lebih dari 1)</label>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {JENIS_OPSI.map(j => {
+                    const dipilih = servisJenisTerpilih.includes(j);
+                    return (
                       <button
-                        key={j} type="button" onClick={() => setServisJenis(j)}
-                        style={{ padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: servisJenis === j ? "2px solid #3182ce" : "1px solid #e2e8f0", background: servisJenis === j ? "#ebf8ff" : "#f8fafc", color: servisJenis === j ? "#2b6cb0" : "#718096" }}
+                        key={j} type="button" onClick={() => toggleJenis(j)}
+                        style={{ padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: dipilih ? "2px solid #3182ce" : "1px solid #e2e8f0", background: dipilih ? "#ebf8ff" : "#f8fafc", color: dipilih ? "#2b6cb0" : "#718096" }}
                       >
-                        {j}
+                        {dipilih ? "✓ " : ""}{j}
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
+                {servisJenisTerpilih.includes(JENIS_TANPA_FOTO) && (
+                  <div style={{ fontSize: "10px", color: "#718096", marginTop: "6px" }}>Info: Ganti Oli tidak perlu foto terpisah — sudah termasuk bagian Servis Berkala.</div>
+                )}
+              </div>
 
-                <div>
-                  <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>DESKRIPSI</label>
-                  <textarea placeholder="Contoh: Ganti oli mesin + filter di bengkel resmi" value={servisDeskripsi} onChange={(e) => setServisDeskripsi(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none", fontSize: "13px" }} />
+              {jenisButuhFotoSendiri.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {jenisButuhFotoSendiri.map((jenis) => (
+                    <KartuUploadFoto
+                      key={jenis}
+                      label={`Foto Bukti — ${jenis}`}
+                      url={fotoPerJenis[jenis] || ""}
+                      isUploading={!!uploadingPerJenis[jenis]}
+                      onUpload={(e) => handleFotoJenisUpload(jenis, e)}
+                    />
+                  ))}
                 </div>
+              )}
 
-                <div>
-                  <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>BIAYA (OPSIONAL)</label>
-                  <input type="text" placeholder="Contoh: 350000" value={servisBiaya} onChange={(e) => setServisBiaya(e.target.value)} style={sharedInputStyle} />
+              {isServisBerkalaDipilih && (
+                <div style={{ border: "1px solid #edf2f7", borderRadius: "14px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "900", color: "#b7791f" }}>📋 SERVIS BERKALA — WAJIB 3 FOTO</div>
+                  <KartuUploadFoto label="Foto Kendaraan" url={fotoBerkala.kendaraan} isUploading={uploadingBerkala.kendaraan} onUpload={(e) => handleFotoBerkalaUpload("kendaraan", e)} />
+                  <KartuUploadFoto label="Foto KM (Odometer)" url={fotoBerkala.km} isUploading={uploadingBerkala.km} onUpload={(e) => handleFotoBerkalaUpload("km", e)} />
+                  <KartuUploadFoto label="Foto Buku Servis" url={fotoBerkala.buku_service} isUploading={uploadingBerkala.buku_service} onUpload={(e) => handleFotoBerkalaUpload("buku_service", e)} />
                 </div>
+              )}
 
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f8fafc", border: "1px dashed #cbd5e0", borderRadius: "12px", padding: "12px" }}>
-                  {fotoEmisi ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={fotoEmisi} alt="Foto bukti uji emisi" style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
-                  ) : (
-                    <span style={{ fontSize: "22px" }}>📸</span>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: "inline-block", padding: "8px 14px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
-                      {isUploadingFoto ? "⏳ Mengunggah..." : (fotoEmisi ? "Ganti Foto Bukti" : "Upload Bukti Servis/Emisi (opsional)")}
-                      <input type="file" accept="image/*" capture="environment" onChange={handleFotoEmisiUpload} disabled={isUploadingFoto} style={{ display: "none" }} />
-                    </label>
-                  </div>
-                </div>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>DESKRIPSI</label>
+                <textarea placeholder="Contoh: Ganti oli mesin + filter di bengkel resmi" value={servisDeskripsi} onChange={(e) => setServisDeskripsi(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none", fontSize: "13px" }} />
+              </div>
 
-                <button type="submit" disabled={isSavingServis || isUploadingFoto} style={{ width: "100%", padding: "16px", background: isSavingServis ? "#a0aec0" : "#dd6b20", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingServis ? "not-allowed" : "pointer", boxShadow: isSavingServis ? "none" : "0 4px 15px rgba(221, 107, 32, 0.3)" }}>
-                  {isSavingServis ? "Menyimpan..." : "✅ Kirim Laporan Servis"}
-                </button>
-              </form>
-            </>
+              <div>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>BIAYA (OPSIONAL)</label>
+                <input type="text" placeholder="Contoh: 350000" value={servisBiaya} onChange={(e) => setServisBiaya(e.target.value)} style={sharedInputStyle} />
+              </div>
+
+              <button type="submit" disabled={isSavingServis || adaUploadBerjalan} style={{ width: "100%", padding: "16px", background: isSavingServis ? "#a0aec0" : "#dd6b20", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingServis ? "not-allowed" : "pointer", boxShadow: isSavingServis ? "none" : "0 4px 15px rgba(221, 107, 32, 0.3)" }}>
+                {isSavingServis ? "Menyimpan..." : "✅ Kirim Laporan Servis"}
+              </button>
+            </form>
           )}
         </div>
       </div>

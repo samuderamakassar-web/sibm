@@ -238,6 +238,25 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "sop_documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "target_dept",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_upload",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     }
   ],
   "fieldOverrides": []

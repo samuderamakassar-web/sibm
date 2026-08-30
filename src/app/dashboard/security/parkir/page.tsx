@@ -107,11 +107,14 @@ const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
 // String status_kendaraan SENGAJA dipertahankan sama seperti sebelumnya untuk "Standby",
 // "Keluar", & "Bengkel/Service" supaya kompatibel dengan logika di halaman lain (portal utama &
 // admin/kendaraan) yang mendeteksi status via substring ("keluar", "tiba", "standby", "bengkel").
+// `instant: true` = klik langsung tercatat (tanpa modal form), dipakai untuk aksi yang tidak butuh
+// info tambahan (tujuan/siapa bawa) — Parkir/Standby & Pulang. Keluar & Service tetap lewat modal
+// karena butuh Tujuan/Keperluan & siapa yang membawa kendaraan.
 const STATUS_AKSI = [
-  { key: "standby", label: "Parkir/Standby", status: "Tiba di Kantor (Standby)", icon: IconPlaneLand, tone: "ok" as const },
-  { key: "pulang", label: "Pulang", status: "Pulang (Selesai Tugas Hari Ini)", icon: IconHome, tone: "accent" as const },
-  { key: "keluar", label: "Keluar", status: "Keluar Beroperasi", icon: IconPlaneTakeoff, tone: "red" as const },
-  { key: "service", label: "Service", status: "Masuk Bengkel / Service", icon: IconWrench, tone: "warn" as const },
+  { key: "standby", label: "Parkir/Standby", status: "Tiba di Kantor (Standby)", icon: IconPlaneLand, tone: "ok" as const, instant: true },
+  { key: "pulang", label: "Pulang", status: "Pulang (Selesai Tugas Hari Ini)", icon: IconHome, tone: "accent" as const, instant: true },
+  { key: "keluar", label: "Keluar", status: "Keluar Beroperasi", icon: IconPlaneTakeoff, tone: "red" as const, instant: false },
+  { key: "service", label: "Service", status: "Masuk Bengkel / Service", icon: IconWrench, tone: "warn" as const, instant: false },
 ];
 
 // Otomatisasi status driver berdasarkan aksi kendaraan yang dipilih.
@@ -158,6 +161,9 @@ export default function LogOperasionalPage() {
   const [tujuan, setTujuan] = useState<string>("");
   const [kilometer, setKilometer] = useState<string>("");
   const [isLoadingAksi, setIsLoadingAksi] = useState<boolean>(false);
+
+  // 💡 AKSI INSTAN (Parkir/Standby & Pulang) — klik langsung tercatat, tanpa modal
+  const [loadingInstantKey, setLoadingInstantKey] = useState<string | null>(null);
 
   // 1. Inisialisasi Jam Live & PIC
   useEffect(() => {
@@ -248,6 +254,38 @@ export default function LogOperasionalPage() {
     setTujuan("");
     setKilometer("");
     setModalAksi({ kendaraan, status, label });
+  };
+
+  // Submit Aksi Instan (Parkir/Standby & Pulang) — driver_bertugas dibawa dari log terakhir kendaraan itu,
+  // biar tetap tercatat tanpa perlu tanya ulang siapa yang bawa.
+  // 💡 SENGAJA TIDAK sync ke driver_status_logs: Standby/Pulang cuma soal status KENDARAAN (parkir/pulang),
+  // bukan soal driver-nya "keluar beroperasi". Status kesiagaan driver hanya berubah kalau kendaraan
+  // benar-benar dipakai keluar (Keluar/Service, lewat handleSubmitAksi di bawah) — itu yang beneran
+  // berarti driver-nya sedang bertugas di luar bareng kendaraan itu.
+  const handleAksiInstan = async (kendaraan: KendaraanMaster, aksi: typeof STATUS_AKSI[number]) => {
+    const uniqueKey = `${kendaraan.id}-${aksi.key}`;
+    setLoadingInstantKey(uniqueKey);
+    try {
+      const logTerkini = statusPerKendaraan[kendaraan.kendaraan];
+      const driverTerakhir = logTerkini?.driver_bertugas && logTerkini.driver_bertugas !== "-" ? logTerkini.driver_bertugas : "-";
+
+      await addDoc(collection(db, "operational_vehicle_logs"), {
+        petugas_security: picName,
+        waktu_catat: serverTimestamp(),
+        kendaraan: kendaraan.kendaraan,
+        status_kendaraan: aksi.status,
+        driver_bertugas: driverTerakhir,
+        tujuan_keperluan: "-",
+        kilometer_kendaraan: "Tidak dicatat",
+      });
+
+      showToast(`Berhasil dicatat: ${kendaraan.kendaraan.split(" - ")[0]} — ${aksi.label}`, "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Gagal menyimpan data kendaraan.", "error");
+    } finally {
+      setLoadingInstantKey(null);
+    }
   };
 
   // Submit Aksi Cepat (DENGAN OTOMATISASI STATUS DRIVER — menggantikan koreksi manual absensi)
@@ -528,9 +566,15 @@ export default function LogOperasionalPage() {
                             <div className="aksi-grid">
                               {STATUS_AKSI.map((aksi) => {
                                 const AksiIcon = aksi.icon;
+                                const isLoadingIni = loadingInstantKey === `${k.id}-${aksi.key}`;
                                 return (
-                                  <button key={aksi.key} className={`aksi-btn ${aksi.tone}`} onClick={() => bukaModalAksi(k, aksi.status, aksi.label)}>
-                                    <AksiIcon size={12} /> {aksi.label}
+                                  <button
+                                    key={aksi.key}
+                                    className={`aksi-btn ${aksi.tone}`}
+                                    disabled={isLoadingIni}
+                                    onClick={() => aksi.instant ? handleAksiInstan(k, aksi) : bukaModalAksi(k, aksi.status, aksi.label)}
+                                  >
+                                    <AksiIcon size={12} /> {isLoadingIni ? "..." : aksi.label}
                                   </button>
                                 );
                               })}

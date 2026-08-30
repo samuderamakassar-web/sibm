@@ -6,7 +6,7 @@ import { doc, onSnapshot, collection, query, where, getDocs, addDoc, serverTimes
 import { db } from "../../../lib/firebase";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { logoutWithConfirm } from "../../../hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -57,6 +57,9 @@ const IconInbox = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v2" /><path d="M8 5h6l1 2H7z" /><path d="M9 7v3" /><path d="M15 7l4-2" /><path d="M9 10h4a3 3 0 0 1 3 3v8H8v-8a3 3 0 0 1 1-2z" /><path d="M8 15h8" /></svg>
 );
+const IconBook = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+);
 
 // ==========================================
 // INTERFACES
@@ -74,9 +77,14 @@ export default function SecurityDashboard() {
   const confirm = useConfirm();
   const showToast = useToast();
 
-  const [picName, setPicName] = useState<string>("");
+  const { session, isReady: isAuthReady } = useAuthGuard({
+    depts: ["Security"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Tim Security.",
+  });
+  const picName = session?.nama || "";
   const [picRole, setPicRole] = useState<string>("");
-  const [isReady, setIsReady] = useState<boolean>(false);
+  const [isDataReady, setIsDataReady] = useState<boolean>(false);
 
   const [securityStaff, setSecurityStaff] = useState<string[]>([]);
   const [hariIniShift, setHariIniShift] = useState<string>("Tidak Ada Shift / Belum Diplot");
@@ -93,20 +101,13 @@ export default function SecurityDashboard() {
     { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "Area Pos Security", alasan: "Lembur Back-up Shift" }
   ]);
 
-  // 1. VERIFIKASI IDENTITAS & TARIK DAFTAR STAF
+  // 1. TARIK DAFTAR STAF — jalan begitu akses sudah tervalidasi oleh useAuthGuard
   useEffect(() => {
+    if (!isAuthReady || !session) return;
+    const nama = session.nama;
+    let role = session.role;
+
     const siapkanHalaman = async () => {
-      const nama = localStorage.getItem("pic_nama");
-      let role = localStorage.getItem("pic_role") || "Staff";
-      const dept = localStorage.getItem("pic_dept") || "";
-
-      if (!nama || (dept !== "Security" && !dept.includes("Admin"))) {
-        router.push("/dashboard");
-        return;
-      }
-
-      setPicName(nama);
-
       try {
         const q = query(collection(db, "users_master"), where("departemen", "==", "Security"));
         const snap = await getDocs(q);
@@ -143,7 +144,7 @@ export default function SecurityDashboard() {
     };
 
     siapkanHalaman();
-  }, [router]);
+  }, [isAuthReady, session]);
 
   // 2. TARIK DATA JADWAL BERDASARKAN PERIODE TGL 11 S/D 10
   useEffect(() => {
@@ -197,7 +198,7 @@ export default function SecurityDashboard() {
       const localTodayStr = getLocalDateString(new Date());
       const shiftKuHariIni = finalData[localTodayStr]?.[picName] || "Off / Belum Diplot";
       setHariIniShift(shiftKuHariIni);
-      setIsReady(true);
+      setIsDataReady(true);
     };
 
     const unsub1 = onSnapshot(doc(db, "security_monthly_schedules", docBulan1), (snap) => {
@@ -296,6 +297,7 @@ export default function SecurityDashboard() {
     { title: "Log Kendaraan", desc: "Pencatatan kendaraan keluar-masuk.", path: "/dashboard/security/parkir", action: "link", token: "info", icon: IconCar, hideOnMobile: false },
     { title: "Inspeksi APAR", desc: "Scan QR & catat kondisi APAR per lantai tiap bulan.", path: "/dashboard/security/inspeksi-apar", action: "link", token: "accent", icon: IconFireExtinguisher, hideOnMobile: false },
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input lemburan (Back-up Shift).", path: "", action: "modal_lembur", token: "accent", icon: IconClock, hideOnMobile: false },
+    { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim Security.", path: "/dashboard/security/sop", action: "link", token: "info", icon: IconBook, hideOnMobile: false },
   ];
 
   const tokenColors: Record<string, { bg: string; color: string }> = {
@@ -306,7 +308,7 @@ export default function SecurityDashboard() {
     accent: { bg: "#f5f3ff", color: "var(--accent)" },
   };
 
-  if (!isReady) return null;
+  if (!isAuthReady || !isDataReady) return null;
 
   const roleLower = picRole.toLowerCase();
   const isKoordinatorArea = roleLower.includes("danru") || roleLower.includes("koordinator") || roleLower.includes("admin");
