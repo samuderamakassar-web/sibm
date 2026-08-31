@@ -1372,8 +1372,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   onChange={(e) => setSearchAtkProduk(e.target.value)}
                 />
 
-                {/* KATALOG PRODUK (GRID ALA TOKO ONLINE) */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px", maxHeight: "280px", overflowY: "auto", padding: "4px" }}>
+                {/* KATALOG PRODUK (GRID ALA TOKO ONLINE) — minmax 100px (bukan 140px) biar tetap
+                    kebagi 2 kolom di HP: modal punya padding 30px+30px + gap, jadi lebar sisa buat
+                    grid di layar sekecil 375px cuma ~275px — minmax 140px bikin auto-fill nyerah
+                    jadi 1 kolom raksasa (kartu tinggi 330px, total 40 kartu = scroll 13.000px+),
+                    persis yang bikin katalog kerasa "gak muncul" karena harus scroll lama banget. */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "12px", maxHeight: "280px", overflowY: "auto", padding: "4px" }}>
                   {masterAtkList
                     .filter(p => p.nama_barang.toLowerCase().includes(searchAtkProduk.toLowerCase()))
                     .map((produk) => (

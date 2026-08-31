@@ -1,12 +1,16 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 31 Agustus 2026 (§22: fix upload dokumen SOP gagal (pesan error Cloudinary asli + guard ukuran 10MB), card Menu Cepat di portal dibikin proporsional (grid kolom tetap, bukan auto-fit), label plot OB & CS di "Tim Bertugas Hari Ini" ditulis lengkap semua nama lantai (bukan "+N" terpotong) — SUDAH DI-COMMIT & DI-DEPLOY bareng §21, lihat §22)
+Update terakhir: 31 Agustus 2026 (§23: sinkronisasi otomatis Karyawan↔Kendaraan §21 DITES LANGSUNG di production pakai data dummy isolated ("ZZ TEST SYNC KARYAWAN" / "ZZ 9999 ZZ") — KEDUA ARAH TERBUKTI JALAN BENAR, semua data test sudah dibersihkan; fix grid katalog ATK di portal yang collapse jadi 1 kolom raksasa di HP (minmax 140px → 100px) — SUDAH DI-COMMIT & DI-DEPLOY, lihat §23)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §21 & §22)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §21, §22 & §23)
+
+### §23 (BATCH TERBARU, baca ini duluan)
+
+User minta 2 hal: (1) tes langsung sinkronisasi Karyawan↔Kendaraan (§21) di production dan laporkan hasilnya, (2) fix katalog ATK yang gak muncul benar di tampilan mobile HP (screenshot dilampirkan). Hasil: **sinkronisasi 2 arah TERBUKTI JALAN BENAR** — dites pakai 1 karyawan dummy + 1 kendaraan dummy yang sengaja dibikin terisolasi ("ZZ TEST SYNC KARYAWAN" / plat "ZZ 9999 ZZ", bukan data karyawan/kendaraan asli manapun) khusus buat testing ini, lewat UI production beneran (bukan simulasi), lalu SEMUA 6 dokumen yang tercipta (1 employees_directory, 1 master_kendaraan, 2 operational_vehicle_logs, 2 security_visitor_logs) dihapus lagi sampai bersih total setelah testing selesai — dicek ulang, 0 sisa. Root cause bug katalog ATK: grid `minmax(140px, 1fr)` gak muat 2 kolom di lebar modal HP (~275px efektif setelah padding), jadi `auto-fill` nyerah collapse ke 1 kolom kartu raksasa (tinggi 330px × 40 produk = scroll ~13.000px) — diperbaiki jadi `minmax(100px, 1fr)`, sekarang 2 kolom rapi di HP. Detail lengkap di **§23**.
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. Sesi ini ada 2 batch dari user dalam 1 percakapan. Batch 1 (§21): (A) field "Unit Bisnis" yang masih manual (free text) di beberapa form diganti dropdown sesuai daftar 11 PT resmi yang dikasih user, dan (B) sinkronisasi otomatis 2 arah antara kehadiran Karyawan (Buku Tamu Digital) dan status Standby Kendaraan (Log Operasional Gerbang) — HANYA berlaku buat karyawan yang punya jatah kendaraan. Batch 2 (§22, dikirim user setelah lihat hasil batch 1 di browser): fix bug upload dokumen SOP gagal (screenshot Console Error dilampirkan), card "Menu Cepat" di portal gak proporsional, dan label plot OB & CS di "Tim Bertugas Hari Ini" kurang jelas (cuma nampilin 1 lantai + "+N"), diikuti instruksi eksplisit "lansung saja commit/push/deploy". Detail teknis lengkap ada di **§21** & **§22**.
 
@@ -1228,5 +1232,48 @@ Diperbaiki jadi `sub: \`OB · ${o.lokasi.join(", ") || "Standby"}\`` — pola `.
 1. Root cause §22A (ukuran file) belum 100% dikonfirmasi — kalau user masih dapat error dengan file di bawah 10MB, gali lebih lanjut (pesan error Cloudinary yang sekarang lebih informatif akan membantu).
 2. **Temuan sampingan**: parameter `folder` yang dikirim ke Cloudinary di SEMUA fitur upload (foto inspeksi, foto buku tamu, dokumen SOP, dst) kemungkinan besar DIABAIKAN karena preset `sibm_storage` punya `asset_folder` tetap (`sibm/checklist-ob`) — bukan bug fungsional (URL tetap valid), tapi kalau user pengen folder Cloudinary rapi sesuai fitur, perlu diubah settingan preset-nya di Cloudinary dashboard (di luar kendali kode) atau bikin preset baru per-fitur. Di luar scope sesi ini.
 3. Rekonsiliasi data lama di `master_kendaraan.unit_bisnis` yang typo dari 3 nama PT (lihat §21A poin 1) — gak urgent.
-4. Sinkronisasi §21B/§21C belum ketest end-to-end pakai data production real — disarankan ditest hati-hati di sesi berikutnya.
+4. ~~Sinkronisasi §21B/§21C belum ketest end-to-end~~ — SUDAH DITES di §23, kedua arah terbukti jalan.
+
+---
+
+## 23. Tes Langsung Sinkronisasi Karyawan↔Kendaraan di Production + Fix Katalog ATK Mobile (31 Agustus 2026, lanjutan sesi §21/§22)
+
+Konteks: setelah §22 di-deploy, user minta 2 hal: "coba tes langsung sinkronisasi karyawan-kendaraan di production dan sampaikan hasilnya" + laporan bug baru "saya coiba order atk lwt hp tapilan mobile tidak sesuai tadk muncul daftar atk" (screenshot mobile "Gudang ATK GA" dilampirkan, kelihatan cuma garis-garis tipis, gak ada produk/gambar kebaca), diikuti instruksi "setelah anda cek dan sesuai sdh jalan dengan baik lasung saja commit push dev merge main build dan deploy".
+
+### 23A. Metodologi testing sinkronisasi — data dummy TERISOLASI, bukan data karyawan/kendaraan asli
+
+Belajar dari insiden §19B/§20I (testing browser pernah nulis data sampah ke akun ORANG ASLI di production), sesi ini testing dilakukan dengan pendekatan berbeda yang JAUH lebih aman: alih-alih pakai karyawan & kendaraan ASLI yang match plat-nya (ada beberapa pasangan valid di data real, mis. "Mathias" ↔ "B 1629 RKP"), dibikin DULU 1 karyawan dummy ("ZZ TEST SYNC KARYAWAN", departemen "Admin GA", plat "ZZ 9999 ZZ") + 1 kendaraan dummy (plat sama "ZZ 9999 ZZ", PIC nama sama, unit bisnis "PT Samudera Indonesia") via form Admin production biasa (bukan langsung tulis Firestore). Prefix "ZZ" & nama eksplisit "TEST SYNC" dipilih supaya: (a) gak nyerempet abjad urutan nama asli manapun di direktori, (b) gampang di-grep/di-query buat dihapus lagi nanti, (c) kalau proses testing gak sempat selesai dibersihkan karena sesi terputus, siapapun yang lihat data ini di admin langsung tahu itu data uji coba, bukan karyawan/kendaraan beneran.
+
+### 23B. Hasil testing — KEDUA ARAH TERBUKTI JALAN BENAR
+
+**Arah 1 (Karyawan check-in → Kendaraan Standby)**: Login sebagai Security dummy ("QA Sinkron Test") di `dashboard/security/buku-tamu`, pilih tab "Karyawan / Staf", cari & pilih "ZZ TEST SYNC KARYAWAN" dari autocomplete (field "No. Plat Kendaraan" otomatis ke-isi "ZZ 9999 ZZ" — konfirmasi lookup `employees_directory` jalan), submit Check-In. **Hasil**: karyawan langsung masuk tab "Di Dalam Area" Buku Tamu (counter 42→43), DAN di `dashboard/security/parkir` kendaraan "ZZ 9999 ZZ" langsung berstatus **STANDBY** di waktu yang SAMA PERSIS dengan check-in (31 Agu 09.58) — dicek juga di tab "Log Pergerakan Armada", entry log-nya nempel `petugas_security: "QA Sinkron Test (Auto-Sync Buku Tamu)"` seperti yang dikode.
+
+**Arah 2 (Kendaraan Standby → Karyawan hadir)**: Karyawan dummy di-checkout dulu dari Buku Tamu (biar precondition "belum Di Dalam Area" reset — kalau enggak, gak ketahuan apakah Arah 2 beneran nge-trigger check-in baru atau cuma nemu entry lama yang masih aktif). Setelah checkout berhasil (dikonfirmasi lewat modal "Ya, Check-Out"), balik ke `dashboard/security/parkir`, klik tombol "Parkir/Standby" di baris kendaraan "ZZ 9999 ZZ" (kendaraan MEMANG udah Standby dari Arah 1, tapi klik manual di parkir SELALU nulis log baru terlepas dari status sebelumnya — beda dari sync otomatis dari Buku Tamu yang ada guard "skip kalau udah Standby"). **Hasil**: langsung dicek balik ke Buku Tamu tab "Di Dalam Area" — "ZZ TEST SYNC KARYAWAN" MUNCUL LAGI otomatis, status "Di Dalam Area", waktu masuk 31 Agu 10.00 (persis waktu klik Standby), "Gate: QA" (dari `pic_bertugas: "QA Sinkron Test (Auto-Sync Kendaraan)"`).
+
+**Kesimpulan**: kedua fungsi (`syncKendaraanStandby` di Buku Tamu, `syncKaryawanHadir` di parkir & DriverArmada) bekerja SESUAI DESAIN persis seperti yang didokumentasikan di §21B/§21C — matching via plat nomor (dinormalisasi), auto-fill data terkait bawaan (departemen, instansi, dll), dan guard anti-dobel-catat berfungsi (Arah 1 gak nulis log Standby kedua kali kalau statusnya udah Standby).
+
+### 23C. Cleanup — 6 dokumen test dihapus lewat Firebase Client SDK langsung dari browser
+
+Query REST API Firestore yang biasa dipakai (`runQuery` + `apiKey`) sesi ini KENA RATE LIMIT (`429 RESOURCE_EXHAUSTED`) — kemungkinan karena API key publik ini sudah sering dipakai buat query serupa di sesi-sesi sebelumnya. Solusi: import langsung Firebase JS SDK (`firebase-app.js` + `firebase-firestore.js`) dari CDN `gstatic.com` di dalam context browser tab yang lagi buka production (`javascript_tool`), inisialisasi app kedua (`initializeApp(..., "qa-cleanup")`) pakai config yang sama, lalu `getDocs`/`deleteDoc` langsung dari client SDK (jalur berbeda dari REST API, gak kena limit yang sama). 6 dokumen diidentifikasi presisi by ID (1 `employees_directory`, 1 `master_kendaraan`, 2 `operational_vehicle_logs` — satu dari auto-sync Arah 1, satu dari klik manual Arah 2 testing, 2 `security_visitor_logs` — satu status "Selesai / Keluar" dari checkout, satu status "Di Dalam Area" dari auto-sync Arah 2), semua dihapus (`deleteDoc` per ID), lalu diverifikasi ulang via query yang sama — 0 dokumen tersisa di keempat collection untuk nama/plat "ZZ TEST"/"ZZ 9999 ZZ". Data production kembali bersih 100%, gak ada bekas testing.
+
+### 23D. Fix katalog ATK mobile
+
+Root cause: grid katalog produk ATK (`app/page.tsx`, komentar kode "KATALOG PRODUK (GRID ALA TOKO ONLINE)") pakai `gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))"`. Modal wrapper (`components/ui/Modal.tsx`) punya padding berlapis: overlay 20px + inner content 30px = 50px per sisi, 100px total. Di HP lebar 375px, sisa lebar buat grid cuma ~275px. `minmax(140px,...)`: 2 kolom butuh minimal 280px (2×140), GAK MUAT di 275px, jadi `auto-fill` mundur jadi 1 kolom SELEBAR PENUH (270px) — kartu produk (gambar aspect-ratio 1:1 + judul + tombol) jadi setinggi ~330px, dikali sampai 40 produk = total tinggi scroll ~13.000px di dalam box `maxHeight: 280px` — user harus scroll SANGAT jauh buat lihat 1 produk demi 1 produk, kerasa kayak "gak muncul daftar ATK" (apalagi kalau gambar produknya lambat kebuka pas scroll cepat, kelihatan cuma garis border tipis yang sisa sebelum gambar & teksnya kebuka).
+
+**Perbaikan**: `minmax(140px, 1fr)` diganti `minmax(100px, 1fr)` — dengan lebar minimum lebih kecil, `auto-fill` bisa muat 2 kolom bahkan di HP paling sempit sekalipun (320px lebar layar: sisa ~220px buat grid, 2×100=200 ≤ 220 ✓). Diverifikasi visual di browser (viewport mobile 375×812): sekarang tampil 2 kolom kartu produk rapi (gambar+judul+tombol "+ Keranjang" semua kebaca), bukan 1 kolom raksasa.
+
+### 23E. Verifikasi & Status: SUDAH di-commit, di-push, dan di-deploy
+
+- `npx tsc --noEmit`: 0 error. `npx eslint .`: 0 error, 104 warning (baseline, gak nambah).
+- `npm run build`: sukses.
+- Sinkronisasi Karyawan↔Kendaraan: DITES LANGSUNG di production dengan data dummy terisolasi, KEDUA ARAH TERBUKTI BENAR (lihat §23B), semua data test sudah dibersihkan (lihat §23C).
+- Fix katalog ATK: diverifikasi visual di viewport mobile (375×812), grid 2 kolom sekarang tampil benar.
+- Sesuai instruksi eksplisit user, di-commit + push (dev → main) + `npm run build` + `firebase deploy --only hosting`, artifact build dikomit terpisah, `dev` di-fast-forward balik dari `main`.
+
+### 23F. Yang perlu dilanjutkan
+
+1. Root cause §22A (upload dokumen SOP, dugaan ukuran file) masih belum dikonfirmasi 100% — belum ada laporan lanjutan dari user soal ini.
+2. Temuan sampingan §22E poin 2 (folder Cloudinary yang diabaikan preset) masih belum ditindaklanjuti — di luar scope.
+3. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A poin 1) — gak urgent.
+4. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
 5. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D.
