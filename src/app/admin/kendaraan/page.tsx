@@ -17,6 +17,7 @@ import Modal from "../../../components/ui/Modal";
 import Badge from "../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../components/ui/Table";
 import VehicleIcon3D, { KATEGORI_KENDARAAN, WARNA_KENDARAAN } from "../../../components/VehicleIcon3D";
+import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -537,7 +538,7 @@ export default function ManajemenKendaraanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [riwayatEffectiveIds.join(","), platKeyRiwayat]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -1365,7 +1366,18 @@ export default function ManajemenKendaraanPage() {
             datalistId="pic-kendaraan-list"
             datalistOptions={employees.map((emp) => emp.nama)}
           />
-          <Input label="Unit Bisnis" name="unit_bisnis" value={formData.unit_bisnis} onChange={handleInputChange} placeholder="Contoh: PT Samudera Makassar Logistik" />
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)" }}>Unit Bisnis</label>
+            <select
+              name="unit_bisnis"
+              value={formData.unit_bisnis}
+              onChange={handleInputChange}
+              style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+            >
+              <option value="">Pilih Unit Bisnis (Opsional)...</option>
+              {DAFTAR_UNIT_BISNIS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
           <Input label="Jenis / Tipe" name="jenis" value={formData.jenis} onChange={handleInputChange} placeholder="Contoh: Toyota Avanza, Motor, dll (opsional)" />
 
           <div style={{ display: "flex", gap: "10px" }}>

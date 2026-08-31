@@ -10,6 +10,7 @@ import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import Input from "../../../components/ui/Input";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../components/ui/Table";
+import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../../../lib/unitBisnis";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -82,7 +83,7 @@ export default function ManajemenKaryawanPage() {
     return () => unsubscribe();
   }, [router]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -278,7 +279,24 @@ export default function ManajemenKaryawanPage() {
 
               <form onSubmit={handleSubmitKaryawan} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                 <Input label="Nama Lengkap *" name="nama" value={formData.nama} onChange={handleInputChange} required placeholder="Contoh: Rina Hapsari" />
-                <Input label="Unit Bisnis / Departemen *" name="departemen" value={formData.departemen} onChange={handleInputChange} required placeholder="Contoh: Finance / Marketing" />
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568" }}>Unit Bisnis / Departemen *</label>
+                  <select
+                    name="departemen"
+                    value={formData.departemen}
+                    onChange={handleInputChange}
+                    required
+                    style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+                  >
+                    <option value="" disabled>Pilih Unit Bisnis / Departemen...</option>
+                    <optgroup label="Unit Bisnis (PT)">
+                      {DAFTAR_UNIT_BISNIS.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="Departemen Internal Gedung">
+                      {DAFTAR_DEPARTEMEN_INTERNAL.map((d) => <option key={d} value={d}>{d}</option>)}
+                    </optgroup>
+                  </select>
+                </div>
                 <Input label="Plat Nomor Kendaraan" name="plat_kendaraan" value={formData.plat_kendaraan} onChange={handleInputChange} placeholder="Contoh: DD 5678 QA (Opsional)" />
                 <Input
                   label="No. WhatsApp *"

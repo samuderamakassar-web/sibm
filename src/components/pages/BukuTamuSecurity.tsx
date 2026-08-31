@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
-import { collection, addDoc, serverTimestamp, updateDoc, doc, setDoc, onSnapshot, query, orderBy, Timestamp, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, updateDoc, doc, setDoc, onSnapshot, query, orderBy, where, limit, Timestamp, getDocs } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import Modal from "../ui/Modal";
+import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../../lib/unitBisnis";
+import { normalizePlat } from "../../lib/platUtils";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -140,6 +142,9 @@ export default function BukuTamuSecurity() {
   const [magangDB, setMagangDB] = useState<MagangData[]>([]);
   const [searchMagang, setSearchMagang] = useState("");
 
+  // 💡 Master kendaraan (buat sinkronisasi otomatis: Karyawan check-in dengan kendaraan -> Standby)
+  const [kendaraanDB, setKendaraanDB] = useState<{ id: string; kendaraan: string; plat_nomor: string }[]>([]);
+
   // State Form & Kamera
   const [jenisPengunjung, setJenisPengunjung] = useState<"Tamu Eksternal" | "Karyawan">("Tamu Eksternal");
   const [kategoriEksternal, setKategoriEksternal] = useState<KategoriEksternal>("Tamu Eksternal");
@@ -220,15 +225,58 @@ export default function BukuTamuSecurity() {
     };
     fetchMagang();
 
+    const unsubKendaraan = onSnapshot(collection(db, "master_kendaraan"), (snap) => {
+      setKendaraanDB(snap.docs.map((d) => {
+        const data = d.data();
+        return { id: d.id, kendaraan: data.kendaraan || "", plat_nomor: data.plat_nomor || "" };
+      }));
+    });
+
     return () => {
       unsubscribe();
+      unsubKendaraan();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [router]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 💡 SINKRON OTOMATIS: karyawan check-in yang PUNYA kendaraan terdaftar (plat_kendaraan di
+  // Master Data Karyawan cocok dengan plat di Master Data Kendaraan) -> kendaraannya otomatis
+  // tercatat "Tiba di Kantor (Standby)" di Log Operasional Gerbang. Karyawan tanpa jatah kendaraan
+  // (plat kosong) tidak memicu apa-apa. Kalau kendaraan sudah Standby, tidak dobel-catat.
+  const syncKendaraanStandby = async (namaKaryawan: string, platKaryawan: string) => {
+    const platNorm = normalizePlat(platKaryawan);
+    if (!platNorm) return;
+    const kendaraanCocok = kendaraanDB.find((k) => normalizePlat(k.plat_nomor) === platNorm);
+    if (!kendaraanCocok) return;
+
+    try {
+      const qLog = query(
+        collection(db, "operational_vehicle_logs"),
+        where("kendaraan", "==", kendaraanCocok.kendaraan),
+        orderBy("waktu_catat", "desc"),
+        limit(1)
+      );
+      const snapLog = await getDocs(qLog);
+      const statusTerkini = snapLog.empty ? "" : (snapLog.docs[0].data().status_kendaraan || "");
+      if (statusTerkini === "Tiba di Kantor (Standby)") return;
+
+      await addDoc(collection(db, "operational_vehicle_logs"), {
+        petugas_security: `${picName} (Auto-Sync Buku Tamu)`,
+        waktu_catat: serverTimestamp(),
+        kendaraan: kendaraanCocok.kendaraan,
+        status_kendaraan: "Tiba di Kantor (Standby)",
+        driver_bertugas: namaKaryawan,
+        tujuan_keperluan: "-",
+        kilometer_kendaraan: "Tidak dicatat",
+      });
+    } catch (error) {
+      console.error("Gagal sinkron status kendaraan otomatis:", error);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -353,6 +401,11 @@ export default function BukuTamuSecurity() {
         waktu_keluar: null,
         pic_bertugas: picName
       });
+
+      // 💡 SINKRON OTOMATIS KE KENDARAAN — hanya berlaku kalau karyawan ini punya jatah kendaraan
+      if (jenisFinal === "Karyawan") {
+        await syncKendaraanStandby(namaFinal, formData.no_kendaraan);
+      }
 
       // 💡 SIMPAN/PERBARUI RIWAYAT NAMA MAGANG — biar nama & PT auto-lengkap di kunjungan berikutnya
       if (jenisFinal === "Magang") {
@@ -599,6 +652,8 @@ export default function BukuTamuSecurity() {
         .form-field label { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--ink-soft); }
         .form-field input { width: 100%; padding: 14px 15px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; font-family: inherit; transition: 0.2s; }
         .form-field input:focus { border-color: var(--info); background: var(--surface); }
+        .form-field select { width: 100%; padding: 14px 15px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; font-family: inherit; transition: 0.2s; cursor: pointer; }
+        .form-field select:focus { border-color: var(--info); background: var(--surface); }
 
         .foto-box { grid-column: span 2; margin-top: 4px; background: var(--bg); padding: 20px; border-radius: 16px; border: 2px dashed var(--line); text-align: center; }
         .foto-open-btn { width: 100%; padding: 20px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 15px; transition: 0.2s; font-family: inherit; }
@@ -761,7 +816,15 @@ export default function BukuTamuSecurity() {
                   {/* MAGANG — form dipangkas: cukup Nama, Unit Bisnis, dan Foto ID Card. Tujuan otomatis "Magang Kerja". */}
                   <div className="form-field span-2">
                     <label>Unit Bisnis *</label>
-                    <input type="text" name="instansi_dept" value={formData.instansi_dept} onChange={handleInputChange} required placeholder="Contoh: IT / Marketing / Finance" />
+                    <select name="instansi_dept" value={formData.instansi_dept} onChange={handleInputChange} required>
+                      <option value="" disabled>Pilih Unit Bisnis...</option>
+                      <optgroup label="Unit Bisnis (PT)">
+                        {DAFTAR_UNIT_BISNIS.map((u) => <option key={u} value={u}>{u}</option>)}
+                      </optgroup>
+                      <optgroup label="Departemen Internal Gedung">
+                        {DAFTAR_DEPARTEMEN_INTERNAL.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </optgroup>
+                    </select>
                   </div>
 
                   <div className="foto-box">

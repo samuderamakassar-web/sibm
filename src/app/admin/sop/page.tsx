@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
-import { handleDokumenUpload } from "@/lib/uploadDokumen";
+import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "@/lib/uploadDokumen";
 
 type IconProps = { size?: number; color?: string };
 const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -82,12 +82,17 @@ export default function AdminSopPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // biar bisa pilih file yang sama lagi kalau upload sebelumnya gagal/dibatalkan
     if (!file) return;
+    if (file.size > MAX_UKURAN_DOKUMEN_MB * 1024 * 1024) {
+      showToast(`Ukuran file maksimal ${MAX_UKURAN_DOKUMEN_MB}MB. File ini ${(file.size / 1024 / 1024).toFixed(1)}MB.`, "warning");
+      return;
+    }
     handleDokumenUpload(
       file, "sibm/sop",
       () => setIsUploadingFile(true),
       (url, namaFile) => { setFileUrl(url); setFileName(namaFile); },
-      (err) => { console.error(err); showToast("Gagal upload dokumen, coba lagi.", "error"); },
+      (err) => { console.error(err); showToast(err instanceof Error ? err.message : "Gagal upload dokumen, coba lagi.", "error"); },
       () => setIsUploadingFile(false)
     );
   };

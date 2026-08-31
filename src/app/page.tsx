@@ -797,7 +797,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     hadirOB.forEach(o => {
       daftar.push({
         key: `ob-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: true,
-        sub: `OB · ${o.lokasi[0] || "Standby"}${o.lokasi.length > 1 ? ` +${o.lokasi.length - 1}` : ""}`,
+        sub: `OB · ${o.lokasi.join(", ") || "Standby"}`,
         label: "HADIR",
       });
     });
@@ -951,7 +951,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .qa-card {
           cursor: pointer; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
           box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+          height: 100%;
         }
+        /* Grid kolom TETAP (bukan auto-fit/minmax) — auto-fit bikin kartu terakhir yang sendirian
+           di baris terakhir ikut melebar ngisi sisa kolom (gak proporsional sama kartu lain). */
+        .menu-cepat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        @media (min-width: 640px) { .menu-cepat-grid { grid-template-columns: repeat(3, 1fr); } }
         .qa-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: rgba(220,38,38,0.28); }
         .qa-icon-chip {
           width: 44px; height: 44px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
@@ -980,7 +985,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         /* 📱 BOTTOM NAV APP-STYLE */
         .app-bottom-nav { display: none; }
         .mobile-only { display: none; }
-        .desktop-only-hide { display: block; }
+        .desktop-only-hide { display: block; height: 100%; }
         @media (max-width: 768px) {
           .main-container { padding-bottom: 108px !important; }
           .mobile-only { display: flex; }
@@ -1054,7 +1059,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         {/* 🧱 MENU CEPAT — satu grid dipakai HP & desktop, gantikan desktop-grid + mobile-nav lama yang isinya duplikat */}
         <div style={{ marginTop: "24px" }} id="menu-cepat-section">
           <div style={{ fontSize: "15px", fontWeight: 800, marginBottom: "12px", color: "var(--ink)" }}>Menu Cepat</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+          <div className="menu-cepat-grid">
             <div className="qa-card" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
               <div className="qa-icon-chip"><IconIdCard size={20} /></div>
               <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Lacak Tamu</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Cek pengunjung gedung</p></div>
@@ -1587,7 +1592,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-              <Input label="Unit Bisnis / Departemen *" type="text" required placeholder="Terisi otomatis..." value={formSbo.unit_bisnis} onChange={(e) => setFormSbo({ ...formSbo, unit_bisnis: e.target.value })} />
+              <Input label="Unit Bisnis / Departemen *" type="text" required readOnly placeholder="Terisi otomatis dari Nama Pelapor..." value={formSbo.unit_bisnis} style={{ background: "#e2e8f0" }} />
               <Input label="Lokasi Temuan *" type="text" required placeholder="Cth: Area Parkir Basement" value={formSbo.lokasi} onChange={(e) => setFormSbo({ ...formSbo, lokasi: e.target.value })} />
             </div>
 

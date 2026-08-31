@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useToast } from "../../../../components/ui/ToastProvider";
+import { normalizePlat } from "../../../../lib/platUtils";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -86,11 +87,20 @@ interface KendaraanMaster {
   kendaraan: string;
   jenis?: string;
   pic_kendaraan?: string;
+  plat_nomor?: string;
 }
 
 interface Employee {
   id: string;
   nama: string;
+  departemen?: string;
+  plat_kendaraan?: string;
+}
+
+interface VisitorLogMini {
+  jenis: string;
+  nama: string;
+  status: string;
 }
 
 // ==========================================
@@ -145,6 +155,7 @@ export default function LogOperasionalPage() {
   // 🚙 MASTER KENDARAAN — daftar armada ditarik live dari master_kendaraan
   const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [visitorLogs, setVisitorLogs] = useState<VisitorLogMini[]>([]);
 
   // STATE PENCARIAN (masing-masing tab punya pencarian sendiri)
   const [searchKendaraan, setSearchKendaraan] = useState<string>("");
@@ -192,8 +203,49 @@ export default function LogOperasionalPage() {
     const unsubEmployees = onSnapshot(collection(db, "employees_directory"), (snap) => {
       setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee)));
     });
-    return () => { unsubKendaraan(); unsubEmployees(); };
+    const unsubVisitorLogs = onSnapshot(collection(db, "security_visitor_logs"), (snap) => {
+      setVisitorLogs(snap.docs.map((d) => {
+        const data = d.data();
+        return { jenis: data.jenis || "", nama: data.nama || "", status: data.status || "" };
+      }));
+    });
+    return () => { unsubKendaraan(); unsubEmployees(); unsubVisitorLogs(); };
   }, []);
+
+  // 💡 SINKRON OTOMATIS: kendaraan di-set Standby -> karyawan pemilik kendaraan itu (dicocokkan
+  // via plat_kendaraan di Master Data Karyawan, SAMA seperti arah sebaliknya di Buku Tamu Digital)
+  // otomatis tercatat hadir. Kendaraan tanpa PIC yang terdaftar sebagai karyawan tidak memicu apa-apa,
+  // dan kalau karyawannya sudah "Di Dalam Area", tidak dobel-catat.
+  const syncKaryawanHadir = async (kendaraan: KendaraanMaster) => {
+    const platNorm = normalizePlat(kendaraan.plat_nomor || "");
+    if (!platNorm) return;
+    const karyawanCocok = employees.find((emp) => normalizePlat(emp.plat_kendaraan || "") === platNorm);
+    if (!karyawanCocok) return;
+
+    const sudahHadir = visitorLogs.some(
+      (log) => log.jenis === "Karyawan" && log.status === "Di Dalam Area" &&
+        log.nama.trim().toLowerCase() === karyawanCocok.nama.trim().toLowerCase()
+    );
+    if (sudahHadir) return;
+
+    try {
+      await addDoc(collection(db, "security_visitor_logs"), {
+        nama: karyawanCocok.nama,
+        instansi_dept: karyawanCocok.departemen || "",
+        no_kendaraan: kendaraan.plat_nomor || "",
+        tujuan: "Bekerja / Operasional",
+        bertemu_dengan: "-",
+        jenis: "Karyawan",
+        foto_bukti: null,
+        status: "Di Dalam Area",
+        waktu_masuk: serverTimestamp(),
+        waktu_keluar: null,
+        pic_bertugas: `${picName} (Auto-Sync Kendaraan)`,
+      });
+    } catch (error) {
+      console.error("Gagal sinkron kehadiran karyawan otomatis:", error);
+    }
+  };
 
   // 2. Tarik Data Real-time (Log Mobil & Status Driver)
   useEffect(() => {
@@ -278,6 +330,10 @@ export default function LogOperasionalPage() {
         tujuan_keperluan: "-",
         kilometer_kendaraan: "Tidak dicatat",
       });
+
+      if (aksi.key === "standby") {
+        await syncKaryawanHadir(kendaraan);
+      }
 
       showToast(`Berhasil dicatat: ${kendaraan.kendaraan.split(" - ")[0]} — ${aksi.label}`, "success");
     } catch (error) {

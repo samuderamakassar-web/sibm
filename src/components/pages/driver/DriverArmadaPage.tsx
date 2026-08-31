@@ -6,6 +6,7 @@ import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timest
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../ui/ToastProvider";
+import { normalizePlat } from "../../../lib/platUtils";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security/parkir (tampilan dibuat sama persis)
@@ -76,6 +77,19 @@ interface KendaraanMaster {
   kendaraan: string;
   jenis?: string;
   pic_kendaraan?: string;
+  plat_nomor?: string;
+}
+
+interface EmployeeMini {
+  nama: string;
+  departemen?: string;
+  plat_kendaraan?: string;
+}
+
+interface VisitorLogMini {
+  jenis: string;
+  nama: string;
+  status: string;
 }
 
 // 4 aksi pergerakan armada — string status_kendaraan SENGAJA dipertahankan sama seperti di
@@ -119,6 +133,8 @@ export default function DriverArmadaPage() {
   const [activeTab, setActiveTab] = useState<"kendaraan" | "log">("kendaraan");
 
   const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
+  const [employees, setEmployees] = useState<EmployeeMini[]>([]);
+  const [visitorLogs, setVisitorLogs] = useState<VisitorLogMini[]>([]);
   const [searchKendaraan, setSearchKendaraan] = useState<string>("");
   const [searchLog, setSearchLog] = useState<string>("");
   const [daftarLogMobil, setDaftarLogMobil] = useState<KendaraanLog[]>([]);
@@ -145,6 +161,53 @@ export default function DriverArmadaPage() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    const unsubEmployees = onSnapshot(collection(db, "employees_directory"), (snap) => {
+      setEmployees(snap.docs.map((d) => d.data() as EmployeeMini));
+    });
+    const unsubVisitorLogs = onSnapshot(collection(db, "security_visitor_logs"), (snap) => {
+      setVisitorLogs(snap.docs.map((d) => {
+        const data = d.data();
+        return { jenis: data.jenis || "", nama: data.nama || "", status: data.status || "" };
+      }));
+    });
+    return () => { unsubEmployees(); unsubVisitorLogs(); };
+  }, []);
+
+  // 💡 SINKRON OTOMATIS: kendaraan di-set Standby (dari aplikasi Driver sendiri) -> karyawan pemilik
+  // kendaraan itu (dicocokkan via plat_kendaraan di Master Data Karyawan) otomatis tercatat hadir di
+  // Buku Tamu Digital — pola sama persis dengan dashboard/security/parkir.
+  const syncKaryawanHadir = async (kendaraan: KendaraanMaster) => {
+    const platNorm = normalizePlat(kendaraan.plat_nomor || "");
+    if (!platNorm) return;
+    const karyawanCocok = employees.find((emp) => normalizePlat(emp.plat_kendaraan || "") === platNorm);
+    if (!karyawanCocok) return;
+
+    const sudahHadir = visitorLogs.some(
+      (log) => log.jenis === "Karyawan" && log.status === "Di Dalam Area" &&
+        log.nama.trim().toLowerCase() === karyawanCocok.nama.trim().toLowerCase()
+    );
+    if (sudahHadir) return;
+
+    try {
+      await addDoc(collection(db, "security_visitor_logs"), {
+        nama: karyawanCocok.nama,
+        instansi_dept: karyawanCocok.departemen || "",
+        no_kendaraan: kendaraan.plat_nomor || "",
+        tujuan: "Bekerja / Operasional",
+        bertemu_dengan: "-",
+        jenis: "Karyawan",
+        foto_bukti: null,
+        status: "Di Dalam Area",
+        waktu_masuk: serverTimestamp(),
+        waktu_keluar: null,
+        pic_bertugas: "Aplikasi Driver (Auto-Sync Kendaraan)",
+      });
+    } catch (error) {
+      console.error("Gagal sinkron kehadiran karyawan otomatis:", error);
+    }
+  };
 
   useEffect(() => {
     const qMobil = query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"));
@@ -211,6 +274,9 @@ export default function DriverArmadaPage() {
     setLoadingInstantKey(uniqueKey);
     try {
       await catatPergerakan(kendaraan.kendaraan, aksi.status, "-", "Tidak dicatat", false);
+      if (aksi.key === "standby") {
+        await syncKaryawanHadir(kendaraan);
+      }
       showToast(`Berhasil dicatat: ${kendaraan.kendaraan.split(" - ")[0]} — ${aksi.label}`, "success");
     } catch (error) {
       console.error(error);
