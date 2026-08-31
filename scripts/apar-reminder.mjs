@@ -10,8 +10,6 @@ const serviceAccount = JSON.parse(
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
-const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
-
 // ==========================================
 // WAKTU SEKARANG (WITA) & DEADLINE BULAN INI
 // ==========================================
@@ -44,28 +42,6 @@ if (!DALAM_WINDOW_REMINDER) {
 // Guard anti-double-kirim: cukup sekali per hari (bukan per-slot seperti patroli).
 const idLogHariIni = hariIni;
 
-function normalisasiNomor(nomor) {
-  if (!nomor) return nomor;
-  let n = String(nomor).replace(/[^0-9]/g, "");
-  if (n.startsWith("0")) n = "62" + n.slice(1);
-  return n;
-}
-
-async function kirimWA(nomor, pesan) {
-  if (!nomor) return;
-  const res = await fetch("https://api.fonnte.com/send", {
-    method: "POST",
-    headers: { Authorization: FONNTE_TOKEN, "Content-Type": "application/json" },
-    body: JSON.stringify({ target: nomor, message: pesan }),
-  });
-  const teks = await res.text();
-  if (!res.ok) {
-    console.error(`Gagal kirim WA ke ${nomor} (HTTP ${res.status}):`, teks);
-  } else {
-    console.log(`Respon Fonnte untuk ${nomor}:`, teks);
-  }
-}
-
 async function tulisNotifApp(namaPic, pesan, jenis) {
   await db.collection("notifikasi_apar").add({
     untuk_nama: namaPic,
@@ -81,10 +57,8 @@ async function kirimKeSemua(picList, pesan, jenis) {
     console.log(`Tidak ada penerima untuk jenis "${jenis}", skip kirim.`);
     return;
   }
-  await Promise.all(
-    picList.map((pic) => Promise.all([kirimWA(pic.whatsapp, pesan), tulisNotifApp(pic.nama, pesan, jenis)]))
-  );
-  picList.forEach((pic) => console.log(`Terkirim ke ${pic.nama} (${pic.whatsapp || "-"})`));
+  await Promise.all(picList.map((pic) => tulisNotifApp(pic.nama, pesan, jenis)));
+  picList.forEach((pic) => console.log(`Notifikasi in-app ditulis untuk ${pic.nama}`));
 }
 
 // ==========================================
@@ -103,8 +77,8 @@ async function ambilSecurityBertugasHariIni() {
   const semuaStaf = usersSnap.docs.map((d) => d.data());
   return namaBertugas
     .map((nama) => semuaStaf.find((u) => u.nama === nama))
-    .filter((u) => u && u.whatsapp)
-    .map((u) => ({ nama: u.nama, whatsapp: normalisasiNomor(u.whatsapp) }));
+    .filter((u) => u)
+    .map((u) => ({ nama: u.nama }));
 }
 
 // ==========================================
@@ -112,10 +86,7 @@ async function ambilSecurityBertugasHariIni() {
 // ==========================================
 async function ambilAdminGaQhse() {
   const snap = await db.collection("users_master").where("departemen", "in", ["Admin GA", "QHSE"]).get();
-  return snap.docs
-    .map((d) => d.data())
-    .filter((u) => u.whatsapp)
-    .map((u) => ({ nama: u.nama, whatsapp: normalisasiNomor(u.whatsapp) }));
+  return snap.docs.map((d) => ({ nama: d.data().nama }));
 }
 
 // ==========================================

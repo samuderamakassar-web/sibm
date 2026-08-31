@@ -1,14 +1,15 @@
 // scripts/kendaraan-reminder.mjs
 //
 // Cek kendaraan yang statusnya "Keluar" tapi udah lewat ambang jam tertentu tanpa update "Tiba".
-// Kirim WA reminder SEKALI ke driver yang tercatat (idempotency guard per log entry, bukan per
+// Tulis notifikasi in-app SEKALI ke driver yang tercatat (idempotency guard per log entry, bukan per
 // kendaraan — jadi kalau kendaraan yang sama keluar lagi di trip lain, dapet reminder baru lagi
 // kalau kejadian telat lagi).
 //
 // Reuse arsitektur reminder yang sudah ada di project ini (patroli-reminder.mjs, checklist-reminder.mjs):
-// Firebase Admin SDK + Fonnte WA API, dijalankan lewat GitHub Actions cron (bukan Cloud Functions,
-// karena masih Spark plan). Reuse secret yang sama, tidak perlu secret baru:
-//   FIREBASE_SERVICE_ACCOUNT_BASE64, FONNTE_TOKEN
+// Firebase Admin SDK, dijalankan lewat GitHub Actions cron (bukan Cloud Functions, karena masih Spark
+// plan). Reuse secret yang sama, tidak perlu secret baru: FIREBASE_SERVICE_ACCOUNT_BASE64
+// (notifikasi WhatsApp via Fonnte SUDAH DIHAPUS TOTAL -- token invalid/expired, sekarang cuma
+// notifikasi in-app lewat NotifikasiKendaraanListener.tsx)
 
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
@@ -19,42 +20,11 @@ const serviceAccount = JSON.parse(serviceAccountJson);
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
-const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
 // Ambang waktu (jam) sebelum kendaraan "Keluar" dianggap kelewat lama tanpa update.
 // Bisa di-override lewat env AMBANG_JAM_KELUAR kalau suatu saat mau diubah tanpa ubah kode.
 const AMBANG_JAM_KELUAR = Number(process.env.AMBANG_JAM_KELUAR || 6);
 
 const isStandbyLabel = (s) => !!s && (s.includes("Standby") || s.includes("Tiba"));
-
-// Normalisasi nomor WA Indonesia: 08xxx -> 62xxx (pola yang sama dipakai di patroli-reminder.mjs)
-function normalisasiNomor(nomor) {
-  if (!nomor) return null;
-  let n = String(nomor).replace(/[^0-9]/g, "");
-  if (n.startsWith("0")) n = "62" + n.slice(1);
-  if (!n.startsWith("62")) n = "62" + n;
-  return n;
-}
-
-async function kirimWA(nomor, pesan) {
-  const nomorFix = normalisasiNomor(nomor);
-  if (!nomorFix) {
-    console.log(`  ⚠️ Nomor WA kosong/tidak valid, skip kirim.`);
-    return false;
-  }
-  try {
-    const res = await fetch("https://api.fonnte.com/send", {
-      method: "POST",
-      headers: { Authorization: FONNTE_TOKEN, "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ target: nomorFix, message: pesan }),
-    });
-    const text = await res.text();
-    console.log(`  📤 Fonnte response (${nomorFix}): ${text}`);
-    return res.ok;
-  } catch (err) {
-    console.error(`  ❌ Gagal kirim WA ke ${nomorFix}:`, err);
-    return false;
-  }
-}
 
 async function main() {
   console.log(`🚗 Cek kendaraan yang lupa update status (ambang: ${AMBANG_JAM_KELUAR} jam)...`);
@@ -90,15 +60,7 @@ async function main() {
   console.log(`🔎 Ditemukan ${kandidat.length} kendaraan kandidat reminder.`);
   if (kandidat.length === 0) return;
 
-  // 3. Tarik nomor WA semua staf sekali (dipakai buat lookup driver)
-  const usersSnap = await db.collection("users_master").get();
-  const nomorWaPerNama = new Map();
-  usersSnap.forEach((d) => {
-    const u = d.data();
-    if (u.nama) nomorWaPerNama.set(u.nama, u.whatsapp);
-  });
-
-  let terkirim = 0;
+  let dicatat = 0;
   for (const { kendaraan, docId, data, jamBerlalu } of kandidat) {
     // Idempotency guard: 1 reminder per LOG ENTRY (docId operational_vehicle_logs), bukan per kendaraan —
     // supaya trip berikutnya dari kendaraan yang sama tetap dapet reminder baru kalau telat lagi
@@ -114,20 +76,14 @@ async function main() {
       timeZone: "Asia/Makassar", dateStyle: "short", timeStyle: "short",
     });
     const pesan =
-      `⏰ *Reminder SIBM*\n\n` +
-      `Kendaraan *${kendaraan}* tercatat *KELUAR* sejak ${jamKeluarStr} WITA (${jamBerlalu.toFixed(1)} jam lalu)` +
+      `Kendaraan ${kendaraan} tercatat KELUAR sejak ${jamKeluarStr} WITA (${jamBerlalu.toFixed(1)} jam lalu)` +
       (data.tujuan_keperluan && data.tujuan_keperluan !== "-" ? ` untuk keperluan: ${data.tujuan_keperluan}.` : `.`) +
-      `\n\nKalau sudah kembali ke kantor, mohon update status *Tiba* di aplikasi SIBM ya.\n` +
-      `Kalau masih di perjalanan (misal luar kota), abaikan pesan ini — statusnya akan otomatis aman begitu di-update nanti.`;
+      ` Kalau sudah kembali ke kantor, mohon update status Tiba di aplikasi SIBM ya.`;
 
-    console.log(`  📨 ${kendaraan} (${namaDriver}), ${jamBerlalu.toFixed(1)} jam keluar -> kirim reminder`);
+    console.log(`  📨 ${kendaraan} (${namaDriver}), ${jamBerlalu.toFixed(1)} jam keluar -> catat reminder in-app`);
 
-    const nomorWa = nomorWaPerNama.get(namaDriver);
-    const berhasilKirim = await kirimWA(nomorWa, pesan);
-    if (berhasilKirim) terkirim++;
-
-    // Catat notifikasi in-app juga (dibaca NotifikasiKendaraanListener.tsx), best-effort — tetap ditulis
-    // walau WA gagal terkirim, supaya minimal notifnya kelihatan di portal
+    // Catat notifikasi in-app (dibaca NotifikasiKendaraanListener.tsx) -- sebelumnya juga kirim WA
+    // (Fonnte), TAPI SUDAH DIHAPUS TOTAL karena token invalid/expired. Sekarang cuma in-app.
     await db.collection("notifikasi_kendaraan").add({
       kendaraan,
       driver: namaDriver,
@@ -137,16 +93,16 @@ async function main() {
       pesan,
       waktu_kirim: FieldValue.serverTimestamp(),
     });
+    dicatat++;
 
-    // Tandai sudah diingatkan (guard) SETELAH percobaan kirim, terlepas WA sukses/gagal —
-    // biar tidak spam re-attempt tiap run kalau nomor WA-nya memang bermasalah
+    // Tandai sudah diingatkan (guard), biar tidak spam re-attempt tiap run
     await guardRef.set({
-      kendaraan, docId, jam_berlalu: jamBerlalu, wa_terkirim: berhasilKirim,
+      kendaraan, docId, jam_berlalu: jamBerlalu,
       waktu: FieldValue.serverTimestamp(),
     });
   }
 
-  console.log(`✅ Selesai. ${terkirim}/${kandidat.length} reminder WA berhasil terkirim.`);
+  console.log(`✅ Selesai. ${dicatat}/${kandidat.length} reminder in-app dicatat.`);
 }
 
 main().catch((err) => {

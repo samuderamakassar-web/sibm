@@ -8,7 +8,6 @@ const serviceAccount = JSON.parse(
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
-const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
 const JAM_TOLERANSI_MS = 3 * 60 * 60 * 1000; // 3 jam — patroli kebersihan berikutnya kalau belum lapor lagi
 
 // Tanggal hari ini dalam zona WITA (UTC+8), biar konsisten sama doc ID daily_plots
@@ -16,22 +15,6 @@ function todayISO() {
   const now = new Date();
   const wita = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   return wita.toISOString().split("T")[0];
-}
-
-async function kirimWA(nomor, pesan) {
-  if (!nomor) return;
-  try {
-    await fetch("https://api.fonnte.com/send", {
-      method: "POST",
-      headers: {
-        Authorization: FONNTE_TOKEN,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ target: nomor, message: pesan }),
-    });
-  } catch (err) {
-    console.error(`Gagal kirim WA ke ${nomor}:`, err);
-  }
 }
 
 async function main() {
@@ -77,18 +60,8 @@ async function main() {
       continue;
     }
 
-    const userSnap = await db
-      .collection("users_master")
-      .where("departemen", "==", "OB & CS")
-      .where("nama", "==", nama)
-      .limit(1)
-      .get();
-
-    const nomorWA = userSnap.empty ? null : userSnap.docs[0].data().whatsapp;
     const areaTeks = areaTugas.join(", ");
     const pesan = `Halo ${nama}, sudah waktunya patroli kebersihan lagi di area: ${areaTeks}. Yuk keliling & upload laporan checklist (foto before/after) untuk sesi berikutnya. 🧹`;
-
-    await kirimWA(nomorWA, pesan);
 
     await db.collection("notifikasi_checklist_ob").add({
       untuk_nama: nama,
@@ -99,7 +72,7 @@ async function main() {
       dibaca: false,
     });
 
-    console.log(`Reminder terkirim ke ${nama} (${areaTeks})`);
+    console.log(`Notifikasi in-app ditulis untuk ${nama} (${areaTeks})`);
   }
 }
 

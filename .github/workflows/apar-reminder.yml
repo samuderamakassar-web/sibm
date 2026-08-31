@@ -22,4 +22,3 @@ jobs:
         run: node scripts/apar-reminder.mjs
         env:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
-          FONNTE_TOKEN: ${{ secrets.FONNTE_TOKEN }}

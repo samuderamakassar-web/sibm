@@ -51,7 +51,7 @@ export default function NotifikasiKendaraanListener() {
         if (waktuMs <= terakhirDilihat) return; // sudah pernah ditampilkan
 
         showToast(
-          `🚗 ${data.kendaraan} masih tercatat KELUAR (${data.jam_berlalu} jam) — driver ${data.driver} sudah diingatkan lewat WA.`,
+          `🚗 ${data.kendaraan} masih tercatat KELUAR (${data.jam_berlalu} jam) — driver ${data.driver} perlu update status Tiba.`,
           "warning"
         );
         if (waktuMs > terbaruBaru) terbaruBaru = waktuMs;

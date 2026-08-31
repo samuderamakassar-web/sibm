@@ -1,35 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 31 Agustus 2026 (§26: fix katalog ATK kosong di Safari iOS — `height:"100%"` ambigu di modal dihapus, TERBUKTI lewat trial-error `minHeight:0` yang malah bikin kolaps di Chrome juga lalu dilepas lagi; hapus TOTAL notifikasi WhatsApp/Fonnte dari web app — Email-only, token Fonnte invalid; SBO→QHSE yang sebelumnya WA-only dikasih jalur Email baru biar gak hilang notifnya; hapus dead-code `PaketPage.tsx` yang importnya ikut pecah — SUDAH DI-COMMIT & DI-DEPLOY, lihat §26. Perlu AKSI MANUAL user di dashboard EmailJS buat fix email HTML mentah, lihat §26B/§26E)
+Update terakhir: 31 Agustus 2026 (§27: hapus total WA dari 4 script reminder GitHub Actions (apar/patroli/checklist/kendaraan) menyusul §26 — filter `.whatsapp` yang dihapus SEKALIAN memperbaiki bug lama (staf tanpa nomor WA sebelumnya ke-skip notifikasi in-app-nya juga); ketemu & benerin toast basi "sudah diingatkan lewat WA" di `NotifikasiKendaraanListener.tsx`; review menyeluruh (code-review effort HIGH) atas semua perubahan §26+§27 — 0 temuan — SUDAH DI-COMMIT & DI-DEPLOY, lihat §27. Fix Safari (§26A) & fix email HTML mentah (§26B, BUTUH AKSI MANUAL user di dashboard EmailJS) MASIH BELUM dikonfirmasi user — prioritas #1 sesi depan)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §26 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §27 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Riwayat singkat 1 percakapan panjang hari ini (§21→§26)
+### Riwayat singkat 1 percakapan panjang hari ini (§21→§27)
 
 - **§21**: dropdown Unit Bisnis 11 PT (+ Departemen Internal Gedung buat staf non-PT) di Master Data Karyawan/Kendaraan/Buku Tamu Magang, dan sinkronisasi otomatis 2 arah Karyawan↔Kendaraan (check-in karyawan yang punya kendaraan → kendaraan Standby; kendaraan di-set Standby → karyawan pemiliknya otomatis hadir di Buku Tamu).
 - **§22**: fix upload dokumen SOP gagal, fix card Menu Cepat "gak proporsional" (percobaan PERTAMA — TERNYATA MALAH BIKIN BUG BARU, lihat §24), fix label plot OB & CS di "Tim Bertugas Hari Ini" jadi nampilin semua lantai.
 - **§23**: sinkronisasi Karyawan↔Kendaraan (§21) DITES LANGSUNG di production pakai data dummy terisolasi — **kedua arah terbukti jalan benar**, semua data test sudah dibersihkan. Fix katalog ATK collapse jadi 1 kolom di HP (minmax 140px→100px, TERNYATA BELUM CUKUP, lihat §24).
 - **§24**: (1) fix REGRESI — fix Menu Cepat di §22 ternyata bikin kartu-kartu di desktop malah tumpang-tindih/berantakan (root cause: `height:100%` di grid item konflik sama auto-row-sizing), (2) field ATK "Departemen" (readOnly) diganti "Invoice To" (dropdown wajib diisi manual, sama daftar 11 PT + internal), (3) audit & konfirmasi notifikasi email ATK ke Admin GA sudah terkonfigurasi benar (env var lengkap, ada kontak Admin GA dengan email valid), (4) matikan `aggressiveFrontEndNavCaching`/`cacheOnFrontEndNav` di config PWA — diduga kuat inilah penyebab HP user "nyangkut" tampilan lama walau app sudah di-uninstall/install ulang, (5) tambah `loading="lazy"` + fallback ikon kalau foto Cloudinary gagal load di katalog ATK, buat jaga-jaga koneksi HP lemah.
 - **§25**: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security (`dashboard/security/parkir`) & driver (`dashboard/driver/armada`) — begitu kendaraan berstatus "Keluar Beroperasi", muncul kartu berisi driver/tujuan/waktu keluar + tombol "Tiba Kantor Kembali" buat nutup pergerakan 1 klik; kartu murni derived state jadi otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel Daftar Kendaraan (gak butuh logic tambahan). ATK mobile diverifikasi ulang — fix §23/§24D masih aktif, gak ada regresi. Ditest end-to-end di browser pakai kendaraan+log dummy terisolasi (bukan data asli) sebelum deploy, semua test data sudah dibersihkan total.
-- **§26 (TERBARU, baca detail di bawah)**: (1) fix katalog ATK kosong khusus di Safari iOS — `height:"100%"` yang ambigu (spec CSS abu-abu, WebKit rawan resolve jadi 0) dihapus dari wrapper modal ATK, BELUM dikonfirmasi user di iPhone asli; (2) hapus TOTAL notifikasi WhatsApp (Fonnte) dari aplikasi web — token invalid & user minta dihapus, semua channel sekarang Email-only lewat `kirimEmail()`/EmailJS; (3) laporan SBO→QHSE (sebelumnya WA-only, satu-satunya yang gak punya jalur Email) dikasih builder Email baru (`buildSboEmailHtml`) biar QHSE gak kehilangan notifikasi; (4) `components/pages/PaketPage.tsx` (dead code lama dari §17) dihapus total karena importnya ke `kirimWA`/`template` ikut pecah begitu dihapus dari `notify.ts`.
+- **§26**: (1) fix katalog ATK kosong khusus di Safari iOS — `height:"100%"` yang ambigu (spec CSS abu-abu, WebKit rawan resolve jadi 0) dihapus dari wrapper modal ATK, BELUM dikonfirmasi user di iPhone asli; (2) hapus TOTAL notifikasi WhatsApp (Fonnte) dari aplikasi web — token invalid & user minta dihapus, semua channel sekarang Email-only lewat `kirimEmail()`/EmailJS; (3) laporan SBO→QHSE (sebelumnya WA-only, satu-satunya yang gak punya jalur Email) dikasih builder Email baru (`buildSboEmailHtml`) biar QHSE gak kehilangan notifikasi; (4) `components/pages/PaketPage.tsx` (dead code lama dari §17) dihapus total karena importnya ke `kirimWA`/`template` ikut pecah begitu dihapus dari `notify.ts`.
+- **§27 (TERBARU, baca detail di bawah)**: hapus total WA dari 4 script reminder GitHub Actions (`apar/patroli/checklist/kendaraan-reminder.mjs`) — susulan §26 yang sebelumnya sengaja gak disentuh (subsistem terpisah, gak lewat `notify.ts`), sekarang user konfirmasi mau dibersihkan juga karena "tidak jalan dan tidak bisa dibenerin". Sekalian ketemu & benerin bug toast basi di `NotifikasiKendaraanListener.tsx` yang masih ngaku "sudah diingatkan lewat WA" walau WA-nya udah gak pernah dikirim. Ditutup dengan review menyeluruh (code-review skill, effort HIGH) atas SEMUA perubahan §26+§27 — hasil 0 temuan.
 
 ### Yang PALING PENTING buat sesi depan
 
 1. **§26A (fix Safari) & §26B (fix email HTML mentah, BUTUH AKSI MANUAL user di dashboard EmailJS: `template_oriy1nw`, `{{message}}`→`{{{message}}}`) BELUM dikonfirmasi user** — cek dulu apakah masih ada laporan sebelum lanjut kerjaan lain yang menyentuh area sama.
-2. **Script reminder GitHub Actions (`apar/patroli/checklist/kendaraan-reminder.mjs`) kemungkinan JUGA gagal kirim WA** (token Fonnte sama), TAPI SENGAJA belum disentuh sesi §26 (di luar scope permintaan user yang spesifik soal web app) — lihat §26E poin 3 buat opsi penggantinya kalau user minta dibenerin juga.
-3. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** baru buka lagi.
-4. Kartu notif §25A cuma trigger buat status persis `"Keluar Beroperasi"` (bukan "Masuk Bengkel/Service") — kalau user ternyata mau kendaraan Service juga dapat kartu serupa, gampang ditambah (lihat §25E).
-5. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
-6. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
-7. Poin lama dari §17/§18/§19/§20D lainnya yang belum berubah — lihat §19D/§20F.
+2. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** baru buka lagi.
+3. Kartu notif §25A cuma trigger buat status persis `"Keluar Beroperasi"` (bukan "Masuk Bengkel/Service") — kalau user ternyata mau kendaraan Service juga dapat kartu serupa, gampang ditambah (lihat §25E).
+4. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
+5. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
+6. Poin lama dari §17/§18/§19/§20D lainnya yang belum berubah — lihat §19D/§20F.
 
-Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**, **§25**, **§26**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
+Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**, **§25**, **§26**, **§27**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
 ---
 
@@ -1399,5 +1399,47 @@ Perubahan:
 
 1. **Fix Safari (§26A) belum dikonfirmasi user di iPhone asli** — pantau apakah user masih lapor katalog ATK kosong di Safari setelah deploy sesi ini.
 2. **Fix email HTML mentah (§26B) perlu AKSI MANUAL user** di dashboard EmailJS (`template_oriy1nw`: `{{message}}` → `{{{message}}}`) — belum dikonfirmasi sudah dikerjakan atau belum.
-3. **Script reminder GitHub Actions (`apar/patroli/checklist/kendaraan-reminder.mjs`) kemungkinan besar JUGA gagal kirim WA** (token Fonnte yang sama), TAPI belum disentuh sesi ini (di luar scope permintaan user yang spesifik soal notifikasi status-berubah di web app). Kalau user konfirmasi mau WA dihapus dari situ juga, perlu didesain penggantinya (Email butuh setup baru di Node/GitHub Actions context — `@emailjs/browser` yang dipakai `notify.ts` khusus browser, gak otomatis jalan di Node — ATAU cukup andalkan notifikasi in-app `tulisNotifApp` yang sudah jalan paralel di semua script itu).
+3. ~~Script reminder GitHub Actions kemungkinan juga gagal kirim WA~~ — SUDAH DIBERESKAN sesi ini, lihat §27.
 4. Poin-poin lama dari §19/§20D/§21A/§25E yang belum berubah.
+
+---
+
+## 27. Hapus WA dari Script Reminder GitHub Actions + Review Menyeluruh (31 Agustus 2026, lanjutan §26)
+
+Konteks: user konfirmasi "silahkan di bersihin bagian itu juga karena tidak jalan dan tidak bisa di benerin jga" (soal follow-up §26E poin 3 — script reminder terjadwal), minta update dokumen + deploy, lalu **"coba lakukan pengecekan menyeluruh mana tau masih ada potensi-potensi error lainnya lansung saja benerin dan deploy"**.
+
+### 27A. Hapus total WA dari 4 script reminder GitHub Actions
+
+Sama seperti §26C (web app), tapi buat `scripts/apar-reminder.mjs`, `scripts/patroli-reminder.mjs`, `scripts/checklist-reminder.mjs`, `scripts/kendaraan-reminder.mjs` (Node/`firebase-admin`, dijalankan cron lewat `.github/workflows/*.yml`, bukan lewat `notify.ts` — jadi gak ikut kebersihin otomatis pas §26):
+
+1. Fungsi `kirimWA()`, `normalisasiNomor()`, dan konstanta `FONNTE_TOKEN` DIHAPUS TOTAL dari ke-4 script. Setiap script sebelumnya nge-fetch `users_master`/`employees_directory` buat ambil nomor WA lalu `.filter(u => u.whatsapp)` — filter ini DIHAPUS (bukan cuma nomor WA-nya yang gak dipakai lagi, tapi staf yang KEBETULAN gak punya nomor WA terisi sebelumnya malah gak dapet notifikasi in-app SAMA SEKALI karena kefilter duluan; sekarang semua staf yang match kriteria dapet notifikasi in-app, terlepas ada/gaknya nomor WA — ini sekalian jadi perbaikan, bukan cuma cleanup).
+2. `notifikasi_kendaraan` (`kendaraan-reminder.mjs`): field `wa_terkirim` di collection guard `reminder_kendaraan_log` dihapus (gak ada yang baca field ini di UI, dicek via grep). Teks `pesan` yang disimpan dibersihkan dari markdown gaya WhatsApp (`*bold*` → teks polos), karena sekarang cuma ditampilkan di in-app.
+3. **Bug kecil ikut ketemu & dibenerin**: `src/components/NotifikasiKendaraanListener.tsx` — toast in-app-nya masih bilang "driver ... sudah diingatkan lewat WA" walau WA-nya udah gak pernah dikirim (dari §26 & §27A) — diganti jadi "driver ... perlu update status Tiba" (gak nyebut WA sama sekali).
+4. 4 file workflow (`.github/workflows/apar-reminder.yml`, `patroli-reminder.yml`, `checklist-reminder.yml`, `kendaraan-reminder.yml`) — baris `FONNTE_TOKEN: ${{ secrets.FONNTE_TOKEN }}` dihapus (env var udah gak dibaca skripnya).
+
+Semua script masih jalan sama persis kayak sebelumnya buat bagian LAIN-nya (guard anti-double-kirim, query jadwal shift, dedup status kendaraan, dll) — HANYA bagian kirim-WA yang dicabut, notifikasi in-app (`tulisNotifApp`/`notifikasi_*` collections, dibaca `Notifikasi*Listener.tsx` di portal) tetap jalan seperti biasa, jadi staf tetap dapet reminder-nya, cuma lewat toast in-app pas buka portal, bukan lewat WA lagi.
+
+### 27B. Review menyeluruh (code-review skill, effort HIGH) atas perubahan §27A
+
+Dilakukan review manual menyusuri 8 angle (correctness line-by-line, removed-behavior audit, cross-file trace ke consumer, reuse/simplification/efficiency, altitude, conventions) atas diff `scripts/*.mjs` + `.github/workflows/*.yml` + `NotifikasiKendaraanListener.tsx`. **Hasil: 0 temuan** — diverifikasi `node --check` (syntax) lolos di ke-4 script, ditelusuri manual bahwa penghapusan filter `.whatsapp` JUSTRU memperbaiki bug lama (staf tanpa nomor WA sebelumnya ke-skip notifikasi in-app-nya juga), dicek gak ada collection/field yang dihapus (`wa_terkirim`, `reminder_*_log`) yang masih dibaca di tempat lain, dan bug toast "sudah diingatkan lewat WA" yang ketemu langsung dibenerin di section yang sama (lihat 27A poin 3).
+
+Sekalian dicek ulang blast radius §26 (WA removal di web app) — dipastikan cuma `kirimEmail` yang ke-import dari `notify.ts` di 5 pemanggil (gak ada sisa import `kirimWA`/`template` yang kelewat), dan field `no_wa`/`whatsapp` yang masih tersisa di beberapa interface/form Master Data Karyawan (`admin/karyawan/page.tsx`, `admin/users/page.tsx`) SENGAJA TIDAK disentuh — itu cuma field data kontak (masih valid buat ditelepon/referensi), bukan trigger notifikasi, di luar scope.
+
+### 27C. Verifikasi
+
+- `node --check` ke-4 script: OK, 0 syntax error.
+- `npx tsc --noEmit`: 0 error (termasuk `NotifikasiKendaraanListener.tsx` yang ikut diubah).
+- `npx eslint .` (seluruh project): 0 error, 103 warning (turun dari baseline 104 di §24E — 1 warning ilang karena `PaketPage.tsx` dihapus di §26, gak ada warning baru dari perubahan §27).
+- `npm run build`: sukses.
+- Code review (§27B): 0 temuan.
+- **TIDAK bisa ditest end-to-end** (script jalan lewat GitHub Actions cron di server, bukan lewat browser lokal) — verifikasi murni statis (syntax check + code review + trace manual), TIDAK ada cara mensimulasikan run cron beneran dari sesi Claude ini. Kalau user mau pastikan 100%, bisa di-trigger manual dari tab **Actions** di GitHub (semua 4 workflow punya `workflow_dispatch: {}`) dan cek log run-nya.
+
+### 27D. Status: SUDAH di-commit, di-push, dan di-deploy
+
+Ikuti [[sibm_deploy_workflow]] seperti biasa.
+
+### 27E. Yang perlu dilanjutkan
+
+1. Fix Safari (§26A) & fix email HTML mentah (§26B, BUTUH AKSI MANUAL user di dashboard EmailJS) MASIH BELUM dikonfirmasi user — ini prioritas paling atas buat sesi depan.
+2. Kalau mau pastikan script reminder beneran jalan tanpa error runtime (bukan cuma syntax-check), bisa trigger manual lewat tab Actions GitHub → pilih salah satu dari 4 workflow → "Run workflow".
+3. Poin-poin lama dari §19/§20D/§21A/§25E yang belum berubah.
