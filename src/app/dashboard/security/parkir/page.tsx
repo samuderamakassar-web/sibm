@@ -299,6 +299,17 @@ export default function LogOperasionalPage() {
     return map;
   }, [daftarLogMobil]);
 
+  // 🔔 KARTU "KENDARAAN SEDANG KELUAR" — diturunkan otomatis dari statusPerKendaraan, jadi begitu status
+  // kendaraan berubah (klik "Tiba Kantor Kembali" di kartu INI, atau klik "Pulang" langsung dari daftar
+  // kendaraan karena driver ternyata pulang ke rumah), kartu otomatis hilang tanpa logika tambahan.
+  const kendaraanSedangKeluar = useMemo(() => {
+    return kendaraanMaster
+      .map((k) => ({ k, log: statusPerKendaraan[k.kendaraan] }))
+      .filter((item): item is { k: KendaraanMaster; log: KendaraanLog } => !!item.log && item.log.status_kendaraan === "Keluar Beroperasi");
+  }, [kendaraanMaster, statusPerKendaraan]);
+
+  const aksiStandby = STATUS_AKSI.find((a) => a.key === "standby")!;
+
   // Buka modal aksi cepat untuk 1 kendaraan + 1 status tujuan
   const bukaModalAksi = (kendaraan: KendaraanMaster, status: string, label: string) => {
     setDriverMobil(DAFTAR_DRIVER[0]);
@@ -523,6 +534,42 @@ export default function LogOperasionalPage() {
 
       {/* WRAPPER UTAMA */}
       <div style={{ maxWidth: "1100px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", flexDirection: "column", gap: "20px" }}>
+
+        {/* 🔔 KENDARAAN SEDANG KELUAR — kartu notif per kendaraan yang masih "Keluar Beroperasi",
+            tombol "Tiba Kantor Kembali" langsung menutup pergerakan (sama seperti klik Parkir/Standby) */}
+        {kendaraanSedangKeluar.length > 0 && (
+          <div className="panel-flat" style={{ borderColor: "rgba(220,38,38,0.3)", background: "var(--red-50)" }}>
+            <h4 style={{ margin: "0 0 15px 0", color: "var(--red-700)", fontSize: "14px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}>
+              <IconPlaneTakeoff size={16} color="var(--red-600)" /> KENDARAAN SEDANG KELUAR ({kendaraanSedangKeluar.length})
+            </h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {kendaraanSedangKeluar.map(({ k, log }) => {
+                const isLoadingIni = loadingInstantKey === `${k.id}-standby`;
+                return (
+                  <div key={k.id} style={{ background: "var(--surface)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: "14px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px" }}>{k.kendaraan.split(" - ")[0]}</div>
+                      <div style={{ fontSize: "12px", color: "var(--ink-soft)", marginTop: "3px" }}>
+                        Sedang keluar bersama <b>{log.driver_bertugas}</b> — &quot;{log.tujuan_keperluan}&quot;
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <IconClock size={11} /> Keluar sejak {formatWaktu(log.waktu_catat)}
+                      </div>
+                    </div>
+                    <button
+                      className="aksi-btn ok"
+                      style={{ padding: "10px 14px" }}
+                      disabled={isLoadingIni}
+                      onClick={() => handleAksiInstan(k, aksiStandby)}
+                    >
+                      <IconPlaneLand size={13} /> {isLoadingIni ? "..." : "Tiba Kantor Kembali"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* STATUS KESIAGAAN DRIVER — persisten, tampil di kedua tab */}
         <div className="panel-flat">

@@ -1,32 +1,33 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 31 Agustus 2026 (§24: fix REGRESI grid Menu Cepat desktop yang malah tumpang-tindih gara-gara fix §22B kemarin, field ATK "Departemen" (readOnly) diganti "Invoice To" (dropdown wajib diisi manual), audit + konfirmasi email notifikasi ATK ke Admin GA sudah terkonfigurasi benar, matikan `aggressiveFrontEndNavCaching`/`cacheOnFrontEndNav` PWA (diduga penyebab HP nyangkut versi lama walau sudah di-reinstall), tambah fallback+lazy-load foto katalog ATK buat koneksi HP lemah — SUDAH DI-COMMIT & DI-DEPLOY, lihat §24)
+Update terakhir: 31 Agustus 2026 (§25: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security & driver — tombol "Tiba Kantor Kembali" 1-klik nutup pergerakan armada, otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel; ATK mobile diverifikasi ulang TIDAK regresi; ditest end-to-end pakai data dummy terisolasi sebelum deploy — SUDAH DI-COMMIT & DI-DEPLOY, lihat §25)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §24 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §25 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Riwayat singkat 1 percakapan panjang hari ini (§21→§24)
+### Riwayat singkat 1 percakapan panjang hari ini (§21→§25)
 
 - **§21**: dropdown Unit Bisnis 11 PT (+ Departemen Internal Gedung buat staf non-PT) di Master Data Karyawan/Kendaraan/Buku Tamu Magang, dan sinkronisasi otomatis 2 arah Karyawan↔Kendaraan (check-in karyawan yang punya kendaraan → kendaraan Standby; kendaraan di-set Standby → karyawan pemiliknya otomatis hadir di Buku Tamu).
 - **§22**: fix upload dokumen SOP gagal, fix card Menu Cepat "gak proporsional" (percobaan PERTAMA — TERNYATA MALAH BIKIN BUG BARU, lihat §24), fix label plot OB & CS di "Tim Bertugas Hari Ini" jadi nampilin semua lantai.
 - **§23**: sinkronisasi Karyawan↔Kendaraan (§21) DITES LANGSUNG di production pakai data dummy terisolasi — **kedua arah terbukti jalan benar**, semua data test sudah dibersihkan. Fix katalog ATK collapse jadi 1 kolom di HP (minmax 140px→100px, TERNYATA BELUM CUKUP, lihat §24).
-- **§24 (TERBARU, baca detail di bawah)**: (1) fix REGRESI — fix Menu Cepat di §22 ternyata bikin kartu-kartu di desktop malah tumpang-tindih/berantakan (root cause: `height:100%` di grid item konflik sama auto-row-sizing), (2) field ATK "Departemen" (readOnly) diganti "Invoice To" (dropdown wajib diisi manual, sama daftar 11 PT + internal), (3) audit & konfirmasi notifikasi email ATK ke Admin GA sudah terkonfigurasi benar (env var lengkap, ada kontak Admin GA dengan email valid), (4) matikan `aggressiveFrontEndNavCaching`/`cacheOnFrontEndNav` di config PWA — diduga kuat inilah penyebab HP user "nyangkut" tampilan lama walau app sudah di-uninstall/install ulang, (5) tambah `loading="lazy"` + fallback ikon kalau foto Cloudinary gagal load di katalog ATK, buat jaga-jaga koneksi HP lemah.
+- **§24**: (1) fix REGRESI — fix Menu Cepat di §22 ternyata bikin kartu-kartu di desktop malah tumpang-tindih/berantakan (root cause: `height:100%` di grid item konflik sama auto-row-sizing), (2) field ATK "Departemen" (readOnly) diganti "Invoice To" (dropdown wajib diisi manual, sama daftar 11 PT + internal), (3) audit & konfirmasi notifikasi email ATK ke Admin GA sudah terkonfigurasi benar (env var lengkap, ada kontak Admin GA dengan email valid), (4) matikan `aggressiveFrontEndNavCaching`/`cacheOnFrontEndNav` di config PWA — diduga kuat inilah penyebab HP user "nyangkut" tampilan lama walau app sudah di-uninstall/install ulang, (5) tambah `loading="lazy"` + fallback ikon kalau foto Cloudinary gagal load di katalog ATK, buat jaga-jaga koneksi HP lemah.
+- **§25 (TERBARU, baca detail di bawah)**: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security (`dashboard/security/parkir`) & driver (`dashboard/driver/armada`) — begitu kendaraan berstatus "Keluar Beroperasi", muncul kartu berisi driver/tujuan/waktu keluar + tombol "Tiba Kantor Kembali" buat nutup pergerakan 1 klik; kartu murni derived state jadi otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel Daftar Kendaraan (gak butuh logic tambahan). ATK mobile diverifikasi ulang — fix §23/§24D masih aktif, gak ada regresi. Ditest end-to-end di browser pakai kendaraan+log dummy terisolasi (bukan data asli) sebelum deploy, semua test data sudah dibersihkan total.
 
 ### Yang PALING PENTING buat sesi depan
 
-1. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama SETELAH deploy sesi ini, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** (bukan cuma reinstall app icon-nya doang, itu gak clear service worker cache) baru buka lagi — kalau masih sama juga, perlu digali lebih dalam (custom service worker update-prompt, dll).
-2. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
-3. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
-4. Status "Pulang" belum ditangani eksplisit di portal (`app/page.tsx`) & `admin/kendaraan/page.tsx` — poin lama dari §19, belum berubah.
+1. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama SETELAH deploy sesi §24, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** (bukan cuma reinstall app icon-nya doang, itu gak clear service worker cache) baru buka lagi — kalau masih sama juga, perlu digali lebih dalam (custom service worker update-prompt, dll).
+2. Kartu notif §25A cuma trigger buat status persis `"Keluar Beroperasi"` (bukan "Masuk Bengkel/Service") — kalau user ternyata mau kendaraan Service juga dapat kartu serupa, gampang ditambah (lihat §25E).
+3. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
+4. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
 5. `admin/kendaraan/page.tsx` (riwayat servis) masih baca `foto_emisi_url` 1 foto tunggal, belum baca `foto_detail` multi-foto — poin lama dari §20D.
 6. Poin lama dari §17/§18/§19 lainnya yang belum berubah — lihat §19D.
 
-Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
+Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**, **§25**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
 ---
 
@@ -1311,3 +1312,46 @@ Sekalian, buat jaga-jaga simptom kedua (koneksi HP lemah bikin gambar produk gak
 3. Root cause §22A (upload dokumen SOP, dugaan ukuran file) masih belum dikonfirmasi 100%.
 4. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
 5. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D.
+
+---
+
+## 25. Fitur Notif "Kendaraan Sedang Keluar" di Security & Driver + Verifikasi ATK Mobile (31 Agustus 2026, lanjutan §21-§24)
+
+Konteks: user minta (quote): *"Tolong tambahkan 1 fungsi ketika security atau driver update status kendaraan yang sedang keluar entah dengan driver atau tidak munculkan 1 card atau berupa notif bahwa sedang keluar bersama driver tujuan pada pukul ini dengan tombol kmbli di kantor/tiba kantor kmbli, dan ini hanya muncul di halaman security dan driver, untuk lebih memudahkan close pergerakan armada oleh driver juga security dan otomatis ter update di status kendaraan/log namun jika ternyata lgsung pulang ketika ada daftar kendaraan di klik pulang maka notif hlng krena dianggap sdh plng kerumah"*, plus lampiran screenshot modal ATK di HP dan instruksi eksplisit "pastikan semua aman dulu lakukan testing baru anda update analisis project dan deploy.. tpi sebelum deploy pastikan tetsing aman".
+
+### 25A. Fitur kartu notif "KENDARAAN SEDANG KELUAR"
+
+Ditambahkan identik di 2 file yang memang sudah duplikat struktur/logic sejak awal — [dashboard/security/parkir/page.tsx](src/app/dashboard/security/parkir/page.tsx) dan [components/pages/driver/DriverArmadaPage.tsx](src/components/pages/driver/DriverArmadaPage.tsx).
+
+Logic: `kendaraanSedangKeluar` = `useMemo` turunan dari `kendaraanMaster` + `statusPerKendaraan` (2 state yang SUDAH ADA, gak ada state/collection baru), filter kendaraan yang log terakhirnya persis `status_kendaraan === "Keluar Beroperasi"`. Kartu ditaruh paling atas di wrapper utama (di security: di atas panel "STATUS KESIAGAAN DRIVER", jadi item paling mendesak), tampilkan nama kendaraan, `driver_bertugas`, `tujuan_keperluan`, dan waktu keluar (`formatWaktu(waktu_catat)`), plus tombol **"Tiba Kantor Kembali"** yang manggil `handleAksiInstan` yang SUDAH ADA dengan aksi `standby` — persis logic yang sama dengan tombol "Parkir/Standby" di tabel Daftar Kendaraan, nulis 1 log baru `status_kendaraan: "Tiba di Kantor (Standby)"` ke `operational_vehicle_logs`.
+
+Kenapa "kalau langsung Pulang, notif otomatis hilang" gak butuh kode tambahan sama sekali: kartu murni DITURUNKAN dari status kendaraan terkini (bukan state terpisah/flag manual), begitu ada log baru apapun yang mengubah status dari `"Keluar Beroperasi"` — baik lewat tombol kartu ATAU klik "Pulang" langsung di tabel Daftar Kendaraan — kartu otomatis hilang di render berikutnya, real-time via `onSnapshot` yang sudah ada dari awal. Kartu HANYA muncul di 2 halaman ini sesuai permintaan, gak disentuh di portal utama (`app/page.tsx`) atau `admin/kendaraan/page.tsx`.
+
+### 25B. Verifikasi ATK mobile — TIDAK ADA REGRESI, fix §23/§24D masih aktif
+
+User melampirkan screenshot modal ATK di HP (kondisi loading skeleton) dengan catatan "bagian ATK masih sama saat tampilan berubah ke mobile". Dicek ulang kode `app/page.tsx` — grid `minmax(100px, 1fr)` (fix §23) dan `loading="lazy"` + fallback ikon (fix §24D) masih utuh, TIDAK ADA perubahan yang menyentuh bagian ini di sesi ini (di luar scope permintaan). Diverifikasi ULANG langsung di browser pada viewport 375px (setara iPhone SE/mini) — katalog tampil rapi 2 kolom dengan foto produk asli dari data production, gak ada regresi.
+
+### 25C. Testing end-to-end di browser — pakai kendaraan/log dummy TERISOLASI, semua dibersihkan tuntas
+
+Karena SIBM cuma 1 Firestore production (gak ada staging, lihat [[sibm_no_staging_env]]), testing pakai 1 kendaraan dummy `TEST-QA-9999` (dibuat via Firestore REST API langsung ke `master_kendaraan`, BUKAN kendaraan asli manapun) dan beberapa log `operational_vehicle_logs` dummy (tujuan_keperluan ditandai jelas "UJI COBA ... - AMAN DIHAPUS" biar gampang di-query & dihapus lagi).
+
+Skenario yang diverifikasi, SEMUA LULUS:
+1. Kartu notif muncul BENAR untuk kendaraan REAL yang sedang `Keluar Beroperasi` di production (DD 1412 XBO bareng Amal Setiawan) — sengaja TIDAK diklik/disentuh sama sekali, biar gak salah nge-reset status kendaraan asli yang beneran masih di luar.
+2. Klik "Keluar" di kendaraan dummy (halaman security, lewat modal form asli) → kartu notif baru muncul dengan driver/tujuan/waktu yang sesuai input.
+3. Klik "Tiba Kantor Kembali" di kartu → kartu hilang, status kendaraan di tabel Daftar Kendaraan berubah jadi STANDBY.
+4. Kendaraan dummy di-"Keluar"-kan lagi (kartu notif muncul lagi otomatis, real-time, tanpa refresh manual) → kali ini klik "Pulang" LANGSUNG di tombol Aksi Cepat tabel (BUKAN tombol kartu) → kartu ikut hilang otomatis, status jadi PULANG. Ini persis skenario yang diminta user.
+5. Diulang test #2-3 di halaman driver (`/dashboard/driver/armada`, simulasi sesi role Driver via localStorage) — kartu notif & tombol "Tiba Kantor Kembali" juga berhasil, termasuk update real-time lintas-halaman (aksi dari halaman driver langsung kelihatan di halaman security dan sebaliknya, karena sama-sama baca `operational_vehicle_logs`).
+6. `npx tsc --noEmit`: 0 error. `npx eslint` (2 file yang diubah): 0 error/warning baru.
+
+Cleanup SELESAI TOTAL: 7 dokumen `operational_vehicle_logs` dummy + 1 dokumen `master_kendaraan` dummy dihapus via Firestore REST API (query by field lalu delete satu-satu), dicek juga TIDAK ADA `driver_status_logs` dummy yang kebentuk (aman karena test pakai nama driver custom "Karyawan"/"QA Tester", bukan driver tetap Amal Setiawan/Muhammad Renaldy yang auto-sync ke `driver_status_logs`). Data/kendaraan asli production TIDAK PERNAH diubah statusnya sepanjang testing.
+
+Catatan kecil: 1 dokumen `master_kendaraan` dummy pertama (id `k0nOOmbbxCCTGkEgdJvo`) sempat hilang sendiri di tengah testing tanpa Claude mengklik apapun yang berhubungan (kemungkinan besar `[Fast Refresh] rebuilding` dari dev server lokal atau proses lain di lingkungan yang sama, bukan hasil aksi dari sesi ini) — langsung dibuat ulang dengan id baru (`f4K6XK5DWh70UL8CiVl4`) dan testing dilanjutkan tanpa masalah lebih jauh; tidak ada dampak ke data production asli manapun.
+
+### 25D. Status: SUDAH di-commit, di-push, dan di-deploy
+
+Sesuai instruksi eksplisit user (testing dulu → update dokumen → baru deploy), setelah semua di atas lulus: commit di `dev`, push, fast-forward ke `main`, `npm run build`, `firebase deploy --only hosting`, commit artifact build terpisah, `dev` di-fast-forward balik dari `main` — ikuti [[sibm_deploy_workflow]] persis seperti sesi-sesi sebelumnya.
+
+### 25E. Yang perlu dilanjutkan
+
+1. Kartu notif saat ini treat "Keluar Beroperasi" (bukan "Masuk Bengkel/Service") sebagai satu-satunya status yang memicu kartu — sesuai kata user "sedang keluar", bukan sedang service. Kalau ternyata user juga mau kendaraan yang lagi Service dapat kartu serupa, tinggal ubah 1 baris filter (`status_kendaraan === "Keluar Beroperasi"`) di kedua file.
+2. Poin-poin lama dari §19/§20D/§21A yang belum berubah — lihat §19D/§20F/§21F untuk detail masing-masing.
