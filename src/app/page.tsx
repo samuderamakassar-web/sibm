@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { kirimWA, kirimEmail, template } from "../lib/notify";
-import { buildRequestBaruEmailHtml } from "../lib/emailTemplates";
+import { kirimEmail } from "../lib/notify";
+import { buildRequestBaruEmailHtml, buildSboEmailHtml } from "../lib/emailTemplates";
 import { useToast } from "../components/ui/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -460,17 +460,25 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     }
   };
 
-  // Broadcast notifikasi WA ke semua kontak QHSE (dipakai saat ada laporan SBO baru)
-  const kirimNotifikasiQHSE = async (namaPelapor: string, kategori: string, lokasi: string) => {
+  // Broadcast notifikasi Email ke semua kontak QHSE (dipakai saat ada laporan SBO baru).
+  // Sebelumnya lewat WA (Fonnte) -- diganti Email-only karena token Fonnte invalid/expired.
+  const kirimNotifikasiQHSE = async (
+    namaPelapor: string,
+    kategori: string,
+    lokasi: string,
+    unitBisnis?: string,
+    detailTemuan?: string,
+    fotoUrl?: string
+  ) => {
     if (daftarQHSE.length === 0) {
       console.warn("[notify] Tidak ada kontak QHSE (departemen 'QHSE') di users_master. Notifikasi dilewati.");
       return;
     }
-    const pesan = template.sboBaruMasuk(namaPelapor, kategori, lokasi);
+    const htmlEmail = buildSboEmailHtml({ namaPelapor, kategori, lokasi, unitBisnis, detailTemuan, fotoUrl });
     for (const qhse of daftarQHSE) {
-      if (!qhse.whatsapp) continue;
-      const hasil = await kirimWA(qhse.whatsapp, pesan);
-      if (!hasil.sukses) console.error(`[notify] Gagal kirim WA ke QHSE (${qhse.nama}):`, hasil.pesanError);
+      if (!qhse.email) continue;
+      const hasil = await kirimEmail(qhse.email, "Laporan SBO Baru Masuk", htmlEmail, qhse.nama);
+      if (!hasil.sukses) console.error(`[notify] Gagal kirim Email ke QHSE (${qhse.nama}):`, hasil.pesanError);
     }
   };
 
@@ -624,7 +632,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       });
 
       // Notifikasi ke QHSE (best-effort, tidak memblokir alur pelapor)
-      kirimNotifikasiQHSE(formSbo.nama_pelapor || "Anonim / Visitor", formSbo.kategori_temuan, formSbo.lokasi);
+      kirimNotifikasiQHSE(formSbo.nama_pelapor || "Anonim / Visitor", formSbo.kategori_temuan, formSbo.lokasi, formSbo.unit_bisnis, formSbo.detail_temuan, fotoSbo);
 
       showToast("Laporan SBO berhasil disubmit!", "success");
       setFormSbo({ nama_pelapor: "", tanggal_kejadian: todayISO, unit_bisnis: "", lokasi: "", detail_temuan: "", kategori_temuan: "Kondisi Tidak Aman (Unsafe Condition)", penyebab: "", action_taken: "", status_temuan: "Open", komitmen_pelaku: "", konsekuensi: "" });
@@ -1357,7 +1365,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
         {/* MODAL 2: ATK */}
         {activeModal === "atk" && (
-          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          // `height:"100%"` DIHAPUS — sebelumnya div ini minta tinggi 100% dari Modal box yang
+          // tingginya sendiri cuma `maxHeight:85vh` (auto/konten, bukan tinggi pasti). Percentage-height
+          // pada flex item yang containing block-nya gak punya tinggi pasti itu area abu-abu di spec
+          // CSS, dan Safari/WebKit (beda dari Chrome) rawan resolve ini jadi tinggi 0 — begitu parent
+          // tingginya 0, katalog ATK di dalamnya (grid + fotonya) ikut "hilang" walau DOM-nya ada. Gak
+          // ada bagian lain di modal ATK yang butuh wrapper ini setinggi 100% (gak ada flex-grow/
+          // space-between yang mengandalkannya), jadi aman dihapus total.
+          // ⚠️ JANGAN tambah `minHeight:0` di sini/wrapper anak-anaknya buat "jaga-jaga" — sempat dicoba
+          // dan malah BIKIN katalog kolaps total (grid-auto-rows ke-compute 2px) bahkan di Chrome
+          // desktop, ke-reproduce & diverifikasi langsung sebelum akhirnya dilepas lagi.
+          <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ marginBottom: "15px", paddingRight: "20px" }}>
               <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#fdf4ff", padding:"8px", borderRadius:"12px"}}>🖇️</span> Gudang ATK GA</h2>
               <p style={{ margin: 0, color: "#718096", fontSize: "13px" }}>Pusat permintaan alat tulis kantor (Kertas, Pulpen, dll).</p>

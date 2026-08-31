@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
-import { kirimWA, kirimEmail, template } from "../../../..//lib/notify";
+import { kirimEmail } from "../../../..//lib/notify";
 import { buildPaketEmailHtml } from "../../../../lib/emailTemplates";
 import { useToast } from "../../../..//components/ui/ToastProvider";
 import Button from "../../../../components/ui/Button";
@@ -339,35 +339,23 @@ export default function PaketPage() {
   ) => {
     const kontak = cariKontakKaryawan(namaPenerima);
 
-    if (!kontak || (!kontak.no_wa && !kontak.email)) {
-      console.warn(`[notify] Kontak untuk "${namaPenerima}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi paket dilewati.`);
+    if (!kontak || !kontak.email) {
+      console.warn(`[notify] Kontak untuk "${namaPenerima}" tidak ditemukan / belum punya email di Master Data Karyawan. Notifikasi paket dilewati.`);
       return;
     }
 
-    const keteranganGabungan = `${jenis} dari ${kurirPengirim}${ket ? ` (${ket})` : ""}`;
-
-    // WA dan Email dikirim INDEPENDEN -- sebelumnya kalau no_wa kosong, email juga ikut ke-skip
-    // walau kontak.email tersedia. Sekarang masing-masing channel dicek & dikirim sendiri-sendiri.
-    if (kontak.no_wa) {
-      const pesanWA = template.paketDiterima(namaPenerima, keteranganGabungan);
-      const hasilWA = await kirimWA(kontak.no_wa, pesanWA);
-      if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA paket:", hasilWA.pesanError);
-    }
-
-    if (kontak.email) {
-      const htmlEmail = buildPaketEmailHtml({
-        namaPenerima,
-        namaPetugas: picName,
-        tanggal: waktuKirim.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }),
-        jam: waktuKirim.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-        jenisBarang: jenis,
-        keterangan: ket,
-        kurir: kurirPengirim,
-        fotoUrl: fotoUrl || undefined,
-      });
-      const hasilEmail = await kirimEmail(kontak.email, "Notifikasi Paket Masuk", htmlEmail, namaPenerima);
-      if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email paket:", hasilEmail.pesanError);
-    }
+    const htmlEmail = buildPaketEmailHtml({
+      namaPenerima,
+      namaPetugas: picName,
+      tanggal: waktuKirim.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }),
+      jam: waktuKirim.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      jenisBarang: jenis,
+      keterangan: ket,
+      kurir: kurirPengirim,
+      fotoUrl: fotoUrl || undefined,
+    });
+    const hasilEmail = await kirimEmail(kontak.email, "Notifikasi Paket Masuk", htmlEmail, namaPenerima);
+    if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email paket:", hasilEmail.pesanError);
   };
 
   const formatWaktu = (timestamp: Timestamp | null) => {

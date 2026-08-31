@@ -1,33 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 31 Agustus 2026 (§25: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security & driver — tombol "Tiba Kantor Kembali" 1-klik nutup pergerakan armada, otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel; ATK mobile diverifikasi ulang TIDAK regresi; ditest end-to-end pakai data dummy terisolasi sebelum deploy — SUDAH DI-COMMIT & DI-DEPLOY, lihat §25)
+Update terakhir: 31 Agustus 2026 (§26: fix katalog ATK kosong di Safari iOS — `height:"100%"` ambigu di modal dihapus, TERBUKTI lewat trial-error `minHeight:0` yang malah bikin kolaps di Chrome juga lalu dilepas lagi; hapus TOTAL notifikasi WhatsApp/Fonnte dari web app — Email-only, token Fonnte invalid; SBO→QHSE yang sebelumnya WA-only dikasih jalur Email baru biar gak hilang notifnya; hapus dead-code `PaketPage.tsx` yang importnya ikut pecah — SUDAH DI-COMMIT & DI-DEPLOY, lihat §26. Perlu AKSI MANUAL user di dashboard EmailJS buat fix email HTML mentah, lihat §26B/§26E)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §25 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §26 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Riwayat singkat 1 percakapan panjang hari ini (§21→§25)
+### Riwayat singkat 1 percakapan panjang hari ini (§21→§26)
 
 - **§21**: dropdown Unit Bisnis 11 PT (+ Departemen Internal Gedung buat staf non-PT) di Master Data Karyawan/Kendaraan/Buku Tamu Magang, dan sinkronisasi otomatis 2 arah Karyawan↔Kendaraan (check-in karyawan yang punya kendaraan → kendaraan Standby; kendaraan di-set Standby → karyawan pemiliknya otomatis hadir di Buku Tamu).
 - **§22**: fix upload dokumen SOP gagal, fix card Menu Cepat "gak proporsional" (percobaan PERTAMA — TERNYATA MALAH BIKIN BUG BARU, lihat §24), fix label plot OB & CS di "Tim Bertugas Hari Ini" jadi nampilin semua lantai.
 - **§23**: sinkronisasi Karyawan↔Kendaraan (§21) DITES LANGSUNG di production pakai data dummy terisolasi — **kedua arah terbukti jalan benar**, semua data test sudah dibersihkan. Fix katalog ATK collapse jadi 1 kolom di HP (minmax 140px→100px, TERNYATA BELUM CUKUP, lihat §24).
 - **§24**: (1) fix REGRESI — fix Menu Cepat di §22 ternyata bikin kartu-kartu di desktop malah tumpang-tindih/berantakan (root cause: `height:100%` di grid item konflik sama auto-row-sizing), (2) field ATK "Departemen" (readOnly) diganti "Invoice To" (dropdown wajib diisi manual, sama daftar 11 PT + internal), (3) audit & konfirmasi notifikasi email ATK ke Admin GA sudah terkonfigurasi benar (env var lengkap, ada kontak Admin GA dengan email valid), (4) matikan `aggressiveFrontEndNavCaching`/`cacheOnFrontEndNav` di config PWA — diduga kuat inilah penyebab HP user "nyangkut" tampilan lama walau app sudah di-uninstall/install ulang, (5) tambah `loading="lazy"` + fallback ikon kalau foto Cloudinary gagal load di katalog ATK, buat jaga-jaga koneksi HP lemah.
-- **§25 (TERBARU, baca detail di bawah)**: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security (`dashboard/security/parkir`) & driver (`dashboard/driver/armada`) — begitu kendaraan berstatus "Keluar Beroperasi", muncul kartu berisi driver/tujuan/waktu keluar + tombol "Tiba Kantor Kembali" buat nutup pergerakan 1 klik; kartu murni derived state jadi otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel Daftar Kendaraan (gak butuh logic tambahan). ATK mobile diverifikasi ulang — fix §23/§24D masih aktif, gak ada regresi. Ditest end-to-end di browser pakai kendaraan+log dummy terisolasi (bukan data asli) sebelum deploy, semua test data sudah dibersihkan total.
+- **§25**: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security (`dashboard/security/parkir`) & driver (`dashboard/driver/armada`) — begitu kendaraan berstatus "Keluar Beroperasi", muncul kartu berisi driver/tujuan/waktu keluar + tombol "Tiba Kantor Kembali" buat nutup pergerakan 1 klik; kartu murni derived state jadi otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel Daftar Kendaraan (gak butuh logic tambahan). ATK mobile diverifikasi ulang — fix §23/§24D masih aktif, gak ada regresi. Ditest end-to-end di browser pakai kendaraan+log dummy terisolasi (bukan data asli) sebelum deploy, semua test data sudah dibersihkan total.
+- **§26 (TERBARU, baca detail di bawah)**: (1) fix katalog ATK kosong khusus di Safari iOS — `height:"100%"` yang ambigu (spec CSS abu-abu, WebKit rawan resolve jadi 0) dihapus dari wrapper modal ATK, BELUM dikonfirmasi user di iPhone asli; (2) hapus TOTAL notifikasi WhatsApp (Fonnte) dari aplikasi web — token invalid & user minta dihapus, semua channel sekarang Email-only lewat `kirimEmail()`/EmailJS; (3) laporan SBO→QHSE (sebelumnya WA-only, satu-satunya yang gak punya jalur Email) dikasih builder Email baru (`buildSboEmailHtml`) biar QHSE gak kehilangan notifikasi; (4) `components/pages/PaketPage.tsx` (dead code lama dari §17) dihapus total karena importnya ke `kirimWA`/`template` ikut pecah begitu dihapus dari `notify.ts`.
 
 ### Yang PALING PENTING buat sesi depan
 
-1. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama SETELAH deploy sesi §24, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** (bukan cuma reinstall app icon-nya doang, itu gak clear service worker cache) baru buka lagi — kalau masih sama juga, perlu digali lebih dalam (custom service worker update-prompt, dll).
-2. Kartu notif §25A cuma trigger buat status persis `"Keluar Beroperasi"` (bukan "Masuk Bengkel/Service") — kalau user ternyata mau kendaraan Service juga dapat kartu serupa, gampang ditambah (lihat §25E).
-3. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
-4. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
-5. `admin/kendaraan/page.tsx` (riwayat servis) masih baca `foto_emisi_url` 1 foto tunggal, belum baca `foto_detail` multi-foto — poin lama dari §20D.
-6. Poin lama dari §17/§18/§19 lainnya yang belum berubah — lihat §19D.
+1. **§26A (fix Safari) & §26B (fix email HTML mentah, BUTUH AKSI MANUAL user di dashboard EmailJS: `template_oriy1nw`, `{{message}}`→`{{{message}}}`) BELUM dikonfirmasi user** — cek dulu apakah masih ada laporan sebelum lanjut kerjaan lain yang menyentuh area sama.
+2. **Script reminder GitHub Actions (`apar/patroli/checklist/kendaraan-reminder.mjs`) kemungkinan JUGA gagal kirim WA** (token Fonnte sama), TAPI SENGAJA belum disentuh sesi §26 (di luar scope permintaan user yang spesifik soal web app) — lihat §26E poin 3 buat opsi penggantinya kalau user minta dibenerin juga.
+3. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** baru buka lagi.
+4. Kartu notif §25A cuma trigger buat status persis `"Keluar Beroperasi"` (bukan "Masuk Bengkel/Service") — kalau user ternyata mau kendaraan Service juga dapat kartu serupa, gampang ditambah (lihat §25E).
+5. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
+6. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
+7. Poin lama dari §17/§18/§19/§20D lainnya yang belum berubah — lihat §19D/§20F.
 
-Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**, **§25**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
+Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**, **§25**, **§26**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
 
 ---
 
@@ -1355,3 +1357,47 @@ Sesuai instruksi eksplisit user (testing dulu → update dokumen → baru deploy
 
 1. Kartu notif saat ini treat "Keluar Beroperasi" (bukan "Masuk Bengkel/Service") sebagai satu-satunya status yang memicu kartu — sesuai kata user "sedang keluar", bukan sedang service. Kalau ternyata user juga mau kendaraan yang lagi Service dapat kartu serupa, tinggal ubah 1 baris filter (`status_kendaraan === "Keluar Beroperasi"`) di kedua file.
 2. Poin-poin lama dari §19/§20D/§21A yang belum berubah — lihat §19D/§20F/§21F untuk detail masing-masing.
+
+---
+
+## 26. Fix Katalog ATK Kosong di Safari iOS + Hapus Total Notifikasi WA (31 Agustus 2026, lanjutan §25)
+
+Konteks: user lapor screenshot email "Request Baru Masuk: Request ATK" isinya HTML mentah (tag `<div style="...">` kelihatan sebagai teks, bukan ke-render), lalu klarifikasi katalog ATK "belum muncul ternyata hanya di browser Safari iPhone" (HP lain normal), tanya cara benerin. Sesi berikutnya (masih sama hari), setelah plan fix Safari disiapkan tapi belum di-deploy, user kirim error console `[notify] Gagal kirim WA: { reason: 'invalid token', status: false }` dari `kirimNotifikasiAtkSiap` (`admin/atk/page.tsx`), bilang notif WA "sangat susah menggunakan di aplikasi pihak ketiga", minta: kalau bisa benerin errornya benerin, kalau enggak **hapus semua notifikasi ke WA, cukup Email saja** — lalu "setelah ini beres langsung deploy saja semua".
+
+### 26A. Root cause katalog ATK kosong di Safari iOS (bukan iPhone-only sebenarnya — CSS ambigu)
+
+`app/page.tsx` baris ~1360: wrapper konten modal ATK minta `height:"100%"` dari Modal box (`components/ui/Modal.tsx`) yang tingginya sendiri cuma `maxHeight:"85vh"` (auto/berdasar konten, BUKAN tinggi pasti). Percentage-height pada flex item yang containing block-nya gak punya tinggi pasti itu area abu-abu di spec CSS — Safari/WebKit dikenal luas rawan resolve ini jadi tinggi 0, beda dari Chrome yang lebih toleran. Begitu wrapper-nya 0px, katalog ATK (grid produk + foto) di dalamnya ikut "hilang" walau DOM-nya sebenarnya ada — persis gejala yang dilaporkan (kelihatan di HP lain/Chrome, kosong di Safari).
+
+**Perbaikan**: `height:"100%"` DIHAPUS TOTAL (gak ada bagian lain modal ATK yang butuh wrapper ini setinggi 100%, gak ada flex-grow/space-between yang mengandalkannya — aman dihapus). Sekalian tambah `WebkitBackdropFilter` di `Modal.tsx` (prefix Safari buat efek blur overlay, `backdropFilter` polos gak jalan di Safari versi lama — cosmetic saja, gak terkait bug utama).
+
+**⚠️ Pelajaran penting dari proses coba-coba**: sempat dicoba tambahan `minHeight:0` di wrapper ATK + wrapper tab REQUEST sebagai "jaga-jaga" pola flexbox klasik — TERNYATA ini malah BIKIN katalog kolaps TOTAL (grid-auto-rows ke-compute jadi 2px per baris, foto/kartu ke-clip habis oleh `overflow:hidden`) bahkan di Chrome desktop biasa, DIREPRODUKSI & di-debug langsung pakai `getBoundingClientRect()`/`getComputedStyle()` di browser sebelum ketauan dan langsung dilepas lagi. Fix final (cuma hapus `height:"100%"`, TANPA `minHeight:0` di manapun) sudah diverifikasi ulang render normal di Chrome desktop DAN mobile viewport (375px) — 2 kolom rapi, foto produk asli tampil. **Catatan jujur ke user**: fix ini analisis kode berdasar pola bug WebKit yang sudah dikenal luas + cocok 100% sama gejala yang dilaporkan, TAPI belum bisa diverifikasi langsung di Safari/iPhone asli (Claude gak punya akses device fisik) — kalau nanti masih bermasalah di iPhone-nya setelah deploy, perlu digali lebih lanjut (minta tau versi iOS-nya).
+
+### 26B. Root cause email HTML mentah (bukan bug kode — pengaturan template EmailJS)
+
+Semua path email (`kirimEmail()` di `src/lib/notify.ts`) ngirim isi HTML lewat variabel `message` ke EmailJS. Kalau template di dashboard EmailJS pakai `{{message}}` (2 kurung kurawal), EmailJS otomatis nge-escape HTML jadi teks mentah — harusnya `{{{message}}}` (3 kurung kurawal, raw/unescaped). **Ini BUKAN bug di kode, gak ada yang diubah** — perlu user sendiri yang login ke dashboard emailjs.com → Email Templates → cari template ID `template_oriy1nw` (dari `.env.local`) → ganti `{{message}}` jadi `{{{message}}}` di editor konten. Karena SEMUA jenis notifikasi email (ATK/Overtime/Helpdesk/Paket/SBO) pakai 1 template yang sama, 1 perbaikan ini otomatis benerin semuanya sekaligus. Status: disampaikan ke user, BELUM dikonfirmasi apakah sudah diperbaiki di sisi dashboard EmailJS.
+
+### 26C. Hapus TOTAL notifikasi WhatsApp (Fonnte) dari aplikasi web — Email-only
+
+Trigger: `NEXT_PUBLIC_FONNTE_TOKEN` invalid/expired ("invalid token" dari Fonnte API), dan user secara eksplisit bilang WA "susah dipakai di app pihak ketiga" — minta dihapus semua, cukup Email. Di-scope ke **aplikasi web Next.js** (semua notifikasi status-berubah: ATK, Overtime, Helpdesk, Paket, SBO/QHSE) — TIDAK menyentuh script reminder terjadwal GitHub Actions (`scripts/apar-reminder.mjs`, `patroli-reminder.mjs`, `checklist-reminder.mjs`, `kendaraan-reminder.mjs`), karena itu subsistem terpisah (WA di sana bukan "duplikat" ke Email, tapi satu-satunya channel reminder, dan scriptnya jalan sendiri lewat cron GitHub Actions bukan lewat `notify.ts`) — lihat §26E poin follow-up, kemungkinan besar juga gagal karena token sama tapi belum ditangani sesi ini.
+
+Perubahan:
+1. **`src/lib/notify.ts`**: fungsi `kirimWA()`, konstanta `FONNTE_TOKEN`, dan objek `template` (kumpulan teks pesan WA — `paketDiterima`, `overtimeDisetujui/Ditolak`, `helpdeskUpdate`, `atkSiapDiambil`, `tamuCheckIn`, `requestBaruMasuk`, `sboBaruMasuk`) DIHAPUS TOTAL. `kirimEmail()` gak diubah sama sekali.
+2. **5 titik pemanggilan WA** (`admin/atk/page.tsx`, `admin/helpdesk/page.tsx`, `admin/overtime/page.tsx`, `dashboard/security/paket/page.tsx`, dan `kirimNotifikasiQHSE` di `app/page.tsx`) — blok `if (kontak.no_wa) { ...kirimWA... }` dihapus, guard awal diubah dari `if (!kontak || (!kontak.no_wa && !kontak.email))` jadi `if (!kontak || !kontak.email)`. 4 dari 5 titik (ATK/Overtime/Helpdesk/Paket) SUDAH punya jalur Email paralel dari sesi-sesi lama, jadi tinggal hapus jalur WA-nya, jalur Email TIDAK disentuh/tetap sama persis.
+3. **`kirimNotifikasiQHSE` (laporan SBO, `app/page.tsx`) — SATU-SATUNYA yang sebelumnya WA-ONLY, gak ada Email sama sekali.** Supaya QHSE gak kehilangan notifikasi total, ditambahkan builder Email baru `buildSboEmailHtml()` di `src/lib/emailTemplates.ts` (pola sama persis dengan builder lain: header merah, tabel field Pelapor/Kategori/Lokasi/Unit Bisnis/Detail Temuan, foto lampiran kalau ada), dipanggil ke semua kontak QHSE yang punya `email` terisi (field ini SUDAH ada di `KontakAdmin`/`users_master`, cuma belum pernah dipakai buat SBO).
+4. **`src/components/pages/PaketPage.tsx` DIHAPUS TOTAL** — file ini sudah lama ditandai DEAD CODE di dokumen ini sendiri (§17: bukan yang di-routing, implementasi asli ada di `dashboard/security/paket/page.tsx`), tapi masih ada di repo dan masih `import { kirimWA, template }`. Begitu `kirimWA`/`template` dihapus dari `notify.ts`, file dead code ini jadi gak bisa kompilasi (import pecah) — daripada di-ubah sia-sia (gak pernah ke-render), langsung dihapus filenya sekalian.
+
+### 26D. Verifikasi
+
+- `npx tsc --noEmit`: 0 error (termasuk setelah hapus `PaketPage.tsx` — sempat error dulu sebelum file itu dihapus, karena importnya ke `kirimWA`/`template` yang udah gak ada).
+- `npx eslint` (7 file yang diubah): 0 error, 2 warning (pre-existing, gak terkait perubahan sesi ini — unused var `confirm` & missing hook dep di `admin/helpdesk/page.tsx`).
+- `npm run build`: sukses, 43/43 halaman ter-generate.
+- Smoke test browser (baca console error, TANPA memicu pengiriman notifikasi asli/perubahan status data production): `/`, `/admin/atk`, `/admin/helpdesk`, `/admin/overtime`, `/dashboard/security/paket` — semua load bersih, 0 error console.
+- Fix Safari (§26A) diverifikasi ulang di Chrome desktop + mobile viewport (375px) — katalog ATK render normal, sudah termasuk proses ketauan & lepas lagi eksperimen `minHeight:0` yang gagal (lihat §26A).
+- **TIDAK dites end-to-end kirim notifikasi beneran** (klik "Siap Diambil"/approve overtime/dll di production akan kirim email asli ke karyawan asli) — perubahan kodenya murni SUBTRAKTIF (hapus 1 channel yang sudah teruji, gak ubah channel Email yang sudah jalan) kecuali `kirimNotifikasiQHSE` yang emang builder barunya belum pernah dites kirim beneran ke inbox QHSE asli.
+
+### 26E. Yang perlu dilanjutkan
+
+1. **Fix Safari (§26A) belum dikonfirmasi user di iPhone asli** — pantau apakah user masih lapor katalog ATK kosong di Safari setelah deploy sesi ini.
+2. **Fix email HTML mentah (§26B) perlu AKSI MANUAL user** di dashboard EmailJS (`template_oriy1nw`: `{{message}}` → `{{{message}}}`) — belum dikonfirmasi sudah dikerjakan atau belum.
+3. **Script reminder GitHub Actions (`apar/patroli/checklist/kendaraan-reminder.mjs`) kemungkinan besar JUGA gagal kirim WA** (token Fonnte yang sama), TAPI belum disentuh sesi ini (di luar scope permintaan user yang spesifik soal notifikasi status-berubah di web app). Kalau user konfirmasi mau WA dihapus dari situ juga, perlu didesain penggantinya (Email butuh setup baru di Node/GitHub Actions context — `@emailjs/browser` yang dipakai `notify.ts` khusus browser, gak otomatis jalan di Node — ATAU cukup andalkan notifikasi in-app `tulisNotifApp` yang sudah jalan paralel di semua script itu).
+4. Poin-poin lama dari §19/§20D/§21A/§25E yang belum berubah.

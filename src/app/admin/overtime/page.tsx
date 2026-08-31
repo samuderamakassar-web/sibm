@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, Timestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
-import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+import { kirimEmail } from "../../../lib/notify";
 import { buildOvertimeEmailHtml } from "../../../lib/emailTemplates";
 import Modal from "../../../components/ui/Modal";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -203,35 +203,25 @@ export default function AdminOvertimePage() {
   ) => {
     const kontak = cariKontakKaryawan(nama);
 
-    if (!kontak || (!kontak.no_wa && !kontak.email)) {
-      // Nama pemohon tidak ketemu di Master Data Karyawan, atau belum punya no_wa/email.
+    if (!kontak || !kontak.email) {
+      // Nama pemohon tidak ketemu di Master Data Karyawan, atau belum punya email.
       // Tidak menghentikan alur approval -- cukup dicatat agar Admin GA tahu harus hubungi manual.
-      console.warn(`[notify] Kontak untuk "${nama}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi dilewati.`);
+      console.warn(`[notify] Kontak untuk "${nama}" tidak ditemukan / belum punya email di Master Data Karyawan. Notifikasi dilewati.`);
       return;
     }
 
-    if (kontak.no_wa) {
-      const pesanWA = keputusan === "Approved"
-        ? template.overtimeDisetujui(nama, tanggal)
-        : template.overtimeDitolak(nama, tanggal, alasanTolak);
-      const hasilWA = await kirimWA(kontak.no_wa, pesanWA);
-      if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA overtime:", hasilWA.pesanError);
-    }
-
-    if (kontak.email) {
-      const subjek = `Update Overtime Gedung: ${keputusan === "Approved" ? "Disetujui" : "Ditolak"}`;
-      const htmlEmail = buildOvertimeEmailHtml({
-        namaPemohon: nama,
-        departemen: departemen || undefined,
-        tanggal,
-        jamMulai,
-        jamSelesai,
-        status: keputusan,
-        alasanTolak: keputusan === "Rejected" ? alasanTolak : undefined,
-      });
-      const hasilEmail = await kirimEmail(kontak.email, subjek, htmlEmail, nama);
-      if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email overtime:", hasilEmail.pesanError);
-    }
+    const subjek = `Update Overtime Gedung: ${keputusan === "Approved" ? "Disetujui" : "Ditolak"}`;
+    const htmlEmail = buildOvertimeEmailHtml({
+      namaPemohon: nama,
+      departemen: departemen || undefined,
+      tanggal,
+      jamMulai,
+      jamSelesai,
+      status: keputusan,
+      alasanTolak: keputusan === "Rejected" ? alasanTolak : undefined,
+    });
+    const hasilEmail = await kirimEmail(kontak.email, subjek, htmlEmail, nama);
+    if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email overtime:", hasilEmail.pesanError);
   };
 
   const formatJam = (ts: Timestamp | null | undefined) => ts ? new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";

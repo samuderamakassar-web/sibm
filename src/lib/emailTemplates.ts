@@ -176,6 +176,41 @@ export function buildRequestBaruEmailHtml(p: {
   return emailShell(`&#128276; Request Baru: ${escapeHtml(p.jenisRequest)}`, body);
 }
 
+/**
+ * Notifikasi ke QHSE saat ada laporan SBO (temuan kondisi tidak aman/berbahaya) baru masuk.
+ * Sebelumnya dikirim lewat WA (Fonnte) -- diganti Email-only karena token Fonnte invalid/expired.
+ */
+export function buildSboEmailHtml(p: {
+  namaPelapor: string;
+  kategori: string;
+  lokasi: string;
+  unitBisnis?: string;
+  detailTemuan?: string;
+  fotoUrl?: string;
+}): string {
+  const infoRows = [
+    fieldRow("Pelapor", escapeHtml(p.namaPelapor)),
+    fieldRow("Kategori Temuan", escapeHtml(p.kategori)),
+    fieldRow("Lokasi", escapeHtml(p.lokasi)),
+    ...(p.unitBisnis ? [fieldRow("Unit Bisnis", escapeHtml(p.unitBisnis))] : []),
+    ...(p.detailTemuan ? [fieldRow("Detail Temuan", escapeHtml(p.detailTemuan))] : []),
+  ].join("");
+
+  const foto = p.fotoUrl
+    ? `<div style="margin-top:18px;"><div style="font-size:11.5px;color:#71717a;font-weight:700;margin-bottom:8px;">FOTO LAMPIRAN</div><img src="${p.fotoUrl}" alt="Lampiran" style="max-width:100%;border-radius:10px;border:1px solid #e7e5e4;display:block;" /></div>`
+    : "";
+
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      Ada laporan SBO (temuan kondisi tidak aman/berbahaya) baru yang perlu segera ditinjau di Dashboard QHSE:
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${infoRows}</table>
+    ${foto}
+  `;
+
+  return emailShell("&#9888;&#65039; Laporan SBO Baru Masuk", body);
+}
+
 /** Notifikasi ke pemohon saat request ATK sudah siap diambil di gudang GA. */
 export function buildAtkSiapEmailHtml(p: {
   namaPemohon: string;

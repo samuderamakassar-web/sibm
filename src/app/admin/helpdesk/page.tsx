@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
-import { kirimWA, kirimEmail, template } from "../../../lib/notify";
+import { kirimEmail } from "../../../lib/notify";
 import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
@@ -184,34 +184,27 @@ export default function AdminHelpdeskPage() {
     return daftarKontak.find((k) => (k.nama || "").trim().toLowerCase() === namaNormal);
   };
 
+  // Kirim Email ke pelapor saat status tiket berubah (WA sudah dihapus, token Fonnte invalid/expired)
   const kirimNotifikasiHelpdesk = async (ticket: HelpdeskTicket, statusBaru: string) => {
     const namaPelapor = ticket.nama_pelapor;
     const kontak = cariKontakKaryawan(namaPelapor);
 
-    if (!kontak || (!kontak.no_wa && !kontak.email)) {
-      console.warn(`[notify] Kontak untuk "${namaPelapor}" tidak ditemukan / belum lengkap di Master Data Karyawan. Notifikasi helpdesk dilewati.`);
+    if (!kontak || !kontak.email) {
+      console.warn(`[notify] Kontak untuk "${namaPelapor}" tidak ditemukan / belum punya email di Master Data Karyawan. Notifikasi helpdesk dilewati.`);
       return;
     }
 
     const kodeTiket = ticket.id.slice(0, 8).toUpperCase();
 
-    if (kontak.no_wa) {
-      const pesanWA = template.helpdeskUpdate(namaPelapor, statusBaru, kodeTiket);
-      const hasilWA = await kirimWA(kontak.no_wa, pesanWA);
-      if (!hasilWA.sukses) console.error("[notify] Gagal kirim WA helpdesk:", hasilWA.pesanError);
-    }
-
-    if (kontak.email) {
-      const htmlEmail = buildHelpdeskUpdateEmailHtml({
-        namaPelapor,
-        kodeTiket,
-        statusBaru,
-        lokasi: ticket.lokasi,
-        deskripsi: ticket.deskripsi,
-      });
-      const hasilEmail = await kirimEmail(kontak.email, `Update Tiket Helpdesk ${kodeTiket}: ${statusBaru}`, htmlEmail, namaPelapor);
-      if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email helpdesk:", hasilEmail.pesanError);
-    }
+    const htmlEmail = buildHelpdeskUpdateEmailHtml({
+      namaPelapor,
+      kodeTiket,
+      statusBaru,
+      lokasi: ticket.lokasi,
+      deskripsi: ticket.deskripsi,
+    });
+    const hasilEmail = await kirimEmail(kontak.email, `Update Tiket Helpdesk ${kodeTiket}: ${statusBaru}`, htmlEmail, namaPelapor);
+    if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email helpdesk:", hasilEmail.pesanError);
   };
 
   const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];

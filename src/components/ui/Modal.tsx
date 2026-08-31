@@ -23,6 +23,7 @@ export default function Modal({ open, onClose, children, maxWidth = "550px" }: M
         bottom: 0,
         background: "rgba(0,0,0,0.65)",
         backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
         zIndex: 100,
         display: "flex",
         justifyContent: "center",
