@@ -15,6 +15,7 @@ import Modal from "../components/ui/Modal";
 import Badge from "../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../components/ui/Table";
 import VehicleIcon3D from "../components/VehicleIcon3D";
+import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../lib/unitBisnis";
 
 // ==========================================
 // INTERFACES
@@ -951,7 +952,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .qa-card {
           cursor: pointer; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
           box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-          height: 100%;
         }
         /* Grid kolom TETAP (bukan auto-fit/minmax) — auto-fit bikin kartu terakhir yang sendirian
            di baris terakhir ikut melebar ngisi sisa kolom (gak proporsional sama kartu lain). */
@@ -985,7 +985,13 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         /* 📱 BOTTOM NAV APP-STYLE */
         .app-bottom-nav { display: none; }
         .mobile-only { display: none; }
-        .desktop-only-hide { display: block; height: 100%; }
+        /* display:flex (bukan block) — wrapper ini adalah 1 grid item di .menu-cepat-grid yang
+           sudah otomatis di-stretch penuh setinggi baris (default align-items:stretch grid), tapi
+           child .qa-card di dalamnya (display:block) gak otomatis ngisi tinggi wrapper tanpa ini —
+           flex container 1 child + default align-items:stretch beres-in itu tanpa perlu height:100%
+           eksplisit (yang sempat dicoba tapi malah bikin kartu LAIN yang gak dibungkus jadi overflow
+           keluar baris — height:100% pada grid item langsung ternyata gak konsisten sama auto-row-sizing). */
+        .desktop-only-hide { display: flex; }
         @media (max-width: 768px) {
           .main-container { padding-bottom: 108px !important; }
           .mobile-only { display: flex; }
@@ -1384,8 +1390,23 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       <div key={produk.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden", background: "white", display: "flex", flexDirection: "column" }}>
                         <div style={{ width: "100%", aspectRatio: "1", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {produk.foto_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={produk.foto_url} alt={produk.nama_barang} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={produk.foto_url}
+                                alt={produk.nama_barang}
+                                loading="lazy"
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                onError={(e) => {
+                                  // Koneksi HP lemah/gambar Cloudinary gagal load -> jangan biarkan kotak
+                                  // gambar kosong melompong (kerasa kayak "item gak muncul"), tampilkan ikon fallback.
+                                  e.currentTarget.style.display = "none";
+                                  const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                  if (fallback) fallback.style.display = "flex";
+                                }}
+                              />
+                              <span style={{ fontSize: "28px", opacity: 0.3, display: "none", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>🖇️</span>
+                            </>
                           ) : (
                             <span style={{ fontSize: "28px", opacity: 0.3 }}>🖇️</span>
                           )}
@@ -1446,7 +1467,23 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                           datalistId="emp-list-atk"
                           datalistOptions={employees.map(emp => emp.nama)}
                         />
-                        <Input label="Departemen" type="text" required readOnly value={formAtkPemohon.dept} style={{ background: "#e2e8f0" }} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568" }}>Invoice To *</label>
+                          <select
+                            required
+                            value={formAtkPemohon.dept}
+                            onChange={(e) => setFormAtkPemohon({ ...formAtkPemohon, dept: e.target.value })}
+                            style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+                          >
+                            <option value="" disabled>Pilih Invoice To...</option>
+                            <optgroup label="Unit Bisnis (PT)">
+                              {DAFTAR_UNIT_BISNIS.map((u) => <option key={u} value={u}>{u}</option>)}
+                            </optgroup>
+                            <optgroup label="Departemen Internal Gedung">
+                              {DAFTAR_DEPARTEMEN_INTERNAL.map((d) => <option key={d} value={d}>{d}</option>)}
+                            </optgroup>
+                          </select>
+                        </div>
                       </div>
 
                       <Button type="submit" variant="primary" loading={isAtkLoading} loadingText="Memproses..." style={{ background: isAtkLoading ? undefined : "#d53f8c", boxShadow: isAtkLoading ? undefined : "0 10px 15px -3px rgba(213,63,140,0.3)" }}>
