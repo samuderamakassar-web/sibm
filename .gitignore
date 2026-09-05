@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# Firebase service account keys -- JANGAN PERNAH commit, akses penuh Admin SDK
+*firebase-adminsdk*.json
+serviceAccountKey.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
