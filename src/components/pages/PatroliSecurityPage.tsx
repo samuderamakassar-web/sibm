@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
-import { Html5QrcodeScanner } from "html5-qrcode";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { hitungShiftSesi, waktuWITASekarang, sesiMinimumTerpenuhi, BATAS_SESI, MINIMUM_SESI_PER_SHIFT, ShiftSesiInfo } from "../../lib/shift";
@@ -48,9 +47,6 @@ const IconAlertTriangle = ({ size = 15, color = "currentColor" }: IconProps) => 
 );
 const IconInboxEmpty = ({ size = 40, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
-);
-const IconSettings = ({ size = 14, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
 );
 const IconMapPin = ({ size = 14, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-6.7 7-12a7 7 0 1 0-14 0c0 5.3 7 12 7 12z" /><circle cx="12" cy="9" r="2.5" /></svg>
@@ -309,24 +305,6 @@ export default function PatroliSecurityPage() {
     }
   }, [photoTarget]);
 
-  useEffect(() => {
-    if (scanTarget) {
-      const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
-      scanner.render((decodedText) => {
-        if (decodedText === scanTarget) {
-          scanner.clear();
-          const targetNama = scanTarget.split("::")[1];
-          setScanTarget(null);
-          bukaKamera(scanTarget, targetNama);
-        } else {
-          showToast(`❌ QR Code Salah! Anda tidak berada di titik ${scanTarget.split("::")[1]}`, "warning");
-        }
-      }, () => {});
-
-      return () => { scanner.clear().catch(e => console.error(e)); };
-    }
-  }, [scanTarget, kondisiTitik, bukaKamera]);
-
   const handleUbahAlasan = (id: string, alasan: string) => {
     setAlasanTerlewat((prev) => ({ ...prev, [id]: alasan }));
   };
@@ -553,7 +531,7 @@ export default function PatroliSecurityPage() {
                                   </div>
 
                                   {!dataSelesai ? (
-                                    <button onClick={() => { setKondisiTitik("Aman Terkendali"); setScanTarget(titik.id); }} className="scan-btn"><IconCamera size={13} /> Scan</button>
+                                    <button onClick={() => { setKondisiTitik("Aman Terkendali"); setScanTarget(titik.id); }} className="scan-btn"><IconCamera size={13} /> Foto</button>
                                   ) : <div style={{ color: "var(--ok)", fontWeight: "bold", display: "flex", alignItems: "center", gap: "4px" }}><IconCheck size={12} /> Selesai</div>}
                                 </div>
                               );
@@ -696,15 +674,15 @@ export default function PatroliSecurityPage() {
       </div>
 
       {/* ======================================= */}
-      {/* MODAL SCANNER QR                        */}
+      {/* MODAL PILIH KONDISI TITIK (sebelum kamera) */}
       {/* ======================================= */}
       {scanTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", flexDirection: "column", backdropFilter: "blur(5px)" }}>
           <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconMapPin size={16} /> Scan Lokasi: {scanTarget.split("::")[1]}</span>
+            <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconMapPin size={16} /> Lokasi: {scanTarget.split("::")[1]}</span>
             <button onClick={() => setScanTarget(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} color="white" /></button>
           </div>
-          <div style={{ padding: "20px", background: "#1a202c", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", overflowY: "auto" }}>
+          <div style={{ padding: "20px", background: "#1a202c", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", overflowY: "auto", justifyContent: "center" }}>
             <div style={{ background: "white", padding: "15px", borderRadius: "16px", marginBottom: "20px", width: "100%", maxWidth: "400px" }}>
               <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px", fontSize: "14px", color: "#4a5568" }}>Pilih Kondisi Titik:</label>
               <select value={kondisiTitik} onChange={(e) => setKondisiTitik(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "2px solid #e2e8f0", fontWeight: "bold", color: kondisiTitik === "Aman Terkendali" ? "#38a169" : "#e53e3e", fontSize: "15px", outline: "none" }}>
@@ -714,11 +692,8 @@ export default function PatroliSecurityPage() {
                 <option value="Kebocoran Air">💧 Kebocoran Air</option>
               </select>
             </div>
-            <div style={{ width: "100%", maxWidth: "400px", background: "white", padding: "10px", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
-              <div id="reader" style={{ width: "100%" }}></div>
-            </div>
-            <button onClick={() => { const targetNama = scanTarget.split("::")[1]; setScanTarget(null); bukaKamera(scanTarget, targetNama); }} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "rgba(255,255,255,0.1)", color: "white", border: "1px dashed rgba(255,255,255,0.3)", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
-              <IconSettings size={14} /> By-pass QR (Simulasi Langsung Foto)
+            <button onClick={() => { const targetNama = scanTarget.split("::")[1]; const targetId = scanTarget; setScanTarget(null); bukaKamera(targetId, targetNama); }} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "var(--info, #2563eb)", color: "white", border: "none", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit", fontWeight: "bold", fontSize: "15px" }}>
+              <IconCamera size={16} /> Buka Kamera
             </button>
           </div>
         </div>

@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { logoutWithConfirm } from "../../hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 
 // Ikon SVG garis — set sama dengan portal utama (src/app/page.tsx) & shell subhalaman admin
 type IconProps = { size?: number; color?: string };
@@ -62,27 +61,12 @@ const IconBook = ({ size = 18, color = "currentColor" }: IconProps) => (
 export default function AdminDashboardPage() {
   const router = useRouter();
   const confirm = useConfirm();
-  const [adminName, setAdminName] = useState<string>("Admin");
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    // 💡 VALIDASI KEAMANAN TINGKAT TINGGI (STRICT MODE)
-    const role = localStorage.getItem("pic_role") || "";
-    const dept = localStorage.getItem("pic_dept") || "";
-    const nama = localStorage.getItem("pic_nama");
-
-    // Jika bukan Admin GA, langsung tendang keluar dan hapus sesi (Force Logout)
-    if (!nama || dept !== "Admin GA" || !role.includes("Admin")) {
-      localStorage.clear();
-      router.replace("/");
-      return;
-    }
-
-    setTimeout(() => {
-      setAdminName(nama);
-      setIsReady(true);
-    }, 0);
-  }, [router]);
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin"],
+    depts: ["Admin GA"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
+  });
 
   const handleLogout = () => logoutWithConfirm(confirm, router);
 
@@ -188,7 +172,8 @@ export default function AdminDashboardPage() {
     accent: { bg: "#f5f3ff", color: "var(--accent)" },
   };
 
-  if (!isReady) return null;
+  if (!isReady || !session) return null;
+  const adminName = session.nama || "Admin";
 
   return (
     <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>

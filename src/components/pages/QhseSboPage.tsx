@@ -6,7 +6,7 @@ import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc } fro
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
-import { logoutWithConfirm } from "../../hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 
 interface ReportSBO {
   id: string;
@@ -41,8 +41,11 @@ const getTodayISOLocal = () => {
 
 export default function QhseSboPage() {
   const router = useRouter();
-  const [picName, setPicName] = useState("");
-  const [isReady, setIsReady] = useState(false);
+  const { session, isReady } = useAuthGuard({
+    depts: ["QHSE"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus divisi QHSE.",
+  });
 
   // State Tabel & Laporan
   const [reports, setReports] = useState<ReportSBO[]>([]);
@@ -60,23 +63,14 @@ export default function QhseSboPage() {
   const [isUploadingFoto, setIsUploadingFoto] = useState(false);
 
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-    const dept = localStorage.getItem("pic_dept");
-
-    if (!role || dept !== "QHSE") {
-      showToast("Akses Ditolak! Halaman ini khusus divisi QHSE.", "error");
-      router.push("/");
-      return;
-    }
-    setTimeout(() => { setPicName(nama || "Staf QHSE"); setIsReady(true); }, 0);
+    if (!isReady || !session) return;
 
     const q = query(collection(db, "qhse_sbo_reports"), orderBy("waktu_lapor", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as ReportSBO)));
     });
     return () => unsub();
-  }, [router]);
+  }, [isReady, session]);
 
   // ===============================================
   // FUNGSI KOMPRESI FOTO AFTER
@@ -212,7 +206,8 @@ export default function QhseSboPage() {
   // FILTERING LOGIC
   const displayedReports = reports.filter(r => filterStatus === "Semua" || r.status_temuan === filterStatus);
 
-  if (!isReady) return null;
+  if (!isReady || !session) return null;
+  const picName = session.nama || "Staf QHSE";
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

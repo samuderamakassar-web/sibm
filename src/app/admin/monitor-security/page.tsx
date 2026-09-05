@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { MINIMUM_SESI_PER_SHIFT } from "../../../lib/shift";
-import { useToast } from "../../../components/ui/ToastProvider";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -120,9 +120,13 @@ function labelPeriodeOption(docId: string): string {
 
 export default function MonitorSecurityPage() {
   const router = useRouter();
-  const showToast = useToast();
 
-  const [adminName, setAdminName] = useState("Admin");
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin", "Koordinator"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Administrator.",
+  });
+
   const [activeTab, setActiveTab] = useState<"PATROLI" | "TAMU" | "PAKET" | "ROSTER">("PATROLI");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -137,7 +141,6 @@ export default function MonitorSecurityPage() {
   const [rosterDocsTersedia, setRosterDocsTersedia] = useState<string[]>([]);
   const [timSecurity, setTimSecurity] = useState<string[]>([]);
   const [detailPatroli, setDetailPatroli] = useState<PatroliLog | null>(null);
-  const [isReady, setIsReady] = useState(false);
 
   // Filter Bulan & Tahun Log Patroli (sama polanya dgn admin/monitor-ob)
   const [filterBulanPatroli, setFilterBulanPatroli] = useState<string>("SEMUA");
@@ -146,18 +149,7 @@ export default function MonitorSecurityPage() {
   const [waktuCetak, setWaktuCetak] = useState("");
 
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-    
-    if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      showToast("Akses Ditolak! Halaman ini khusus Administrator.", "error");
-      setTimeout(() => router.push("/"), 1200);
-      return;
-    }
-    setTimeout(() => {
-      setAdminName(nama || "Admin");
-      setIsReady(true);
-    }, 0);
+    if (!isReady || !session) return;
 
     const unsubPatrol = onSnapshot(query(collection(db, "security_patrols"), orderBy("waktu_laporan", "desc")), (snap) => {
       setPatrols(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as PatroliLog[]);
@@ -177,7 +169,7 @@ export default function MonitorSecurityPage() {
     }).catch((e) => console.error(e));
 
     return () => { unsubPatrol(); unsubVisitor(); unsubPackage(); };
-  }, [router]);
+  }, [isReady, session]);
 
   // Muat ulang data roster tiap kali periode yang dipilih berubah (default: siklus yang aktif hari ini)
   useEffect(() => {
@@ -268,7 +260,8 @@ export default function MonitorSecurityPage() {
     setTimeout(() => window.print(), 0);
   };
 
-  if (!isReady) return null;
+  if (!isReady || !session) return null;
+  const adminName = session.nama || "Admin";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "../lib/firebase";
 import { useToast } from "../components/ui/ToastProvider";
 
 // =============================================================================
@@ -97,26 +99,40 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const { nama, role, dept } = getStoredSession();
-    const adminBypass = options.adminBypass !== false && isAdministrator(role);
+    // Cek sesi Firebase Auth SUNGGUHAN dulu -- localStorage (pic_nama/pic_role/pic_dept) cuma
+    // cache tampilan, bukan lagi sumber kebenaran akses. Kalau tidak ada sesi Firebase Auth
+    // aktif (mis. localStorage di-tulis manual lewat DevTools tanpa login beneran), langsung
+    // dianggap belum login, apa pun isi localStorage-nya.
+    let redirectTimer: ReturnType<typeof setTimeout> | undefined;
+    let readyTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const roleOk = !options.roles || options.roles.length === 0 || roleMatches(role, options.roles) || adminBypass;
-    const deptOk = !options.depts || options.depts.length === 0 || options.depts.includes(dept) || adminBypass;
-    const sudahLogin = nama.trim().length > 0;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      const { nama, role, dept } = getStoredSession();
+      const adminBypass = options.adminBypass !== false && isAdministrator(role);
 
-    if (!sudahLogin || !roleOk || !deptOk) {
-      showToast(options.deniedMessage || "Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman ini.", "error");
-      const t = setTimeout(() => router.push(options.redirectTo || "/"), 1200);
-      return () => clearTimeout(t);
-    }
+      const roleOk = !options.roles || options.roles.length === 0 || roleMatches(role, options.roles) || adminBypass;
+      const deptOk = !options.depts || options.depts.length === 0 || options.depts.includes(dept) || adminBypass;
+      const sudahLogin = !!firebaseUser && nama.trim().length > 0;
 
-    // setState langsung di body effect kena lint react-hooks/set-state-in-effect -> bungkus setTimeout(...,0)
-    // (konvensi yang sudah dipakai di beberapa halaman lain di project ini)
-    const t = setTimeout(() => {
-      setSession({ nama, role, dept });
-      setIsReady(true);
-    }, 0);
-    return () => clearTimeout(t);
+      if (!sudahLogin || !roleOk || !deptOk) {
+        showToast(options.deniedMessage || "Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman ini.", "error");
+        redirectTimer = setTimeout(() => router.push(options.redirectTo || "/"), 1200);
+        return;
+      }
+
+      // setState langsung di body effect kena lint react-hooks/set-state-in-effect -> bungkus setTimeout(...,0)
+      // (konvensi yang sudah dipakai di beberapa halaman lain di project ini)
+      readyTimer = setTimeout(() => {
+        setSession({ nama, role, dept });
+        setIsReady(true);
+      }, 0);
+    });
+
+    return () => {
+      unsubscribe();
+      if (redirectTimer) clearTimeout(redirectTimer);
+      if (readyTimer) clearTimeout(readyTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -127,6 +143,7 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
  *  disentralkan juga supaya tidak ada lagi redirect ke rute yang tidak ada fisiknya (404). */
 export function logout(router: { push: (path: string) => void }, redirectTo: string = "/") {
   localStorage.clear();
+  signOut(auth).catch((err) => console.error("[logout] Gagal signOut Firebase Auth:", err));
   router.push(redirectTo);
 }
 

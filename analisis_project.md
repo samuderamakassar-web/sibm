@@ -1,35 +1,30 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 31 Agustus 2026 (§27: hapus total WA dari 4 script reminder GitHub Actions (apar/patroli/checklist/kendaraan) menyusul §26 — filter `.whatsapp` yang dihapus SEKALIAN memperbaiki bug lama (staf tanpa nomor WA sebelumnya ke-skip notifikasi in-app-nya juga); ketemu & benerin toast basi "sudah diingatkan lewat WA" di `NotifikasiKendaraanListener.tsx`; review menyeluruh (code-review effort HIGH) atas semua perubahan §26+§27 — 0 temuan — SUDAH DI-COMMIT & DI-DEPLOY, lihat §27. Fix Safari (§26A) & fix email HTML mentah (§26B, BUTUH AKSI MANUAL user di dashboard EmailJS) MASIH BELUM dikonfirmasi user — prioritas #1 sesi depan)
+Update terakhir: 5 September 2026 (§28: audit keamanan menyeluruh — ketemu 3 celah KRITIS (tidak ada Firebase Authentication, password plaintext, tidak ada `firestore.rules` sama sekali). Sudah dikerjakan & ditest bersih (build+lint 0 error): migrasi ke Firebase Authentication sungguhan (`scripts/migrate-users-to-auth.mjs`, login pakai `signInWithEmailAndPassword`), `firestore.rules` baru (36 collection, deny-by-default), 3 perbaikan cepat (hapus by-pass QR APAR, hapus scan QR patroli, checklist OB dibatasi 3x/hari), dan rapihkan 13 halaman lain ke `useAuthGuard` (sekalian ketemu & benerin bug lama: hardcode nama "hilal" di `DeepCleaningPage.tsx`, bug 404 redirect `/dashboard` di 4 file). **BELUM DI-DEPLOY** — terhambat akun Firebase CLI yang aktif gak punya akses ke project `sibm-app`, nunggu user kasih service account JSON buat jalanin migrasi + deploy. Lihat §28 untuk detail & urutan langkah lanjutan yang WAJIB diikuti persis.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 31 Agustus 2026 — §27 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 5 September 2026 — §28 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Riwayat singkat 1 percakapan panjang hari ini (§21→§27)
+### Sesi hari ini (§28) — FOKUS KEAMANAN, terpisah dari rangkaian §21-§27
 
-- **§21**: dropdown Unit Bisnis 11 PT (+ Departemen Internal Gedung buat staf non-PT) di Master Data Karyawan/Kendaraan/Buku Tamu Magang, dan sinkronisasi otomatis 2 arah Karyawan↔Kendaraan (check-in karyawan yang punya kendaraan → kendaraan Standby; kendaraan di-set Standby → karyawan pemiliknya otomatis hadir di Buku Tamu).
-- **§22**: fix upload dokumen SOP gagal, fix card Menu Cepat "gak proporsional" (percobaan PERTAMA — TERNYATA MALAH BIKIN BUG BARU, lihat §24), fix label plot OB & CS di "Tim Bertugas Hari Ini" jadi nampilin semua lantai.
-- **§23**: sinkronisasi Karyawan↔Kendaraan (§21) DITES LANGSUNG di production pakai data dummy terisolasi — **kedua arah terbukti jalan benar**, semua data test sudah dibersihkan. Fix katalog ATK collapse jadi 1 kolom di HP (minmax 140px→100px, TERNYATA BELUM CUKUP, lihat §24).
-- **§24**: (1) fix REGRESI — fix Menu Cepat di §22 ternyata bikin kartu-kartu di desktop malah tumpang-tindih/berantakan (root cause: `height:100%` di grid item konflik sama auto-row-sizing), (2) field ATK "Departemen" (readOnly) diganti "Invoice To" (dropdown wajib diisi manual, sama daftar 11 PT + internal), (3) audit & konfirmasi notifikasi email ATK ke Admin GA sudah terkonfigurasi benar (env var lengkap, ada kontak Admin GA dengan email valid), (4) matikan `aggressiveFrontEndNavCaching`/`cacheOnFrontEndNav` di config PWA — diduga kuat inilah penyebab HP user "nyangkut" tampilan lama walau app sudah di-uninstall/install ulang, (5) tambah `loading="lazy"` + fallback ikon kalau foto Cloudinary gagal load di katalog ATK, buat jaga-jaga koneksi HP lemah.
-- **§25**: kartu notif "KENDARAAN SEDANG KELUAR" di halaman security (`dashboard/security/parkir`) & driver (`dashboard/driver/armada`) — begitu kendaraan berstatus "Keluar Beroperasi", muncul kartu berisi driver/tujuan/waktu keluar + tombol "Tiba Kantor Kembali" buat nutup pergerakan 1 klik; kartu murni derived state jadi otomatis hilang kalau kendaraan langsung di-"Pulang"-kan dari tabel Daftar Kendaraan (gak butuh logic tambahan). ATK mobile diverifikasi ulang — fix §23/§24D masih aktif, gak ada regresi. Ditest end-to-end di browser pakai kendaraan+log dummy terisolasi (bukan data asli) sebelum deploy, semua test data sudah dibersihkan total.
-- **§26**: (1) fix katalog ATK kosong khusus di Safari iOS — `height:"100%"` yang ambigu (spec CSS abu-abu, WebKit rawan resolve jadi 0) dihapus dari wrapper modal ATK, BELUM dikonfirmasi user di iPhone asli; (2) hapus TOTAL notifikasi WhatsApp (Fonnte) dari aplikasi web — token invalid & user minta dihapus, semua channel sekarang Email-only lewat `kirimEmail()`/EmailJS; (3) laporan SBO→QHSE (sebelumnya WA-only, satu-satunya yang gak punya jalur Email) dikasih builder Email baru (`buildSboEmailHtml`) biar QHSE gak kehilangan notifikasi; (4) `components/pages/PaketPage.tsx` (dead code lama dari §17) dihapus total karena importnya ke `kirimWA`/`template` ikut pecah begitu dihapus dari `notify.ts`.
-- **§27 (TERBARU, baca detail di bawah)**: hapus total WA dari 4 script reminder GitHub Actions (`apar/patroli/checklist/kendaraan-reminder.mjs`) — susulan §26 yang sebelumnya sengaja gak disentuh (subsistem terpisah, gak lewat `notify.ts`), sekarang user konfirmasi mau dibersihkan juga karena "tidak jalan dan tidak bisa dibenerin". Sekalian ketemu & benerin bug toast basi di `NotifikasiKendaraanListener.tsx` yang masih ngaku "sudah diingatkan lewat WA" walau WA-nya udah gak pernah dikirim. Ditutup dengan review menyeluruh (code-review skill, effort HIGH) atas SEMUA perubahan §26+§27 — hasil 0 temuan.
+User minta audit keamanan menyeluruh. Ketemu 3 celah KRITIS: (1) app ini SAMA SEKALI gak pakai Firebase Authentication — login cuma compare password manual di client; (2) password karyawan tersimpan PLAINTEXT di Firestore; (3) TIDAK ADA `firestore.rules` di project sama sekali sejak awal — kemungkinan besar database bisa dibaca/ditulis siapa saja tanpa login. Setelah audit, user titip 6 rencana fitur baru sekaligus minta 3 yang kecil/independen dikerjakan bareng, dan di akhir minta "rapihkan sekalian" 13 halaman lain + commit/merge/deploy. Detail teknis LENGKAP ada di **§28** (§28A-§28G) — baca itu untuk semua detail implementasi, bukan diulang di sini.
 
-### Yang PALING PENTING buat sesi depan
+**Status: SEMUA KODE SUDAH DIKERJAKAN & DITEST BERSIH (`npm run build` + `npm run lint` 0 error), TAPI BELUM DI-DEPLOY.** Blocker: akun Firebase CLI aktif di mesin ini gak punya akses ke project `sibm-app`. User sudah pilih mau kasih service account JSON — begitu tersedia, WAJIB ikuti urutan di §28G persis (migrasi dulu, baru deploy rules, baru deploy hosting, baru commit/merge) supaya tidak ada user yang ke-lock out.
 
-1. **§26A (fix Safari) & §26B (fix email HTML mentah, BUTUH AKSI MANUAL user di dashboard EmailJS: `template_oriy1nw`, `{{message}}`→`{{{message}}}`) BELUM dikonfirmasi user** — cek dulu apakah masih ada laporan sebelum lanjut kerjaan lain yang menyentuh area sama.
-2. **Fix §24 poin 4 (PWA cache) BELUM bisa dipastikan 100% menyelesaikan masalah HP user** — ini dugaan ter-informed (bukan captured langsung dari device user), karena Claude gak punya akses ke HP user buat verifikasi langsung. Kalau user masih lapor HP-nya nyangkut versi lama, kemungkinan besar user perlu **uninstall total PWA-nya + clear semua site data Safari/Chrome buat browser tab biasa** baru buka lagi.
-3. Kartu notif §25A cuma trigger buat status persis `"Keluar Beroperasi"` (bukan "Masuk Bengkel/Service") — kalau user ternyata mau kendaraan Service juga dapat kartu serupa, gampang ditambah (lihat §25E).
-4. Rekonsiliasi data lama `master_kendaraan.unit_bisnis` yang typo (§21A) — gak urgent.
-5. `DashboardOBPage.tsx` (`/dashboard/ob`) masih punya bug 404 — poin lama dari §20D, belum berubah.
-6. Poin lama dari §17/§18/§19/§20D lainnya yang belum berubah — lihat §19D/§20F.
+### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-Detail teknis lengkap tiap batch ada di section masing-masing: **§21**, **§22**, **§23**, **§24**, **§25**, **§26**, **§27**. Open questions lama yang masih nunggu (belum berubah): lihat §6.
+1. **Kalau service account JSON sudah ada tapi migrasi+deploy §28 belum dieksekusi** — ini prioritas #1 mutlak, ikuti §28G langkah 1-6 PERSIS URUTANNYA (jangan deploy rules sebelum migrasi user selesai, nanti semua orang termasuk Admin GA ke-lock out dari `users_master`).
+2. Kalau §28 sudah live & dites aman — baru lanjut ke 3 fitur besar yang ditunda: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan, absensi check-in/out (lihat penutup §28G untuk konteks kenapa ditunda).
+3. Temuan audit §28A poin 5 yang belum dieksekusi (bukan blocker, tapi baiknya dibereskan): cabut `NEXT_PUBLIC_FONNTE_TOKEN` lama, `npm audit fix` dependency rentan, cek batasan Cloudinary upload preset.
+4. **§26A (fix Safari) & §26B (fix email HTML mentah, BUTUH AKSI MANUAL user di dashboard EmailJS) BELUM dikonfirmasi user** — masih menggantung dari sesi sebelumnya, cek kalau masih ada laporan.
+5. Poin-poin lama dari §17-§25 yang belum berubah — lihat §19D/§20F/§21A/§25E/§26E/§27E. (Catatan: poin lama "`DashboardOBPage.tsx` masih bug 404" dari §20D **SUDAH DIPERBAIKI** di §28E, sekalian dengan 3 file admin lain yang ternyata punya bug sama.)
+
+Detail teknis lengkap sesi hari ini: **§28**. Riwayat sesi 21-27 (fitur/bug, bukan keamanan): lihat ringkasan lama di git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
 ---
 
@@ -1443,3 +1438,76 @@ Ikuti [[sibm_deploy_workflow]] seperti biasa.
 1. Fix Safari (§26A) & fix email HTML mentah (§26B, BUTUH AKSI MANUAL user di dashboard EmailJS) MASIH BELUM dikonfirmasi user — ini prioritas paling atas buat sesi depan.
 2. Kalau mau pastikan script reminder beneran jalan tanpa error runtime (bukan cuma syntax-check), bisa trigger manual lewat tab Actions GitHub → pilih salah satu dari 4 workflow → "Run workflow".
 3. Poin-poin lama dari §19/§20D/§21A/§25E yang belum berubah.
+
+---
+
+## 28. Audit Keamanan Menyeluruh + Migrasi Firebase Authentication + Firestore Rules + 3 Perbaikan Cepat + Rapihkan 13 Halaman Auth Guard (5 September 2026)
+
+Konteks: user minta "lakukan pengecekan dulu pada aplikasi saya ini, lakukan testing kemanan dan lainnya" sebagai sesi baru terpisah dari §21-§27 (fokus fitur/bug), murni fokus keamanan + kualitas jangka panjang buat dipakai tim. Setelah audit awal, user juga sekalian titip 6 rencana fitur baru (poin/gamifikasi, survei kepuasaan, absensi, checklist 3x/hari, hapus by-pass QR APAR, hapus scan QR patroli) — disepakati 3 yang independen/kecil dikerjakan sekalian, 3 yang besar (poin, survei, absensi) ditunda karena butuh desain skema lebih dulu (fondasi Auth+Rules sengaja disiapkan supaya 3 fitur itu tinggal nambah collection baru nanti). Di akhir, user minta "rapihkan sekalian" (13 halaman lain yang masih pola akses lama) + commit/merge/deploy.
+
+### 28A. Temuan Audit Keamanan (kritis)
+
+1. **Tidak ada Firebase Authentication SAMA SEKALI** — login (`src/app/page.tsx` lama) cuma query `users_master` lalu `password !== uData.password` di JavaScript client.
+2. **Password karyawan disimpan PLAINTEXT** di Firestore, bisa dilihat admin apa adanya lewat form edit `admin/users/page.tsx`.
+3. **Tidak ada `firestore.rules` di repo/project sama sekali** — karena login butuh query Firestore SEBELUM ada sesi auth apa pun, rules yang berlaku kemungkinan besar mengizinkan baca/tulis tanpa autentikasi sama sekali (dikonfirmasi tidak langsung lewat memori sesi lain: `sibm_no_staging_env` — "Firestore security rules apparently allow open client writes/deletes since the app has no Firebase Auth session"). Artinya siapa pun yang tahu config Firebase publik (selalu terlihat di source JS) berpotensi mengambil/mengubah SELURUH database termasuk password, tanpa buka aplikasinya sama sekali.
+4. Kontrol akses role/admin (`useAuthGuard.ts` & 13 halaman lain yang gak lewat hook ini) 100% berbasis `localStorage` yang bisa diedit bebas lewat DevTools — cuma "aman" kalau Firestore Rules sungguhan menahan di level database, yang sebelumnya TIDAK terjadi.
+5. Temuan tambahan (belum dieksekusi sesi ini, di luar scope diminta): `NEXT_PUBLIC_FONNTE_TOKEN` di `.env.local` sempat pakai prefix publik (untungnya fitur WA sudah dihapus total §26-§27, tapi token lama sebaiknya dicabut); dependency rentan (`npm audit`: `xlsx` prototype-pollution/ReDoS tanpa fix resmi, `sharp` high-severity ada fix, chain `next-pwa`→`workbox-build` moderate); Cloudinary unsigned upload preset belum dicek batasannya di dashboard.
+
+Live intrusion test (query langsung ke Firestore project asli lewat REST API) SENGAJA TIDAK dijalankan tanpa izin eksplisit — diblokir classifier permission, dan memang bukan langkah yang tepat diambil sepihak. Semua temuan di atas murni dari code-level analysis.
+
+### 28B. Migrasi ke Firebase Authentication
+
+- **`scripts/migrate-users-to-auth.mjs`** (BARU) — script migrasi SATU KALI (bukan cron), pola sama seperti `apar-reminder.mjs` (Admin SDK + `FIREBASE_SERVICE_ACCOUNT_BASE64`). Untuk tiap dokumen lama `users_master` (auto-ID): bikin akun Firebase Auth (`auth.createUser`, password lama dipakai apa adanya — TIDAK ada reset paksa, dikonfirmasi user), tulis ulang dokumen profil dengan ID = Firebase Auth UID (field `password` dihapus total), hapus dokumen lama. Idempotent (skip user yang emailnya sudah ada di Auth).
+- **`src/app/page.tsx`** — `handleLogin` diganti total: `signInWithEmailAndPassword` (bukan compare manual), profil diambil dari `users_master/{uid}` pakai `getDoc`. Error Firebase Auth (`auth/wrong-password`, `auth/user-not-found`, `auth/too-many-requests`, dll) dipetakan ke toast Indonesia yang sudah ada.
+- **`src/hooks/useAuthGuard.ts`** — tambah `onAuthStateChanged` sebagai pengecekan WAJIB sebelum mempercayai `localStorage`: kalau tidak ada sesi Firebase Auth aktif, langsung dianggap belum login apa pun isi localStorage-nya. `logout()` sekarang juga `signOut(auth)`.
+- **`src/lib/firebase.ts`** — tambah `getSecondaryAuth()`: instance Auth KEDUA (named app terpisah) khusus dipakai `admin/users/page.tsx` saat bikin akun baru, supaya `createUserWithEmailAndPassword` tidak menggantikan sesi login Admin yang sedang aktif (perilaku default Firebase Auth SDK kalau pakai instance utama).
+- **`src/app/admin/users/page.tsx`** — tambah user baru lewat `getSecondaryAuth()` + `setDoc(users_master/{uid})` (bukan `addDoc`). Edit user: field password DIHAPUS TOTAL dari form (admin sudah tidak bisa lihat/set password orang lain sama sekali — ini sendiri perbaikan keamanan), diganti tombol **"Reset Password"** → `sendPasswordResetEmail`. Field email dikunci `disabled` saat edit (ganti email butuh Admin SDK, di luar kemampuan client SDK — mencegah data users_master & Auth jadi tidak sinkron). Hapus user: tetap `deleteDoc` profil (cukup untuk mencabut SEMUA akses karena rules butuh dokumen profil untuk resolve role — akun Auth jadi "yatim" tapi tanpa profil = tanpa izin apa pun, tidak berbahaya).
+
+### 28C. Firestore Security Rules
+
+**`firestore.rules`** (BARU, root) — helper `isSignedIn()`/`hasProfile()`/`myProfile()`/`isAdmin()` (substring "admin" case-insensitive, samakan `isAdministrator()` di `useAuthGuard.ts`)/`myDept()`. Mencakup semua ~36 collection yang dipakai client (hasil grep menyeluruh `collection(db,"...")` + `doc(db,"...")` di seluruh `src/`):
+- `users_master`: read hanya dokumen sendiri atau admin; write admin only.
+- `apar_units`: **read: `if true`** (SENGAJA public — dipakai `/qr-apar` halaman tanpa login, discan dari QR fisik di lokasi); write dibatasi admin/Security.
+- Data master/referensi (`master_atk`, `master_kendaraan`, `employees_directory`, `sop_documents`, `security_magang_directory`, `settings`, `ob_settings`): read signed-in, write admin only.
+- ~24 collection transaksional (`helpdesk_tickets`, `ob_checklists`, `security_patrols`, `packages`, dll): create+read signed-in, update/delete admin only — baseline v1 yang mengubah "terbuka untuk seluruh internet" jadi "hanya karyawan yang login".
+- Deny-by-default (`match /{document=**} { allow read, write: if false; }`) untuk collection yang belum eksplisit ditulis (termasuk collection server-only seperti `fcm_tokens`/`notifikasi_apar`/`reminder_*_log` yang cuma disentuh Admin SDK di script — Admin SDK selalu bypass rules, jadi aman).
+- Komentar TODO ditinggal untuk 3 fitur mendatang (`points_ledger`, `attendance`, `survey_responses`) — didesain terpisah, `survey_responses` khususnya butuh pola akses beda (link email tanpa login).
+- `firebase.json` diupdate: `"firestore.rules"` ditambahkan ke config `firestore` (sebelumnya cuma `indexes`).
+
+### 28D. 3 Perbaikan Cepat (dikonfirmasi lewat AskUserQuestion)
+
+1. **Inspeksi APAR** (`InspeksiAparPage.tsx`): tombol "By-pass QR (QR Rusak/Tidak Terbaca)" DIHAPUS total (`bukaFormLangsung` ikut dihapus, tidak dipakai tempat lain) — sekarang wajib scan QR asli.
+2. **Patroli Security** (`PatroliSecurityPage.tsx`): langkah scan QR dihapus total — tap titik di daftar langsung buka kamera (`bukaKamera`), lewat modal kecil pilih "Kondisi Titik" dulu (Aman Terkendali/Ada Temuan/dll — dipertahankan, cuma bagian QR-nya yang hilang). `Html5QrcodeScanner` & state `scanTarget` terkait scanner dihapus.
+3. **Checklist OB** (`ChecklistOBPage.tsx` + helper baru `sesiOBSekarang()`/`JENDELA_SESI_OB` di `src/lib/shift.ts`): dibatasi ke 3 jendela waktu/hari — Pagi 07:00-10:00, Siang 11:30-14:30, Sore 14:30-17:30 WITA (dipusatkan di sekitar jam reminder FCM yang sudah ada, `.github/workflows/fcm-reminder.yml`). Submit di luar semua jendela ditolak; submit 2x di jendela yang sama untuk area yang sama juga ditolak. Field `sesi` ditambahkan ke dokumen `ob_checklists`. Indikator status 3 sesi (✅/🕒/⏳) ditampilkan di form.
+
+### 28E. Rapihkan 13 Halaman ke `useAuthGuard` (bukan lagi cek `localStorage` manual per-halaman)
+
+File: `admin/users/page.tsx`, `admin/karyawan/page.tsx`, `admin/kendaraan/page.tsx`, `admin/monitor-security/page.tsx`, `admin/monitor-ob/page.tsx`, `admin/helpdesk/page.tsx`, `admin/page.tsx`, `DashboardQHSEPage.tsx`, `QhseSboPage.tsx`, `StockOpnamePage.tsx`, `DeepCleaningPage.tsx`, `PlottingOBPage.tsx`, `DashboardOBPage.tsx`. Semua diganti pola seragam: `const { session, isReady } = useAuthGuard({ roles/depts/redirectTo/deniedMessage })`, listener Firestore digerbangi `if (!isReady || !session) return;`, `adminName`/`picName` di-derive dari `session.nama` (bukan `useState` terpisah lagi). Efek sampingnya: setiap halaman sekarang otomatis ikut cek sesi Firebase Auth sungguhan (§28B), bukan cuma `localStorage`.
+
+Sekalian ketemu & dibenerin 2 bug lama di tengah proses ini:
+- **`DeepCleaningPage.tsx`** — cek akses lama literally cek `nama.includes("hilal")` (bug yang sama persis dengan yang disebut sudah "sempat" difix di komentar `useAuthGuard.ts`, ternyata masih hidup di file lain). Diganti `roles:["Koordinator"], depts:["OB & CS"]`.
+- **Bug 404 `/dashboard`** — `DashboardOBPage.tsx`, `admin/karyawan/page.tsx`, `admin/kendaraan/page.tsx`, `admin/monitor-ob/page.tsx` semuanya redirect ke `/dashboard` kalau akses ditolak, padahal route itu **tidak punya `page.tsx` fisik** (404, static export) — poin lama yang sempat dicatat di §20D untuk `DashboardOBPage.tsx` tapi ternyata menyebar ke 3 file admin lain juga. Semua diganti redirect ke `/` (halaman login asli).
+- **`DashboardOBPage.tsx`** sebelumnya juga TIDAK PUNYA pembatasan dept sama sekali (staf dept manapun yang login bisa buka `/dashboard/ob` dan lihat semua data OB) — ditambahkan `depts:["OB & CS"]`.
+- **`StockOpnamePage.tsx`** — dipersempit dari "role Koordinator dept APAPUN boleh masuk" jadi `depts:["OB & CS"]` saja (Administrator tetap bisa lewat `adminBypass`) — menutup celah "Koordinator dept lain bisa akses stok OB", kemungkinan oversight lama bukan disengaja.
+
+### 28F. Verifikasi
+
+- `npm run build`: sukses, 0 error, semua 43 route ke-generate (baik sebelum maupun sesudah §28E).
+- `npx eslint .`: 0 error konsisten di setiap tahap (0 error sebelum §28A-D, 0 error sesudah §28B-D, 0 error sesudah §28E) — 94-102 warning semuanya diverifikasi manual pre-existing lewat `git diff` per file, TIDAK ada warning baru dari perubahan sesi ini (2 warning baru sempat muncul di tengah proses lalu langsung difix: `DashboardOBPage.tsx` missing-dep `picName`, `PlottingOBPage.tsx` eslint-disable jadi perlu lagi setelah dep array diisi).
+- **BELUM ditest login end-to-end di browser** (butuh migrasi user beneran jalan dulu — lihat §28G) dan **BELUM di-deploy**.
+
+### 28G. Status: BELUM di-deploy — terhambat akses project Firebase
+
+Akun Firebase CLI yang aktif di mesin ini (`cctv.samudera@gmail.com`) **tidak punya akses ke project `sibm-app`** (dicoba `firebase deploy --only firestore:rules` → `403 The caller does not have permission`; `projects:list` cuma nunjukin 3 project lain yang tidak terkait). Ditanya ke user lewat AskUserQuestion — user pilih kasih **service account JSON** (Firebase Console → Project Settings → Service Accounts → Generate new private key), untuk dipakai SEKALIGUS menjalankan `scripts/migrate-users-to-auth.mjs` DAN deploy `firestore:rules`+`hosting`.
+
+**Yang perlu dilanjutkan begitu service account tersedia (urutan wajib, JANGAN dibalik):**
+1. `node scripts/migrate-users-to-auth.mjs` — migrasi semua akun lama ke Firebase Auth (password lama tetap dipakai, tidak ada gangguan tim).
+2. Test login manual (`npm run dev`) pakai minimal 1 akun tiap departemen — pastikan tetap bisa masuk seperti biasa DAN akses ditolak dengan benar untuk halaman yang bukan haknya.
+3. `firebase deploy --only firestore:rules` — WAJIB SETELAH migrasi (kalau rules dideploy duluan sebelum ada user yang uid-nya cocok, bahkan Admin GA sendiri bisa ke-lock out dari `users_master`).
+4. `npm run build` + `firebase deploy --only hosting` (ikuti [[sibm_deploy_workflow]]).
+5. Commit ke `dev`, fast-forward `main`, commit artifact build/deploy — ikuti urutan persis di [[sibm_deploy_workflow]].
+6. Setelah live, verifikasi tambahan yang cuma bisa dilakukan di production sungguhan: coba akses Firestore tanpa login (harus `PERMISSION_DENIED`), coba `localStorage.pic_role="Administrator"` tanpa login sungguhan di DevTools (harus tetap redirect).
+
+**Belum dikerjakan sesi ini (di luar scope diminta, dicatat sebagai temuan audit §28A poin 5):** cabut `NEXT_PUBLIC_FONNTE_TOKEN` lama, `npm audit fix` untuk dependency rentan, cek batasan Cloudinary upload preset di dashboard.
+
+**Ditunda sengaja** (butuh detail desain lebih lanjut dari user, fondasi §28B/§28C sudah disiapkan supaya tinggal nambah collection baru): sistem poin/gamifikasi per karyawan, survei kepuasaan pelanggan per laporan (kemungkinan token link email tanpa login), fitur absensi check-in/out.

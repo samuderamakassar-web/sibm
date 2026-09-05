@@ -7,7 +7,7 @@ import { db } from "../../../lib/firebase";
 import { kirimEmail } from "../../../lib/notify";
 import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { useConfirm } from "../../../components/ui/ConfirmProvider";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import Modal from "../../../components/ui/Modal";
@@ -53,8 +53,11 @@ const STATUS_TONE: Record<string, "warning" | "info" | "success"> = {
 export default function AdminHelpdeskPage() {
   const router = useRouter();
   const showToast = useToast();
-  const confirm = useConfirm();
-  const [adminName, setAdminName] = useState("Admin GA");
+  const { session, isReady: isAuthReady } = useAuthGuard({
+    depts: ["Admin GA", "Management"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
+  });
   const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
   const [isReady, setIsReady] = useState(false);
   const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
@@ -73,17 +76,7 @@ export default function AdminHelpdeskPage() {
   const [filterTahun, setFilterTahun] = useState<string>("SEMUA");
 
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const dept = localStorage.getItem("pic_dept");
-    const nama = localStorage.getItem("pic_nama");
-
-    if (!role || (dept !== "Admin GA" && dept !== "Management")) {
-      showToast("Akses Ditolak! Halaman ini khusus Admin GA.", "error");
-      router.push("/");
-      return;
-    }
-
-    setTimeout(() => setAdminName(nama || "Admin GA"), 0);
+    if (!isAuthReady || !session) return;
 
     const q = query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -101,7 +94,7 @@ export default function AdminHelpdeskPage() {
       unsubscribe();
       unsubscribeKontak();
     };
-  }, [router]);
+  }, [isAuthReady, session]);
 
   const formatJam = (ts: Timestamp | null | undefined) => {
     if (!ts) return "-";
@@ -220,7 +213,8 @@ export default function AdminHelpdeskPage() {
     return matchStatus && matchBulan && matchTahun;
   });
 
-  if (!isReady) return null;
+  if (!isAuthReady || !session || !isReady) return null;
+  const adminName = session.nama || "Admin GA";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

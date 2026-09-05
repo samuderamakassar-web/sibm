@@ -1,0 +1,140 @@
+rules_version = '2';
+
+// ============================================================================
+// Firestore Security Rules -- Portal SIBM
+// ----------------------------------------------------------------------------
+// Sebelum file ini ada, TIDAK ADA rules yang di-version-control untuk project
+// ini sama sekali. Aplikasi juga tidak pernah pakai Firebase Authentication
+// (login lama cuma query Firestore + compare password di client) -- artinya
+// siapa pun yang tahu config Firebase publik (selalu terlihat di source JS,
+// itu wajar) bisa baca/tulis SELURUH database tanpa rules eksplisit.
+//
+// Sekarang login sudah pakai Firebase Authentication sungguhan (lihat
+// src/app/page.tsx, scripts/migrate-users-to-auth.mjs). Rules di bawah
+// menegakkan itu di level database: hampir semua operasi butuh
+// `request.auth != null`, dan role/departemen staf yang login diambil dari
+// dokumen profilnya sendiri di `users_master/{uid}` (BUKAN dari localStorage,
+// yang bisa diedit bebas lewat DevTools).
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --------------------------------------------------------------------
+    // HELPER FUNCTIONS
+    // --------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasProfile() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users_master/$(request.auth.uid));
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users_master/$(request.auth.uid)).data;
+    }
+
+    // Substring case-insensitive, samakan dengan isAdministrator() di
+    // src/hooks/useAuthGuard.ts -- "Administrator" maupun "Admin" lolos.
+    function isAdmin() {
+      return hasProfile() && myProfile().role.lower().matches('.*admin.*');
+    }
+
+    function myDept() {
+      return hasProfile() ? myProfile().departemen : '';
+    }
+
+    // --------------------------------------------------------------------
+    // users_master -- profil + role staf. Paling sensitif: JANGAN pernah
+    // buat ini bisa dibaca semua orang (dulu ini yang bocor password
+    // plaintext ke siapa pun yang query langsung ke Firestore).
+    // --------------------------------------------------------------------
+    match /users_master/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // --------------------------------------------------------------------
+    // apar_units -- SENGAJA public read: dipakai halaman tanpa login
+    // /qr-apar (src/app/qr-apar/page.tsx) yang discan dari QR fisik yang
+    // ditempel di lokasi APAR, oleh siapa pun (bukan cuma karyawan login).
+    // Data di sini tidak sensitif (cuma info unit APAR + kondisi terakhir).
+    // --------------------------------------------------------------------
+    match /apar_units/{unitId} {
+      allow read: if true;
+      allow write: if isSignedIn() && (isAdmin() || myDept() == 'Security');
+    }
+
+    // --------------------------------------------------------------------
+    // Data master/referensi: dibaca semua staf yang login, cuma diubah Admin.
+    // --------------------------------------------------------------------
+    match /{col}/{docId} {
+      allow read: if col in [
+          'master_atk', 'master_kendaraan', 'employees_directory',
+          'sop_documents', 'security_magang_directory',
+          'settings', 'ob_settings'
+        ] && isSignedIn();
+      allow write: if col in [
+          'master_atk', 'master_kendaraan', 'employees_directory',
+          'sop_documents', 'security_magang_directory',
+          'settings', 'ob_settings'
+        ] && isAdmin();
+    }
+
+    // --------------------------------------------------------------------
+    // Collection transaksional: laporan/tiket/log yang dibuat staf sehari-
+    // hari. create + read butuh login (dashboard admin & beberapa listener,
+    // mis. "areaBersamaSelesai" di ChecklistOBPage, memang perlu baca
+    // dokumen yang dibuat staf lain). update/delete dibatasi Admin untuk
+    // v1 ini -- staf tidak mengubah ulang laporan yang sudah terkirim.
+    //
+    // Ini baseline yang mengubah "terbuka untuk seluruh internet" jadi
+    // "hanya karyawan yang login" -- perbaikan drastis dibanding sebelum
+    // ada rules ini. Aturan lebih granular per-collection (mis. staf boleh
+    // update tiket miliknya sendiri) bisa jadi iterasi berikutnya.
+    // --------------------------------------------------------------------
+    match /{col}/{docId} {
+      allow create, read: if col in [
+          'helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests',
+          'ga_overtime_requests', 'security_visitor_logs', 'packages',
+          'operational_vehicle_logs', 'driver_status_logs', 'ob_checklists',
+          'ob_stock', 'ob_stock_logs', 'daily_plots', 'inspeksi_fasilitas',
+          'apar_inspections', 'security_patrols', 'kendaraan_odometer_logs',
+          'kendaraan_service_logs', 'kendaraan_inspeksi_logs',
+          'kendaraan_uji_emisi', 'deep_cleaning_tasks', 'notifikasi_patroli',
+          'notifikasi_kendaraan', 'notifikasi_checklist_ob',
+          'security_monthly_schedules', 'fcm_tokens'
+        ] && isSignedIn();
+      allow update, delete: if col in [
+          'helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests',
+          'ga_overtime_requests', 'security_visitor_logs', 'packages',
+          'operational_vehicle_logs', 'driver_status_logs', 'ob_checklists',
+          'ob_stock', 'ob_stock_logs', 'daily_plots', 'inspeksi_fasilitas',
+          'apar_inspections', 'security_patrols', 'kendaraan_odometer_logs',
+          'kendaraan_service_logs', 'kendaraan_inspeksi_logs',
+          'kendaraan_uji_emisi', 'deep_cleaning_tasks', 'notifikasi_patroli',
+          'notifikasi_kendaraan', 'notifikasi_checklist_ob',
+          'security_monthly_schedules', 'fcm_tokens'
+        ] && isAdmin();
+    }
+
+    // --------------------------------------------------------------------
+    // TODO (fitur mendatang, BELUM diimplementasikan -- lihat rencana user):
+    //   - points_ledger / user_points  : sistem poin per karyawan
+    //   - attendance                  : absensi check-in/out
+    //   - survey_responses            : survei kepuasaan per laporan,
+    //                                    kemungkinan ditulis lewat link
+    //                                    email tanpa login -> butuh pola
+    //                                    rules berbeda (token/ID acak, bukan
+    //                                    isSignedIn()), didesain terpisah.
+    // --------------------------------------------------------------------
+
+    // Deny-by-default: collection baru yang belum ditambahkan secara
+    // eksplisit di atas otomatis tertutup, bukan otomatis terbuka.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

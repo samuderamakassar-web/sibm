@@ -10,6 +10,7 @@ import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import Input from "../../../components/ui/Input";
@@ -408,7 +409,12 @@ export default function ManajemenKendaraanPage() {
   const showToast = useToast();
   const confirm = useConfirm();
 
-  const [adminName, setAdminName] = useState("");
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin", "Koordinator"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus untuk Administrator.",
+  });
+
   const [pageTab, setPageTab] = useState<"DAFTAR" | "RIWAYAT">("DAFTAR");
   const [kendaraanList, setKendaraanList] = useState<Kendaraan[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -447,16 +453,7 @@ export default function ManajemenKendaraanPage() {
   const platKeyRiwayat = riwayatEffectiveIds.map((id) => kendaraanList.find((k) => k.id === id)?.plat_nomor || "").join("|");
 
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-
-    if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      showToast("Akses Ditolak! Halaman ini khusus untuk Administrator.", "error");
-      router.push("/dashboard");
-      return;
-    }
-
-    setTimeout(() => setAdminName(nama || "Admin"), 0);
+    if (!isReady || !session) return;
 
     const ref = collection(db, "master_kendaraan");
     const q = query(ref, orderBy("kendaraan", "asc"));
@@ -477,8 +474,7 @@ export default function ManajemenKendaraanPage() {
     });
 
     return () => { unsubscribe(); unsubEmployees(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [isReady, session]);
 
   // TARIK RIWAYAT UNTUK SETIAP KENDARAAN YANG DIPILIH (bisa lebih dari 1)
   useEffect(() => {
@@ -899,6 +895,9 @@ export default function ManajemenKendaraanPage() {
     if (riwayatEntries.length === 0) return showToast("Tidak ada data pada filter ini untuk diexport.", "warning");
     window.print();
   };
+
+  if (!isReady || !session) return null;
+  const adminName = session.nama || "Admin";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

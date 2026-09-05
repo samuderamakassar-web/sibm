@@ -6,6 +6,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, order
 import { db } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import Input from "../../../components/ui/Input";
@@ -43,7 +44,12 @@ export default function ManajemenKaryawanPage() {
   const showToast = useToast();
   const confirm = useConfirm();
 
-  const [adminName, setAdminName] = useState("");
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin", "Koordinator"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus untuk Administrator.",
+  });
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -58,16 +64,7 @@ export default function ManajemenKaryawanPage() {
   });
 
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-
-    if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      showToast("Akses Ditolak! Halaman ini khusus untuk Administrator.", "error");
-      router.push("/dashboard");
-      return;
-    }
-
-    setTimeout(() => setAdminName(nama || "Admin"), 0);
+    if (!isReady || !session) return;
 
     const empRef = collection(db, "employees_directory");
     const q = query(empRef, orderBy("nama", "asc"));
@@ -81,7 +78,7 @@ export default function ManajemenKaryawanPage() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [isReady, session]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -214,6 +211,9 @@ export default function ManajemenKaryawanPage() {
       (emp.no_wa || "").includes(searchTerm) ||
       (emp.email || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (!isReady || !session) return null;
+  const adminName = session.nama || "Admin";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

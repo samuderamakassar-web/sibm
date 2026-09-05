@@ -32,9 +32,6 @@ const IconX = ({ size = 14, color = "currentColor" }: IconProps) => (
 const IconTarget = ({ size = 17, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></svg>
 );
-const IconSettings = ({ size = 14, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
-);
 const IconInboxEmpty = ({ size = 30, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
 );
@@ -142,15 +139,6 @@ export default function InspeksiAparPage() {
     return () => { scanner.clear().catch(e => console.error(e)); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanTarget]);
-
-  const bukaFormLangsung = (unit: AparUnit) => {
-    setKondisiTabung(KONDISI_TABUNG_OPSI[0]);
-    setTekanan(TEKANAN_OPSI[0]);
-    setSegelUtuh(true);
-    setCatatan("");
-    setFormTarget(unit);
-    setScanTarget(null);
-  };
 
   const handleSubmitInspeksi = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -335,9 +323,6 @@ export default function InspeksiAparPage() {
             <div style={{ width: "100%", maxWidth: "400px", background: "white", padding: "10px", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
               <div id="reader-apar" style={{ width: "100%" }}></div>
             </div>
-            <button onClick={() => bukaFormLangsung(scanTarget)} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "rgba(255,255,255,0.1)", color: "white", border: "1px dashed rgba(255,255,255,0.3)", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
-              <IconSettings size={14} /> By-pass QR (QR Rusak / Tidak Terbaca)
-            </button>
           </div>
         </div>
       )}

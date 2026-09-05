@@ -12,6 +12,7 @@ import Textarea from "@/components/ui/Textarea";
 import Badge from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 interface DeepCleaningTask {
   id: string;
@@ -49,7 +50,12 @@ export default function DeepCleaningPage() {
   const showToast = useToast();
   const confirm = useConfirm();
 
-  const [picName, setPicName] = useState("");
+  const { session, isReady: isAuthReady } = useAuthGuard({
+    roles: ["Koordinator"],
+    depts: ["OB & CS"],
+    redirectTo: "/dashboard/ob",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Koordinator OB & CS.",
+  });
   const [isReady, setIsReady] = useState(false);
   const [tasks, setTasks] = useState<DeepCleaningTask[]>([]);
 
@@ -61,43 +67,22 @@ export default function DeepCleaningPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const siapkanHalaman = async () => {
-      const nama = localStorage.getItem("pic_nama") || "";
-      const role = (localStorage.getItem("pic_role") || "").toLowerCase();
-      const namaLower = nama.toLowerCase();
+    if (!isAuthReady || !session) return;
 
-      const isAuthorized =
-        namaLower.includes("hilal") ||
-        namaLower.includes("kord") ||
-        namaLower.includes("koordinator") ||
-        role.includes("admin") ||
-        role.includes("kord") ||
-        role.includes("koordinator");
+    const tasksRef = collection(db, "deep_cleaning_tasks");
+    const q = query(tasksRef, orderBy("tanggal", "desc"));
 
-      if (!isAuthorized) {
-        showToast("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.", "error");
-        setTimeout(() => router.push("/dashboard/ob"), 1200);
-        return;
-      }
-      setPicName(nama);
-
-      const tasksRef = collection(db, "deep_cleaning_tasks");
-      const q = query(tasksRef, orderBy("tanggal", "desc"));
-
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const taskList: DeepCleaningTask[] = [];
-        snapshot.forEach((docSnap) => {
-          taskList.push({ id: docSnap.id, ...docSnap.data() } as DeepCleaningTask);
-        });
-        setTasks(taskList);
-        setIsReady(true);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const taskList: DeepCleaningTask[] = [];
+      snapshot.forEach((docSnap) => {
+        taskList.push({ id: docSnap.id, ...docSnap.data() } as DeepCleaningTask);
       });
+      setTasks(taskList);
+      setIsReady(true);
+    });
 
-      return () => unsubscribe();
-    };
-
-    siapkanHalaman();
-  }, [router]);
+    return () => unsubscribe();
+  }, [isAuthReady, session]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -152,7 +137,8 @@ export default function DeepCleaningPage() {
     }
   };
 
-  if (!isReady) return null;
+  if (!isAuthReady || !session || !isReady) return null;
+  const picName = session.nama || "";
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

@@ -76,3 +76,33 @@ export function sesiMinimumTerpenuhi(sesiList: (string | undefined | null)[]): b
   const unik = new Set(sesiList.filter((s): s is string => !!s));
   return unik.size >= MINIMUM_SESI_PER_SHIFT;
 }
+
+/**
+ * ------------------------------------------------------------------
+ * SESI CHECKLIST OB & CS -- dipakai ChecklistOBPage supaya laporan
+ * kebersihan wajib dikirim 3x sehari (Pagi/Siang/Sore), bukan bebas
+ * kapan saja seperti sebelumnya (dikonfirmasi user: biar kelihatan
+ * dampak/perubahan sepanjang hari, bukan cuma 1x lalu dianggap selesai).
+ *
+ * Jendelanya SENGAJA dipusatkan di sekitar jam reminder FCM yang sudah
+ * ada (lihat .github/workflows/fcm-reminder.yml -- 08:30 / 13:00 / 16:00
+ * WITA), dikasih toleransi longgar di kedua sisi supaya staf tidak
+ * kejar-kejaran detik dengan jendela.
+ * ------------------------------------------------------------------
+ */
+export type SesiOB = "Pagi" | "Siang" | "Sore";
+
+export const JENDELA_SESI_OB: { sesi: SesiOB; label: string }[] = [
+  { sesi: "Pagi", label: "07:00 - 10:00" },
+  { sesi: "Siang", label: "11:30 - 14:30" },
+  { sesi: "Sore", label: "14:30 - 17:30" },
+];
+
+/** null kalau waktu sekarang di luar SEMUA jendela (submit harus dikunci). */
+export function sesiOBSekarang(now: Date): SesiOB | null {
+  const menit = now.getHours() * 60 + now.getMinutes();
+  if (menit >= 7 * 60 && menit < 10 * 60) return "Pagi";
+  if (menit >= 11 * 60 + 30 && menit < 14 * 60 + 30) return "Siang";
+  if (menit >= 14 * 60 + 30 && menit < 17 * 60 + 30) return "Sore";
+  return null;
+}

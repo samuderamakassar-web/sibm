@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
-import { useToast } from "../../../components/ui/ToastProvider";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -167,9 +167,13 @@ function getTahunBulanInspeksi(item: InspeksiLog): { tahun: number; bulan: numbe
 
 export default function MonitorOBPage() {
   const router = useRouter();
-  const showToast = useToast();
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin", "Koordinator"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Administrator.",
+  });
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [adminName, setAdminName] = useState("Admin");
   const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "INSPEKSI" | "PLOT">("CHECKLIST");
   // Filter Bulan & Tahun Log Pembersihan (dipisah jadi 2 dropdown independen)
   const [filterBulanChecklist, setFilterBulanChecklist] = useState<string>("SEMUA");
@@ -195,15 +199,7 @@ export default function MonitorOBPage() {
   const [waktuCetak, setWaktuCetak] = useState("");
 
   useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-
-    if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      showToast("Akses Ditolak! Halaman ini khusus Administrator.", "error");
-      setTimeout(() => router.push("/dashboard"), 1200);
-      return;
-    }
-    setTimeout(() => setAdminName(nama || "Admin"), 0);
+    if (!isReady || !session) return;
 
     // Log checklist harian TIDAK dibatasi limit() — ini sumber data audit, sengaja
     // gak dipotong biar filter "Semua Bulan" & export PDF beneran lengkap.
@@ -243,7 +239,7 @@ export default function MonitorOBPage() {
     return () => {
       unsubChecklist(); unsubStock(); unsubStockLog(); unsubPlot(); unsubInspeksi();
     };
-  }, [router]);
+  }, [isReady, session]);
 
   const formatWaktu = (timestamp: Timestamp | null) => {
     if (!timestamp) return "-";
@@ -294,6 +290,9 @@ export default function MonitorOBPage() {
     setWaktuCetak(new Date().toLocaleString("id-ID"));
     setTimeout(() => window.print(), 0);
   };
+
+  if (!isReady || !session) return null;
+  const adminName = session.nama || "Admin";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

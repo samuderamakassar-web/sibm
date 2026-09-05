@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, query, where, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useFcmSetup } from "@/hooks/useFcmSetup";
-import { logoutWithConfirm } from "@/hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard } from "@/hooks/useAuthGuard";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -100,8 +100,11 @@ export default function DashboardOBPage() {
   const confirm = useConfirm();
   const showToast = useToast();
   const todayISO = getTodayISOLocal();
-  const [picRole, setPicRole] = useState<string>("");
-  const [picName, setPicName] = useState<string>("");
+  const { session, isReady: isAuthReady } = useAuthGuard({
+    depts: ["OB & CS"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus tim OB & CS.",
+  });
 
   const [isReady, setIsReady] = useState<boolean>(false);
   const [assignedFloors, setAssignedFloors] = useState<string[]>([]);
@@ -118,27 +121,15 @@ export default function DashboardOBPage() {
     { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "", alasan: "" }
   ]);
 
-  // EFEK 1: Ambil Identitas
-  useEffect(() => {
-  const siapkanIdentitas = async () => {
-    const nama = localStorage.getItem("pic_nama");
-    const role = localStorage.getItem("pic_role") || "";
-    if (!nama) {
-      router.push("/dashboard");
-    } else {
-      setPicName(nama);
-      setPicRole(role);
-    }
-  };
-  siapkanIdentitas();
-}, [router]);
+  const picName = session?.nama || "";
+  const picRole = session?.role || "";
 
-// 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari localStorage
+// 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari sesi Firebase Auth
   useFcmSetup(picName, !!picName);
 
   // EFEK 2: Listener Data Real-time (Plotting, Stok, Deep Cleaning)
   useEffect(() => {
-    if (!picName) return;
+    if (!isAuthReady || !session) return;
 
     // A. Listener Plot Lantai
     const plotRef = doc(db, "daily_plots", todayISO);
@@ -188,7 +179,7 @@ export default function DashboardOBPage() {
       unsubStock();
       unsubDC();
     };
-  }, [picName, todayISO]);
+  }, [isAuthReady, session, picName, todayISO]);
 
   const handleKeluar = () => logoutWithConfirm(confirm, router);
 
@@ -260,7 +251,7 @@ export default function DashboardOBPage() {
 
   const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
 
-  if (!isReady) return null;
+  if (!isAuthReady || !session || !isReady) return null;
 
   return (
     <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>

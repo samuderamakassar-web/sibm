@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useConfirm } from "../ui/ConfirmProvider";
-import { logoutWithConfirm } from "../../hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -34,20 +33,11 @@ const IconCar = ({ size = 18, color = "currentColor" }: IconProps) => (
 export default function DashboardQHSEPage() {
   const router = useRouter();
   const confirm = useConfirm();
-  const [picName, setPicName] = useState("");
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-    const dept = localStorage.getItem("pic_dept");
-
-    if (!role || dept !== "QHSE") {
-      router.push("/");
-      return;
-    }
-    setTimeout(() => { setPicName(nama || "Staf QHSE"); setIsReady(true); }, 0);
-  }, [router]);
+  const { session, isReady } = useAuthGuard({
+    depts: ["QHSE"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus divisi QHSE.",
+  });
 
   const handleKeluar = () => logoutWithConfirm(confirm, router);
 
@@ -66,7 +56,8 @@ export default function DashboardQHSEPage() {
     accent: { bg: "#f5f3ff", color: "var(--accent)" },
   };
 
-  if (!isReady) return null;
+  if (!isReady || !session) return null;
+  const picName = session.nama || "Staf QHSE";
 
   return (
     <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>

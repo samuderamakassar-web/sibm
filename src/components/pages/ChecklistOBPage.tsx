@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
+import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/lib/shift";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -303,6 +304,8 @@ interface FotoPasangan {
 interface ChecklistLog {
   id: string;
   area: string;
+  tanggal?: string;
+  sesi?: SesiOB;
   pic_bertugas: string;
   waktu_selesai: Timestamp | null;
   detail_segmen: SegmentLog[];
@@ -530,6 +533,24 @@ export default function ChecklistOBPage() {
       return;
     }
 
+    // Wajib lapor 3x sehari dalam jendela waktu tertentu (Pagi/Siang/Sore), bukan bebas
+    // kapan saja -- biar keliatan dampak & perubahannya sepanjang hari (instruksi user).
+    const sesiSekarang = sesiOBSekarang(waktuWITASekarang());
+    if (!sesiSekarang) {
+      const daftarJam = JENDELA_SESI_OB.map(j => `${j.sesi} (${j.label})`).join(", ");
+      showToast(`Belum masuk jam laporan. Jendela laporan hari ini: ${daftarJam} WITA.`, "warning");
+      return;
+    }
+
+    const todayISO = getTodayISOLocal();
+    const sudahLaporSesiIni = riwayatKerja.some(
+      log => log.area === selectedArea && log.tanggal === todayISO && log.sesi === sesiSekarang
+    );
+    if (sudahLaporSesiIni) {
+      showToast(`Anda sudah lapor sesi ${sesiSekarang} untuk ${selectedArea} hari ini. Tunggu jendela sesi berikutnya.`, "info");
+      return;
+    }
+
     const daftarSegmen = getSegmenUntukArea(selectedArea);
     const semuaPertanyaan = daftarSegmen.flatMap(s => s.pertanyaan);
 
@@ -559,7 +580,8 @@ export default function ChecklistOBPage() {
       await addDoc(collection(db, "ob_checklists"), {
         pic_bertugas: picName,
         area: selectedArea,
-        tanggal: getTodayISOLocal(),
+        tanggal: todayISO,
+        sesi: sesiSekarang,
         waktu_selesai: serverTimestamp(),
         detail_segmen: detailSegmen,
         foto_bukti: fotoValid,
@@ -737,6 +759,25 @@ export default function ChecklistOBPage() {
                     <h2 style={{ margin: "5px 0 0 0", color: "var(--ink)", fontSize: "18px" }}>{selectedArea}</h2>
                   </div>
                   <button onClick={() => setStep(1)} style={{ background: "var(--bg)", border: "1px solid var(--line)", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)" }}>Ganti Area</button>
+                </div>
+
+                {/* STATUS 3 SESI HARI INI (Pagi/Siang/Sore) UNTUK AREA INI */}
+                <div style={{ display: "flex", gap: "8px", marginBottom: "25px", flexWrap: "wrap" }}>
+                  {JENDELA_SESI_OB.map(({ sesi, label }) => {
+                    const todayISO = getTodayISOLocal();
+                    const sudahLapor = riwayatKerja.some(log => log.area === selectedArea && log.tanggal === todayISO && log.sesi === sesi);
+                    const sesiAktif = sesiOBSekarang(waktuWITASekarang()) === sesi;
+                    return (
+                      <div key={sesi} style={{
+                        flex: "1 1 100px", padding: "8px 10px", borderRadius: "10px", textAlign: "center", fontSize: "11px", fontWeight: "bold",
+                        background: sudahLapor ? "var(--ok-50)" : (sesiAktif ? "var(--info-50)" : "var(--bg)"),
+                        color: sudahLapor ? "var(--ok)" : (sesiAktif ? "var(--info)" : "var(--muted)"),
+                        border: `1px solid ${sudahLapor ? "rgba(22,163,74,0.3)" : (sesiAktif ? "rgba(37,99,235,0.3)" : "var(--line)")}`,
+                      }}>
+                        {sudahLapor ? "✅" : sesiAktif ? "🕒" : "⏳"} {sesi} <span style={{ display: "block", fontWeight: "normal", opacity: 0.8 }}>{label}</span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* CHECKLIST PER SEGMENT */}

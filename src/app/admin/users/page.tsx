@@ -2,10 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { collection, onSnapshot, deleteDoc, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
+import { auth, db, getSecondaryAuth } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
 type IconProps = { size?: number; color?: string };
 const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -16,13 +18,12 @@ const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
 );
 
 interface UserData {
-  id: string;
+  id: string; // = Firebase Auth UID (lihat migrate-users-to-auth.mjs)
   nama: string;
   email: string;
   departemen: string;
   role: string;
   whatsapp?: string;
-  password?: string;
   foto_url?: string;
 }
 
@@ -46,7 +47,12 @@ export default function UserManagementPage() {
   const showToast = useToast();
   const confirm = useConfirm();
 
-  const [adminName, setAdminName] = useState("Admin");
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin", "Koordinator"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus untuk Administrator.",
+  });
+
   const [users, setUsers] = useState<UserData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -64,21 +70,6 @@ export default function UserManagementPage() {
     password: "",
     foto_url: ""
   });
-
-  // 1. Verifikasi Admin & Set Nama
-  useEffect(() => {
-    const role = localStorage.getItem("pic_role");
-    const nama = localStorage.getItem("pic_nama");
-
-    if (!role || (!role.includes("Admin") && !role.includes("Koordinator"))) {
-      showToast("Akses Ditolak! Halaman ini khusus untuk Administrator.", "error");
-      router.push("/");
-      return;
-    }
-
-    setTimeout(() => setAdminName(nama || "Admin"), 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
 
   // 2. Tarik Data Users dari Firestore
   useEffect(() => {
@@ -136,8 +127,8 @@ export default function UserManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nama.trim() || !formData.email.trim() || !formData.password.trim()) {
-      showToast("Nama, Email, dan Password wajib diisi!", "warning");
+    if (!formData.nama.trim() || !formData.email.trim() || (!isEditMode && !formData.password.trim())) {
+      showToast(isEditMode ? "Nama dan Email wajib diisi!" : "Nama, Email, dan Password wajib diisi!", "warning");
       return;
     }
     if (isUploadingFoto) {
@@ -153,7 +144,6 @@ export default function UserManagementPage() {
         departemen: formData.departemen,
         role: formData.role,
         whatsapp: formData.whatsapp,
-        password: formData.password,
         foto_url: formData.foto_url || ""
       };
 
@@ -162,7 +152,12 @@ export default function UserManagementPage() {
         await updateDoc(userRef, { ...userDataToSave, waktu_update: serverTimestamp() });
         showToast("Data pengguna berhasil diperbarui!", "success");
       } else {
-        await addDoc(collection(db, "users_master"), { ...userDataToSave, waktu_dibuat: serverTimestamp() });
+        // Bikin akun Firebase Auth lewat instance Auth KEDUA (lihat getSecondaryAuth di
+        // lib/firebase.ts) supaya sesi login Admin yang sedang aktif tidak ikut tergantikan.
+        const secondaryAuth = getSecondaryAuth();
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, userDataToSave.email, formData.password);
+        await signOut(secondaryAuth); // bersihkan sesi di instance kedua, tidak dipakai lagi
+        await setDoc(doc(db, "users_master", cred.user.uid), { ...userDataToSave, waktu_dibuat: serverTimestamp() });
         showToast("Pengguna baru berhasil ditambahkan!", "success");
       }
 
@@ -170,10 +165,35 @@ export default function UserManagementPage() {
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
-      console.error("Gagal menyimpan data:", error);
-      showToast("Terjadi kesalahan sistem saat menyimpan.", "error");
+      const code = (error as { code?: string })?.code;
+      if (code === "auth/email-already-in-use") {
+        showToast("Email ini sudah terdaftar sebagai akun login.", "error");
+      } else if (code === "auth/weak-password") {
+        showToast("Password terlalu pendek (minimal 6 karakter).", "error");
+      } else {
+        console.error("Gagal menyimpan data:", error);
+        showToast("Terjadi kesalahan sistem saat menyimpan.", "error");
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (user: UserData) => {
+    const yakin = await confirm({
+      title: "Kirim Link Reset Password",
+      message: `Kirim email reset password ke ${user.email}? ${user.nama} akan menerima link untuk membuat password baru.`,
+      confirmText: "Ya, Kirim",
+      variant: "danger"
+    });
+    if (!yakin) return;
+
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+      showToast(`Email reset password terkirim ke ${user.email}.`, "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Gagal mengirim email reset password.", "error");
     }
   };
 
@@ -186,7 +206,7 @@ export default function UserManagementPage() {
       departemen: user.departemen,
       role: user.role,
       whatsapp: user.whatsapp || "",
-      password: user.password || "",
+      password: "",
       foto_url: user.foto_url || ""
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -202,6 +222,10 @@ export default function UserManagementPage() {
     if (!yakin) return;
 
     try {
+      // Menghapus dokumen profil ini sudah cukup untuk mencabut SEMUA akses app (Firestore
+      // Rules butuh dokumen users_master/{uid} untuk resolve role) -- akun Firebase Auth-nya
+      // sendiri jadi "yatim" (tanpa profil = tanpa izin apa pun), tidak berbahaya. Kalau mau
+      // benar-benar dihapus dari Firebase Auth, perlu script Admin SDK terpisah (bukan dari sini).
       await deleteDoc(doc(db, "users_master", id));
       showToast(`Akses login ${nama} berhasil dihapus.`, "success");
     } catch (error) {
@@ -223,6 +247,9 @@ export default function UserManagementPage() {
     if (parts.length > 1) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.substring(0, 2).toUpperCase();
   };
+
+  if (!isReady || !session) return null;
+  const adminName = session.nama || "Admin";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
@@ -401,13 +428,19 @@ export default function UserManagementPage() {
               <div style={{ background: "var(--bg)", padding: "15px", borderRadius: "12px", border: "1px dashed var(--line)", width: "100%" }}>
                 <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--info)", marginBottom: "10px" }}>Akses Login Karyawan</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <input type="email" name="email" value={formData.email} onChange={handleInputChange} required placeholder="Email (contoh@sibm.com)" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", outline: "none" }} />
-                  <div style={{ position: "relative", width: "100%" }}>
-                    <input type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleInputChange} required placeholder="Password Default" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", outline: "none" }} />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: "12px" }}>
-                      {showPassword ? "🙈" : "👁️"}
-                    </button>
-                  </div>
+                  <input type="email" name="email" value={formData.email} onChange={handleInputChange} required disabled={isEditMode} placeholder="Email (contoh@sibm.com)" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", outline: "none", opacity: isEditMode ? 0.6 : 1, cursor: isEditMode ? "not-allowed" : "text" }} />
+                  {isEditMode ? (
+                    <div style={{ fontSize: "11px", color: "var(--muted)" }}>
+                      Email tidak bisa diubah dari sini (terhubung ke akun login). Untuk ganti password, pakai tombol &quot;Reset Password&quot; di daftar pengguna.
+                    </div>
+                  ) : (
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <input type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleInputChange} required placeholder="Password Default (min. 6 karakter)" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", outline: "none" }} />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: "12px" }}>
+                        {showPassword ? "🙈" : "👁️"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -478,7 +511,6 @@ export default function UserManagementPage() {
                             <div style={{ overflow: "hidden" }}>
                               <div style={{ fontWeight: "900", color: "var(--ink)", fontSize: "14px", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{user.nama}</div>
                               <div style={{ color: "var(--muted)", fontSize: "12px", marginTop: "2px", wordBreak: "break-all" }}>{user.email}</div>
-                              <div style={{ color: "var(--muted)", fontSize: "11px", marginTop: "4px", fontWeight: "bold" }}>Pass: {user.password ? "********" : "Tidak diatur"}</div>
                             </div>
                           </div>
                         </td>
@@ -500,6 +532,12 @@ export default function UserManagementPage() {
                               style={{ background: "var(--surface)", color: "var(--warn)", border: "1px solid var(--warn)", padding: "8px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
                             >
                               Edit
+                            </button>
+                            <button
+                              onClick={() => handleResetPassword(user)}
+                              style={{ background: "var(--surface)", color: "var(--info)", border: "1px solid var(--info)", padding: "8px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
+                            >
+                              Reset Password
                             </button>
                             <button
                               onClick={() => handleDelete(user.id, user.nama)}

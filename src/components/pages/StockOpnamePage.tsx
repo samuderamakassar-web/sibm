@@ -6,6 +6,7 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimest
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain (DashboardOBPage/ChecklistOBPage)
@@ -122,7 +123,11 @@ export default function StockOpnamePage() {
   const showToast = useToast();
   const confirm = useConfirm();
 
-  const [picName, setPicName] = useState("");
+  const { session, isReady: isAuthReady } = useAuthGuard({
+    depts: ["OB & CS"],
+    redirectTo: "/dashboard/ob",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus tim operasional OB & CS.",
+  });
   const [isReady, setIsReady] = useState(false);
 
   // Data States
@@ -138,33 +143,11 @@ export default function StockOpnamePage() {
   const picRef = useRef("");
 
   // ==========================================
-  // EFEK 1: Verifikasi Akses & Identitas
-  // ==========================================
-  useEffect(() => {
-    const siapkanIdentitas = async () => {
-      const nama = localStorage.getItem("pic_nama") || "";
-      const role = (localStorage.getItem("pic_role") || "").toLowerCase();
-      const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
-
-      const isAuthorized = role.includes("admin") || role.includes("koordinator") || dept.includes("ob & cs");
-
-      if (!isAuthorized || !nama) {
-        showToast("Akses Ditolak! Halaman ini khusus tim operasional OB & CS.", "error");
-        setTimeout(() => router.push("/dashboard/ob"), 1200);
-        return;
-      }
-
-      setPicName(nama);
-      picRef.current = nama;
-    };
-    siapkanIdentitas();
-  }, [router]);
-
-  // ==========================================
   // EFEK 2: Listener Stok & Riwayat (Real-time)
   // ==========================================
   useEffect(() => {
-    if (!picName) return;
+    if (!isAuthReady || !session) return;
+    picRef.current = session.nama;
 
     // A. Listener Stok Utama
     const stockRef = collection(db, "ob_stock");
@@ -191,7 +174,7 @@ export default function StockOpnamePage() {
       unsubscribeStock();
       unsubscribeLog();
     };
-  }, [picName]);
+  }, [isAuthReady, session]);
 
   // ==========================================
   // FUNGSI HANDLER
@@ -270,7 +253,8 @@ export default function StockOpnamePage() {
   const daftarUrgent = analisaSemuaBarang.filter((a) => a.isUrgent);
   const daftarBulanDepan = analisaSemuaBarang.filter((a) => a.isPerluBulanDepan);
 
-  if (!isReady) return null;
+  if (!isAuthReady || !session || !isReady) return null;
+  const picName = session.nama || "";
 
   return (
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

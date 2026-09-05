@@ -17,6 +17,7 @@ import {
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
+import { useAuthGuard } from "../../hooks/useAuthGuard";
 
 // ==========================================
 // KONSTANTA
@@ -102,8 +103,12 @@ export default function PlottingOBPage() {
   const showToast = useToast();
   const confirm = useConfirm();
 
-  const [adminName, setAdminName] = useState("Koordinator");
-  const [isPageLoading, setIsPageLoading] = useState(true);
+  const { session, isReady } = useAuthGuard({
+    roles: ["Koordinator"],
+    depts: ["OB & CS"],
+    redirectTo: "/dashboard/ob",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Koordinator OB & CS.",
+  });
 
   const [staffList, setStaffList] = useState<StaffOB[]>([]);
   const [pelayananTetap, setPelayananTetap] = useState("");
@@ -122,32 +127,11 @@ export default function PlottingOBPage() {
   const [isLoadingMonth, setIsLoadingMonth] = useState(false);
 
   // ==========================================
-  // 1. Cek Akses — khusus Koordinator/Administrator dept OB & CS
-  // ==========================================
-  useEffect(() => {
-    const role = localStorage.getItem("pic_role") || "";
-    const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
-    const nama = localStorage.getItem("pic_nama") || "";
-
-    const bolehAkses =
-      role.includes("Administrator") || (role.includes("Koordinator") && dept.includes("ob & cs"));
-
-    if (!bolehAkses) {
-      showToast("Akses Ditolak! Halaman ini khusus Koordinator OB & CS.", "error");
-      router.push("/dashboard/ob");
-      return;
-    }
-    setTimeout(() => {
-      setAdminName(nama || "Koordinator");
-      setIsPageLoading(false);
-    }, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
-
-  // ==========================================
   // 2. Ambil Daftar Staff OB & CS + Setting Pelayanan Tetap
   // ==========================================
   useEffect(() => {
+    if (!isReady || !session) return;
+
     const muatData = async () => {
       try {
         const qStaff = query(collection(db, "users_master"), where("departemen", "==", "OB & CS"));
@@ -167,7 +151,7 @@ export default function PlottingOBPage() {
     };
     muatData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isReady, session]);
 
   const simpanPelayananTetap = async (nama: string) => {
     setPelayananTetap(nama);
@@ -392,9 +376,10 @@ export default function PlottingOBPage() {
     setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   };
 
-  if (isPageLoading) {
+  if (!isReady || !session) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#718096" }}>Memuat halaman...</div>;
   }
+  const adminName = session.nama || "Koordinator";
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>

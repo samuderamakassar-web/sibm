@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../lib/firebase";
 import { kirimEmail } from "../lib/notify";
 import { buildRequestBaruEmailHtml, buildSboEmailHtml } from "../lib/emailTemplates";
 import { useToast } from "../components/ui/ToastProvider";
@@ -680,21 +681,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     e.preventDefault();
     setIsLoginLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, "users_master"), where("email", "==", email.toLowerCase())));
-      if (snap.empty) {
-        showToast("Email tidak terdaftar.", "error");
+      const cred = await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+
+      const profileSnap = await getDoc(doc(db, "users_master", cred.user.uid));
+      if (!profileSnap.exists()) {
+        showToast("Akun ditemukan tapi profil pengguna belum lengkap. Hubungi Admin GA.", "error");
         setIsLoginLoading(false);
         return;
       }
-
-      const uData = snap.docs[0].data();
-
-      // Cek Password Asli dari Database
-      if (password !== uData.password) {
-        showToast("Password yang Anda masukkan salah!", "error");
-        setIsLoginLoading(false);
-        return;
-      }
+      const uData = profileSnap.data();
 
       localStorage.setItem("pic_nama", uData.nama);
       localStorage.setItem("pic_dept", uData.departemen);
@@ -708,6 +703,16 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       else if (uData.departemen === "QHSE") router.push("/dashboard/qhse");
       else showToast(`Akses belum tersedia untuk ${uData.departemen}`, "warning");
     } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code === "auth/user-not-found" || code === "auth/invalid-email") {
+        showToast("Email tidak terdaftar.", "error");
+      } else if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        showToast("Password yang Anda masukkan salah!", "error");
+      } else if (code === "auth/too-many-requests") {
+        showToast("Terlalu banyak percobaan gagal. Coba lagi beberapa saat lagi.", "error");
+      } else {
+        showToast("Gagal login. Periksa koneksi internet Anda.", "error");
+      }
       console.error(error);
     } finally {
       setIsLoginLoading(false);
