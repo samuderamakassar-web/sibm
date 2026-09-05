@@ -1561,3 +1561,36 @@ User juga minta sistem **notifikasi push asli (kayak WA)** yang muncul berulang 
 
 ### 29D. Verifikasi
 `npm run build` + `npx eslint` (4 file yang disentuh): 0 error. 1 warning baru sempat muncul (`_area` unused param di `InspeksiFasilitasPage.tsx`) — langsung difix (hapus parameter, bukan cuma prefix underscore). **SUDAH di-deploy** (`firebase deploy --only hosting`) & di-commit (`f85d89c` kode, `bd9f75f` artifact). `dev`+`main` sinkron. **Belum ditest manual oleh user di browser** — minta dicoba dulu terutama Plotting Lantai 5, Inspeksi Fasilitas (4 item baru), checklist Zainal, dan titik patroli Security (kalau kebetulan lagi weekend/Shift 2 pas dites).
+
+Catatan tambahan: user sempat lapor "belum ada perubahan" setelah §29 di-deploy — dicek langsung ke Firebase (`hosting:channel:list`, timestamp release cocok persis sama waktu deploy), deploy TERBUKTI berhasil. Kemungkinan besar cache browser/PWA sisi user (histori project ini punya masalah cache berulang, lihat §24 poin 4/§26A) — disarankan hard refresh atau clear cache PWA, BUKAN masalah deploy.
+
+---
+
+## 30. Sistem Push Notification (FCM) Real-Time: Checklist OB Pintar + Tugas Tambahan Security (5 September 2026, lanjutan langsung §29)
+
+Konteks: user minta notifikasi checklist OB yang sekarang cuma banner in-app (`StickyBanner`/`ChecklistOBBanner`) diganti/dilengkapi jadi **push notification asli** (seperti WA) yang muncul berulang tiap ~30 menit selama tugas belum diselesaikan — alasan: banner in-app gampang terlewat karena user harus buka tab/app dulu buat lihatnya, padahal semua staf diyakini sudah install PWA-nya.
+
+### 30A. Yang sudah ada sebelumnya (infrastruktur FCM, sebagian belum lengkap)
+- `useFcmSetup.ts` (hook) + `firebase-messaging-sw.js` (service worker) + collection `fcm_tokens` — SUDAH ADA dari sesi lama, tapi **cuma dipasang di `DashboardOBPage.tsx`**. Security belum pernah punya token FCM sama sekali.
+- `scripts/fcm-reminder.mjs` (cron GitHub Actions) — SEBELUMNYA cuma blast 1 pesan generik ("Jangan lupa submit checklist...") ke SEMUA token terdaftar, 3x/hari jam tetap (08:30/13:00/16:00 WITA weekday), TANPA cek siapa yang sebenarnya masih pending.
+
+### 30B. Perubahan
+1. **`useFcmSetup.ts`**: tambah parameter `dept` opsional, disimpan bareng token di `fcm_tokens/{picName}` — supaya script reminder bisa kirim TERTARGET per departemen (OB & CS vs Security), bukan blast semua token tanpa pandang siapa.
+2. **`dashboard/security/page.tsx`**: pasang `useFcmSetup(picName, !!picName, "Security")` — Security sekarang ikut kebagian token FCM begitu mereka login & kasih izin notifikasi browser.
+3. **`scripts/fcm-reminder.mjs` dirombak total** jadi "pintar": tiap kali jalan, cek dulu ini lagi di jendela sesi checklist yang mana (Pagi/Siang/Sore, atau skip kalau di luar jendela/weekend), baca `daily_plots` hari ini buat tau siapa PIC per area, baca `ob_checklists` buat tau siapa yang SUDAH lapor sesi ini, lalu cuma kirim push FCM ke PIC yang assigned tapi BELUM lapor. Cron diubah dari 3 jadwal jam tetap jadi **`*/30 * * * *`** (tiap 30 menit, sepanjang hari, setiap hari) — sengaja gak dibatasi cron ke jam/hari kerja tertentu (rawan salah hitung offset UTC/WITA buat weekday, ada catatan soal ini di `kendaraan-reminder.yml`), scriptnya sendiri yang skip kalau kondisi gak cocok.
+4. **`scripts/security-tugas-reminder.mjs` (BARU)** + **`.github/workflows/security-tugas-reminder.yml` (BARU)**, cron sama (`*/30 * * * *`, script yang filter sendiri): kirim push FCM ke petugas Security **Shift 2** yang terjadwal hari itu (reuse pola `ambilPicShift`-style dari `patroli-reminder.mjs`) untuk 2 tugas dari §29B poin 4:
+   - Sabtu & Minggu, jendela ~06:00-07:00 WITA: "Siram tanaman & bersihkan Pantry Lt 1 & Lt 2".
+   - Senin-Jumat, jendela ~07:20 WITA (toleransi ±20 menit): "Pastikan semua AC menyala".
+   - Guard anti-double-kirim per hari+slot (pola sama `reminder_patroli_log`), disimpan di collection baru `reminder_security_tugas_log`.
+
+### 30C. Kendala teknis ditemukan & difix saat dry-run lokal
+Pola import lama yang dipakai script reminder LAMA (`import admin from "firebase-admin"` lalu `admin.credential.cert(...)`) ternyata **error di environment lokal sesi ini** (`admin.credential` undefined) — kemungkinan besar cuma gara-gara state `node_modules` lokal yang sempat diutak-atik pas benerin konflik `jwks-rsa`/`jose` di §28G, BUKAN bug di scriptnya sendiri (script LAMA yang sudah production-proven, `patroli-reminder.mjs` dkk, pakai pola sama & terbukti jalan di CI asli GitHub Actions yang selalu fresh install). Untuk 2 SCRIPT BARU ini, diganti ke modular import (`firebase-admin/app`, `/firestore`, `/messaging`) yang sama dipakai `migrate-users-to-auth.mjs` — setelah diganti, dry-run lokal terhadap Firestore project asli **berhasil jalan tanpa error** (dicoba Sabtu siang WITA — kedua script benar mendeteksi "di luar jendela", skip kirim, sesuai desain).
+
+### 30D. BELUM bisa dipastikan 100% — perlu verifikasi user
+- **Belum pernah lolos ke jalur "ketemu PIC yang harus dikirim push"** dalam dry-run (karena dites di waktu yang gak cocok jendela manapun) — logika query/filter/kirimnya SENDIRI belum pernah tereksekusi penuh, cuma jalur "skip"-nya yang tervalidasi. Kalau ternyata ada bug di bagian itu, baru ketahuan pas beneran ke-trigger di jendela yang cocok (atau lewat `workflow_dispatch` manual dari tab Actions GitHub kapan saja, dianjurkan buat ditest begitu ada waktu yang pas).
+- **VAPID_KEY** di `useFcmSetup.ts` — dipakai apa adanya (kode existing dari sesi lama), TIDAK diverifikasi ulang apakah key ini masih valid/aktif di Firebase Console project `sibm-app`.
+- Staf yang belum pernah buka dashboard-nya lagi SETELAH deploy ini (buat Security khususnya, karena baru pertama kali dipasang) belum akan punya token FCM sampai mereka login & kasih izin notifikasi browser — push gak akan sampai ke mereka sampai itu terjadi.
+- **Butuh test end-to-end oleh user langsung** di device asli (grant izin notifikasi, tunggu jendela waktu yang sesuai, atau trigger manual lewat tab Actions → pilih workflow → "Run workflow").
+
+### 30E. Verifikasi
+`npm run build` + `npx eslint` (file TS yang disentuh): 0 error. `node --check` kedua script baru: OK. Dry-run lokal terhadap Firestore asli: OK (jalur skip). **Tidak perlu redeploy hosting** (perubahan `.mjs`/`.yml` dibaca langsung dari repo oleh GitHub Actions, bukan dari bundle yang di-deploy) — TAPI perubahan `useFcmSetup.ts` & `dashboard/security/page.tsx` (kode client) SUDAH ikut di-deploy bareng §29. Commit: `ccaccd4` (fitur), `46e63b0` (artifact), `9e3824d` (fix import). `dev`+`main` sinkron.
