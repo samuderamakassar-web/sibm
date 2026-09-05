@@ -67,7 +67,11 @@ function shuffle<T>(arr: T[]): T[] {
 // - Basement & Lantai 1: satu paket, 1 orang kerjakan keduanya (area tidak terlalu banyak)
 // - Lantai 2: berdiri sendiri, khusus 1 orang, tidak dirangkap area lain (area padat karyawan)
 // - Lantai 3 & Lantai 4: satu paket juga, 1 orang kerjakan keduanya (area tidak terlalu banyak)
-// - Lantai 5: dikerjakan bersama oleh semua staff pas jam kosong, tidak masuk rotasi individu (lihat AREA_BERSAMA di bawah)
+// - Lantai 5: rotasi individu juga (bukan dikerjakan bersama lagi -- dulu "Semua/All", diubah
+//   atas permintaan user karena OB Pelayanan Tetap gak perlu ikut Lantai 5 sama sekali, cuma
+//   staff CS/cleaning). Lanjutan rotasi round-robin yang sama (index ke-4, siklus balik ke
+//   staff pertama) -- staffAcak di sini SUDAH otomatis cuma berisi staff CS (cleaningStaff =
+//   staffList dikurangi pelayananTetap), jadi gak perlu hardcode nama.
 // Total 3 paket tugas cleaning (Basement+L1, L2, L3+L4) — pas untuk 3 staff cleaning;
 // kalau staff cleaning lebih/kurang dari 3, sisa/kekurangan dibagi rata via idx % staffAcak.length
 // ==========================================
@@ -77,6 +81,9 @@ const GRUP_TUGAS: string[][] = [
   ["Lantai 3", "Lantai 4"],
 ];
 const AREA_BERSAMA = "Lantai 5";
+// Nilai lama "Semua / All" dipertahankan cuma sebagai pilihan manual legacy di dropdown
+// (kalau koordinator memang mau balik ke mode dikerjakan bersama buat 1 hari tertentu),
+// TAPI generate otomatis sekarang selalu isi nama orang, bukan nilai ini lagi.
 const NILAI_BERSAMA = "Semua / All";
 
 // Bagi grup tugas ke staff cleaning yang tersedia, urutan staff diacak tiap kali dipanggil
@@ -92,8 +99,8 @@ function buatRotasiCleaning(cleaningStaff: string[]): Record<string, string> {
     });
   });
 
-  // Lantai 5 selalu dikerjakan bersama, bukan ditugaskan ke 1 orang
-  hasil[AREA_BERSAMA] = NILAI_BERSAMA;
+  // Lantai 5 lanjut rotasi round-robin yang sama (index ke-4) -- staffAcak sudah CS-only
+  hasil[AREA_BERSAMA] = staffAcak[GRUP_TUGAS.length % staffAcak.length];
 
   return hasil;
 }
@@ -462,22 +469,30 @@ export default function PlottingOBPage() {
                 <div style={{ textAlign: "center", color: "#a0aec0", padding: "20px 0" }}>Memuat plotting...</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {SEMUA_AREA.map((area) => (
-                    <div key={area}>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px" }}>{area}</label>
-                      <select
-                        value={plotHariIni[area] || ""}
-                        onChange={(e) => handleUbahArea(area, e.target.value)}
-                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px" }}
-                      >
-                        <option value="">-- Kosong --</option>
-                        <option value="Semua / All">Semua / All</option>
-                        {staffList.map((s) => (
-                          <option key={s.id} value={s.nama}>{s.nama}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
+                  {SEMUA_AREA.map((area) => {
+                    // Lantai 5: cuma staff CS (bukan OB Pelayanan Tetap) -- OB Pelayanan Tetap
+                    // sudah punya tugasnya sendiri di area "Pelayanan Khusus OB", gak perlu
+                    // dirangkap ke Lantai 5.
+                    const opsiStaff = area === AREA_BERSAMA
+                      ? staffList.filter((s) => s.nama !== pelayananTetap)
+                      : staffList;
+                    return (
+                      <div key={area}>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px" }}>{area}</label>
+                        <select
+                          value={plotHariIni[area] || ""}
+                          onChange={(e) => handleUbahArea(area, e.target.value)}
+                          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px" }}
+                        >
+                          <option value="">-- Kosong --</option>
+                          {area === AREA_BERSAMA && <option value={NILAI_BERSAMA}>Semua / All (mode lama)</option>}
+                          {opsiStaff.map((s) => (
+                            <option key={s.id} value={s.nama}>{s.nama}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
 
                   <button
                     onClick={simpanSatuHari}

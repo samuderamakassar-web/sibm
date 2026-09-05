@@ -228,6 +228,21 @@ const SEGMENTS_LANTAI5: SegmentConfig[] = [
   },
 ];
 
+// Tugas ekstra tetap buat Zainal -- apa pun area yang diplot untuknya hari itu, checklist
+// hariannya selalu dapat tambahan segment ini di akhir (permintaan user, bukan bagian dari
+// rotasi plotting biasa).
+const NAMA_STAF_MUSHALLAH_TETAP = "Zainal";
+const SEGMENT_MUSHALLAH_L4: SegmentConfig = {
+  id: "mushallah-l4-zainal",
+  nama: "Mushallah Lantai 4",
+  pertanyaan: [
+    { id: "mus-1", teks: "Apakah lantai Mushallah sudah disapu?" },
+    { id: "mus-2", teks: "Apakah lantai Mushallah sudah dipel?" },
+    { id: "mus-3", teks: "Apakah sajadah/karpet sudah dirapikan?" },
+    { id: "mus-4", teks: "Apakah area wudhu sudah dibersihkan?" },
+  ],
+};
+
 const SEGMENTS_PELAYANAN: SegmentConfig[] = [
   {
     id: "pelayanan",
@@ -257,14 +272,21 @@ const NILAI_BERSAMA = "Semua / All";
 // Minimal pasangan foto before/after yang harus lengkap sebelum laporan bisa dikirim.
 const MINIMAL_PASANGAN_FOTO = 2;
 
-function getSegmenUntukArea(area: string): SegmentConfig[] {
-  if (SEGMENTS_CONFIG[area]) return SEGMENTS_CONFIG[area];
-  if (area.toLowerCase().includes("pelayanan")) return SEGMENTS_PELAYANAN;
+function getSegmenUntukArea(area: string, picName?: string): SegmentConfig[] {
+  let segmen: SegmentConfig[];
+  if (SEGMENTS_CONFIG[area]) segmen = SEGMENTS_CONFIG[area];
+  else if (area.toLowerCase().includes("pelayanan")) segmen = SEGMENTS_PELAYANAN;
+  else {
+    const cocok = Object.keys(SEGMENTS_CONFIG).find(
+      (k) => area.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(area.toLowerCase())
+    );
+    segmen = cocok ? SEGMENTS_CONFIG[cocok] : SEGMENTS_CONFIG["Lantai 1"];
+  }
 
-  const cocok = Object.keys(SEGMENTS_CONFIG).find(
-    (k) => area.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(area.toLowerCase())
-  );
-  return cocok ? SEGMENTS_CONFIG[cocok] : SEGMENTS_CONFIG["Lantai 1"];
+  if (picName === NAMA_STAF_MUSHALLAH_TETAP) {
+    segmen = [...segmen, SEGMENT_MUSHALLAH_L4];
+  }
+  return segmen;
 }
 
 // ==========================================
@@ -551,7 +573,7 @@ export default function ChecklistOBPage() {
       return;
     }
 
-    const daftarSegmen = getSegmenUntukArea(selectedArea);
+    const daftarSegmen = getSegmenUntukArea(selectedArea, picName);
     const semuaPertanyaan = daftarSegmen.flatMap(s => s.pertanyaan);
 
     const belumDijawab = semuaPertanyaan.some(p => !jawabanTugas[p.id]);
@@ -781,7 +803,7 @@ export default function ChecklistOBPage() {
                 </div>
 
                 {/* CHECKLIST PER SEGMENT */}
-                {getSegmenUntukArea(selectedArea).map((segment) => (
+                {getSegmenUntukArea(selectedArea, picName).map((segment) => (
                   <div key={segment.id} style={{ marginBottom: "20px" }}>
                     <h3 className="segment-title">
                       <span className="icon-chip" style={{ width: "22px", height: "22px", background: "var(--ok)", color: "white", borderRadius: "6px" }}><IconClipboard size={12} /></span>

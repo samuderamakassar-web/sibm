@@ -55,7 +55,7 @@ const IconMapPin = ({ size = 14, color = "currentColor" }: IconProps) => (
 // ==========================================
 // 1. DATA TITIK PATROLI
 // ==========================================
-const GROUPED_PATROLI: Record<string, { id: string, nama: string }[]> = {
+const GROUPED_PATROLI_DASAR: Record<string, { id: string, nama: string }[]> = {
   "Ground (Basement)": [
     { id: "Ground::Parkiran Basement", nama: "Area Parkiran Basement" },
     { id: "Ground::Toilet", nama: "Toilet Basement" },
@@ -102,6 +102,38 @@ const GROUPED_PATROLI: Record<string, { id: string, nama: string }[]> = {
     { id: "Lantai 5::Ruang Pompa", nama: "Ruang Pompa Air Lt 5" },
   ]
 };
+
+// Sabtu & Minggu: 2 titik tambahan (di luar patroli rutin Pantry Lt 1/2 yang sudah ada) --
+// siram tanaman & kebersihan, permintaan user karena weekend gak ada OB & CS bertugas.
+function isWeekend(now: Date): boolean {
+  const hari = now.getDay();
+  return hari === 0 || hari === 6;
+}
+
+// Cek AC menyala jam 07:20 -- cuma Senin-Jumat, khusus petugas Shift 2 (kerja sampai jam
+// 08:00 pagi) yang masih standby pas jam segitu.
+function buatGroupedPatroli(sertakanTugasWeekend: boolean, sertakanCekAC: boolean): Record<string, { id: string, nama: string }[]> {
+  const hasil = { ...GROUPED_PATROLI_DASAR };
+
+  if (sertakanTugasWeekend) {
+    hasil["Lantai 1"] = [
+      ...GROUPED_PATROLI_DASAR["Lantai 1"],
+      { id: "Lantai 1::Pantry Siram Weekend", nama: "Pantry Lt 1 — Siram Tanaman & Kebersihan (Weekend)" },
+    ];
+    hasil["Lantai 2"] = [
+      ...GROUPED_PATROLI_DASAR["Lantai 2"],
+      { id: "Lantai 2::Pantry Siram Weekend", nama: "Pantry Lt 2 — Siram Tanaman & Kebersihan (Weekend)" },
+    ];
+  }
+
+  if (sertakanCekAC) {
+    hasil["Tugas Shift Pagi"] = [
+      { id: "Umum::Cek AC Menyala", nama: "Pastikan Semua AC Sudah Menyala (Cek jam 07:20)" },
+    ];
+  }
+
+  return hasil;
+}
 
 // ==========================================
 // INTERFACES
@@ -153,9 +185,15 @@ export default function PatroliSecurityPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), []);
+  const GROUPED_PATROLI = useMemo(() => {
+    const now = waktuWITASekarang();
+    const weekend = isWeekend(now);
+    const shiftSekarang = hitungShiftSesi(now).shift;
+    return buatGroupedPatroli(weekend, !weekend && shiftSekarang === "Shift 2");
+  }, []);
+  const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), [GROUPED_PATROLI]);
   const progressPersen = (scannedItems.length / totalTitikKeseluruhan) * 100;
-  const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), []);
+  const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), [GROUPED_PATROLI]);
   const titikTerlewat = useMemo(
     () => semuaTitikPatroli.filter((t) => !scannedItems.some((s) => s.id === t.id)),
     [scannedItems, semuaTitikPatroli]

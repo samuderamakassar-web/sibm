@@ -46,19 +46,15 @@ const IconInbox = ({ size = 18, color = "currentColor" }: IconProps) => (
 
 // ==========================================
 // KONFIGURASI FASILITAS PER AREA
-// Basement & Lantai 5 area utilitas/mekanikal (parkiran, gudang, ruang mesin), BUKAN area kerja
-// biasa — gak punya toilet/pantry/kantor kayak Lantai 1-4, jadi daftar fasilitas standarnya beda,
-// bukan template generik yang sama buat semua lantai.
+// Disederhanakan atas permintaan user: cukup peralatan dapur + genset (bukan lagi daftar
+// generik toilet/meja/kursi/AC/dll) -- sama untuk SEMUA area, item yang gak relevan/gak ada
+// fisiknya di area tertentu (mis. Genset di luar Basement) tinggal dinilai "Tidak Ada" (N/A).
 // "dll fasilitas gedung lainnya" ditangani lewat tombol "+ Tambah Fasilitas Lain" di form
 // (item custom dgn nama bebas), bukan hardcode semua kemungkinan fasilitas gedung.
 // ==========================================
-const FASILITAS_DEFAULT = ["Keran Air", "Wastafel", "Kloset", "Meja", "Kursi", "AC", "Kulkas", "Kompor", "Dispenser", "Tempat Sampah", "Lampu"];
-const FASILITAS_PER_AREA: Record<string, string[]> = {
-  "Basement": ["Genset", "Gudang", "Mesin Air", "Pompa Hydrant", "Taman"],
-  "Lantai 5": ["Gudang", "Ruang Pompa", "Rooftop", "Tandon Air"],
-};
-function getFasilitasUntukArea(area: string): string[] {
-  return FASILITAS_PER_AREA[area] || FASILITAS_DEFAULT;
+const FASILITAS_DEFAULT = ["Kulkas", "Dispenser Pantry Lantai 1", "Dispenser Pantry Lantai 2", "Genset (Tugas Khusus)"];
+function getFasilitasUntukArea(): string[] {
+  return FASILITAS_DEFAULT;
 }
 
 type Kondisi = "Baik" | "Rusak" | "Tidak Ada";
@@ -256,7 +252,7 @@ export default function InspeksiFasilitasPage() {
   // ==========================================
   const handleSubmit = async () => {
     // Item standar wajib semua dinilai; item custom yang belum diisi nama/kondisi diabaikan (opsional).
-    const jumlahStandar = getFasilitasUntukArea(selectedArea).length;
+    const jumlahStandar = getFasilitasUntukArea().length;
     const itemStandar = hasilList.slice(0, jumlahStandar);
     const itemCustomTerisi = hasilList.slice(jumlahStandar).filter((h) => h.nama.trim() && h.kondisi);
 
@@ -406,7 +402,7 @@ export default function InspeksiFasilitasPage() {
 
                     <button
                       onClick={() => {
-                        setHasilList(getFasilitasUntukArea(selectedArea).map((nama) => ({ nama, kondisi: "", catatan: "", foto: "" })));
+                        setHasilList(getFasilitasUntukArea().map((nama) => ({ nama, kondisi: "", catatan: "", foto: "" })));
                         setStep(2);
                       }}
                       style={{ width: "100%", padding: "18px", background: "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
@@ -438,7 +434,7 @@ export default function InspeksiFasilitasPage() {
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {hasilList.map((h, index) => {
-                    const isCustom = index >= getFasilitasUntukArea(selectedArea).length;
+                    const isCustom = index >= getFasilitasUntukArea().length;
                     return (
                       <div key={index} className="fasilitas-row">
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
