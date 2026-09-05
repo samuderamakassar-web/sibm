@@ -1529,3 +1529,35 @@ User konfirmasi berhasil login, tapi lapor 2 kejanggalan: (1) halaman utama lamb
 **Status: SUDAH di-deploy** (`firestore:rules` untuk fix #1, `hosting` untuk fix #1+#2). Commit terpisah: `ab23ac1` (rules), `aa5f574` (kode), `f57c046` (artifact). `dev`+`main` sinkron.
 
 **Pelajaran buat sesi berikutnya:** SEBELUM mempersempit Firestore Rules di app manapun, wajib telusuri dulu apakah ada halaman/fitur yang SENGAJA didesain publik tanpa login (jangan asumsikan "seluruh app perlu login" tanpa verifikasi eksplisit) — kesalahan ini seharusnya bisa dicegah dengan membaca `src/app/page.tsx` secara utuh (bukan cuma bagian `handleLogin`) sebelum menulis `firestore.rules` pertama kali.
+
+---
+
+## 29. Batch Fitur OB/Security: Lantai 5 CS-only, Sederhanakan Inspeksi Fasilitas, Tugas Tetap Zainal, Titik Patroli Weekend+AC (5 September 2026, lanjutan langsung §28)
+
+Konteks: setelah §28 live, user lapor 2 kejanggalan tambahan (notifikasi checklist masih muncul di weekend, form Plotting masih nampilin nama lama di hari libur) — root cause SAMA dengan §28H (dokumen `daily_plots` weekend nyangkut data lama), tapi di 2 CONSUMER lain yang belum ke-cover fix §28H (`ChecklistOBBanner.tsx`, form edit `fetchPlot` di `PlottingOBPage.tsx`). Sekalian itu, user titip 1 batch fitur baru cukup besar untuk OB & Security.
+
+### 29A. Fix lanjutan: banner & form plotting masih baca data weekend lama
+- `ChecklistOBBanner.tsx`: tambah `isWeekend()` guard sebelum baca `daily_plots` — banner reminder gak lagi trigger di Sabtu/Minggu.
+- `PlottingOBPage.tsx` (`fetchPlot`): form edit per-tanggal sekarang SELALU kosong untuk weekend, terlepas dari isi dokumennya (dulu tetap nampilin data lama kalau dokumennya `exists()`).
+- Commit `b45af7a`.
+
+### 29B. Fitur baru (dikonfirmasi via AskUserQuestion + klarifikasi lanjutan user)
+1. **Lantai 5 CS-only** (`PlottingOBPage.tsx`): dulu selalu "Semua / All" (dikerjakan bersama semua staff). Sekarang rotasi individu juga, round-robin lanjutan dari 3 grup tugas yang sudah ada (index ke-4, `staffAcak[GRUP_TUGAS.length % staffAcak.length]`) — otomatis CS-only karena `cleaningStaff` = `staffList` dikurangi `pelayananTetap` (OB Pelayanan Tetap tidak pernah masuk pool ini). Dropdown manual per-tanggal juga dibatasi ke staff CS untuk baris Lantai 5 (opsi "Semua / All" ditinggal sebagai pilihan manual legacy).
+2. **Sederhanakan Inspeksi Fasilitas** (`InspeksiFasilitasPage.tsx`): 11 item generik (Keran Air, Wastafel, Kloset, Meja, Kursi, AC, Kulkas, Kompor, Dispenser, Tempat Sampah, Lampu) DIGANTI TOTAL jadi 4 item — Kulkas, Dispenser Pantry Lantai 1, Dispenser Pantry Lantai 2, Genset (Tugas Khusus) — berlaku SAMA untuk semua area (bukan per-area lagi seperti `FASILITAS_PER_AREA` sebelumnya), item yang gak ada fisiknya di area tertentu dinilai "Tidak Ada" (N/A, opsi yang sudah ada dari awal).
+3. **Tugas tetap Zainal** (`ChecklistOBPage.tsx`): `getSegmenUntukArea()` sekarang terima parameter `picName` opsional — kalau `picName === "Zainal"`, checklist hariannya OTOMATIS dapat 1 segment tambahan "Mushallah Lantai 4" di akhir daftar, di luar area utama yang diplot hari itu.
+4. **Titik patroli baru untuk Security** (`PatroliSecurityPage.tsx`): `GROUPED_PATROLI` (dulu konstanta statis) diubah jadi fungsi `buatGroupedPatroli(sertakanTugasWeekend, sertakanCekAC)`, dihitung sekali via `useMemo` berdasarkan hari & shift saat halaman dibuka:
+   - **Sabtu & Minggu**: 2 titik tambahan di Pantry Lt 1 & Lt 2 — "Siram Tanaman & Kebersihan (Weekend)".
+   - **Senin-Jumat, khusus petugas Shift 2** (kerja sampai jam 8 pagi): 1 titik tambahan grup baru "Tugas Shift Pagi" — "Pastikan Semua AC Sudah Menyala (Cek jam 07:20)".
+5. **Foto inspeksi kamera/galeri** — dicek: `InspeksiFasilitasPage.tsx` sudah pakai `<input type="file" accept="image/*">` TANPA atribut `capture`, artinya di HP native picker SUDAH menawarkan pilihan Kamera ATAU Galeri/File secara default. **Tidak ada perubahan kode** — kalau user masih ngerasa cuma bisa 1 opsi di device tertentu, kemungkinan besar itu perilaku browser/OS spesifik, bukan batasan dari kode.
+
+### 29C. BELUM dikerjakan — butuh sesi/desain terpisah (jangan lupa)
+User juga minta sistem **notifikasi push asli (kayak WA)** yang muncul berulang tiap 30 menit selama tugas belum diselesaikan (checklist OB, dan ditanya juga soal reminder siram tanaman jam 6-7 pagi weekend untuk Security) — MENGGANTI/melengkapi banner in-app (`StickyBanner`/`ChecklistOBBanner`) yang dirasa gampang terlewat. Ini **infrastruktur baru yang signifikan**, BUKAN sekadar tweak kecil:
+- FCM (`useFcmSetup.ts` + `firebase-messaging-sw.js` + `fcm_tokens` collection) SUDAH ADA tapi cuma dipasang di `DashboardOBPage.tsx` — Security **belum punya token FCM sama sekali** (perlu pasang `useFcmSetup` di dashboard Security dulu sebelum bisa kirim push ke mereka).
+- `scripts/fcm-reminder.mjs` (cron GitHub Actions) sekarang cuma blast pesan generik ke SEMUA token di 3 jam tetap/hari — perlu diubah jadi "smart" (cek per-PIC apakah sesi checklist-nya masih pending, baru kirim push ke yang bersangkutan) DAN jadwalnya diperpadat (tiap 30 menit) untuk kesan "real-time" yang diminta user.
+- GitHub Actions cron ada keterbatasan: TIDAK dijamin presisi (bisa telat, ada catatan soal ini di `patroli-reminder.mjs` — "GitHub Actions sering telat 30-90 menit"), jadi ekspektasi "persis tiap 30 menit kayak WA" perlu dikomunikasikan ke user sebagai limitasi platform gratis (Spark plan, gak ada Cloud Functions/Scheduler berbayar).
+- Watering-reminder Security (jam 6-7 pagi weekend) & notifikasi AC-check butuh cron/logic terpisah lagi dari checklist OB (audiens & waktu beda).
+
+**Rekomendasi:** jangan dicoba buru-buru sisipkan di sesi yang sama — ini pantas jadi 1 sesi/perencanaan sendiri (mulai dari pasang FCM di Security, baru desain ulang cron reminder-nya).
+
+### 29D. Verifikasi
+`npm run build` + `npx eslint` (4 file yang disentuh): 0 error. 1 warning baru sempat muncul (`_area` unused param di `InspeksiFasilitasPage.tsx`) — langsung difix (hapus parameter, bukan cuma prefix underscore). **SUDAH di-deploy** (`firebase deploy --only hosting`) & di-commit (`f85d89c` kode, `bd9f75f` artifact). `dev`+`main` sinkron. **Belum ditest manual oleh user di browser** — minta dicoba dulu terutama Plotting Lantai 5, Inspeksi Fasilitas (4 item baru), checklist Zainal, dan titik patroli Security (kalau kebetulan lagi weekend/Shift 2 pas dites).
