@@ -1624,3 +1624,29 @@ Sudah 3x sesi ini nemu bug "baca `daily_plots` mentah tanpa guard weekend" di fi
 
 ### 31E. Verifikasi
 `npm run build`: 0 error. `npx eslint`: ketemu 1 ERROR baru (`setState` sinkron di body effect, `src/app/page.tsx`) — langsung difix pakai pola `setTimeout(...,0)` yang sudah konvensi di project ini. 2 warning `showToast` missing-dep pre-existing, gak nambah. `node --check` script baru: OK. **SUDAH di-deploy** (`hosting`) & di-commit (`7b7630e` kode, `1014b47` artifact). `dev`+`main` sinkron. **Belum ditest ulang oleh user** — minta dicoba lagi terutama halaman checklist OB di hari Sabtu/Minggu ini juga (harus nunjukin "Hari Ini Libur" sekarang), dan flow sesi checklist pas hari kerja nanti.
+
+---
+
+## 32. Label Status Kendaraan, Email Overtime ke PIC, Sinkron Inspeksi→Helpdesk, Redesign Riwayat (5 September 2026, lanjutan langsung §31)
+
+Konteks: 4 permintaan baru dari user — (1) label status kendaraan "Keluar Pool" dirasa berlebihan; (2) email Overtime Gedung salah sasaran (ke Admin GA, harusnya ke PIC yang lembur); (3) temuan Rusak dari Inspeksi Fasilitas harus sinkron ke Laporan Kerusakan admin + email + data durasi (hari) buat KPI + export Excel; (4) tab Riwayat (OB & Security) dirapikan jadi 2 kolom (filter kiri, detail kanan).
+
+### 32A. Label Status Kendaraan
+Ketemu sumber pastinya: fungsi `classifyStatus()` (diduplikasi di `dashboard/security/parkir/page.tsx` DAN `components/pages/driver/DriverArmadaPage.tsx`, pola lama "sengaja diduplikasi" yang sudah didokumentasikan sebelumnya) punya fallback case literal `label: "KELUAR POOL"`. Diganti jadi `"KELUAR"` di kedua file. Sekalian dirapikan `admin/kendaraan/page.tsx` yang menampilkan `status_kendaraan` MENTAH ("Keluar Beroperasi") di beberapa badge/teks — ditambah helper `formatStatusLabel()` (persingkat "Keluar Beroperasi" → "Keluar" cuma di tampilan, nilai ASLI di Firestore TIDAK diubah supaya semua perbandingan logic yang sudah ada di banyak file tetap jalan tanpa perlu disentuh).
+
+### 32B. Email Overtime ke PIC, Bukan Admin GA
+`src/app/page.tsx` (`handleSubmitOvertime`): sebelumnya cuma kirim email ke Admin GA lewat `kirimNotifikasiAdminGA()`. Sekarang lookup email PIC dari `employees_directory` (field `email`, `Employee` interface diperluas), kirim email KONFIRMASI ke PIC itu sendiri pakai template baru `buildOvertimeTercatatEmailHtml()` (beda dari `buildOvertimeEmailHtml()` yang sudah ada — itu buat notif approve/reject, ini murni konfirmasi "sudah tercatat" tanpa approval). Kalau PIC gak punya email di Master Data Karyawan, dilewati dengan console.warn (gak nge-block laporan overtime-nya sendiri).
+
+### 32C. Sinkron Inspeksi Fasilitas → Laporan Kerusakan + KPI + Export
+- Ternyata sinkron `helpdesk_tickets` SUDAH ADA dari fitur lama (jadi otomatis nongol di tabel `admin/helpdesk`) — yang BELUM ada adalah notifikasi EMAIL ke Admin GA. Ditambahkan di `InspeksiFasilitasPage.tsx` (reuse `buildRequestBaruEmailHtml`, fetch kontak Admin GA on-demand pas submit, best-effort — gagal kirim email TIDAK membatalkan laporan yang sudah kesimpan).
+- `admin/helpdesk/page.tsx`: kolom baru **"Durasi"** — `hitungDurasiHari()` (selisih `waktu_lapor`→`waktu_selesai` dalam HARI, dibulatkan ke atas biar "1 jam" tetap kehitung 1 hari bukan 0) buat data KPI aktual.
+- Tombol **"Export ke Excel"** baru (pakai `xlsx`, pola sama seperti export di `admin/kendaraan/page.tsx`) — ikutin filter status/bulan/tahun yang lagi aktif di tabel, kolom termasuk Durasi.
+
+### 32D. Redesign Tab Riwayat (OB & Security)
+`ChecklistOBPage.tsx` & `PatroliSecurityPage.tsx`: tab Riwayat yang lama nampilin SEMUA log ke-expand penuh sekaligus (bisa puluhan entri, berantakan). Diganti layout grid 2 kolom:
+- **Kiri** (sticky): pilih **Sesi** (Pagi/Siang/Sore untuk OB, Sesi 1/2/3 untuk Security) + **Tanggal** (dropdown dari tanggal yang benar-benar ada datanya, bukan date-picker bebas), tombol **"🔍 Cek"**.
+- **Kanan**: kosong dengan pesan "Pilih Sesi & Tanggal" sebelum tombol Cek diklik; begitu diklik, tampilkan detail lengkap (sama seperti render lama) buat entri yang cocok filter, atau "Tidak Ada Riwayat" kalau kosong.
+- Responsif: `.riwayat-grid` jadi 1 kolom di mobile (`@media max-width:640px`), kartu kiri gak lagi sticky di layar sempit.
+
+### 32E. Verifikasi
+`npm run build`: 0 error (2x, setelah batch pertama dan setelah redesign Riwayat). `npx eslint` (semua file disentuh): 0 error, semua warning pre-existing. **SUDAH di-deploy** (`hosting`) & di-commit (`4f380c5` kode, `d52a7a2` artifact). `dev`+`main` sinkron. **Belum ditest oleh user** — terutama alur Riwayat 2 kolom (klik Cek), export Excel di admin/helpdesk, dan email overtime yang sekarang ke PIC (perlu PIC yang emailnya sudah keisi di Master Data Karyawan buat ketes beneran).
