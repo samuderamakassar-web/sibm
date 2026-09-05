@@ -10,14 +10,16 @@
 //
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
-import admin from "firebase-admin";
+import { initializeApp, cert } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 const serviceAccount = JSON.parse(
   Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf-8")
 );
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-const db = admin.firestore();
-const messaging = admin.messaging();
+initializeApp({ credential: cert(serviceAccount) });
+const db = getFirestore();
+const messaging = getMessaging();
 
 // ==========================================
 // WAKTU SEKARANG (WITA)
@@ -88,7 +90,7 @@ async function jalankan() {
     console.log(`Slot "${slotAktif.id}" hari ini sudah pernah diproses, skip (anti-double-kirim).`);
     return;
   }
-  await logRef.set({ slot: slotAktif.id, diproses_pada: admin.firestore.FieldValue.serverTimestamp() });
+  await logRef.set({ slot: slotAktif.id, diproses_pada: FieldValue.serverTimestamp() });
 
   const daftarNama = await ambilPicShift2HariIni();
   if (daftarNama.length === 0) {
