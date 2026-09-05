@@ -2,13 +2,13 @@ name: FCM Reminder OB & CS
 
 on:
   schedule:
-    # Cron pakai UTC. WITA = UTC+8.
-    # 08:30 WITA -> 00:33 UTC
-    - cron: "33 0 * * 1-5"
-    # 13:00 WITA -> 05:07 UTC
-    - cron: "7 5 * * 1-5"
-    # 16:00 WITA -> 08:41 UTC
-    - cron: "41 8 * * 1-5"
+    # Jalan tiap 30 menit SEPANJANG hari, setiap hari (bukan cuma jam & hari kerja
+    # tertentu) -- script fcm-reminder.mjs sendiri yang memutuskan skip kalau lagi
+    # weekend atau di luar jendela sesi Pagi/Siang/Sore. Ini sengaja dipilih daripada
+    # coba hitung cron UTC buat "cuma weekday jam sekian" yang rawan salah (lihat
+    # catatan offset WITA/UTC di kendaraan-reminder.yml) -- lebih gampang & aman biarin
+    # scriptnya yang jaga logika, cron cuma nge-trigger.
+    - cron: "*/30 * * * *"
   workflow_dispatch: {} # buat test manual dari tab Actions
 
 jobs:

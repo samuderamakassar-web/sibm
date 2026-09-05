@@ -11,7 +11,9 @@ const VAPID_KEY = "BMuIDLfqhaGDc0ov7MR1pIwa81eZkX67mtPHQT3PWpb3ApvN0FUOhHM39VECU
 
 // Panggil hook ini sekali setelah user login (tau nama & dept-nya),
 // misal di halaman dashboard OB setelah localStorage pic_nama keisi.
-export function useFcmSetup(picName: string, aktif: boolean) {
+// `dept` opsional -- disimpan bareng token supaya script reminder (fcm-reminder.mjs dkk)
+// bisa kirim push TERTARGET per departemen (OB & CS vs Security), bukan blast ke semua token.
+export function useFcmSetup(picName: string, aktif: boolean, dept?: string) {
   useEffect(() => {
     if (!aktif || !picName) return;
 
@@ -36,6 +38,7 @@ export function useFcmSetup(picName: string, aktif: boolean) {
           await setDoc(doc(db, "fcm_tokens", picName), {
             pic_nama: picName,
             token,
+            dept: dept || "",
             updated_at: new Date().toISOString(),
           });
         }
@@ -45,5 +48,5 @@ export function useFcmSetup(picName: string, aktif: boolean) {
     };
 
     setup();
-  }, [picName, aktif]);
+  }, [picName, aktif, dept]);
 }

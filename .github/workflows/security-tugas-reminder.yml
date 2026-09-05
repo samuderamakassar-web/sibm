@@ -1,0 +1,28 @@
+name: Security Tugas Tambahan Reminder
+
+on:
+  schedule:
+    # Tiap 30 menit sepanjang hari -- script sendiri yang memutuskan skip kalau
+    # bukan jendela siram tanaman (Sabtu/Minggu ~06:00-07:00 WITA) atau cek AC
+    # (Senin-Jumat ~07:20 WITA), sama pola dengan fcm-reminder.yml (hindari cron
+    # UTC/WITA weekday yang rawan salah hitung).
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Jalankan reminder
+        run: node scripts/security-tugas-reminder.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}

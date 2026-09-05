@@ -7,6 +7,7 @@ import { db } from "../../../lib/firebase";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
+import { useFcmSetup } from "../../../hooks/useFcmSetup";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -83,6 +84,9 @@ export default function SecurityDashboard() {
     deniedMessage: "Akses Ditolak! Halaman ini khusus Tim Security.",
   });
   const picName = session?.nama || "";
+  // 🔔 Setup FCM -- Security belum pernah pasang push notif sebelum ini (cuma OB & CS),
+  // dibutuhkan buat reminder siram tanaman weekend & cek AC pagi hari kerja.
+  useFcmSetup(picName, !!picName, "Security");
   const [picRole, setPicRole] = useState<string>("");
   const [isDataReady, setIsDataReady] = useState<boolean>(false);
 

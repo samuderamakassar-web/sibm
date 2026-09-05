@@ -133,7 +133,7 @@ export default function DashboardOBPage() {
   const picRole = session?.role || "";
 
 // 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari sesi Firebase Auth
-  useFcmSetup(picName, !!picName);
+  useFcmSetup(picName, !!picName, "OB & CS");
 
   // EFEK 2: Listener Data Real-time (Plotting, Stok, Deep Cleaning)
   useEffect(() => {
