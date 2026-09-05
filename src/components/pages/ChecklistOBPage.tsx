@@ -359,6 +359,12 @@ export default function ChecklistOBPage() {
 
   // State Data Riwayat
   const [riwayatKerja, setRiwayatKerja] = useState<ChecklistLog[]>([]);
+  // Filter tab Riwayat -- dipisah jadi "pilihan" (kiri) vs "sudah dicek" (kanan) supaya
+  // detail cuma muncul begitu tombol Cek diklik, bukan otomatis nampilin SEMUA riwayat
+  // sekaligus (dulu gini, gampang berantakan kalau riwayatnya sudah puluhan).
+  const [filterSesiRiwayat, setFilterSesiRiwayat] = useState<"" | SesiOB>("");
+  const [filterTanggalRiwayat, setFilterTanggalRiwayat] = useState<string>("");
+  const [sudahCekRiwayat, setSudahCekRiwayat] = useState(false);
 
   // Loading States
   const [isLoading, setIsLoading] = useState(false);
@@ -743,6 +749,8 @@ export default function ChecklistOBPage() {
         .input-grid-mobile { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         @media (max-width: 640px) {
           .input-grid-mobile { grid-template-columns: 1fr 1fr; gap: 10px; }
+          .riwayat-grid { grid-template-columns: 1fr !important; }
+          .riwayat-grid > div:first-child { position: static !important; }
         }
       `}} />
 
@@ -988,9 +996,66 @@ export default function ChecklistOBPage() {
         {/* ========================================================================================= */}
         {/* TAB 2: GALERI & RIWAYAT VISUAL */}
         {/* ========================================================================================= */}
-        {activeTab === "history" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "25px", animation: "fadeIn 0.3s ease-in-out" }}>
-            {riwayatKerja.length > 0 ? riwayatKerja.map((log) => (
+        {activeTab === "history" && (() => {
+          const tanggalTersedia = Array.from(new Set(riwayatKerja.map(l => l.tanggal).filter(Boolean))) as string[];
+          tanggalTersedia.sort((a, b) => b.localeCompare(a));
+          const hasilCek = sudahCekRiwayat
+            ? riwayatKerja.filter(l =>
+                (!filterSesiRiwayat || l.sesi === filterSesiRiwayat) &&
+                (!filterTanggalRiwayat || l.tanggal === filterTanggalRiwayat)
+              )
+            : [];
+
+          return (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: "20px", alignItems: "start", animation: "fadeIn 0.3s ease-in-out" }} className="riwayat-grid">
+            {/* KIRI: pilih sesi + tanggal, lalu klik Cek */}
+            <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "22px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid var(--line)", position: "sticky", top: "20px" }}>
+              <h3 style={{ margin: "0 0 16px 0", color: "var(--ink)", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}><IconClock size={16} /> Cari Riwayat</h3>
+
+              <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Sesi</label>
+              <select
+                value={filterSesiRiwayat}
+                onChange={(e) => { setFilterSesiRiwayat(e.target.value as "" | SesiOB); setSudahCekRiwayat(false); }}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", marginBottom: "16px", outline: "none", background: "var(--bg)" }}
+              >
+                <option value="">Semua Sesi</option>
+                {JENDELA_SESI_OB.map(j => <option key={j.sesi} value={j.sesi}>{j.sesi} ({j.label})</option>)}
+              </select>
+
+              <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Tanggal</label>
+              <select
+                value={filterTanggalRiwayat}
+                onChange={(e) => { setFilterTanggalRiwayat(e.target.value); setSudahCekRiwayat(false); }}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", marginBottom: "18px", outline: "none", background: "var(--bg)" }}
+              >
+                <option value="">Semua Tanggal</option>
+                {tanggalTersedia.map(t => <option key={t} value={t}>{new Date(t + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</option>)}
+              </select>
+
+              <button
+                onClick={() => setSudahCekRiwayat(true)}
+                disabled={riwayatKerja.length === 0}
+                style={{ width: "100%", padding: "14px", background: riwayatKerja.length === 0 ? "var(--muted)" : "var(--ok)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: riwayatKerja.length === 0 ? "not-allowed" : "pointer" }}
+              >
+                🔍 Cek
+              </button>
+            </div>
+
+            {/* KANAN: detail hasil, baru muncul setelah klik Cek */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {!sudahCekRiwayat ? (
+              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
+                <div className="icon-chip" style={{ width: "60px", height: "60px", background: "var(--bg)", color: "var(--muted)", margin: "0 auto 15px" }}><IconMapPin size={28} /></div>
+                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Pilih Sesi & Tanggal</h3>
+                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Pilih sesi dan tanggal di sebelah kiri, lalu klik Cek untuk lihat detail laporannya.</p>
+              </div>
+            ) : hasilCek.length === 0 ? (
+              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
+                <div className="icon-chip" style={{ width: "60px", height: "60px", background: "var(--bg)", color: "var(--muted)", margin: "0 auto 15px" }}><IconInbox size={28} /></div>
+                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Tidak Ada Riwayat</h3>
+                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Tidak ditemukan laporan untuk sesi/tanggal yang dipilih.</p>
+              </div>
+            ) : hasilCek.map((log) => (
               <div key={log.id} style={{ background: "var(--surface)", borderRadius: "20px", padding: "25px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid var(--line)" }}>
 
                 {/* Header Riwayat */}
@@ -1046,15 +1111,11 @@ export default function ChecklistOBPage() {
                 </div>
 
               </div>
-            )) : (
-              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
-                <div className="icon-chip" style={{ width: "60px", height: "60px", background: "var(--bg)", color: "var(--muted)", margin: "0 auto 15px" }}><IconInbox size={28} /></div>
-                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Belum Ada Riwayat</h3>
-                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Log pekerjaan Anda akan terekam dan ditampilkan dengan apik di sini setelah Anda mengirimkan laporan pertama.</p>
-              </div>
-            )}
+            ))}
+            </div>
           </div>
-        )}
+          );
+        })()}
 
       </div>
 

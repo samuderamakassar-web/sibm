@@ -138,6 +138,39 @@ export function buildOvertimeEmailHtml(p: {
 }
 
 /**
+ * Konfirmasi ke PIC YANG BERSANGKUTAN sendiri saat overtime-nya baru saja tercatat
+ * (src/app/page.tsx, handleSubmitOvertime) -- BUKAN ke Admin GA. Sekarang overtime
+ * langsung "Tercatat" tanpa approval (lihat komentar di handleSubmitOvertime), jadi
+ * email ini murni konfirmasi buat pemohon, bukan permintaan approval.
+ */
+export function buildOvertimeTercatatEmailHtml(p: {
+  namaPemohon: string;
+  departemen?: string;
+  area: string;
+  tanggal: string;
+  jamMulai: string;
+  jamSelesai: string;
+  alasan: string;
+}): string {
+  const rows = [
+    fieldRow("Tanggal Lembur", escapeHtml(p.tanggal)),
+    fieldRow("Area / Ruangan", escapeHtml(p.area)),
+    fieldRow("Jam Mulai", escapeHtml(p.jamMulai)),
+    fieldRow("Jam Selesai", escapeHtml(p.jamSelesai)),
+    fieldRow("Alasan", escapeHtml(p.alasan)),
+  ].join("");
+
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      Halo ${escapeHtml(p.namaPemohon)}, overtime gedung Anda sudah tercatat di sistem dan akan masuk rekap tagihan. Berikut rinciannya:
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+  `;
+
+  return emailShell("&#9989; Overtime Gedung Tercatat", body);
+}
+
+/**
  * Notifikasi ke Admin GA saat ada pengajuan BARU masuk (ATK / Overtime Gedung / Tiket Helpdesk)
  * dari portal publik (src/app/page.tsx). Satu builder dipakai untuk ketiganya -- bentuknya sama
  * (judul + info pemohon + rincian field), cuma isi `rows`/`itemsTable`-nya beda per jenis.

@@ -172,6 +172,11 @@ export default function PatroliSecurityPage() {
   const [catatanUmum, setCatatanUmum] = useState<string>("");
   const [alasanTerlewat, setAlasanTerlewat] = useState<Record<string, string>>({});
   const [riwayatSaya, setRiwayatSaya] = useState<PatroliLog[]>([]); // DATA RIWAYAT BARU
+  // Filter tab Riwayat -- detail cuma muncul setelah tombol Cek diklik (sama pola dengan
+  // ChecklistOBPage.tsx), bukan otomatis nampilin SEMUA riwayat sekaligus.
+  const [filterSesiRiwayat, setFilterSesiRiwayat] = useState<string>("");
+  const [filterTanggalRiwayat, setFilterTanggalRiwayat] = useState<string>("");
+  const [sudahCekRiwayat, setSudahCekRiwayat] = useState(false);
 
   const [scanTarget, setScanTarget] = useState<string | null>(null);
   const [kondisiTitik, setKondisiTitik] = useState<string>("Aman Terkendali");
@@ -442,6 +447,8 @@ export default function PatroliSecurityPage() {
 
         @media (max-width: 640px) {
           .panel { padding: 16px !important; border-radius: 16px !important; }
+          .riwayat-grid { grid-template-columns: 1fr !important; }
+          .riwayat-grid > div:first-child { position: static !important; }
         }
       `}} />
 
@@ -659,9 +666,68 @@ export default function PatroliSecurityPage() {
         {/* ========================================================= */}
         {/* TAB 2: RIWAYAT SAYA (HISTORY VIEW)                        */}
         {/* ========================================================= */}
-        {activeTab === "HISTORY" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "25px", animation: "fadeIn 0.3s" }}>
-            {riwayatSaya.length > 0 ? riwayatSaya.map((log) => (
+        {activeTab === "HISTORY" && (() => {
+          const tanggalTersedia = Array.from(new Set(riwayatSaya.map(l => l.tanggal_shift).filter(Boolean))) as string[];
+          tanggalTersedia.sort((a, b) => b.localeCompare(a));
+          const hasilCek = sudahCekRiwayat
+            ? riwayatSaya.filter(l =>
+                (!filterSesiRiwayat || l.sesi === filterSesiRiwayat) &&
+                (!filterTanggalRiwayat || l.tanggal_shift === filterTanggalRiwayat)
+              )
+            : [];
+
+          return (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: "20px", alignItems: "start" }} className="riwayat-grid">
+            {/* KIRI: pilih sesi + tanggal shift, lalu klik Cek */}
+            <div className="panel" style={{ padding: "22px", position: "sticky", top: "20px" }}>
+              <h3 style={{ margin: "0 0 16px 0", color: "var(--ink)", fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}><IconHistory size={16} /> Cari Riwayat</h3>
+
+              <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Sesi</label>
+              <select
+                value={filterSesiRiwayat}
+                onChange={(e) => { setFilterSesiRiwayat(e.target.value); setSudahCekRiwayat(false); }}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", marginBottom: "16px", outline: "none", background: "var(--bg)" }}
+              >
+                <option value="">Semua Sesi</option>
+                <option value="Sesi 1">Sesi 1</option>
+                <option value="Sesi 2">Sesi 2</option>
+                <option value="Sesi 3">Sesi 3</option>
+              </select>
+
+              <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Tanggal Shift</label>
+              <select
+                value={filterTanggalRiwayat}
+                onChange={(e) => { setFilterTanggalRiwayat(e.target.value); setSudahCekRiwayat(false); }}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", marginBottom: "18px", outline: "none", background: "var(--bg)" }}
+              >
+                <option value="">Semua Tanggal</option>
+                {tanggalTersedia.map(t => <option key={t} value={t}>{new Date(t + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</option>)}
+              </select>
+
+              <button
+                onClick={() => setSudahCekRiwayat(true)}
+                disabled={riwayatSaya.length === 0}
+                style={{ width: "100%", padding: "14px", background: riwayatSaya.length === 0 ? "var(--muted)" : "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: riwayatSaya.length === 0 ? "not-allowed" : "pointer" }}
+              >
+                🔍 Cek
+              </button>
+            </div>
+
+            {/* KANAN: detail hasil, baru muncul setelah klik Cek */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {!sudahCekRiwayat ? (
+              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
+                <div style={{ color: "var(--muted)", marginBottom: "15px", display: "flex", justifyContent: "center" }}><IconInboxEmpty size={40} /></div>
+                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Pilih Sesi & Tanggal</h3>
+                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Pilih sesi dan tanggal shift di sebelah kiri, lalu klik Cek untuk lihat detail patrolinya.</p>
+              </div>
+            ) : hasilCek.length === 0 ? (
+              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
+                <div style={{ color: "var(--muted)", marginBottom: "15px", display: "flex", justifyContent: "center" }}><IconInboxEmpty size={40} /></div>
+                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Tidak Ada Riwayat</h3>
+                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Tidak ditemukan laporan patroli untuk sesi/tanggal yang dipilih.</p>
+              </div>
+            ) : hasilCek.map((log) => (
               <div key={log.id} className="panel" style={{ padding: "25px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "2px solid var(--bg)", paddingBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
                   <div>
@@ -699,15 +765,11 @@ export default function PatroliSecurityPage() {
                   })}
                 </div>
               </div>
-            )) : (
-              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
-                <div style={{ color: "var(--muted)", marginBottom: "15px", display: "flex", justifyContent: "center" }}><IconInboxEmpty size={40} /></div>
-                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Belum Ada Riwayat</h3>
-                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Catatan patroli keliling Anda akan terekam dan ditampilkan di sini.</p>
-              </div>
-            )}
+            ))}
+            </div>
           </div>
-        )}
+          );
+        })()}
 
       </div>
 

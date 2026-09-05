@@ -6,7 +6,7 @@ import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp,
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import { kirimEmail } from "../lib/notify";
-import { buildRequestBaruEmailHtml, buildSboEmailHtml } from "../lib/emailTemplates";
+import { buildRequestBaruEmailHtml, buildSboEmailHtml, buildOvertimeTercatatEmailHtml } from "../lib/emailTemplates";
 import { useToast } from "../components/ui/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -26,7 +26,7 @@ interface DriverStatusLog { nama_driver: string; status: string; waktu_ubah?: Ti
 interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: string; waktu_masuk?: Timestamp | null; waktu_keluar?: Timestamp | null; }
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
 interface ObStatusData { nama: string; status: string; lokasi: string[]; }
-interface Employee { id: string; nama: string; departemen: string; }
+interface Employee { id: string; nama: string; departemen: string; email?: string; }
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
@@ -563,14 +563,25 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         waktu_request: serverTimestamp()
       });
 
-      // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — sekarang sifatnya info, bukan permintaan approval
-      kirimNotifikasiAdminGA("Overtime Gedung", formOvertime.nama, formOvertime.dept, [
-        { label: "Tanggal", value: formOvertime.tanggal },
-        { label: "Area", value: formOvertime.area },
-        { label: "Jam Mulai", value: formOvertime.jam_mulai },
-        { label: "Jam Selesai", value: formOvertime.jam_selesai },
-        { label: "Alasan", value: formOvertime.alasan },
-      ]);
+      // Konfirmasi ke PIC yang bersangkutan SENDIRI (bukan Admin GA lagi) -- overtime sekarang
+      // langsung "Tercatat" tanpa approval, jadi gak ada lagi yang perlu ditinjau Admin GA di
+      // tahap ini, cukup pemohonnya sendiri yang dapat bukti pencatatan lewat email.
+      const emailPemohon = employees.find(emp => emp.nama === formOvertime.nama)?.email;
+      if (emailPemohon) {
+        const htmlOvertime = buildOvertimeTercatatEmailHtml({
+          namaPemohon: formOvertime.nama,
+          departemen: formOvertime.dept,
+          area: formOvertime.area,
+          tanggal: formOvertime.tanggal,
+          jamMulai: formOvertime.jam_mulai,
+          jamSelesai: formOvertime.jam_selesai,
+          alasan: formOvertime.alasan,
+        });
+        const hasilEmail = await kirimEmail(emailPemohon, "Overtime Gedung Tercatat", htmlOvertime, formOvertime.nama);
+        if (!hasilEmail.sukses) console.error("[notify] Gagal kirim email konfirmasi overtime ke pemohon:", hasilEmail.pesanError);
+      } else {
+        console.warn(`[notify] ${formOvertime.nama} tidak punya email di Master Data Karyawan, konfirmasi overtime dilewati.`);
+      }
 
       showToast("Overtime Gedung berhasil dicatat. Akan masuk rekap tagihan.", "success");
       setFormOvertime({ nama: "", dept: "", area: "", tanggal: todayISO, jam_mulai: "", jam_selesai: "", alasan: "" }); setActiveModal("none");
@@ -1278,7 +1289,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   const standby = !isBengkel && isStandbyLabel(k.status_kendaraan);
                   const statusColor = isBengkel ? "#a1a1aa" : standby ? "var(--ok)" : "var(--red-600)";
                   return (
-                    <div key={k.kendaraan} title={`${k.kendaraan} — ${k.status_kendaraan}`} style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", width: "58px" }}>
+                    <div key={k.kendaraan} title={`${k.kendaraan} — ${k.status_kendaraan?.replace("Keluar Beroperasi", "Keluar")}`} style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", width: "58px" }}>
                       <div style={{ width: "46px", height: "46px", borderRadius: "14px", border: `2px solid ${statusColor}`, background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={24} />
                       </div>

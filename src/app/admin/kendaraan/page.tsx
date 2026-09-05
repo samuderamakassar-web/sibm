@@ -259,6 +259,14 @@ function getPergerakanTone(status: string): BadgeTone {
   return "success"; // Tiba di Kantor (Standby), dsb.
 }
 
+// Label tampilan dipersingkat -- "Keluar Beroperasi" cukup "Keluar" (tujuan & driver-nya
+// sudah kelihatan di keterangan sebelahnya, "Beroperasi" jadi berlebihan). Nilai ASLI di
+// Firestore ("Keluar Beroperasi") SENGAJA TIDAK diubah -- dipakai di banyak perbandingan
+// logic di seluruh app, cuma tampilannya yang dipersingkat di sini.
+function formatStatusLabel(status: string): string {
+  return status === "Keluar Beroperasi" ? "Keluar" : status;
+}
+
 // Data riwayat per kendaraan — disimpan sebagai map supaya bisa lihat beberapa kendaraan sekaligus di tab Riwayat
 interface VehicleRiwayatData {
   odometerLogs: OdometerLog[];
@@ -276,7 +284,7 @@ function buildRiwayatEntries(kendaraanId: string, kendaraanLabel: string, data: 
     tanggal: tglDariTimestamp(l.waktu_catat),
     jenis: "Pergerakan",
     tone: getPergerakanTone(l.status_kendaraan || ""),
-    utama: [l.status_kendaraan, (l.tujuan_keperluan && l.tujuan_keperluan !== "-") ? l.tujuan_keperluan : ""].filter(Boolean).join(" — "),
+    utama: [formatStatusLabel(l.status_kendaraan), (l.tujuan_keperluan && l.tujuan_keperluan !== "-") ? l.tujuan_keperluan : ""].filter(Boolean).join(" — "),
     sub: [
       l.kilometer_kendaraan && l.kilometer_kendaraan !== "Tidak dicatat" ? `Odometer: ${l.kilometer_kendaraan} km` : "",
       l.petugas_security ? `Dicatat oleh: ${l.petugas_security}` : "",
@@ -1147,7 +1155,7 @@ export default function ManajemenKendaraanPage() {
                       <div style={{ fontSize: "11px", fontWeight: "bold", color: "var(--info)", marginBottom: "6px" }}>POSISI / AKTIVITAS TERAKHIR</div>
                       {dataKendaraanTunggal.pergerakanLogs.length > 0 ? (
                         <>
-                          <Badge tone={getPergerakanTone(dataKendaraanTunggal.pergerakanLogs[0].status_kendaraan || "")}>{dataKendaraanTunggal.pergerakanLogs[0].status_kendaraan}</Badge>
+                          <Badge tone={getPergerakanTone(dataKendaraanTunggal.pergerakanLogs[0].status_kendaraan || "")}>{formatStatusLabel(dataKendaraanTunggal.pergerakanLogs[0].status_kendaraan)}</Badge>
                           {dataKendaraanTunggal.pergerakanLogs[0].tujuan_keperluan && dataKendaraanTunggal.pergerakanLogs[0].tujuan_keperluan !== "-" && (
                             <div style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink)", marginTop: "6px" }}>📍 {dataKendaraanTunggal.pergerakanLogs[0].tujuan_keperluan}</div>
                           )}
@@ -1200,7 +1208,7 @@ export default function ManajemenKendaraanPage() {
                           </div>
                           {posisi ? (
                             <>
-                              <Badge tone={getPergerakanTone(posisi.status_kendaraan || "")}>{posisi.status_kendaraan}</Badge>
+                              <Badge tone={getPergerakanTone(posisi.status_kendaraan || "")}>{formatStatusLabel(posisi.status_kendaraan)}</Badge>
                               {posisi.tujuan_keperluan && posisi.tujuan_keperluan !== "-" && (
                                 <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink)", marginTop: "6px" }}>📍 {posisi.tujuan_keperluan}</div>
                               )}

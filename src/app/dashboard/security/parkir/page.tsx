@@ -138,7 +138,7 @@ function classifyStatus(status: string): { label: string; bg: string; color: str
   if (status.includes("Bengkel") || status.includes("Service")) return { label: "SERVICE", bg: "var(--line)", color: "var(--ink-soft)" };
   if (status.includes("Pulang")) return { label: "PULANG", bg: "rgba(124,58,237,0.12)", color: "var(--accent)" };
   if (status.includes("Standby") || status.includes("Tiba")) return { label: "STANDBY", bg: "var(--ok-50)", color: "var(--ok)" };
-  return { label: "KELUAR POOL", bg: "var(--red-50)", color: "var(--red-600)" };
+  return { label: "KELUAR", bg: "var(--red-50)", color: "var(--red-600)" };
 }
 
 export default function LogOperasionalPage() {

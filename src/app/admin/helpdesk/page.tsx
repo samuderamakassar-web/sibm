@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { kirimEmail } from "../../../lib/notify";
 import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
@@ -104,6 +105,17 @@ export default function AdminHelpdeskPage() {
   const formatTanggal = (ts: Timestamp | null | undefined) => {
     if (!ts) return "-";
     return new Date(ts.toDate()).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  };
+
+  // Durasi penyelesaian dalam HARI (bukan cuma jam) -- buat data KPI. Dibulatkan ke atas
+  // (Math.ceil) supaya "1 jam" tetap kehitung 1 hari, bukan 0 -- lebih masuk akal buat
+  // laporan tiket lama sebagai satuan yang manusiawi, bukan pecahan hari.
+  const hitungDurasiHari = (lapor: Timestamp | null | undefined, selesai: Timestamp | null | undefined): string => {
+    if (!lapor || !selesai) return "-";
+    const ms = selesai.toDate().getTime() - lapor.toDate().getTime();
+    if (ms <= 0) return "0 hari";
+    const hari = Math.ceil(ms / (1000 * 60 * 60 * 24));
+    return `${hari} hari`;
   };
 
   const handleBukaModal = (tiket: HelpdeskTicket) => {
@@ -212,6 +224,32 @@ export default function AdminHelpdeskPage() {
     const matchTahun = filterTahun === "SEMUA" || (tglLapor && String(tglLapor.getFullYear()) === filterTahun);
     return matchStatus && matchBulan && matchTahun;
   });
+
+  // Export ke Excel -- data KPI (durasi penyelesaian per tiket), ikutin filter yang lagi aktif.
+  const handleExportExcel = () => {
+    if (filteredTickets.length === 0) {
+      showToast("Tidak ada data pada filter ini untuk diexport.", "warning");
+      return;
+    }
+    const headers = ["Tanggal Lapor", "Pelapor", "Departemen", "Lokasi", "Deskripsi", "Status", "Waktu Lapor", "Waktu Selesai", "Durasi Penyelesaian"];
+    const rows = filteredTickets.map((t) => [
+      formatTanggal(t.waktu_lapor),
+      t.nama_pelapor,
+      t.departemen,
+      t.lokasi,
+      t.deskripsi,
+      t.status,
+      formatJam(t.waktu_lapor),
+      formatJam(t.waktu_selesai),
+      hitungDurasiHari(t.waktu_lapor, t.waktu_selesai),
+    ]);
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    sheet["!cols"] = headers.map(() => ({ wch: 22 }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Laporan Kerusakan");
+    const sekarang = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Laporan_Kerusakan_${sekarang}.xlsx`);
+  };
 
   if (!isAuthReady || !session || !isReady) return null;
   const adminName = session.nama || "Admin GA";
@@ -328,6 +366,12 @@ export default function AdminHelpdeskPage() {
                 <option value="SEMUA">Semua Tahun</option>
                 {tahunTersedia.map((th) => <option key={th} value={th}>{th}</option>)}
               </select>
+              <button
+                onClick={handleExportExcel}
+                style={{ padding: "10px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", background: "var(--ok)", color: "white", display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                📊 Export ke Excel
+              </button>
             </div>
           </div>
         </Card>
@@ -342,11 +386,12 @@ export default function AdminHelpdeskPage() {
                     <th style={{ width: "10%" }}>Tanggal</th>
                     <th style={{ width: "18%" }}>Keluhan</th>
                     <th style={{ width: "9%" }}>Foto Laporan</th>
-                    <th style={{ width: "13%" }}>Waktu Lapor</th>
-                    <th style={{ width: "13%" }}>Waktu Selesai</th>
-                    <th style={{ width: "9%" }}>Foto Selesai</th>
-                    <th style={{ width: "8%" }}>Status</th>
-                    <th style={{ width: "10%" }}>Aksi</th>
+                    <th style={{ width: "11%" }}>Waktu Lapor</th>
+                    <th style={{ width: "11%" }}>Waktu Selesai</th>
+                    <th style={{ width: "8%" }}>Durasi</th>
+                    <th style={{ width: "8%" }}>Foto Selesai</th>
+                    <th style={{ width: "7%" }}>Status</th>
+                    <th style={{ width: "9%" }}>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -369,6 +414,7 @@ export default function AdminHelpdeskPage() {
                       </td>
                       <td data-label="Waktu Lapor" style={{ fontSize: "12px" }}>{formatJam(tiket.waktu_lapor)}</td>
                       <td data-label="Waktu Selesai" style={{ fontSize: "12px" }}>{formatJam(tiket.waktu_selesai)}</td>
+                      <td data-label="Durasi" style={{ fontSize: "12px", fontWeight: "bold", color: tiket.waktu_selesai ? "var(--ink)" : "var(--muted)" }}>{hitungDurasiHari(tiket.waktu_lapor, tiket.waktu_selesai)}</td>
                       <td data-label="Foto Selesai">
                         {tiket.foto_proses ? (
                           // eslint-disable-next-line @next/next/no-img-element

@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, doc, getDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { kirimEmail } from "@/lib/notify";
+import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
 import { useToast } from "@/components/ui/ToastProvider";
 
 // ==========================================
@@ -285,6 +287,9 @@ export default function InspeksiFasilitasPage() {
 
       // Fasilitas yang Rusak tetap diteruskan ke Helpdesk Admin GA — bagian yang dipertahankan
       // dari fitur lama, cuma sumbernya sekarang checklist terstruktur, bukan form bebas.
+      // Sekalian kirim email ke Admin GA (sebelumnya cuma masuk tabel, gak ada notifikasi
+      // email sama sekali buat temuan dari inspeksi) supaya langsung ketahuan, bukan cuma
+      // nongol diam-diam di tabel admin/helpdesk.
       const rusak = semuaDinilai.filter((h) => h.kondisi === "Rusak");
       await Promise.all(rusak.map((h) => addDoc(collection(db, "helpdesk_tickets"), {
         nama_pelapor: picName,
@@ -295,6 +300,34 @@ export default function InspeksiFasilitasPage() {
         foto_awal: h.foto || "",
         status: "Menunggu",
       })));
+
+      if (rusak.length > 0) {
+        try {
+          const adminSnap = await getDocs(query(collection(db, "users_master"), where("departemen", "==", "Admin GA")));
+          const daftarAdminGA = adminSnap.docs.map((d) => d.data() as { nama: string; email?: string });
+          for (const h of rusak) {
+            const htmlEmail = buildRequestBaruEmailHtml({
+              jenisRequest: "Laporan Kerusakan (Inspeksi Mingguan)",
+              namaPemohon: picName,
+              departemen: "OB & CS",
+              rows: [
+                { label: "Lokasi", value: `${selectedArea} - ${h.nama}` },
+                { label: "Keterangan", value: h.catatan },
+              ],
+              fotoUrl: h.foto || undefined,
+            });
+            for (const admin of daftarAdminGA) {
+              if (!admin.email) continue;
+              const hasilEmail = await kirimEmail(admin.email, `Laporan Kerusakan Baru: ${selectedArea} - ${h.nama}`, htmlEmail, admin.nama);
+              if (!hasilEmail.sukses) console.error(`[notify] Gagal kirim email temuan inspeksi ke ${admin.nama}:`, hasilEmail.pesanError);
+            }
+          }
+        } catch (emailError) {
+          // Best-effort -- kegagalan kirim email TIDAK boleh membatalkan laporan inspeksi yang
+          // sudah kesimpan (helpdesk_tickets di atas sudah berhasil, itu yang lebih penting).
+          console.error("[notify] Gagal memproses notifikasi email temuan inspeksi:", emailError);
+        }
+      }
 
       showToast(rusak.length > 0
         ? `Inspeksi terkirim! ${rusak.length} temuan rusak sudah diteruskan ke Admin GA.`
