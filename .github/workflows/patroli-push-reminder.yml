@@ -1,0 +1,28 @@
+name: Patroli Push Reminder
+
+on:
+  schedule:
+    # Tiap 30 menit sepanjang hari -- ganti banner in-app PatroliShiftBanner yang
+    # dicopot atas permintaan user. Sengaja TANPA guard anti-double-kirim per hari
+    # (beda dari script reminder lain) -- justru itu yang diminta: terus muncul
+    # tiap 30 menit selama sesi minimum belum terpenuhi.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Jalankan push reminder patroli
+        run: node scripts/patroli-push-reminder.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}

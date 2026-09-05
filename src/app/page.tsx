@@ -210,10 +210,17 @@ export default function PortalSIBM() {
       }));
     };
 
-    // 1. Tarik Data OB — plot hari ini
-    const unsubPlot = onSnapshot(doc(db, "daily_plots", todayISO), (docSnap) => {
-      setObBertugas(parsePlotDoc(docSnap));
-    });
+    // 1. Tarik Data OB — plot hari ini (skip kalau weekend, OB & CS gak ada jadwal, walau
+    // dokumennya mungkin masih nyimpan data lama)
+    let unsubPlot = () => {};
+    if (!isWeekend(todayISO)) {
+      unsubPlot = onSnapshot(doc(db, "daily_plots", todayISO), (docSnap) => {
+        setObBertugas(parsePlotDoc(docSnap));
+      });
+    } else {
+      const t = setTimeout(() => setObBertugas([]), 0);
+      unsubPlot = () => clearTimeout(t);
+    }
 
     // 1b. Setelah jam 20:00 WITA, tarik juga plot BESOK biar staf/GA bisa lihat plotting besok dari malam ini
     // (skip kalau besok Sabtu/Minggu — OB & CS tidak ada jadwal, walau dokumen plot lama mungkin masih nyimpan data basi)

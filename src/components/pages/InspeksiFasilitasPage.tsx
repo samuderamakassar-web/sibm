@@ -82,6 +82,12 @@ interface InspeksiLog {
 function getTodayISOLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
+// OB & CS tidak ada jadwal di akhir pekan -- jaga-jaga kalau daily_plots weekend kebetulan
+// masih nyimpan data lama.
+function isWeekend(dateISO: string): boolean {
+  const hari = new Date(dateISO + "T00:00:00").getDay();
+  return hari === 0 || hari === 6;
+}
 function toISOFromDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -144,12 +150,14 @@ export default function InspeksiFasilitasPage() {
 
       try {
         const todayISO = getTodayISOLocal();
-        const plotSnap = await getDoc(doc(db, "daily_plots", todayISO));
-        if (plotSnap.exists()) {
-          const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
-          const lantaiKu = Object.keys(plots).filter((l) => plots[l] === nama || plots[l] === "Semua / All");
-          setAssignedAreas(lantaiKu);
-          if (lantaiKu.length > 0) setSelectedArea(lantaiKu[0]);
+        if (!isWeekend(todayISO)) {
+          const plotSnap = await getDoc(doc(db, "daily_plots", todayISO));
+          if (plotSnap.exists()) {
+            const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
+            const lantaiKu = Object.keys(plots).filter((l) => plots[l] === nama || plots[l] === "Semua / All");
+            setAssignedAreas(lantaiKu);
+            if (lantaiKu.length > 0) setSelectedArea(lantaiKu[0]);
+          }
         }
       } catch (error) {
         console.error("Gagal memuat data plotting:", error);
@@ -472,6 +480,24 @@ export default function InspeksiFasilitasPage() {
                                 <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "3px solid rgba(220,38,38,0.2)", borderTopColor: "var(--red-600)", animation: "spin 0.8s linear infinite" }} />
                               ) : (
                                 <><IconCamera size={18} color="var(--red-600)" /> Foto</>
+                              )}
+                              <input type="file" accept="image/*" onChange={(e) => handleFotoChange(e, index)} style={{ display: "none" }} disabled={uploadingIdx === index} />
+                            </label>
+                          </div>
+                        )}
+
+                        {/* Foto tetap bisa ditambahkan buat kondisi Baik/N/A juga (opsional, bukan cuma
+                            pas Rusak) -- dokumentasi kondisi fasilitas gak harus nunggu rusak dulu. */}
+                        {(h.kondisi === "Baik" || h.kondisi === "Tidak Ada") && (
+                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            <label className="foto-dropzone">
+                              {h.foto ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={h.foto} alt="Bukti" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "11px" }} />
+                              ) : uploadingIdx === index ? (
+                                <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "3px solid var(--line)", borderTopColor: "var(--ok)", animation: "spin 0.8s linear infinite" }} />
+                              ) : (
+                                <><IconCamera size={18} color="var(--muted)" /> Foto</>
                               )}
                               <input type="file" accept="image/*" onChange={(e) => handleFotoChange(e, index)} style={{ display: "none" }} disabled={uploadingIdx === index} />
                             </label>

@@ -303,6 +303,13 @@ function getTodayISOLocal(): string {
   }).format(new Date());
 }
 
+// OB & CS tidak ada jadwal di akhir pekan (sama aturan dengan PlottingOBPage.tsx dkk) --
+// dipakai buat jaga-jaga kalau dokumen daily_plots weekend kebetulan masih nyimpan data lama.
+function isWeekend(dateISO: string): boolean {
+  const hari = new Date(dateISO + "T00:00:00").getDay();
+  return hari === 0 || hari === 6;
+}
+
 // ==========================================
 // INTERFACES DATA
 // ==========================================
@@ -365,16 +372,33 @@ export default function ChecklistOBPage() {
   const [fotoList, setFotoList] = useState<{ before?: string; after?: string }[]>([{}]);
   const [showFotoModal, setShowFotoModal] = useState(false);
 
-  // Area yang tersedia buat dipilih PIC ini hari ini: punya plot ATAS namanya, DIKURANGI
-  // area bersama (Lantai 5) yang sudah diselesaikan staf lain — cukup 1x per hari buat semua.
-  const assignedAreas = plotMapHariIni
+  // Area yang jadi tanggung jawab PIC ini hari ini, DIKURANGI area bersama (Lantai 5) yang
+  // sudah diselesaikan staf lain — cukup 1x per hari buat semua.
+  const areaTanggungJawab = plotMapHariIni
     ? Object.keys(plotMapHariIni).filter((area) => !(plotMapHariIni[area] === NILAI_BERSAMA && areaBersamaSelesai.has(area)))
     : [];
-  // Punya plot mentah tapi semua sudah selesai (dikerjakan staf lain) — beda pesan dgn "tidak ada jadwal sama sekali".
-  const semuaTugasSudahSelesai = !!plotMapHariIni && Object.keys(plotMapHariIni).length > 0 && assignedAreas.length === 0;
+
+  const todayISOUntukFilter = getTodayISOLocal();
+  const sesiSekarangUntukFilter = sesiOBSekarang(waktuWITASekarang());
+  // Dari area tanggung jawab, buang yang SUDAH dilaporkan di sesi yang lagi berjalan --
+  // begitu sesi berikutnya mulai (waktu jalan terus, sesiSekarangUntukFilter ikut berubah
+  // tiap render), area yang tadi hilang otomatis muncul lagi karena filter ini re-evaluasi.
+  const assignedAreas = sesiSekarangUntukFilter
+    ? areaTanggungJawab.filter((area) => !riwayatKerja.some(
+        log => log.area === area && log.tanggal === todayISOUntukFilter && log.sesi === sesiSekarangUntukFilter
+      ))
+    : areaTanggungJawab;
+
+  // Punya plot mentah tapi semua sudah selesai (dikerjakan staf lain, mis. Lantai 5) — beda
+  // pesan dgn "tidak ada jadwal sama sekali".
+  const semuaTugasSudahSelesai = !!plotMapHariIni && Object.keys(plotMapHariIni).length > 0 && areaTanggungJawab.length === 0;
+  // Semua area tanggung jawab SUDAH dilaporkan untuk sesi yang lagi berjalan (tapi masih ada
+  // sesi berikutnya buat dikerjakan lagi nanti) -- beda pesan lagi, bukan "tidak ada jadwal".
+  const sesiIniSudahSelesaiSemua = !semuaTugasSudahSelesai && areaTanggungJawab.length > 0 && assignedAreas.length === 0 && !!sesiSekarangUntukFilter;
   // Default pilihan area di step 1 kalau user belum eksplisit milih — dihitung tiap render
   // (bukan lewat effect+setState) biar gak nge-reset pilihan yang udah "dikunci" pas masuk step 2.
   const defaultArea = assignedAreas[0] ?? "";
+  const isLiburHariIni = isWeekend(getTodayISOLocal());
 
   // ==========================================
   // EFEK 1: Ambil Identitas & Data Ploting
@@ -393,18 +417,24 @@ export default function ChecklistOBPage() {
 
       try {
         const todayISO = getTodayISOLocal();
-        const plotRef = doc(db, "daily_plots", todayISO);
-        const plotSnap = await getDoc(plotRef);
-
-        if (plotSnap.exists()) {
-          const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
-          const punyaKu: Record<string, string> = {};
-          Object.keys(plots).forEach((lantai) => {
-            if (plots[lantai] === nama || plots[lantai] === NILAI_BERSAMA) punyaKu[lantai] = plots[lantai];
-          });
-          setPlotMapHariIni(punyaKu);
-        } else {
+        if (isWeekend(todayISO)) {
+          // Weekend: SELALU kosong, terlepas dari isi dokumennya (bisa saja masih nyimpan
+          // data lama) -- OB & CS memang tidak ada jadwal Sabtu/Minggu.
           setPlotMapHariIni({});
+        } else {
+          const plotRef = doc(db, "daily_plots", todayISO);
+          const plotSnap = await getDoc(plotRef);
+
+          if (plotSnap.exists()) {
+            const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
+            const punyaKu: Record<string, string> = {};
+            Object.keys(plots).forEach((lantai) => {
+              if (plots[lantai] === nama || plots[lantai] === NILAI_BERSAMA) punyaKu[lantai] = plots[lantai];
+            });
+            setPlotMapHariIni(punyaKu);
+          } else {
+            setPlotMapHariIni({});
+          }
         }
       } catch (error) {
         console.error("Gagal memuat data plotting:", error);
@@ -609,7 +639,18 @@ export default function ChecklistOBPage() {
         foto_bukti: fotoValid,
       });
 
-      showToast("Laporan Kebersihan berhasil dikirim! Riwayat visual Anda telah terekam di sistem.", "success");
+      // Kabari progres 3 sesi hari ini buat area ini -- beda pesan kalau ini sesi
+      // terakhir yang bikin semuanya (3/3) selesai vs baru sebagian.
+      const sesiIndex = JENDELA_SESI_OB.findIndex(j => j.sesi === sesiSekarang) + 1;
+      const sesiLainSudahLapor = JENDELA_SESI_OB
+        .filter(j => j.sesi !== sesiSekarang)
+        .every(j => riwayatKerja.some(log => log.area === selectedArea && log.tanggal === todayISO && log.sesi === j.sesi));
+
+      if (sesiLainSudahLapor) {
+        showToast("🎉 Selamat! Anda hebat menyelesaikan semua sesi (3/3) & misi hari ini. Tetap semangat!", "success");
+      } else {
+        showToast(`Sesi ${sesiIndex}/3 (${sesiSekarang}) selesai! Silakan isi lagi nanti pas sesi berikutnya.`, "success");
+      }
       setJawabanTugas({});
       setFotoList([{}]);
       setStep(1);
@@ -751,6 +792,22 @@ export default function ChecklistOBPage() {
                       Lanjut Isi Checklist ➔
                     </button>
                   </>
+                ) : isLiburHariIni ? (
+                  <div style={{ padding: "20px" }}>
+                    <div className="icon-chip" style={{ width: "72px", height: "72px", background: "var(--bg)", color: "var(--muted)", margin: "0 auto 18px" }}><IconMapPin size={34} /></div>
+                    <h3 style={{ color: "var(--ink)", margin: "0 0 10px 0", fontSize: "20px" }}>Hari Ini Libur 🎉</h3>
+                    <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0, lineHeight: "1.6" }}>
+                      OB & CS tidak ada jadwal kebersihan di Sabtu/Minggu. Selamat istirahat, sampai jumpa hari kerja berikutnya!
+                    </p>
+                  </div>
+                ) : sesiIniSudahSelesaiSemua ? (
+                  <div style={{ padding: "20px" }}>
+                    <div className="icon-chip" style={{ width: "72px", height: "72px", background: "var(--ok-50)", color: "var(--ok)", margin: "0 auto 18px" }}><IconCheck size={30} /></div>
+                    <h3 style={{ color: "var(--ok)", margin: "0 0 10px 0", fontSize: "20px" }}>Sesi {sesiSekarangUntukFilter} Sudah Dilaporkan Semua ✅</h3>
+                    <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0, lineHeight: "1.6" }}>
+                      Semua area tanggung jawab Anda sudah dilaporkan untuk sesi ini. Silakan kembali lagi nanti begitu jendela sesi berikutnya mulai.
+                    </p>
+                  </div>
                 ) : semuaTugasSudahSelesai ? (
                   <div style={{ padding: "20px" }}>
                     <div className="icon-chip" style={{ width: "72px", height: "72px", background: "var(--ok-50)", color: "var(--ok)", margin: "0 auto 18px" }}><IconCheck size={30} /></div>
