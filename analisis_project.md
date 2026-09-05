@@ -1594,3 +1594,33 @@ Pola import lama yang dipakai script reminder LAMA (`import admin from "firebase
 
 ### 30E. Verifikasi
 `npm run build` + `npx eslint` (file TS yang disentuh): 0 error. `node --check` kedua script baru: OK. Dry-run lokal terhadap Firestore asli: OK (jalur skip). **Tidak perlu redeploy hosting** (perubahan `.mjs`/`.yml` dibaca langsung dari repo oleh GitHub Actions, bukan dari bundle yang di-deploy) — TAPI perubahan `useFcmSetup.ts` & `dashboard/security/page.tsx` (kode client) SUDAH ikut di-deploy bareng §29. Commit: `ccaccd4` (fitur), `46e63b0` (artifact), `9e3824d` (fix import). `dev`+`main` sinkron.
+
+---
+
+## 31. Fix Lanjutan §29/§30: Guard Weekend Checklist OB, UX Sesi, Foto Inspeksi, Push Patroli (5 September 2026, lanjutan langsung §30)
+
+Konteks: user test langsung di browser (Sabtu) dan lapor: (1) halaman checklist (`/dashboard/ob/checklist`) MASIH nampilin area "Basement" buat dipilih padahal harusnya libur — kirim screenshot; (2) minta UX sesi lebih hidup (opsi hilang begitu dilaporkan, notif progres per sesi, notif spesial pas semua sesi selesai); (3) inspeksi fasilitas gak ada opsi foto kecuali kondisi Rusak; (4) banner in-app Security ("Sesi patroli minimum belum terpenuhi") minta dihapus, diganti push kayak OB.
+
+### 31A. Root cause #1 masih ada di 2 tempat lain (§28H/§29A ternyata belum lengkap)
+Sudah 3x sesi ini nemu bug "baca `daily_plots` mentah tanpa guard weekend" di file yang berbeda-beda (`DashboardOBPage.tsx`, `ChecklistOBBanner.tsx`, `PlottingOBPage.tsx` di §28H — lalu ternyata MASIH ada di 2 tempat lagi:
+- **`ChecklistOBPage.tsx` sendiri** (halaman checklist-nya, bukan cuma banner reminder-nya) — ini yang bikin screenshot user nunjukin "Basement" masih muncul. Root cause SAMA: fetch `daily_plots` gak ada pengecekan weekend.
+- **`src/app/page.tsx`** ("Tim Bertugas Hari Ini" di portal publik) — cuma bagian "besok" yang ada guard weekend (dari commit lama), bagian "hari ini" kelewat.
+- **`InspeksiFasilitasPage.tsx`** — belum kena bug user (belum sempat ditest weekend), tapi sekalian dipatch preventif karena pola persis sama.
+
+**Pelajaran (update dari §28H)**: audit "cari SEMUA konsumen `daily_plots` sekaligus lewat grep" ternyata baru dilakukan SEKARANG (§31), bukan pas nemu bug pertama kali di §28H — kalau grep menyeluruh dilakukan dari awal, 2 file tambahan ini harusnya ketemu sekaligus, bukan nyicil ketemu satu-satu tiap user lapor.
+
+### 31B. UX Sesi Checklist OB (`ChecklistOBPage.tsx`)
+- `assignedAreas` sekarang exclude area yang SUDAH dilaporkan di sesi yang lagi berjalan (dicek ke `riwayatKerja` + `sesiOBSekarang()`) — otomatis muncul lagi begitu jam masuk sesi berikutnya (waktu jalan terus, re-evaluasi tiap render).
+- Toast sukses submit sekarang beda-beda: `Sesi X/3 (nama sesi) selesai!` untuk sesi 1-2, dan pesan spesial "🎉 Selamat! Anda hebat menyelesaikan semua sesi (3/3)..." begitu sesi ke-3 (terakhir) juga selesai.
+- State baru `sesiIniSudahSelesaiSemua`: kalau semua area tanggung jawab sudah dilaporkan buat sesi yang lagi berjalan (tapi masih ada sesi berikutnya nanti), tampilkan pesan "Sesi [X] Sudah Dilaporkan Semua ✅" — beda dari pesan lama "Tidak Ada Jadwal" (yang harusnya cuma buat kasus koordinator lupa plot) dan beda dari "Tugas Hari Ini Sudah Selesai" (khusus kasus Lantai 5 diambil rekan tim).
+
+### 31C. Foto Inspeksi Fasilitas untuk Semua Kondisi
+`InspeksiFasilitasPage.tsx`: foto dropzone sebelumnya cuma render kalau `kondisi === "Rusak"` (nempel jadi satu sama textarea keterangan wajib). Sekarang foto (opsional, gak wajib) juga muncul buat kondisi **Baik** dan **Tidak Ada** — dipisah jadi blok render sendiri, styling netral (bukan merah), textarea keterangan tetap Rusak-only (gak diubah, gak ada komplain soal itu).
+
+### 31D. Push Notification Patroli Security (ganti banner in-app)
+- `PatroliShiftBanner.tsx` DICOPOT dari `dashboard/security/layout.tsx` (file komponennya sendiri dibiarkan ada sebagai dead code, konsisten pola lama `NotifikasiChecklistListener.tsx`).
+- **`scripts/patroli-push-reminder.mjs` (BARU)** + workflow baru, cron `*/30 * * * *` — cek shift+sesi yang lagi berjalan, kirim push FCM ke petugas yang belum penuhi minimum 2/3 sesi. SENGAJA dibuat TERPISAH dari `patroli-reminder.mjs` yang sudah production-proven (gak mau resiko ganggu logic pre-shift/shift-start-nya) — dan SENGAJA TANPA guard anti-double-kirim per hari (beda dari script lain), karena memang harus terus muncul tiap 30 menit sampai syarat terpenuhi.
+- **Dry-run lokal SEMPAT benar-benar mengirim 1 push notification asli** ke device Awaluddin (petugas Security yang kebetulan sedang shift & belum penuhi minimum sesi saat dry-run dijalankan) — bukan simulasi. Isinya akurat/relevan buat situasinya, jadi tidak masalah, tapi dicatat di sini sebagai transparansi (user sudah diberi tahu langsung di chat).
+
+### 31E. Verifikasi
+`npm run build`: 0 error. `npx eslint`: ketemu 1 ERROR baru (`setState` sinkron di body effect, `src/app/page.tsx`) — langsung difix pakai pola `setTimeout(...,0)` yang sudah konvensi di project ini. 2 warning `showToast` missing-dep pre-existing, gak nambah. `node --check` script baru: OK. **SUDAH di-deploy** (`hosting`) & di-commit (`7b7630e` kode, `1014b47` artifact). `dev`+`main` sinkron. **Belum ditest ulang oleh user** — minta dicoba lagi terutama halaman checklist OB di hari Sabtu/Minggu ini juga (harus nunjukin "Hari Ini Libur" sekarang), dan flow sesi checklist pas hari kerja nanti.
