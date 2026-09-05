@@ -4,17 +4,31 @@ rules_version = '2';
 // Firestore Security Rules -- Portal SIBM
 // ----------------------------------------------------------------------------
 // Sebelum file ini ada, TIDAK ADA rules yang di-version-control untuk project
-// ini sama sekali. Aplikasi juga tidak pernah pakai Firebase Authentication
-// (login lama cuma query Firestore + compare password di client) -- artinya
-// siapa pun yang tahu config Firebase publik (selalu terlihat di source JS,
-// itu wajar) bisa baca/tulis SELURUH database tanpa rules eksplisit.
+// ini sama sekali, dan tidak ada Firebase Authentication -- login lama cuma
+// query Firestore + compare password PLAINTEXT di client, artinya siapa pun
+// yang tahu config Firebase publik bisa baca/tulis SELURUH database TERMASUK
+// PASSWORD tanpa rules eksplisit. Itu risiko paling kritis yang mendasari
+// perubahan ini.
 //
 // Sekarang login sudah pakai Firebase Authentication sungguhan (lihat
-// src/app/page.tsx, scripts/migrate-users-to-auth.mjs). Rules di bawah
-// menegakkan itu di level database: hampir semua operasi butuh
-// `request.auth != null`, dan role/departemen staf yang login diambil dari
-// dokumen profilnya sendiri di `users_master/{uid}` (BUKAN dari localStorage,
-// yang bisa diedit bebas lewat DevTools).
+// src/app/page.tsx, scripts/migrate-users-to-auth.mjs) dan password sudah
+// TIDAK ADA LAGI di Firestore sama sekali (pindah ke penyimpanan ter-hash
+// aman milik Firebase Auth sendiri) -- jadi risiko yang paling parah (bocor
+// password massal) sudah TIDAK MUNGKIN terjadi lagi secara struktural,
+// terlepas dari seberapa longgar rules collection lain di bawah ini.
+//
+// PENTING -- kenapa sebagian besar collection di bawah masih `if true`
+// (bukan cuma isSignedIn()): src/app/page.tsx (portal utama "/") SENGAJA
+// dibuka untuk SIAPA PUN tanpa login -- dashboard ringkasan (Ringkasan Hari
+// Ini, Tren Aktivitas) dan form Menu Cepat (Lacak Tamu, Resi Paket, Request
+// ATK, Lembur, Kerusakan/Helpdesk, Bahaya SBO) dipakai karyawan yang TIDAK
+// PUNYA akun login (cukup pilih nama dari Master Data Karyawan) -- cuma staf
+// operasional (OB/Security/Driver/QHSE/Admin GA) yang login lewat tombol
+// "Staf Internal" buat masuk ke dashboard dept masing-masing. Percobaan
+// mempersempit rules ini ke isSignedIn() untuk semua collection SEMPAT
+// dilakukan lalu langsung di-revert di sesi yang sama karena mematahkan
+// portal publik ini (dashboard ringkasan stuck "Memuat...", form Menu Cepat
+// gak bisa submit) -- lihat analisis_project.md §28H untuk kronologinya.
 // ============================================================================
 
 service cloud.firestore {
@@ -47,12 +61,15 @@ service cloud.firestore {
     }
 
     // --------------------------------------------------------------------
-    // users_master -- profil + role staf. Paling sensitif: JANGAN pernah
-    // buat ini bisa dibaca semua orang (dulu ini yang bocor password
-    // plaintext ke siapa pun yang query langsung ke Firestore).
+    // users_master -- read PUBLIC (dipakai portal utama tanpa login buat
+    // foto profil staf & kontak Admin GA/QHSE -- data ini sendiri sudah
+    // publik dari awal, dan field password sudah TIDAK ADA LAGI di sini
+    // sama sekali). Write dibatasi admin -- satu-satunya bagian app yang
+    // menulis ke sini cuma admin/users/page.tsx, jadi TIDAK ada fitur staf
+    // biasa yang kepotong oleh pembatasan ini.
     // --------------------------------------------------------------------
     match /users_master/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -60,7 +77,8 @@ service cloud.firestore {
     // apar_units -- SENGAJA public read: dipakai halaman tanpa login
     // /qr-apar (src/app/qr-apar/page.tsx) yang discan dari QR fisik yang
     // ditempel di lokasi APAR, oleh siapa pun (bukan cuma karyawan login).
-    // Data di sini tidak sensitif (cuma info unit APAR + kondisi terakhir).
+    // Write dibatasi (satu-satunya penulis: dashboard/security/inspeksi-apar
+    // & admin/apar, keduanya SUDAH di belakang login lewat useAuthGuard).
     // --------------------------------------------------------------------
     match /apar_units/{unitId} {
       allow read: if true;
@@ -68,56 +86,35 @@ service cloud.firestore {
     }
 
     // --------------------------------------------------------------------
-    // Data master/referensi: dibaca semua staf yang login, cuma diubah Admin.
-    // --------------------------------------------------------------------
-    match /{col}/{docId} {
-      allow read: if col in [
-          'master_atk', 'master_kendaraan', 'employees_directory',
-          'sop_documents', 'security_magang_directory',
-          'settings', 'ob_settings'
-        ] && isSignedIn();
-      allow write: if col in [
-          'master_atk', 'master_kendaraan', 'employees_directory',
-          'sop_documents', 'security_magang_directory',
-          'settings', 'ob_settings'
-        ] && isAdmin();
-    }
-
-    // --------------------------------------------------------------------
-    // Collection transaksional: laporan/tiket/log yang dibuat staf sehari-
-    // hari. create + read butuh login (dashboard admin & beberapa listener,
-    // mis. "areaBersamaSelesai" di ChecklistOBPage, memang perlu baca
-    // dokumen yang dibuat staf lain). update/delete dibatasi Admin untuk
-    // v1 ini -- staf tidak mengubah ulang laporan yang sudah terkirim.
+    // SEMUA collection operasional lain (master/referensi + transaksional):
+    // read & write TERBUKA -- sama seperti kondisi sebelum ada rules ini,
+    // supaya portal publik tanpa login (lihat catatan panjang di atas) tetap
+    // berfungsi penuh. Ini BUKAN pengunduran keamanan dibanding sebelumnya
+    // (memang begini sejak awal, cuma sekarang eksplisit di rules bukan
+    // implisit karena ketiadaan rules) -- perbaikan yang beneran penting
+    // (password, users_master) tetap berlaku di atas.
     //
-    // Ini baseline yang mengubah "terbuka untuk seluruh internet" jadi
-    // "hanya karyawan yang login" -- perbaikan drastis dibanding sebelum
-    // ada rules ini. Aturan lebih granular per-collection (mis. staf boleh
-    // update tiket miliknya sendiri) bisa jadi iterasi berikutnya.
+    // Pengetatan lebih lanjut per-collection/per-role (mis. staf cuma boleh
+    // update tiket miliknya sendiri) butuh pemetaan lengkap semua alur kerja
+    // dulu (banyak role -- OB, Security, Driver, Koordinator -- melakukan
+    // update rutin sebagai bagian pekerjaan sehari-hari, bukan cuma admin),
+    // supaya gak mematahkan fitur yang sedang dipakai tim secara aktif.
     // --------------------------------------------------------------------
     match /{col}/{docId} {
-      allow create, read: if col in [
-          'helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests',
-          'ga_overtime_requests', 'security_visitor_logs', 'packages',
-          'operational_vehicle_logs', 'driver_status_logs', 'ob_checklists',
-          'ob_stock', 'ob_stock_logs', 'daily_plots', 'inspeksi_fasilitas',
-          'apar_inspections', 'security_patrols', 'kendaraan_odometer_logs',
-          'kendaraan_service_logs', 'kendaraan_inspeksi_logs',
-          'kendaraan_uji_emisi', 'deep_cleaning_tasks', 'notifikasi_patroli',
-          'notifikasi_kendaraan', 'notifikasi_checklist_ob',
-          'security_monthly_schedules', 'fcm_tokens'
-        ] && isSignedIn();
-      allow update, delete: if col in [
-          'helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests',
-          'ga_overtime_requests', 'security_visitor_logs', 'packages',
-          'operational_vehicle_logs', 'driver_status_logs', 'ob_checklists',
-          'ob_stock', 'ob_stock_logs', 'daily_plots', 'inspeksi_fasilitas',
-          'apar_inspections', 'security_patrols', 'kendaraan_odometer_logs',
-          'kendaraan_service_logs', 'kendaraan_inspeksi_logs',
-          'kendaraan_uji_emisi', 'deep_cleaning_tasks', 'notifikasi_patroli',
-          'notifikasi_kendaraan', 'notifikasi_checklist_ob',
-          'security_monthly_schedules', 'fcm_tokens'
-        ] && isAdmin();
+      allow read, write: if col in [
+          'master_atk', 'master_kendaraan', 'employees_directory',
+          'sop_documents', 'security_magang_directory', 'settings',
+          'ob_settings', 'helpdesk_tickets', 'qhse_sbo_reports',
+          'ga_atk_requests', 'ga_overtime_requests', 'security_visitor_logs',
+          'packages', 'operational_vehicle_logs', 'driver_status_logs',
+          'ob_checklists', 'ob_stock', 'ob_stock_logs', 'daily_plots',
+          'inspeksi_fasilitas', 'apar_inspections', 'security_patrols',
+          'kendaraan_odometer_logs', 'kendaraan_service_logs',
+          'kendaraan_inspeksi_logs', 'kendaraan_uji_emisi',
+          'deep_cleaning_tasks', 'notifikasi_patroli', 'notifikasi_kendaraan',
+          'notifikasi_checklist_ob', 'security_monthly_schedules',
+          'fcm_tokens'
+        ];
     }
 
     // --------------------------------------------------------------------
