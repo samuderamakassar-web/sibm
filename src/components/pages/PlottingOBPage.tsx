@@ -566,7 +566,11 @@ export default function PlottingOBPage() {
                             {tgl} <span style={{ fontWeight: "normal", fontSize: "11px" }}>({namaHari}{weekend ? " · Libur" : ""})</span>
                           </td>
                           {SEMUA_AREA.map((a) => (
-                            <td key={a} style={{ color: weekend ? "#cbd5e0" : plot?.[a] ? "#2d3748" : "#cbd5e0" }}>{weekend ? "-" : (plot?.[a] || "-")}</td>
+                            // Tampilkan data ASLI dari Firestore, jangan dipaksa "-" cuma karena
+                            // weekend -- kalau ternyata ada data nyangkut (mis. belum sempat
+                            // di-generate ulang), admin harus bisa LIHAT & sadar ada yang perlu
+                            // dibersihkan, bukan disembunyikan seolah-olah sudah bersih.
+                            <td key={a} style={{ color: plot?.[a] ? (weekend ? "#c05621" : "#2d3748") : "#cbd5e0" }}>{plot?.[a] || "-"}</td>
                           ))}
                         </tr>
                       );

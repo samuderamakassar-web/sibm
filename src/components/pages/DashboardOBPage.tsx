@@ -95,6 +95,14 @@ function getTodayISOLocal(): string {
   }).format(new Date());
 }
 
+// OB & CS tidak ada jadwal di akhir pekan (sama aturan dengan PlottingOBPage.tsx) --
+// dipakai buat jaga-jaga di sisi tampilan kalau dokumen daily_plots hari weekend
+// kebetulan masih nyimpan data lama yang belum sempat dibersihkan ulang.
+function isWeekend(dateISO: string): boolean {
+  const hari = new Date(dateISO + "T00:00:00").getDay();
+  return hari === 0 || hari === 6;
+}
+
 export default function DashboardOBPage() {
   const router = useRouter();
   const confirm = useConfirm();
@@ -134,7 +142,7 @@ export default function DashboardOBPage() {
     // A. Listener Plot Lantai
     const plotRef = doc(db, "daily_plots", todayISO);
     const unsubPlot = onSnapshot(plotRef, (docSnap) => {
-      if (docSnap.exists()) {
+      if (docSnap.exists() && !isWeekend(todayISO)) {
         const plots = docSnap.data().plot_lantai || {};
         const lantaiKu = Object.keys(plots).filter(
           (lantai) => plots[lantai] === picName || plots[lantai] === "Semua / All"
