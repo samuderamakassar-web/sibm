@@ -176,11 +176,15 @@ export default function PlottingOBPage() {
       try {
         const ref = doc(db, "daily_plots", selectedDate);
         const snap = await getDoc(ref);
-        if (snap.exists()) {
+        const weekend = isWeekend(selectedDate);
+        // Weekend SELALU ditampilkan kosong di sini, walau dokumennya ternyata masih nyimpan
+        // data lama (dari sebelum ada logika "kosongkan pas generate") -- OB & CS memang tidak
+        // ada jadwal weekend by default. Kalau memang perlu kebutuhan khusus, koordinator isi
+        // manual lewat dropdown di bawah lalu Simpan (baru jadi data weekend yang SENGAJA).
+        if (snap.exists() && !weekend) {
           setPlotHariIni((snap.data().plot_lantai || {}) as PlotHarian);
         } else {
           const kosong: PlotHarian = {};
-          const weekend = isWeekend(selectedDate);
           SEMUA_AREA.forEach((a) => {
             kosong[a] = !weekend && a === AREA_PELAYANAN ? pelayananTetap : "";
           });

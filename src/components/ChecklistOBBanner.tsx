@@ -29,6 +29,14 @@ function tanggalWITAHariIni(): string {
   return wita.toISOString().split("T")[0];
 }
 
+// OB & CS tidak ada jadwal di akhir pekan -- jangan pernah picu reminder di
+// Sabtu/Minggu, apa pun isi dokumen daily_plots-nya (bisa saja masih nyimpan
+// data lama, atau memang diisi manual buat kebutuhan khusus).
+function isWeekend(tanggalISO: string): boolean {
+  const hari = new Date(tanggalISO + "T00:00:00").getDay();
+  return hari === 0 || hari === 6;
+}
+
 interface ChecklistDoc {
   waktu_selesai?: Timestamp;
 }
@@ -46,6 +54,10 @@ export default function ChecklistOBBanner() {
   useEffect(() => {
     if (!picName) {
       const t = setTimeout(() => setAreaTugas(null), 0);
+      return () => clearTimeout(t);
+    }
+    if (isWeekend(tanggal)) {
+      const t = setTimeout(() => setAreaTugas([]), 0);
       return () => clearTimeout(t);
     }
     let dibatalkan = false;
