@@ -1,30 +1,30 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 5 September 2026 (§28: audit keamanan menyeluruh — ketemu 3 celah KRITIS (tidak ada Firebase Authentication, password plaintext, tidak ada `firestore.rules` sama sekali). Migrasi ke Firebase Authentication sungguhan, `firestore.rules` baru (36 collection, deny-by-default), 3 perbaikan cepat (hapus by-pass QR APAR, hapus scan QR patroli, checklist OB dibatasi 3x/hari), rapihkan 13 halaman lain ke `useAuthGuard` (sekalian benerin bug lama: hardcode nama "hilal", bug 404 redirect `/dashboard` di 4 file) — **SEMUA SUDAH DI-DEPLOY ke production** (migrasi 12/12 user sukses, rules+hosting live, diverifikasi via REST API tanpa login: collection sensitif `403 PERMISSION_DENIED`, `apar_units` tetap `200` sesuai desain). **User BELUM sempat test login manual pakai password asli** — lihat §28G buat detail lengkap & langkah lanjutan.)
+Update terakhir: 7 September 2026 (§33: batch 8 item dari user dalam 1 pesan — Menu Cepat dirapikan jadi 3 kolom konsisten, Tim Bertugas Hari Ini OB & CS auto-swap ke preview rencana berikutnya mulai jam 17:00 WITA (balik normal jam 06:00), tampilkan Security shift berikutnya, notifikasi staleness status kendaraan (driver+Security jaga) kalau >2 jam gak diupdate, reorganisasi titik patroli (Parkiran + Siram Tanaman khusus Sesi 1 + Taman Belakang Lt1, hapus titik weekend lama), fitur baru "Notifikasi Dadakan: Siram Tanaman" wajib foto bukti (2 jendela harian) + monitoring admin, hapus 2 banner in-app tersisa (OB & Security) full pindah ke push FCM, dan alasan+foto wajib buat jawaban "Tidak" di segment Pelayanan + field catatan penyimpangan tugas — **SUDAH DI-DEPLOY ke production** (`hosting`+`firestore:rules`), `dev`+`main` sinkron fast-forward tanpa conflict. **Belum ditest visual manual oleh user** — lihat §33I.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 5 September 2026 — §28 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 7 September 2026 — §33 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Sesi hari ini (§28) — FOKUS KEAMANAN, terpisah dari rangkaian §21-§27
+### Sesi hari ini (§33) — batch 8 item dalam 1 pesan, lanjutan langsung §32
 
-User minta audit keamanan menyeluruh. Ketemu 3 celah KRITIS: (1) app ini SAMA SEKALI gak pakai Firebase Authentication — login cuma compare password manual di client; (2) password karyawan tersimpan PLAINTEXT di Firestore; (3) TIDAK ADA `firestore.rules` di project sama sekali sejak awal — kemungkinan besar database bisa dibaca/ditulis siapa saja tanpa login. Setelah audit, user titip 6 rencana fitur baru sekaligus minta 3 yang kecil/independen dikerjakan bareng, dan di akhir minta "rapihkan sekalian" 13 halaman lain + commit/merge/deploy. Detail teknis LENGKAP ada di **§28** (§28A-§28G) — baca itu untuk semua detail implementasi, bukan diulang di sini.
+User kirim 8 permintaan sekaligus + screenshot: (1) Menu Cepat berantakan di mobile, (2) Tim Bertugas Hari Ini OB & CS harus berhenti tampil jam 17:00 & ganti preview rencana besok (balik normal jam 06:00), (3) tampilkan Security shift berikutnya bukan cuma yang jaga sekarang, (4) notif push kalau status kendaraan gak diupdate driver/Security, (5) reorganisasi titik patroli (Parkiran+Siram Tanaman khusus Sesi 1+Taman Belakang Lt1, hapus titik weekend lama, siram tanaman dipindah jadi notifikasi dadakan terpisah wajib foto), (6) banner in-app checklist OB ternyata MASIH nongol padahal sudah diminta hilang sesi lalu — lupa dicopot dari layout, sekalian minta Security & Driver juga full push-only, (7) alasan+foto wajib kalau jawab "Tidak" di checklist Pelayanan, (8) field catatan penyimpangan tugas khusus Pelayanan. Instruksi eksplisit: kerjakan semua lalu langsung commit+deploy begitu aman, pastikan `dev`/`main` sinkron. Detail teknis lengkap: **§33** (§33A-§33I).
 
-**Status: SUDAH DI-DEPLOY PENUH ke production.** Migrasi 12/12 user ke Firebase Auth sukses, `firestore.rules`+hosting sudah live (deploy dibarengkan dalam 1 command biar gak ada jeda situs lama rusak), diverifikasi via REST API read-only tanpa kredensial apa pun. `dev`+`main` sinkron di commit `d78d36c`. Detail lengkap termasuk 1 kendala teknis npm (`jwks-rsa`/`jose` ESM conflict) yang ketemu & dibenerin pas eksekusi: **§28G**.
+**Status: SUDAH DI-DEPLOY PENUH ke production.** `npm run build` 0 error, `npx eslint src scripts` 0 error (semua project, bukan cuma file yang disentuh). Deploy `hosting`+`firestore:rules` dibarengkan 1 command. `dev`+`main` sinkron via fast-forward merge (commit kode `ff6f7a3`, artifact `9b0c90f`) — TIDAK ada conflict.
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **User belum sempat test login manual pakai password asli sendiri** (Claude gak tahu & gak boleh tahu password siapa pun, jadi cuma bisa verifikasi integritas data & rules, bukan login end-to-end sungguhan) — minta user coba login sekali di situs live, laporkan kalau ada kendala.
-2. Kalau §28 sudah live & dites aman — baru lanjut ke 3 fitur besar yang ditunda: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan, absensi check-in/out (lihat penutup §28G untuk konteks kenapa ditunda).
-3. Temuan audit §28A poin 5 yang belum dieksekusi (bukan blocker, tapi baiknya dibereskan): cabut `NEXT_PUBLIC_FONNTE_TOKEN` lama, `npm audit fix` dependency rentan, cek batasan Cloudinary upload preset.
-4. **§26A (fix Safari) & §26B (fix email HTML mentah, BUTUH AKSI MANUAL user di dashboard EmailJS) BELUM dikonfirmasi user** — masih menggantung dari sesi sebelumnya, cek kalau masih ada laporan.
-5. Poin-poin lama dari §17-§25 yang belum berubah — lihat §19D/§20F/§21A/§25E/§26E/§27E. (Catatan: poin lama "`DashboardOBPage.tsx` masih bug 404" dari §20D **SUDAH DIPERBAIKI** di §28E, sekalian dengan 3 file admin lain yang ternyata punya bug sama.)
+1. **User belum test visual manual sama sekali** untuk batch §33 ini (Claude gak punya tool browser di environment ini) — terutama: Menu Cepat 3 kolom di HP asli, transisi jam 17:00/06:00 Tim Bertugas, halaman Notifikasi Dadakan pas/di luar jendela, alur alasan+foto Pelayanan end-to-end. Minta user coba & lapor kalau ada yang aneh.
+2. **Ambang staleness driver (120 menit) di `scripts/driver-status-staleness.mjs` adalah ASUMSI Claude**, user gak sebutkan angka spesifik — tanya user apa sudah pas, kalau kurang pas tinggal ubah konstanta `AMBANG_STALE_MENIT`.
+3. Bug laten yang KETEMU & DIBENERIN pas kerjain §33F (bukan diminta user, ditemukan pas rombak `security-tugas-reminder.mjs`): PIC Shift 2 yang relevan buat reminder jam pagi (06:00-07:20) itu HARUSNYA yang shift-nya mulai KEMARIN malam, bukan hari ini — pola ini juga ada di `patroli-push-reminder.mjs` (sudah benar di situ) jadi kalau bikin script cron baru yang berurusan sama Shift 2 dini hari, cek pola `tanggalShift2Relevan`/`tanggalShift` di kedua script itu.
+4. Poin-poin lama dari §28-§32 yang belum berubah — lihat penutup masing-masing (§28G, §29E, §30E, §31E, §32E) kalau perlu detail. 3 fitur besar yang masih ditunda dari §28: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan, absensi check-in/out.
+5. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung) — minta user coba login sekali di situs live kalau belum.
 
-Detail teknis lengkap sesi hari ini: **§28**. Riwayat sesi 21-27 (fitur/bug, bukan keamanan): lihat ringkasan lama di git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
+Detail teknis lengkap sesi hari ini: **§33**. Riwayat sesi 21-32: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
 ---
 
@@ -1650,3 +1650,66 @@ Ketemu sumber pastinya: fungsi `classifyStatus()` (diduplikasi di `dashboard/sec
 
 ### 32E. Verifikasi
 `npm run build`: 0 error (2x, setelah batch pertama dan setelah redesign Riwayat). `npx eslint` (semua file disentuh): 0 error, semua warning pre-existing. **SUDAH di-deploy** (`hosting`) & di-commit (`4f380c5` kode, `d52a7a2` artifact). `dev`+`main` sinkron. **Belum ditest oleh user** — terutama alur Riwayat 2 kolom (klik Cek), export Excel di admin/helpdesk, dan email overtime yang sekarang ke PIC (perlu PIC yang emailnya sudah keisi di Master Data Karyawan buat ketes beneran).
+
+---
+
+## 33. Batch 8 Item: Menu Cepat, Swap Tim Bertugas Jam 17:00, Next-Security, Staleness Driver, Reorganisasi Patroli, Hapus Banner OB/Security, Alasan+Foto Pelayanan (7 September 2026, lanjutan langsung §32)
+
+Konteks: user kirim 8 permintaan sekaligus dalam 1 pesan (dengan screenshot), minta semuanya dikerjakan lalu langsung commit+deploy tanpa nunggu konfirmasi lagi ("cukup ini saja dulu ... silahkan kerjakan semua dan jika sudah aman dan test aman lansung saja push commit dan deploy").
+
+### 33A. Menu Cepat — Rapikan Layout (khususnya mobile)
+`src/app/page.tsx`: `.menu-cepat-grid` sebelumnya 2 kolom di mobile padahal cuma 3 kartu yang kelihatan (3 kartu lain disembunyikan `.desktop-only-hide` karena duplikat shortcut bottom-nav) → hasilnya "2 lalu 1 nyempil". Diseragamkan jadi **3 kolom di semua ukuran layar** (3 kartu = 1 baris rapi di mobile, 6 kartu = 2 baris rapi di desktop). Kartu mobile diubah ke layout vertikal ringkas (ikon di atas, judul kecil, subtitle disembunyikan); desktop tetap horizontal dengan subtitle terlihat (`@media min-width:640px`).
+
+### 33B. Tim Bertugas Hari Ini — Auto-Swap ke Rencana Berikutnya Jam 17:00 WITA
+Sebelumnya ada 2 hal terpisah: daftar "hadir hari ini" (`hadirOB`) tampil terus sepanjang hari, dan kotak kecil "Plot Besok" baru muncul tambahan (bukan gantiin) mulai jam 20:00 (`sudahMalam`). User minta: OB & CS berhenti tampil jam 17:00, lalu GANTI jadi preview rencana kerja periode berikutnya, dan otomatis balik normal jam 06:00.
+
+Diimplementasikan dengan 2 variabel baru (gantiin `sudahMalam`):
+- `previewBesokAktif = jamWITA >= 17 || jamWITA < 6` — di luar jam kerja OB (06:00-17:00 WITA).
+- `tanggalPreviewOB = jamWITA < 6 ? todayISO : tomorrowISO` — sebelum jam 6 pagi, "periode berikutnya" itu masih tanggal HARI INI (shift OB belum mulai); setelah jam 5 sore, targetnya BESOK.
+
+Efek konkret: fetch `daily_plots/{tanggalPreviewOB}` cuma jalan kalau `previewBesokAktif` (gantiin fetch `tomorrowISO` yang dulu fixed). Di `timBertugasHariIni`, kalau `previewBesokAktif` true, entri OB diganti total jadi hasil `obBesok` dengan label **"SEGERA"** (bukan lagi "HADIR", `aktif:false`) dan sub-teks nunjukin apakah rencana itu buat "hari ini" atau "besok". Kotak teaser terpisah "🌙 Plot Besok" yang lama DIHAPUS (sudah menyatu ke list utama) — `IconChevronRight` yang cuma dipakai di situ ikut dihapus (unused var). Section title dikasih subtitle kecil kondisional pas mode preview aktif.
+
+### 33C. Tampilkan Security Shift Berikutnya
+`interface SecurityShift` di `src/app/page.tsx` ternyata SUDAH punya field `next`/`nextName` (dihitung tapi gak pernah dipakai di render). Tinggal tambah loop `securityShift.next.forEach(...)` di `timBertugasHariIni` dengan label **"BERIKUTNYA"**, `aktif:false`, `sub` menunjukkan nama shift berikutnya (mis. "Shift 2 (20:00 - 08:00)").
+
+### 33D. Notifikasi Staleness Status Kendaraan (Driver + Security)
+Permintaan: kalau status kendaraan tidak diupdate driver/Security dalam waktu tertentu, kirim push ke driver yang tercatat bertugas DAN Security yang sedang jaga. Ambang dipilih **120 menit** (2 jam) sebagai default wajar (tidak dispesifikasi user).
+
+- **`scripts/driver-status-staleness.mjs`** (baru, cron 30 menit, pola sama seperti `patroli-push-reminder.mjs` — TANPA guard anti-double-kirim, sengaja terus muncul selama status belum diupdate): ambil log terakhir per `kendaraan` dari `operational_vehicle_logs` (limit 200 terbaru), filter yang BUKAN standby (`isStandbyLabel`: mengandung "Standby"/"Tiba") dan sudah >120 menit sejak `waktu_catat`, kirim FCM ke `driver_bertugas` (token dari `fcm_tokens`, semua dept — bukan cuma Security) + semua Security yang jaga shift sekarang (`ambilSecurityJaga()`, pola sama `patroli-push-reminder.mjs`).
+- `.github/workflows/driver-status-staleness.yml` (baru, cron `*/30 * * * *`).
+- `DriverArmadaPage.tsx`: ditambah `useFcmSetup(activeDriver, !!session?.nama, "Driver")` — sebelumnya Driver SAMA SEKALI belum register token FCM, jadi push apa pun (termasuk ini) gak akan pernah sampai ke Driver tanpa ini.
+
+### 33E. Reorganisasi Titik Patroli Security
+`PatroliSecurityPage.tsx`:
+- **Dihapus**: titik weekend-only "Pantry Lt 1/2 — Siram Tanaman & Kebersihan (Weekend)" (dari §-sebelumnya) — user eksplisit minta dihilangkan, dipindah ke fitur baru (lihat 33F).
+- **Baru**: grup **"Parkiran"** dengan titik dasar "Parkiran Utama"; titik **"Siram Tanaman"** ditambahkan ke grup Parkiran ini TAPI cuma muncul kalau `hitungShiftSesi(now).sesi === "Sesi 1"` (Sesi 1 Shift 1 ATAU Sesi 1 Shift 2 — bukan lagi terikat weekend/weekday). `buatGroupedPatroli()` parameter pertama diganti dari `sertakanTugasWeekend` jadi `sertakanSiramTanaman`.
+- **Baru**: "Taman Belakang / Garden" ditambahkan ke grup Lantai 1 (permanen, bukan kondisional).
+- `firestore.rules`: tidak perlu perubahan (patroli sudah masuk daftar collection terbuka `security_patrols`).
+
+### 33F. Fitur Baru: Notifikasi Dadakan — Siram Tanaman (wajib foto bukti)
+Siram tanaman dipindah dari titik patroli weekend-only jadi **notifikasi terpisah harian**, muncul di 2 jendela: **Pagi 06:00-07:00** dan **Malam 20:00-22:00** WITA, setiap hari (bukan cuma weekend), wajib upload foto bukti penyelesaian.
+
+- **`NotifikasiDadakanSiramPage.tsx`** (baru) + route `/dashboard/security/notifikasi-dadakan`: halaman khusus Security, deteksi jendela aktif client-side (`jendelaAktifSekarang()`), kalau di luar jendela tampil "Belum Waktunya"; kalau aktif dan belum ada submission hari ini untuk jendela itu, tampilkan tombol upload foto (reuse `handleFotoUpload` dari `lib/uploadFoto.ts`); kalau sudah ada, tampilkan siapa & jam berapa + foto buktinya (read-only). Data disimpan 1 dokumen per jendela per hari: `notifikasi_dadakan_siram/{tanggal}_{jendela}` (id gabungan supaya idempoten, staf lain yang buka menu yang sama lihat "sudah diselesaikan oleh X").
+- Menu baru "Notifikasi Dadakan: Siram Tanaman" ditambahkan ke `menuSecurity` di `dashboard/security/page.tsx` (icon droplet baru `IconDroplet`).
+- `firestore.rules`: `notifikasi_dadakan_siram` ditambahkan ke daftar collection `isSignedIn()`-open (pola sama collection operasional lain).
+- **`scripts/security-tugas-reminder.mjs`** dirombak: dulu cuma 1 slot weekend (06:00-07:00) + 1 slot AC weekday (07:20); sekarang siram tanaman jalan **tiap hari** di 2 jendela (Pagi & Malam), plus **sekalian dibenerin bug laten**: PIC Shift 2 yang relevan buat jendela pagi (06:00-07:00) itu yang shift-nya MULAI KEMARIN malam, bukan hari ini (`tanggalShift2Relevan = jamWITA<12 ? kemarin : hariIni`) — sebelumnya script ini selalu pakai `hariIni` walau lagi ngecek AC jam 07:20 pagi (baris jam 07:20 itu logisnya masih bagian shift 2 semalam), jadi berpotensi salah tembak PIC kalau shift Security ganti orang.
+- **Admin monitoring**: `src/app/admin/monitor-dadakan/page.tsx` (baru) — tabel rekap 14 hari terakhir, per tanggal nunjukin status Pagi/Malam (✅ nama+jam kalau ada bukti, ❌ "Belum ada bukti" kalau tidak, foto bisa diklik buka full).
+
+### 33G. Hapus Banner In-App OB & Security, Full Push-Only
+User laporkan (dengan screenshot) banner "Belum ada laporan checklist kebersihan dalam 3 jam terakhir" (`ChecklistOBBanner`) MASIH muncul padahal sudah diminta diganti push di sesi sebelumnya — ternyata pushnya (`fcm-reminder.mjs`, sudah direwrite jadi target per-sesi di §30) SUDAH jalan, tapi banner in-app-nya LUPA dicopot dari `dashboard/ob/layout.tsx`. Dicopot sekarang (component file tetap ada sebagai dead code, konsisten pola project).
+
+User juga minta perlakuan sama buat "security dan driver". Driver memang belum pernah punya banner in-app (aman). Security masih punya 1 banner tersisa: `AparInspectionBanner` di `dashboard/security/layout.tsx` (banner "Inspeksi APAR belum lengkap" — beda dari `PatroliShiftBanner` yang sudah dicopot §30). Dicopot dari layout Security (TETAP dipasang di `admin/apar/page.tsx` — itu halaman monitoring internal Admin GA/QHSE, bukan sesi kerja harian staf lapangan, jadi bukan sasaran keluhan user). Gantinya: `scripts/apar-reminder.mjs` (cron harian H-3 sebelum deadline, sudah ada duluan) ditambah `kirimPushKeSemua()` — sekarang kirim FCM push asli ke Security yang bertugas, bukan cuma nulis dokumen `notifikasi_apar` (in-app, pasif) seperti sebelumnya.
+
+### 33H. Checklist Pelayanan: Alasan + Foto Wajib untuk "Tidak", + Catatan Penyimpangan Tugas
+`ChecklistOBPage.tsx`, segment `SEGMENTS_PELAYANAN` (`id: ID_SEGMENT_PELAYANAN = "pelayanan"`) — mirror pola "Rusak" di `InspeksiFasilitasPage.tsx`:
+- Kalau pertanyaan di segment Pelayanan dijawab **"Tidak"**, muncul textarea alasan (wajib) + tombol upload foto (wajib, reuse `uploadToCloudinary` yang sudah ada di file ini) sebelum laporan bisa dikirim — divalidasi di `handleKirimLaporan` (cek semua pertanyaan Tidak di segment Pelayanan sudah punya `alasanTidakPelayanan` & `fotoTidakPelayanan`).
+- Field baru di skema: `JawabanPertanyaan.alasan_tidak?`, `JawabanPertanyaan.foto_tidak?` (cuma keisi kalau segment Pelayanan & jawaban Tidak).
+- **Field baru terpisah** (bukan per-pertanyaan): "Catatan Penyimpangan Tugas" — textarea opsional yang HANYA muncul di segment Pelayanan, buat OB nulis kalau tugas hari itu beda dari yang biasa dikerjakan. Disimpan sebagai `catatan_penyimpangan_tugas` di level dokumen `ob_checklists` (bukan di dalam segment), cuma ditulis kalau area yang dilaporkan memang punya segment Pelayanan.
+- Tab Riwayat (redesign §32D) ikut ditambahi render alasan+foto per item Tidak, dan kotak kuning "Catatan Penyimpangan Tugas" kalau ada isinya.
+
+### 33I. Verifikasi
+`npm run build`: 0 error (semua 45 route ke-generate termasuk 2 route baru `/admin/monitor-dadakan` & `/dashboard/security/notifikasi-dadakan`). `npx eslint src scripts`: 0 error di seluruh project, semua warning yang muncul pre-existing (dicek satu-satu, tidak ada yang baru dari perubahan sesi ini). **SUDAH di-deploy** (`hosting` + `firestore:rules` dibarengkan 1 command) & di-commit (`ff6f7a3` kode, `9b0c90f` artifact). `dev`+`main` sinkron via fast-forward merge, tanpa conflict.
+
+**Belum sempat ditest visual di browser oleh Claude** (tidak ada tool browser di environment ini) — terutama: tampilan Menu Cepat 3 kolom di HP asli, transisi Tim Bertugas jam 17:00/06:00 (butuh nunggu jam asli atau ubah jam sistem buat simulasi), halaman Notifikasi Dadakan pas jendela aktif vs tidak aktif, dan alur alasan+foto Pelayanan end-to-end. User perlu coba manual & lapor kalau ada yang aneh.
+
+**Ambang staleness driver (120 menit) adalah ASUMSI Claude** karena user tidak menyebutkan angka spesifik — kalau kerasa kurang pas (terlalu cepat/lambat), tinggal ubah konstanta `AMBANG_STALE_MENIT` di `scripts/driver-status-staleness.mjs`.
