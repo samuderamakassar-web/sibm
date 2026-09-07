@@ -69,9 +69,6 @@ const IconTruck = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z" /></svg>
 );
-const IconChevronRight = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-);
 
 // Geser tanggal ISO (YYYY-MM-DD) sejumlah n hari, lewat komponen Y/M/D langsung (aman dari isu timezone)
 const geserTanggalISO = (iso: string, n: number) => {
@@ -110,7 +107,12 @@ export default function PortalSIBM() {
   const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(now);
   const tomorrowISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date(now.getTime() + 24 * 60 * 60 * 1000));
   const jamWITA = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Makassar", hour: "numeric", hourCycle: "h23" }).format(now), 10);
-  const sudahMalam = jamWITA >= 20; // >= 20:00 WITA -> mulai tampilkan plot besok juga
+  // Jam aktif tampil "Tim Bertugas Hari Ini" untuk OB & CS: 06:00-16:59 WITA (jam kerja OB).
+  // Di luar itu (>=17:00 s/d <06:00 besok), tampilkan rencana/plot utk periode kerja berikutnya
+  // sebagai gantinya. Sebelum jam 6 pagi, periode berikutnya itu masih "hari ini" (shift OB
+  // belum mulai) -> target tanggalnya todayISO; setelah jam 5 sore, target tanggalnya tomorrowISO.
+  const previewBesokAktif = jamWITA >= 17 || jamWITA < 6;
+  const tanggalPreviewOB = jamWITA < 6 ? todayISO : tomorrowISO;
 
   // Rentang Senin-Minggu (WITA) untuk widget "Overtime Gedung (Minggu Ini)" — dulu cuma tampilkan hari ini
   // Ambil angka hari dari tanggal WITA yang sudah benar (todayISO), bukan dari Date lokal browser
@@ -222,11 +224,12 @@ export default function PortalSIBM() {
       unsubPlot = () => clearTimeout(t);
     }
 
-    // 1b. Setelah jam 20:00 WITA, tarik juga plot BESOK biar staf/GA bisa lihat plotting besok dari malam ini
-    // (skip kalau besok Sabtu/Minggu — OB & CS tidak ada jadwal, walau dokumen plot lama mungkin masih nyimpan data basi)
+    // 1b. Di luar jam kerja OB & CS (>=17:00 s/d <06:00 WITA), tarik plot utk periode kerja
+    // berikutnya biar staf/GA bisa lihat siapa yang akan bertugas (skip kalau tanggal targetnya
+    // Sabtu/Minggu — OB & CS tidak ada jadwal, walau dokumen plot lama mungkin masih nyimpan data basi)
     let unsubPlotBesok = () => {};
-    if (sudahMalam && !isWeekend(tomorrowISO)) {
-      unsubPlotBesok = onSnapshot(doc(db, "daily_plots", tomorrowISO), (docSnap) => {
+    if (previewBesokAktif && !isWeekend(tanggalPreviewOB)) {
+      unsubPlotBesok = onSnapshot(doc(db, "daily_plots", tanggalPreviewOB), (docSnap) => {
         setObBesok(parsePlotDoc(docSnap));
       });
     } else {
@@ -355,7 +358,7 @@ export default function PortalSIBM() {
     });
 
     return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
-  }, [todayISO, tomorrowISO, sudahMalam, seninMingguIni, mingguMingguIni]);
+  }, [todayISO, tomorrowISO, previewBesokAktif, tanggalPreviewOB, seninMingguIni, mingguMingguIni]);
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
 
@@ -826,18 +829,37 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   // securityShift.current) sehingga malah bikin error build, bukan warning.
   const timBertugasHariIni: TimBertugasEntry[] = (() => {
     const daftar: TimBertugasEntry[] = [];
-    hadirOB.forEach(o => {
-      daftar.push({
-        key: `ob-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: true,
-        sub: `OB · ${o.lokasi.join(", ") || "Standby"}`,
-        label: "HADIR",
+    if (!previewBesokAktif) {
+      hadirOB.forEach(o => {
+        daftar.push({
+          key: `ob-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: true,
+          sub: `OB · ${o.lokasi.join(", ") || "Standby"}`,
+          label: "HADIR",
+        });
       });
-    });
+    } else {
+      // Sudah lewat jam 17:00 (atau masih dini hari sebelum jam 6) -> tampilkan rencana plot
+      // periode kerja berikutnya sebagai ganti daftar "hadir" hari ini yang sudah tidak relevan.
+      obBesok.forEach(o => {
+        daftar.push({
+          key: `ob-next-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: false,
+          sub: `OB · ${o.lokasi.join(", ") || "Standby"} (rencana ${tanggalPreviewOB === todayISO ? "hari ini" : "besok"})`,
+          label: "SEGERA",
+        });
+      });
+    }
     securityShift.current.forEach(nama => {
       daftar.push({
         key: `sec-${nama}`, nama, tipe: "security", foto: staffFotoMap[nama], aktif: true,
         sub: `Security · ${securityShift.currentName}`,
         label: "JAGA",
+      });
+    });
+    securityShift.next.forEach(nama => {
+      daftar.push({
+        key: `sec-next-${nama}`, nama, tipe: "security", foto: staffFotoMap[nama], aktif: false,
+        sub: `Security · ${securityShift.nextName}`,
+        label: "BERIKUTNYA",
       });
     });
     driverEntries.forEach(([nama, status]) => {
@@ -985,9 +1007,21 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
         /* Grid kolom TETAP (bukan auto-fit/minmax) — auto-fit bikin kartu terakhir yang sendirian
-           di baris terakhir ikut melebar ngisi sisa kolom (gak proporsional sama kartu lain). */
-        .menu-cepat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        @media (min-width: 640px) { .menu-cepat-grid { grid-template-columns: repeat(3, 1fr); } }
+           di baris terakhir ikut melebar ngisi sisa kolom (gak proporsional sama kartu lain).
+           3 kolom dipakai SAMA di mobile & desktop -- di mobile cuma 3 kartu yang kelihatan
+           (Request ATK/Kerusakan/Bahaya SBO disembunyikan, sudah ada di bottom-nav), jadi 3
+           kolom pas jadi 1 baris rapi. Sebelumnya mobile pakai 2 kolom, bikin 3 kartu itu
+           kepotong jadi "2 lalu 1 sendirian" yang keliatan berantakan -- ini yang dikeluhkan. */
+        .menu-cepat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .qa-card { padding: 14px 8px !important; flex-direction: column !important; text-align: center; gap: 8px !important; }
+        .qa-card h2 { font-size: 12px !important; }
+        .qa-card p { display: none; }
+        @media (min-width: 640px) {
+          .menu-cepat-grid { gap: 12px; }
+          .qa-card { padding: 18px !important; flex-direction: row !important; text-align: left; gap: 12px !important; }
+          .qa-card h2 { font-size: 14px !important; }
+          .qa-card p { display: block; }
+        }
         .qa-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: rgba(220,38,38,0.28); }
         .qa-icon-chip {
           width: 44px; height: 44px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
@@ -1206,7 +1240,14 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         <div style={{ marginTop: "22px" }}>
           <div className="section-title">
             <div className="section-title-icon"><IconShield size={18} /></div>
-            <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Tim Bertugas Hari Ini</h3>
+            <div>
+              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Tim Bertugas Hari Ini</h3>
+              {previewBesokAktif && (
+                <div style={{ fontSize: "10.5px", color: "var(--muted)", fontWeight: 600, marginTop: "1px" }}>
+                  OB &amp; CS: rencana plot {tanggalPreviewOB === todayISO ? "hari ini" : "besok"} (tampil kembali pukul 06:00)
+                </div>
+              )}
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {timBertugasHariIni.length > 0 ? timBertugasHariIni.map((t) => {
@@ -1231,20 +1272,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             )}
           </div>
         </div>
-
-        {/* 🌙 PLOT BESOK — cuma tampil setelah jam 20:00 WITA, biar staf/GA bisa lihat plotting besok dari malam ini */}
-        {sudahMalam && obBesok.length > 0 && (
-          <div style={{ marginTop: "14px", background: "var(--bg)", border: "1px dashed var(--line)", borderRadius: "16px", padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 800, color: "var(--ink-soft)", marginBottom: "8px" }}>
-              <IconChevronRight size={14} color="var(--muted)" /> Plot Besok ({obBesok.length} OB &amp; CS terjadwal)
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {obBesok.map((o) => (
-                <span key={o.nama} title={o.lokasi.join(", ") || "Standby"} style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-soft)", background: "var(--surface)", border: "1px solid var(--line)", padding: "6px 12px", borderRadius: "20px" }}>{o.nama}</span>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* ⚙️ STATUS OPERASIONAL (ringkas) */}
         <Card style={{ borderRadius: "20px", marginTop: "18px", padding: "6px 20px" }}>

@@ -61,6 +61,9 @@ const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) 
 const IconBook = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
 );
+const IconDroplet = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2s7 7.5 7 12a7 7 0 0 1-14 0c0-4.5 7-12 7-12z" /></svg>
+);
 
 // ==========================================
 // INTERFACES
@@ -302,6 +305,7 @@ export default function SecurityDashboard() {
     { title: "Inspeksi APAR", desc: "Scan QR & catat kondisi APAR per lantai tiap bulan.", path: "/dashboard/security/inspeksi-apar", action: "link", token: "accent", icon: IconFireExtinguisher, hideOnMobile: false },
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input lemburan (Back-up Shift).", path: "", action: "modal_lembur", token: "accent", icon: IconClock, hideOnMobile: false },
     { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim Security.", path: "/dashboard/security/sop", action: "link", token: "info", icon: IconBook, hideOnMobile: false },
+    { title: "Notifikasi Dadakan: Siram Tanaman", desc: "Upload bukti foto siram tanaman (Pagi 06:00-07:00 / Malam 20:00-22:00).", path: "/dashboard/security/notifikasi-dadakan", action: "link", token: "ok", icon: IconDroplet, hideOnMobile: false },
   ];
 
   const tokenColors: Record<string, { bg: string; color: string }> = {

@@ -1,12 +1,20 @@
 // scripts/security-tugas-reminder.mjs
 //
-// Push notification (FCM) buat 2 tugas tambahan Security yang diminta user:
-//   1. Siram tanaman & kebersihan Pantry Lt 1/2 -- Sabtu & Minggu, jam 06:00-07:00 WITA.
+// Push notification (FCM) buat tugas tambahan Security:
+//   1. "Notifikasi dadakan" siram tanaman -- TIAP HARI, jendela Pagi 06:00-07:00 &
+//      Malam 20:00-22:00 WITA (dulu titik patroli weekend-only Pantry Lt 1/2, sekarang
+//      dipindah kesini atas permintaan user jadi notifikasi terpisah yang wajib upload
+//      foto bukti -- lihat NotifikasiDadakanSiramPage.tsx & collection
+//      notifikasi_dadakan_siram). Ini CUMA push pengingatnya; submit bukti fotonya
+//      dilakukan staf lewat halaman /dashboard/security/notifikasi-dadakan.
 //   2. Pastikan semua AC menyala -- Senin-Jumat, jam 07:20 WITA.
-// Keduanya cuma relevan buat petugas Shift 2 (kerja sampai jam 08:00 pagi) yang
-// masih standby pas jam segitu. Dipanggil via GitHub Actions cron tiap 30 menit
-// (lihat .github/workflows/security-tugas-reminder.yml), pola slot+toleransi sama
-// seperti scripts/patroli-reminder.mjs biar tahan telatnya cron GitHub Actions.
+// Semuanya cuma relevan buat petugas Shift 2 (kerja sampai jam 08:00 pagi) yang masih
+// standby pas jam segitu. Dipanggil via GitHub Actions cron tiap 30 menit (lihat
+// .github/workflows/security-tugas-reminder.yml), pola slot+toleransi sama seperti
+// scripts/patroli-reminder.mjs biar tahan telatnya cron GitHub Actions.
+//
+// PENTING: jendela jam disini HARUS sinkron dengan jendelaAktifSekarang() di
+// NotifikasiDadakanSiramPage.tsx -- kalau salah satu diubah, ubah juga yang lain.
 //
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
@@ -42,38 +50,45 @@ function formatTanggal(d) {
   return `${y}-${m}-${t}`;
 }
 const hariIni = formatTanggal(now);
+const kemarin = formatTanggal(new Date(now.getTime() - 24 * 60 * 60 * 1000));
 
-// Tentukan slot yang berlaku HARI INI (weekend vs weekday saling eksklusif).
+// Shift 2 (20:00-08:00) yang relevan tergantung jam sekarang: kalau masih pagi (sebelum
+// tengah hari), Shift 2 yang relevan itu yang MULAI kemarin malam; kalau sudah malam,
+// Shift 2 yang relevan itu yang mulai hari ini.
+const tanggalShift2Relevan = now.getHours() < 12 ? kemarin : hariIni;
+
+// Tentukan slot yang berlaku sekarang -- siram tanaman jalan TIAP HARI (tidak lagi
+// weekend-only), AC check tetap Senin-Jumat saja.
 let slotAktif = null;
-if (isWeekend) {
-  // Jendela 06:00-07:00 -- pakai titik tengah 06:30 + toleransi lebar (30 menit)
-  // biar seluruh jendela 1 jam kecakup oleh 1 kali kirim.
-  const target = toWaktu(6, 30);
-  if (selisihMenit(target) <= 30) {
-    slotAktif = { id: "siram-tanaman-weekend", pesan: "🌱 Waktunya siram tanaman & bersihkan Pantry Lt 1 & Lt 2 (tugas weekend)." };
-  }
-} else {
-  const target = toWaktu(7, 20);
-  if (selisihMenit(target) <= TOLERANSI_MENIT) {
-    slotAktif = { id: "cek-ac-pagi", pesan: "❄️ Pastikan SEMUA AC sudah menyala jam segini, tanpa terkecuali." };
-  }
+const targetPagi = toWaktu(6, 30); // jendela 06:00-07:00, titik tengah 06:30 +-30 menit
+const targetMalam = toWaktu(21, 0); // jendela 20:00-22:00, titik tengah 21:00 +-60 menit
+const targetAC = toWaktu(7, 20);
+
+if (selisihMenit(targetPagi) <= 30) {
+  slotAktif = { id: "siram-tanaman-pagi", tanggalShift: tanggalShift2Relevan, pesan: "🌱 Notifikasi Dadakan: waktunya siram tanaman! Buka menu \"Notifikasi Dadakan\" di aplikasi & upload foto bukti." };
+} else if (selisihMenit(targetMalam) <= 60) {
+  slotAktif = { id: "siram-tanaman-malam", tanggalShift: tanggalShift2Relevan, pesan: "🌱 Notifikasi Dadakan: waktunya siram tanaman! Buka menu \"Notifikasi Dadakan\" di aplikasi & upload foto bukti." };
+} else if (!isWeekend && selisihMenit(targetAC) <= TOLERANSI_MENIT) {
+  slotAktif = { id: "cek-ac-pagi", tanggalShift: tanggalShift2Relevan, pesan: "❄️ Pastikan SEMUA AC sudah menyala jam segini, tanpa terkecuali." };
 }
 
 if (!slotAktif) {
-  console.log(`Jam ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")} WITA (${isWeekend ? "weekend" : "weekday"}) bukan waktu tugas tambahan Security, skip.`);
+  console.log(`Jam ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")} WITA bukan waktu tugas tambahan Security, skip.`);
   process.exit(0);
 }
 console.log("Slot aktif:", slotAktif.id);
 
 // ==========================================
-// PIC SHIFT 2 HARI INI (sama pola dengan scripts/patroli-reminder.mjs)
+// PIC SHIFT 2 (sama pola dengan scripts/patroli-reminder.mjs) -- pakai tanggalShift
+// slot yang aktif, BUKAN tanggal kalender hari ini, karena Shift 2 yang relevan pas
+// jendela pagi (06:00-07:00) itu yang mulai KEMARIN malam.
 // ==========================================
-async function ambilPicShift2HariIni() {
-  const bulanKey = hariIni.substring(0, 7);
+async function ambilPicShift2(tanggalShift) {
+  const bulanKey = tanggalShift.substring(0, 7);
   const monthSnap = await db.collection("security_monthly_schedules").doc(bulanKey).get();
   if (!monthSnap.exists) return [];
 
-  const plotHariIni = monthSnap.data().data_hari?.[hariIni] || {};
+  const plotHariIni = monthSnap.data().data_hari?.[tanggalShift] || {};
   const namaTerjadwal = Object.keys(plotHariIni).filter((nama) => plotHariIni[nama] === "Shift 2");
   if (namaTerjadwal.length === 0) return [];
 
@@ -83,7 +98,7 @@ async function ambilPicShift2HariIni() {
 }
 
 async function jalankan() {
-  const idLogHariIni = `${hariIni}_${slotAktif.id}`;
+  const idLogHariIni = `${slotAktif.tanggalShift}_${slotAktif.id}`;
   const logRef = db.collection("reminder_security_tugas_log").doc(idLogHariIni);
   const logSnap = await logRef.get();
   if (logSnap.exists) {
@@ -92,9 +107,9 @@ async function jalankan() {
   }
   await logRef.set({ slot: slotAktif.id, diproses_pada: FieldValue.serverTimestamp() });
 
-  const daftarNama = await ambilPicShift2HariIni();
+  const daftarNama = await ambilPicShift2(slotAktif.tanggalShift);
   if (daftarNama.length === 0) {
-    console.log("Tidak ada petugas Shift 2 terjadwal hari ini, skip.");
+    console.log(`Tidak ada petugas Shift 2 terjadwal (${slotAktif.tanggalShift}), skip.`);
     return;
   }
 

@@ -57,6 +57,9 @@ const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) 
 const IconBook = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
 );
+const IconDroplet = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2s7 7.5 7 12a7 7 0 0 1-14 0c0-4.5 7-12 7-12z" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -161,6 +164,13 @@ export default function AdminDashboardPage() {
       path: "/admin/sop",
       token: "accent",
       icon: IconBook,
+    },
+    {
+      title: "Pantau Notifikasi Dadakan",
+      desc: "Cek bukti foto siram tanaman Security (jendela Pagi/Malam) per hari.",
+      path: "/admin/monitor-dadakan",
+      token: "ok",
+      icon: IconDroplet,
     },
   ];
 

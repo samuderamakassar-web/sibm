@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
 import { normalizePlat } from "../../../lib/platUtils";
 
@@ -126,6 +127,7 @@ export default function DriverArmadaPage() {
     deniedMessage: "Akses Ditolak! Halaman ini khusus Tim Driver.",
   });
   const activeDriver = session?.nama || "Driver";
+  useFcmSetup(activeDriver, !!session?.nama, "Driver");
 
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
 

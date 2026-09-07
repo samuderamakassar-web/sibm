@@ -113,7 +113,7 @@ service cloud.firestore {
           'kendaraan_inspeksi_logs', 'kendaraan_uji_emisi',
           'deep_cleaning_tasks', 'notifikasi_patroli', 'notifikasi_kendaraan',
           'notifikasi_checklist_ob', 'security_monthly_schedules',
-          'fcm_tokens'
+          'fcm_tokens', 'notifikasi_dadakan_siram'
         ];
     }
 

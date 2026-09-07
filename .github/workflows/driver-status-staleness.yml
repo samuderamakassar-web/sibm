@@ -1,0 +1,28 @@
+name: Driver Status Staleness Push
+
+on:
+  schedule:
+    # Tiap 30 menit -- cek kendaraan yang statusnya (operational_vehicle_logs)
+    # belum diupdate lebih dari ambang waktu padahal bukan standby. Sengaja TANPA
+    # guard anti-double-kirim, sama seperti patroli-push-reminder.yml -- terus
+    # muncul selama statusnya belum diupdate.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Jalankan cek staleness status kendaraan
+        run: node scripts/driver-status-staleness.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}

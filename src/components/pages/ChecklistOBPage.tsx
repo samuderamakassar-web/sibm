@@ -243,9 +243,10 @@ const SEGMENT_MUSHALLAH_L4: SegmentConfig = {
   ],
 };
 
+const ID_SEGMENT_PELAYANAN = "pelayanan";
 const SEGMENTS_PELAYANAN: SegmentConfig[] = [
   {
-    id: "pelayanan",
+    id: ID_SEGMENT_PELAYANAN,
     nama: "Pelayanan",
     pertanyaan: [
       { id: "plyn-1", teks: "Apakah belanja / beli makan sudah dilakukan?" },
@@ -317,6 +318,8 @@ interface JawabanPertanyaan {
   pertanyaan_id: string;
   teks: string;
   jawaban: "Ya" | "Tidak";
+  alasan_tidak?: string;
+  foto_tidak?: string;
 }
 
 interface SegmentLog {
@@ -339,6 +342,7 @@ interface ChecklistLog {
   waktu_selesai: Timestamp | null;
   detail_segmen: SegmentLog[];
   foto_bukti: FotoPasangan[];
+  catatan_penyimpangan_tugas?: string;
 }
 
 export default function ChecklistOBPage() {
@@ -373,6 +377,15 @@ export default function ChecklistOBPage() {
 
   // State Jawaban Checklist Ya/Tidak, key = pertanyaan_id
   const [jawabanTugas, setJawabanTugas] = useState<Record<string, "Ya" | "Tidak">>({});
+
+  // Khusus segment "Pelayanan": kalau jawab "Tidak", wajib isi alasan + foto (mirip pola
+  // kondisi "Rusak" di InspeksiFasilitasPage.tsx) -- key = pertanyaan_id.
+  const [alasanTidakPelayanan, setAlasanTidakPelayanan] = useState<Record<string, string>>({});
+  const [fotoTidakPelayanan, setFotoTidakPelayanan] = useState<Record<string, string>>({});
+  const [uploadingAlasanId, setUploadingAlasanId] = useState<string | null>(null);
+  // Khusus OB yang bertugas Pelayanan: catatan bebas kalau tugas hari ini melenceng dari
+  // yang biasa dikerjakan (opsional, 1x per laporan -- bukan per pertanyaan).
+  const [catatanPenyimpanganPelayanan, setCatatanPenyimpanganPelayanan] = useState("");
 
   // State Foto Bukti: bisa lebih dari 1 pasang before/after
   const [fotoList, setFotoList] = useState<{ before?: string; after?: string }[]>([{}]);
@@ -554,6 +567,45 @@ export default function ChecklistOBPage() {
     e.target.value = "";
   };
 
+  // Foto bukti alasan "Tidak" khusus segment Pelayanan -- reuse uploadToCloudinary yang sama.
+  const handleFotoAlasanTidak = (e: React.ChangeEvent<HTMLInputElement>, pertanyaanId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 720;
+        const scale = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scale;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          setUploadingAlasanId(pertanyaanId);
+          try {
+            const url = await uploadToCloudinary(blob);
+            setFotoTidakPelayanan(prev => ({ ...prev, [pertanyaanId]: url }));
+          } catch (err) {
+            console.error(err);
+            showToast("Gagal upload foto, coba lagi.", "error");
+          } finally {
+            setUploadingAlasanId(null);
+          }
+        }, "image/jpeg", 0.7);
+      };
+      if (typeof ev.target?.result === "string") img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const hapusFotoSatuan = (index: number, type: "before" | "after") => {
     setFotoList(prev => {
       const next = [...prev];
@@ -617,6 +669,17 @@ export default function ChecklistOBPage() {
       return showToast("Mohon isi checklist Ya/Tidak untuk semua item di setiap segment sebelum mengirim laporan!", "warning");
     }
 
+    // Khusus segment Pelayanan: jawaban "Tidak" wajib disertai alasan + foto bukti.
+    const segmenPelayanan = daftarSegmen.find(s => s.id === ID_SEGMENT_PELAYANAN);
+    if (segmenPelayanan) {
+      const tidakBelumLengkap = segmenPelayanan.pertanyaan.some(
+        p => jawabanTugas[p.id] === "Tidak" && (!alasanTidakPelayanan[p.id]?.trim() || !fotoTidakPelayanan[p.id])
+      );
+      if (tidakBelumLengkap) {
+        return showToast("Untuk item Pelayanan yang dijawab \"Tidak\", mohon isi alasan & upload foto buktinya dulu.", "warning");
+      }
+    }
+
     const fotoValid = fotoList.filter(f => f.before && f.after) as FotoPasangan[];
     if (fotoValid.length < MINIMAL_PASANGAN_FOTO) {
       setShowFotoModal(true);
@@ -628,11 +691,15 @@ export default function ChecklistOBPage() {
       const detailSegmen: SegmentLog[] = daftarSegmen.map(segment => ({
         segment_id: segment.id,
         nama_segment: segment.nama,
-        jawaban: segment.pertanyaan.map(p => ({
-          pertanyaan_id: p.id,
-          teks: p.teks,
-          jawaban: jawabanTugas[p.id],
-        })),
+        jawaban: segment.pertanyaan.map(p => {
+          const j = jawabanTugas[p.id];
+          const item: JawabanPertanyaan = { pertanyaan_id: p.id, teks: p.teks, jawaban: j };
+          if (segment.id === ID_SEGMENT_PELAYANAN && j === "Tidak") {
+            item.alasan_tidak = alasanTidakPelayanan[p.id]?.trim() || "";
+            item.foto_tidak = fotoTidakPelayanan[p.id] || "";
+          }
+          return item;
+        }),
       }));
 
       await addDoc(collection(db, "ob_checklists"), {
@@ -643,6 +710,7 @@ export default function ChecklistOBPage() {
         waktu_selesai: serverTimestamp(),
         detail_segmen: detailSegmen,
         foto_bukti: fotoValid,
+        ...(segmenPelayanan ? { catatan_penyimpangan_tugas: catatanPenyimpanganPelayanan.trim() } : {}),
       });
 
       // Kabari progres 3 sesi hari ini buat area ini -- beda pesan kalau ini sesi
@@ -658,6 +726,9 @@ export default function ChecklistOBPage() {
         showToast(`Sesi ${sesiIndex}/3 (${sesiSekarang}) selesai! Silakan isi lagi nanti pas sesi berikutnya.`, "success");
       }
       setJawabanTugas({});
+      setAlasanTidakPelayanan({});
+      setFotoTidakPelayanan({});
+      setCatatanPenyimpanganPelayanan("");
       setFotoList([{}]);
       setStep(1);
       setActiveTab("history");
@@ -878,30 +949,73 @@ export default function ChecklistOBPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                       {segment.pertanyaan.map((p) => {
                         const jawaban = jawabanTugas[p.id];
+                        const perluAlasanFoto = segment.id === ID_SEGMENT_PELAYANAN && jawaban === "Tidak";
                         return (
-                          <div key={p.id} className="question-row">
-                            <span style={{ color: "var(--ink)", fontSize: "14px", flex: "1 1 200px", lineHeight: "1.4" }}>{p.teks}</span>
+                          <div key={p.id}>
+                            <div className="question-row">
+                              <span style={{ color: "var(--ink)", fontSize: "14px", flex: "1 1 200px", lineHeight: "1.4" }}>{p.teks}</span>
 
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              <button
-                                type="button"
-                                onClick={() => pilihJawaban(p.id, "Ya")}
-                                className={`answer-btn ya ${jawaban === "Ya" ? "active" : ""}`}
-                              >
-                                <IconCheck size={13} /> Ya
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => pilihJawaban(p.id, "Tidak")}
-                                className={`answer-btn tidak ${jawaban === "Tidak" ? "active" : ""}`}
-                              >
-                                <IconX size={13} /> Tidak
-                              </button>
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => pilihJawaban(p.id, "Ya")}
+                                  className={`answer-btn ya ${jawaban === "Ya" ? "active" : ""}`}
+                                >
+                                  <IconCheck size={13} /> Ya
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => pilihJawaban(p.id, "Tidak")}
+                                  className={`answer-btn tidak ${jawaban === "Tidak" ? "active" : ""}`}
+                                >
+                                  <IconX size={13} /> Tidak
+                                </button>
+                              </div>
                             </div>
+
+                            {/* Khusus Pelayanan: jawaban "Tidak" wajib alasan + foto -- mirip pola
+                                kondisi "Rusak" di InspeksiFasilitasPage.tsx, biar laporannya lebih real. */}
+                            {perluAlasanFoto && (
+                              <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", background: "var(--red-50)", padding: "12px", borderRadius: "12px", border: "1px solid rgba(220,38,38,0.2)", marginTop: "6px" }}>
+                                <textarea
+                                  placeholder="Alasan belum dilakukan (wajib)..."
+                                  value={alasanTidakPelayanan[p.id] || ""}
+                                  onChange={(e) => setAlasanTidakPelayanan(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                  style={{ flex: 1, minHeight: "60px", padding: "10px", borderRadius: "8px", border: "1px solid rgba(220,38,38,0.25)", fontSize: "13px", resize: "none", outline: "none", background: "var(--surface)" }}
+                                />
+                                <label className="foto-dropzone" style={{ width: "90px", height: "90px", aspectRatio: "auto", flexShrink: 0 }}>
+                                  {fotoTidakPelayanan[p.id] ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={fotoTidakPelayanan[p.id]} alt="Bukti" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "11px" }} />
+                                  ) : uploadingAlasanId === p.id ? (
+                                    <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "3px solid rgba(220,38,38,0.2)", borderTopColor: "var(--red-600)", animation: "spin 0.8s linear infinite" }} />
+                                  ) : (
+                                    <><IconCamera size={18} color="var(--red-600)" /> Foto</>
+                                  )}
+                                  <input type="file" accept="image/*" onChange={(e) => handleFotoAlasanTidak(e, p.id)} style={{ display: "none" }} disabled={uploadingAlasanId === p.id} />
+                                </label>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
+
+                    {/* Khusus segment Pelayanan: catatan bebas kalau tugas hari ini melenceng
+                        dari yang biasa dikerjakan (opsional). */}
+                    {segment.id === ID_SEGMENT_PELAYANAN && (
+                      <div style={{ marginTop: "14px" }}>
+                        <label style={{ display: "block", fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)", marginBottom: "6px" }}>
+                          Catatan Penyimpangan Tugas (opsional)
+                        </label>
+                        <textarea
+                          placeholder="Kalau tugas hari ini berbeda dari yang biasa dikerjakan, jelaskan di sini..."
+                          value={catatanPenyimpanganPelayanan}
+                          onChange={(e) => setCatatanPenyimpanganPelayanan(e.target.value)}
+                          style={{ width: "100%", minHeight: "70px", padding: "10px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", resize: "vertical", outline: "none", background: "var(--surface)", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -1080,17 +1194,35 @@ export default function ChecklistOBPage() {
                       {segment.jawaban.map((item, itemIdx) => {
                         const isYa = item.jawaban === "Ya";
                         return (
-                          <div key={itemIdx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: "10px", background: isYa ? "var(--ok-50)" : "var(--red-50)", border: "1px solid var(--line)" }}>
-                            <span style={{ fontSize: "12px", color: "var(--ink)" }}>{item.teks}</span>
-                            <span style={{ fontSize: "10px", fontWeight: "900", padding: "3px 8px", borderRadius: "6px", background: isYa ? "var(--ok)" : "var(--red-600)", color: "white", whiteSpace: "nowrap", marginLeft: "8px", display: "flex", alignItems: "center", gap: "3px" }}>
-                              {isYa ? <><IconCheck size={9} color="white" /> YA</> : <><IconX size={9} color="white" /> TIDAK</>}
-                            </span>
+                          <div key={itemIdx}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: "10px", background: isYa ? "var(--ok-50)" : "var(--red-50)", border: "1px solid var(--line)" }}>
+                              <span style={{ fontSize: "12px", color: "var(--ink)" }}>{item.teks}</span>
+                              <span style={{ fontSize: "10px", fontWeight: "900", padding: "3px 8px", borderRadius: "6px", background: isYa ? "var(--ok)" : "var(--red-600)", color: "white", whiteSpace: "nowrap", marginLeft: "8px", display: "flex", alignItems: "center", gap: "3px" }}>
+                                {isYa ? <><IconCheck size={9} color="white" /> YA</> : <><IconX size={9} color="white" /> TIDAK</>}
+                              </span>
+                            </div>
+                            {!isYa && (item.alasan_tidak || item.foto_tidak) && (
+                              <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "8px 12px", marginTop: "4px" }}>
+                                {item.alasan_tidak && <span style={{ fontSize: "11.5px", color: "var(--muted)", flex: 1 }}>&quot;{item.alasan_tidak}&quot;</span>}
+                                {item.foto_tidak && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={item.foto_tidak} alt="Bukti alasan" style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   </div>
                 ))}
+
+                {log.catatan_penyimpangan_tugas && (
+                  <div style={{ background: "var(--warn-50)", border: "1px solid rgba(217,119,6,0.2)", borderRadius: "12px", padding: "12px 14px", marginBottom: "18px" }}>
+                    <div style={{ fontSize: "10.5px", fontWeight: 900, color: "var(--warn)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>Catatan Penyimpangan Tugas</div>
+                    <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>{log.catatan_penyimpangan_tugas}</div>
+                  </div>
+                )}
 
                 {/* Foto Bukti - Bisa Lebih Dari 1 Pasang */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "10px" }}>

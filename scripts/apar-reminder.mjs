@@ -1,5 +1,6 @@
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 // ==========================================
 // SETUP FIREBASE ADMIN
@@ -9,6 +10,7 @@ const serviceAccount = JSON.parse(
 );
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
+const messaging = getMessaging();
 
 // ==========================================
 // WAKTU SEKARANG (WITA) & DEADLINE BULAN INI
@@ -50,6 +52,27 @@ async function tulisNotifApp(namaPic, pesan, jenis) {
     waktu: FieldValue.serverTimestamp(),
     dibaca: false,
   });
+}
+
+async function kirimPushKeSemua(picList, pesan) {
+  if (picList.length === 0) return;
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "Security").get();
+  const tokenPerNama = {};
+  tokenSnap.forEach((d) => {
+    const data = d.data();
+    if (data.token && data.pic_nama) tokenPerNama[data.pic_nama] = data.token;
+  });
+  const tokens = picList.map((pic) => tokenPerNama[pic.nama]).filter(Boolean);
+  if (tokens.length === 0) {
+    console.log("Tidak ada token FCM terdaftar untuk penerima reminder APAR, skip push.");
+    return;
+  }
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title: "Pengingat Inspeksi APAR", body: pesan },
+    webpush: { notification: { icon: "/icons/icon-192.png" } },
+  });
+  console.log(`Push APAR: ${response.successCount} sukses, ${response.failureCount} gagal.`);
 }
 
 async function kirimKeSemua(picList, pesan, jenis) {
@@ -126,8 +149,12 @@ async function jalankan() {
   const pesanSecurity = `🧯 Inspeksi APAR bulan ini belum lengkap: ${belum} dari ${total} unit belum diperiksa. Batas waktu: tanggal ${deadlineDay} ${namaBulan}. Segera selesaikan lewat menu Inspeksi APAR.`;
   const pesanGaQhse = `🧯 [Monitoring] ${belum} dari ${total} unit APAR belum diinspeksi bulan ini. Batas waktu: tanggal ${deadlineDay} ${namaBulan}.`;
 
-  await kirimKeSemua(await ambilSecurityBertugasHariIni(), pesanSecurity, "apar-reminder-security");
+  const securityBertugas = await ambilSecurityBertugasHariIni();
+  await kirimKeSemua(securityBertugas, pesanSecurity, "apar-reminder-security");
   await kirimKeSemua(await ambilAdminGaQhse(), pesanGaQhse, "apar-reminder-monitoring");
+  // Push FCM (WA-style) buat Security -- gantikan AparInspectionBanner in-app yang dicopot
+  // dari dashboard/security/layout.tsx atas permintaan user.
+  await kirimPushKeSemua(securityBertugas, pesanSecurity);
 }
 
 jalankan()
