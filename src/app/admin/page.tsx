@@ -64,6 +64,9 @@ const IconDroplet = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconCalendarCheck = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /><path d="m9 15 2 2 4-4" /></svg>
 );
+const IconTrophy = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4" /><path d="M7 4h10v6a5 5 0 0 1-10 0V4z" /><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4" /><path d="M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -182,6 +185,13 @@ export default function AdminDashboardPage() {
       path: "/admin/monitor-absensi",
       token: "info",
       icon: IconCalendarCheck,
+    },
+    {
+      title: "Rekap Poin Staf",
+      desc: "Poin bulanan tiap staf (mulai 100, berkurang kalau tugas tidak sempurna) — siapa paling rajin & perlu perhatian.",
+      path: "/admin/monitor-poin",
+      token: "accent",
+      icon: IconTrophy,
     },
   ];
 
