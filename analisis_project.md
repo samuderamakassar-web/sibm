@@ -1,30 +1,40 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 7 September 2026 (§33: batch 8 item dari user dalam 1 pesan — Menu Cepat dirapikan jadi 3 kolom konsisten, Tim Bertugas Hari Ini OB & CS auto-swap ke preview rencana berikutnya mulai jam 17:00 WITA (balik normal jam 06:00), tampilkan Security shift berikutnya, notifikasi staleness status kendaraan (driver+Security jaga) kalau >2 jam gak diupdate, reorganisasi titik patroli (Parkiran + Siram Tanaman khusus Sesi 1 + Taman Belakang Lt1, hapus titik weekend lama), fitur baru "Notifikasi Dadakan: Siram Tanaman" wajib foto bukti (2 jendela harian) + monitoring admin, hapus 2 banner in-app tersisa (OB & Security) full pindah ke push FCM, dan alasan+foto wajib buat jawaban "Tidak" di segment Pelayanan + field catatan penyimpangan tugas — **SUDAH DI-DEPLOY ke production** (`hosting`+`firestore:rules`), `dev`+`main` sinkron fast-forward tanpa conflict. **Belum ditest visual manual oleh user** — lihat §33I.)
+Update terakhir: 18 September 2026 (§34: fitur baru **Absensi Check-in/Check-out** untuk semua staf — widget `AbsensiCard` di 5 dashboard (OB & CS, Security, Driver, QHSE, Admin GA), monitoring admin baru `admin/monitor-absensi` (filter tanggal/dept + export Excel). SUDAH DI-DEPLOY ke production (hosting+rules). **⚠️ TAPI git push ke GitHub GAGAL karena masalah kredensial** — kode aman ter-commit LOKAL di `dev`(`0985fcb`)+`main`(fast-forward lokal, belum ke-push), TAPI `origin/dev`/`origin/main` di GitHub masih di commit lama `25cefda`. User PERLU benerin login Git Credential Manager dulu (akun ke-cache `Samudera-Makassar` gak punya akses push, seharusnya pakai akun yang punya akses spt `Fin-Samudera`) sebelum sesi berikutnya bisa push. Detail: §34C.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 7 September 2026 — §33 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 18 September 2026 — §34 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Sesi hari ini (§33) — batch 8 item dalam 1 pesan, lanjutan langsung §32
+### 🔴🔴 PALING URGENT: git push ke GitHub GAGAL, cek/benerin dulu sebelum kerja apa pun
 
-User kirim 8 permintaan sekaligus + screenshot: (1) Menu Cepat berantakan di mobile, (2) Tim Bertugas Hari Ini OB & CS harus berhenti tampil jam 17:00 & ganti preview rencana besok (balik normal jam 06:00), (3) tampilkan Security shift berikutnya bukan cuma yang jaga sekarang, (4) notif push kalau status kendaraan gak diupdate driver/Security, (5) reorganisasi titik patroli (Parkiran+Siram Tanaman khusus Sesi 1+Taman Belakang Lt1, hapus titik weekend lama, siram tanaman dipindah jadi notifikasi dadakan terpisah wajib foto), (6) banner in-app checklist OB ternyata MASIH nongol padahal sudah diminta hilang sesi lalu — lupa dicopot dari layout, sekalian minta Security & Driver juga full push-only, (7) alasan+foto wajib kalau jawab "Tidak" di checklist Pelayanan, (8) field catatan penyimpangan tugas khusus Pelayanan. Instruksi eksplisit: kerjakan semua lalu langsung commit+deploy begitu aman, pastikan `dev`/`main` sinkron. Detail teknis lengkap: **§33** (§33A-§33I).
+Sesi §34 berakhir dengan kode SELESAI, DITEST (build+lint 0 error), dan SUDAH LIVE di production (Firebase deploy jalur kredensial terpisah, gak kena masalah ini) — tapi **`git push` ke `origin/dev` dan `origin/main` ditolak**. Commit-nya aman tersimpan LOKAL di mesin ini (`dev` di commit `0985fcb`, `main` sudah di-fast-forward-merge lokal ke commit yang sama, tinggal push), tapi GitHub (`samuderamakassar-web/sibm`) masih di commit lama `25cefda`.
 
-**Status: SUDAH DI-DEPLOY PENUH ke production.** `npm run build` 0 error, `npx eslint src scripts` 0 error (semua project, bukan cuma file yang disentuh). Deploy `hosting`+`firestore:rules` dibarengkan 1 command. `dev`+`main` sinkron via fast-forward merge (commit kode `ff6f7a3`, artifact `9b0c90f`) — TIDAK ada conflict.
+Penyebab: kredensial Git Credential Manager yang ke-cache di mesin ini pakai akun GitHub **`Samudera-Makassar`** yang **tidak punya izin push** ke repo ini (`403 Permission denied` waktu dicoba dari Git Bash). Dicoba dari PowerShell malah gak ketemu kredensial ke-cache sama sekali ("terminal prompts disabled"). Git user yang tercatat sah di awal sesi ini adalah **`Fin-Samudera`** — kemungkinan itu akun yang seharusnya dipakai.
+
+**Langkah buat user**: buka Windows Credential Manager (atau jalankan `git credential-manager github logout` lalu login ulang), hapus/ganti kredensial GitHub yang ke-cache jadi akun yang punya akses push ke repo ini. Setelah itu, sesi berikutnya tinggal `git push origin dev` dan `git push origin main` — TIDAK perlu commit ulang, cuma push commit yang sudah ada.
+
+### Sesi hari ini (§34) — Fitur Absensi Check-in/Check-out, lanjutan langsung §33
+
+User minta lanjut ke salah satu dari 3 fitur besar yang ditunda sejak §28C (sistem poin/gamifikasi, survei kepuasaan, absensi check-in/out), dengan instruksi "lanjutkan ke yang paling anda rekomendasikan, lansung saja eksekusi". Dipilih **Absensi Check-in/Out** — scope paling jelas & risiko desain paling rendah (2 fitur besar lainnya, poin/gamifikasi & survei kepuasaan, MASIH DITUNDA, belum dikerjakan). Detail teknis lengkap: **§34** (§34A-§34C).
+
+**Status kode: SUDAH SELESAI & LIVE di production** (`npm run build` 0 error, `npx eslint src scripts` 0 error project-wide). **Status git: BELUM ke-push ke GitHub** — lihat peringatan di atas.
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **User belum test visual manual sama sekali** untuk batch §33 ini (Claude gak punya tool browser di environment ini) — terutama: Menu Cepat 3 kolom di HP asli, transisi jam 17:00/06:00 Tim Bertugas, halaman Notifikasi Dadakan pas/di luar jendela, alur alasan+foto Pelayanan end-to-end. Minta user coba & lapor kalau ada yang aneh.
-2. **Ambang staleness driver (120 menit) di `scripts/driver-status-staleness.mjs` adalah ASUMSI Claude**, user gak sebutkan angka spesifik — tanya user apa sudah pas, kalau kurang pas tinggal ubah konstanta `AMBANG_STALE_MENIT`.
-3. Bug laten yang KETEMU & DIBENERIN pas kerjain §33F (bukan diminta user, ditemukan pas rombak `security-tugas-reminder.mjs`): PIC Shift 2 yang relevan buat reminder jam pagi (06:00-07:20) itu HARUSNYA yang shift-nya mulai KEMARIN malam, bukan hari ini — pola ini juga ada di `patroli-push-reminder.mjs` (sudah benar di situ) jadi kalau bikin script cron baru yang berurusan sama Shift 2 dini hari, cek pola `tanggalShift2Relevan`/`tanggalShift` di kedua script itu.
-4. Poin-poin lama dari §28-§32 yang belum berubah — lihat penutup masing-masing (§28G, §29E, §30E, §31E, §32E) kalau perlu detail. 3 fitur besar yang masih ditunda dari §28: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan, absensi check-in/out.
-5. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung) — minta user coba login sekali di situs live kalau belum.
+1. **Benerin kredensial git dulu (lihat peringatan paling atas), lalu push `dev` dan `main`** yang sudah di-commit lokal dari sesi §34 (`338c9e3`, `0985fcb`).
+2. **User belum test visual manual** fitur Absensi (tombol Absen Masuk/Pulang di 5 dashboard, halaman `admin/monitor-absensi`) — Claude gak punya tool browser di environment ini.
+3. **Desain Absensi v1 SENGAJA sederhana** (§34A) — cuma catat jam masuk/pulang apa adanya, TANPA logika "telat" (butuh jam standar resmi per dept yang belum ada). Tanya user apa perlu ditambah nanti.
+4. Bug laten yang ketemu pas riset §34B (BUKAN diperbaiki, cuma dicatat): `dashboard/security/page.tsx` baris ~103, variable `todayISO` pakai `new Date().toISOString()` yang itu UTC bukan WITA — berpotensi salah tanggal jam 00:00-07:59 WITA. Di luar scope sesi ini (resiko regresi ke fitur shift yang sudah jalan), tapi kalau ada laporan bug tanggal aneh di jam segitu, ini kemungkinan penyebabnya.
+5. Poin-poin lama dari §28-§33 yang belum berubah — lihat penutup masing-masing kalau perlu detail. 2 fitur besar yang masih ditunda: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan.
+6. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung) — minta user coba login sekali di situs live kalau belum.
+7. Batch §33 (Menu Cepat, Tim Bertugas jam 17:00, dst) juga masih belum ditest visual manual oleh user — lihat §33I.
 
-Detail teknis lengkap sesi hari ini: **§33**. Riwayat sesi 21-32: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
+Detail teknis lengkap sesi hari ini: **§34**. Riwayat sesi 21-33: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
 ---
 
@@ -1713,3 +1723,24 @@ User juga minta perlakuan sama buat "security dan driver". Driver memang belum p
 **Belum sempat ditest visual di browser oleh Claude** (tidak ada tool browser di environment ini) — terutama: tampilan Menu Cepat 3 kolom di HP asli, transisi Tim Bertugas jam 17:00/06:00 (butuh nunggu jam asli atau ubah jam sistem buat simulasi), halaman Notifikasi Dadakan pas jendela aktif vs tidak aktif, dan alur alasan+foto Pelayanan end-to-end. User perlu coba manual & lapor kalau ada yang aneh.
 
 **Ambang staleness driver (120 menit) adalah ASUMSI Claude** karena user tidak menyebutkan angka spesifik — kalau kerasa kurang pas (terlalu cepat/lambat), tinggal ubah konstanta `AMBANG_STALE_MENIT` di `scripts/driver-status-staleness.mjs`.
+
+---
+
+## 34. Fitur Absensi Check-in/Check-out (18 September 2026, lanjutan langsung §33)
+
+Konteks: user minta lanjut ke salah satu dari 3 fitur besar yang ditunda di §28C (sistem poin/gamifikasi, survei kepuasaan, absensi check-in/out) — "lanjutkan ke yang paling anda rekomendasikan, lansung saja eksekusi". Dipilih **Absensi Check-in/Out** karena scope-nya paling jelas & risiko desain paling rendah dibanding 2 yang lain (poin butuh aturan insentif yang belum didefinisikan, survei butuh pola akses token-tanpa-login yang belum didesain) — 2 fitur besar itu (poin/gamifikasi & survei kepuasaan) MASIH DITUNDA, belum dikerjakan.
+
+### 34A. Desain (asumsi Claude, belum dikonfirmasi user)
+Tidak ada detail spesifik dari user soal jam kerja standar/aturan telat per dept (yang memang beda-beda: OB & CS 3 sesi, Security shift 24 jam, Driver on-call, dst) — jadi v1 ini SENGAJA dibuat sesederhana mungkin: cuma catat jam absen masuk & pulang apa adanya, TANPA logika "telat"/"tidak lengkap jam kerja" karena itu butuh jam standar resmi per dept yang belum ada datanya di sistem. Kalau user mau tambah logika itu nanti, tinggal dikembangkan dari fondasi ini.
+
+### 34B. Implementasi
+- **`src/lib/shift.ts`**: tambah `tanggalISOWITASekarang()` (export baru) — dipusatkan karena ternyata setiap halaman sebelumnya nulis ulang versi lokalnya sendiri dengan cara beda-beda, dan salah satunya (`dashboard/security/page.tsx`, variable `todayISO` baris 103) ternyata **TIDAK WITA-safe** (pakai `new Date().toISOString().split("T")[0]` yang itu zona UTC, bukan WITA) — bug laten lama yang ketemu pas riset fitur ini, TIDAK diubah di lokasi lamanya (di luar scope, resiko regresi ke fitur shift yang sudah jalan) tapi dicatat di sini biar kalau nanti ada bug tanggal aneh di halaman itu jam 00:00-07:59 WITA, ini kemungkinan penyebabnya.
+- **`src/components/AbsensiCard.tsx`** (baru, reusable widget) — 1 dokumen per orang per hari di collection `attendance_logs`, id dokumen `${tanggal}_${slugNama(nama)}` (pola composite ID yang sama seperti `notifikasi_dadakan_siram/{tanggal}_{jendela}` dari §33F). Render 3 state: belum absen masuk (tombol "✅ Absen Masuk"), sudah masuk belum pulang (tampil jam masuk + tombol "🚪 Absen Pulang"), sudah keduanya (ringkasan "Selesai ✓"). Real-time via `onSnapshot` jadi kalau dibuka di 2 device gak akan nyimpang.
+- **Dipasang di 5 dashboard home**: `DashboardOBPage.tsx`, `dashboard/security/page.tsx` (disembunyikan khusus Magang, sama seperti menu lain), `driver/DriverMenuPage.tsx`, `DashboardQHSEPage.tsx`, `admin/page.tsx` (Admin GA) — masing-masing kirim `picName` + `departemen` (Admin GA pakai `session.dept` biar akurat walau adminBypass bikin role lain juga bisa akses halaman itu).
+- **`src/app/admin/monitor-absensi/page.tsx`** (baru) — rekap tabel per tanggal (default hari ini) + filter departemen (dropdown 5 dept + "Semua"), kolom Nama/Departemen/Jam Masuk/Jam Pulang/Durasi (jam desimal), tombol Export Excel (pola `xlsx` sama seperti `admin/helpdesk`). Menu baru ditambahkan ke `admin/page.tsx` (`IconCalendarCheck` baru).
+- **`firestore.rules`**: `attendance_logs` ditambahkan ke daftar collection `isSignedIn()`-open (pola sama collection operasional lain — bukan `if true` publik, tetap butuh login).
+
+### 34C. Verifikasi
+`npm run build`: 0 error (46 route, termasuk route baru `/admin/monitor-absensi`). `npx eslint src scripts`: 0 error project-wide, semua warning pre-existing (sama persis daftarnya dengan §33I, tidak nambah). **SUDAH di-deploy** ke `hosting`+`firestore:rules` (1 command, live di production). **Belum ditest visual manual** (constraint lingkungan sama seperti §33 — tidak ada tool browser).
+
+**KENDALA BARU sesi ini — git push ke GitHub GAGAL** (bukan masalah kode): kedua commit (`338c9e3` fitur, `0985fcb` artifact build) sudah tercatat aman di branch `dev` LOKAL, dan `main` sudah di-fast-forward-merge LOKAL (`0985fcb`) tanpa conflict — tapi `git push` ke `origin/dev` maupun `origin/main` ditolak. Dari Bash: kredensial yang ke-cache di mesin ini punya akun GitHub `Samudera-Makassar` yang **tidak punya izin push** ke `samuderamakassar-web/sibm` (`403 Permission denied`). Dari PowerShell: malah gagal lebih awal ("terminal prompts disabled", gak ketemu kredensial ke-cache sama sekali). Kesimpulan: kredensial Git Credential Manager di mesin ini perlu di-refresh/login ulang pakai akun yang PUNYA akses push (kemungkinan `Fin-Samudera`, sesuai git user yang tercatat di awal sesi ini) — **user perlu benerin ini manual dulu** (sign out akun lama di Windows Credential Manager / `git credential-manager github logout`, lalu login ulang), baru saya bisa push. Sampai itu selesai, `origin/dev` dan `origin/main` di GitHub MASIH di commit lama (`25cefda`) walau situs production SUDAH menjalankan kode terbaru (deploy Firebase gak butuh git push, jalur kredensialnya beda/independen).
