@@ -1,40 +1,36 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 18 September 2026 (§34: fitur baru **Absensi Check-in/Check-out** untuk semua staf — widget `AbsensiCard` di 5 dashboard (OB & CS, Security, Driver, QHSE, Admin GA), monitoring admin baru `admin/monitor-absensi` (filter tanggal/dept + export Excel). SUDAH DI-DEPLOY ke production (hosting+rules). **⚠️ TAPI git push ke GitHub GAGAL karena masalah kredensial** — kode aman ter-commit LOKAL di `dev`(`0985fcb`)+`main`(fast-forward lokal, belum ke-push), TAPI `origin/dev`/`origin/main` di GitHub masih di commit lama `25cefda`. User PERLU benerin login Git Credential Manager dulu (akun ke-cache `Samudera-Makassar` gak punya akses push, seharusnya pakai akun yang punya akses spt `Fin-Samudera`) sebelum sesi berikutnya bisa push. Detail: §34C.)
+Update terakhir: 18 September 2026 (§35: fix bug logo hitam di `DashboardOBPage.tsx` & `admin/qr-manager/page.tsx` (pola bug lama §12F yang ternyata belum tuntas di 2 file ini), fix bug tanggal UTC di `dashboard/security/page.tsx` (default tanggal form Lembur salah kalau dibuka dini hari WITA), dan patch 6 dari 15 kerentanan dependency lewat `npm audit fix` non-breaking — 9 sisanya (termasuk 1 CRITICAL di Next.js) BUTUH keputusan/approval user karena fix-nya breaking change di app production tanpa staging. SUDAH DI-DEPLOY ke production & **git push SUDAH BERHASIL** ke `dev`+`main` (kendala kredensial sesi §34 sudah dibenerin user). Detail: §35.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 18 September 2026 — §34 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 18 September 2026 — §35 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: git push ke GitHub GAGAL, cek/benerin dulu sebelum kerja apa pun
+### Sesi hari ini (§34 + §35) — Fitur Absensi, lalu bugfix + patch dependency, lanjutan langsung §33
 
-Sesi §34 berakhir dengan kode SELESAI, DITEST (build+lint 0 error), dan SUDAH LIVE di production (Firebase deploy jalur kredensial terpisah, gak kena masalah ini) — tapi **`git push` ke `origin/dev` dan `origin/main` ditolak**. Commit-nya aman tersimpan LOKAL di mesin ini (`dev` di commit `0985fcb`, `main` sudah di-fast-forward-merge lokal ke commit yang sama, tinggal push), tapi GitHub (`samuderamakassar-web/sibm`) masih di commit lama `25cefda`.
+Rangkaian 2 bagian dalam 1 sesi:
+- **§34**: user minta lanjut ke salah satu dari 3 fitur besar yang ditunda sejak §28C, instruksi "lanjutkan ke yang paling anda rekomendasikan, lansung saja eksekusi" — dipilih **Absensi Check-in/Out** (widget di 5 dashboard + monitoring admin). Sempat ada kendala git push (kredensial GitHub salah akun ke-cache) — **SUDAH DIBENERIN user**, push berhasil.
+- **§35**: user tanya status deploy lalu minta lanjut ke "bagian lain yang perlu diperbaiki/ditambahkan" — Claude audit ulang daftar "belum dikerjakan" di dokumen ini, eksekusi 3 temuan aman: fix 2 bug logo hitam (pola lama §12F), fix 1 bug tanggal UTC (`dashboard/security/page.tsx`), patch 6/15 kerentanan dependency (`npm audit fix` non-breaking).
 
-Penyebab: kredensial Git Credential Manager yang ke-cache di mesin ini pakai akun GitHub **`Samudera-Makassar`** yang **tidak punya izin push** ke repo ini (`403 Permission denied` waktu dicoba dari Git Bash). Dicoba dari PowerShell malah gak ketemu kredensial ke-cache sama sekali ("terminal prompts disabled"). Git user yang tercatat sah di awal sesi ini adalah **`Fin-Samudera`** — kemungkinan itu akun yang seharusnya dipakai.
+**Status: SUDAH DI-DEPLOY PENUH & git push BERHASIL.** `dev`+`main` sinkron di commit `4aa53d9`, tanpa conflict. Detail teknis lengkap: **§34** (fitur Absensi) dan **§35** (bugfix + dependency).
 
-**Langkah buat user**: buka Windows Credential Manager (atau jalankan `git credential-manager github logout` lalu login ulang), hapus/ganti kredensial GitHub yang ke-cache jadi akun yang punya akses push ke repo ini. Setelah itu, sesi berikutnya tinggal `git push origin dev` dan `git push origin main` — TIDAK perlu commit ulang, cuma push commit yang sudah ada.
-
-### Sesi hari ini (§34) — Fitur Absensi Check-in/Check-out, lanjutan langsung §33
-
-User minta lanjut ke salah satu dari 3 fitur besar yang ditunda sejak §28C (sistem poin/gamifikasi, survei kepuasaan, absensi check-in/out), dengan instruksi "lanjutkan ke yang paling anda rekomendasikan, lansung saja eksekusi". Dipilih **Absensi Check-in/Out** — scope paling jelas & risiko desain paling rendah (2 fitur besar lainnya, poin/gamifikasi & survei kepuasaan, MASIH DITUNDA, belum dikerjakan). Detail teknis lengkap: **§34** (§34A-§34C).
-
-**Status kode: SUDAH SELESAI & LIVE di production** (`npm run build` 0 error, `npx eslint src scripts` 0 error project-wide). **Status git: BELUM ke-push ke GitHub** — lihat peringatan di atas.
+**2 fitur besar yang masih ditunda dari §28C**: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan — BELUM dikerjakan, masih butuh detail desain dari user.
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **Benerin kredensial git dulu (lihat peringatan paling atas), lalu push `dev` dan `main`** yang sudah di-commit lokal dari sesi §34 (`338c9e3`, `0985fcb`).
-2. **User belum test visual manual** fitur Absensi (tombol Absen Masuk/Pulang di 5 dashboard, halaman `admin/monitor-absensi`) — Claude gak punya tool browser di environment ini.
+1. **9 kerentanan dependency BUTUH KEPUTUSAN USER** (§35C) — 1 CRITICAL di Next.js (fix butuh upgrade ke 16.3.5, di luar range `package.json` saat ini), sisanya breaking change ke PWA/next-pwa atau `xlsx` yang gak ada fix sama sekali. App ini production tanpa staging, jadi upgrade-upgrade ini SENGAJA tidak dijalankan tanpa persetujuan eksplisit — tanya user apa mau lanjut (dan idealnya test di local dulu, bukan langsung production).
+2. **User belum test visual manual** fitur Absensi dari §34 (tombol Absen Masuk/Pulang di 5 dashboard, halaman `admin/monitor-absensi`) DAN fix logo dari §35A (header OB & CS Desk, kartu label QR cetak) — Claude gak punya tool browser di environment ini.
 3. **Desain Absensi v1 SENGAJA sederhana** (§34A) — cuma catat jam masuk/pulang apa adanya, TANPA logika "telat" (butuh jam standar resmi per dept yang belum ada). Tanya user apa perlu ditambah nanti.
-4. Bug laten yang ketemu pas riset §34B (BUKAN diperbaiki, cuma dicatat): `dashboard/security/page.tsx` baris ~103, variable `todayISO` pakai `new Date().toISOString()` yang itu UTC bukan WITA — berpotensi salah tanggal jam 00:00-07:59 WITA. Di luar scope sesi ini (resiko regresi ke fitur shift yang sudah jalan), tapi kalau ada laporan bug tanggal aneh di jam segitu, ini kemungkinan penyebabnya.
-5. Poin-poin lama dari §28-§33 yang belum berubah — lihat penutup masing-masing kalau perlu detail. 2 fitur besar yang masih ditunda: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan.
+4. `NEXT_PUBLIC_FONNTE_TOKEN` (§35C) — sudah gak dipakai di kode sama sekali, tinggal housekeeping manual user hapus secret-nya di GitHub/hosting config kalau mau (gak ada resiko kalau dibiarkan juga).
+5. Poin-poin lama dari §28-§33 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
 6. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung) — minta user coba login sekali di situs live kalau belum.
 7. Batch §33 (Menu Cepat, Tim Bertugas jam 17:00, dst) juga masih belum ditest visual manual oleh user — lihat §33I.
 
-Detail teknis lengkap sesi hari ini: **§34**. Riwayat sesi 21-33: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
+Detail teknis lengkap sesi hari ini: **§34** dan **§35**. Riwayat sesi 21-33: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
 ---
 
@@ -1743,4 +1739,34 @@ Tidak ada detail spesifik dari user soal jam kerja standar/aturan telat per dept
 ### 34C. Verifikasi
 `npm run build`: 0 error (46 route, termasuk route baru `/admin/monitor-absensi`). `npx eslint src scripts`: 0 error project-wide, semua warning pre-existing (sama persis daftarnya dengan §33I, tidak nambah). **SUDAH di-deploy** ke `hosting`+`firestore:rules` (1 command, live di production). **Belum ditest visual manual** (constraint lingkungan sama seperti §33 — tidak ada tool browser).
 
-**KENDALA BARU sesi ini — git push ke GitHub GAGAL** (bukan masalah kode): kedua commit (`338c9e3` fitur, `0985fcb` artifact build) sudah tercatat aman di branch `dev` LOKAL, dan `main` sudah di-fast-forward-merge LOKAL (`0985fcb`) tanpa conflict — tapi `git push` ke `origin/dev` maupun `origin/main` ditolak. Dari Bash: kredensial yang ke-cache di mesin ini punya akun GitHub `Samudera-Makassar` yang **tidak punya izin push** ke `samuderamakassar-web/sibm` (`403 Permission denied`). Dari PowerShell: malah gagal lebih awal ("terminal prompts disabled", gak ketemu kredensial ke-cache sama sekali). Kesimpulan: kredensial Git Credential Manager di mesin ini perlu di-refresh/login ulang pakai akun yang PUNYA akses push (kemungkinan `Fin-Samudera`, sesuai git user yang tercatat di awal sesi ini) — **user perlu benerin ini manual dulu** (sign out akun lama di Windows Credential Manager / `git credential-manager github logout`, lalu login ulang), baru saya bisa push. Sampai itu selesai, `origin/dev` dan `origin/main` di GitHub MASIH di commit lama (`25cefda`) walau situs production SUDAH menjalankan kode terbaru (deploy Firebase gak butuh git push, jalur kredensialnya beda/independen).
+**KENDALA git push (sesi §34) — SUDAH BERES.** User login ulang Git Credential Manager pakai akun yang benar, konfirmasi ke Claude, push berhasil di kedua branch. `origin/dev` dan `origin/main` sekarang sinkron di commit `ec5138b` (lanjut ke commit terbaru §35 di bawah).
+
+---
+
+## 35. Fix Bug Logo Hitam, Bug Tanggal UTC, Patch Dependency Rentan (18 September 2026, lanjutan langsung §34)
+
+Konteks: user tanya "apakah sudah terdeploy" (dikonfirmasi ya, lihat `hosting:channel:list` timestamp cocok) lalu minta lanjut ke "bagian lainnya yang perlu diperbaiki atau ditambahkan". Claude audit ulang daftar "belum dikerjakan" di seluruh dokumen ini dan eksekusi 3 temuan yang aman & konkret (bukan 2 fitur besar yang masih ditunda — itu tetap butuh detail dari user).
+
+### 35A. Fix Bug Logo Hitam (temuan lama §12F yang ternyata belum tuntas)
+§12F (sesi lama) sudah nemu & benerin root cause bug "logo Samudera nge-blob gelap tak terbaca" di `admin/page.tsx` — filter CSS `invert(1) brightness(...)` diterapkan ke logo yang ASLINYA sudah gelap (bukan logo putih yang butuh di-invert). §12F juga sudah mencatat 2 file lain dengan pola bug identik yang BELUM diperbaiki saat itu. Dicek ulang sekarang:
+- `dashboard/security/page.tsx` — ternyata SUDAH diperbaiki di sesi lain di antara §12 dan sekarang (gak ada lagi filter invert di file ini).
+- **`DashboardOBPage.tsx`** (logo header OB & CS Desk) — masih ada `filter: "invert(1) brightness(0.2)"` pada logo `LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg`. Dihapus filternya, logo tampil warna asli.
+- **`admin/qr-manager/page.tsx`** (logo di kartu label QR cetak) — masih ada `filter: "invert(1) brightness(0)"` (versi lebih parah, maksa solid hitam apapun warnanya). Dihapus filternya juga.
+
+### 35B. Fix Bug Tanggal UTC di `dashboard/security/page.tsx`
+Ditemukan pas riset §34B: `todayISO` di file ini pakai `new Date().toISOString().split("T")[0]` (UTC), dipakai sebagai default tanggal form "Klaim Lembur". Salah tanggal kalau form dibuka jam 00:00-07:59 WITA (masih nunjukin tanggal kemarin). Diganti pakai `tanggalISOWITASekarang()` (helper baru dari §34B, `lib/shift.ts`).
+
+### 35C. Patch Dependency Rentan (`npm audit fix`, non-breaking saja)
+Dari 15 kerentanan yang ketemu (`npm audit`), 6 dipatch aman lewat `npm audit fix` biasa (tanpa `--force`, gak ada perubahan versi di luar range yang sudah diizinkan `package.json`): `baseline-browser-mapping`, `brace-expansion`, `browserslist`, `fast-uri`, `nanoid`, `protobufjs`.
+
+**9 sisanya SENGAJA TIDAK disentuh, butuh keputusan/approval user dulu:**
+- **`next` (CRITICAL)** + `postcss` + `sharp` — fix-nya perlu upgrade `next` ke `16.3.5` (di luar range `package.json` saat ini, versi produksi sekarang `16.2.7`). Ini app production **tanpa staging environment**, jadi upgrade framework utama beresiko — perlu persetujuan eksplisit user dulu sebelum dicoba (dan sebaiknya dites dulu di local/staging kalau ada, bukan langsung production).
+- **`serialize-javascript`** (lewat `workbox-build`/`@ducanh2912/next-pwa`) — fix-nya breaking change ke `@ducanh2912/next-pwa@10.2.6`, bisa pengaruh ke PWA/service worker yang sudah beberapa kali jadi sumber masalah cache di app ini (lihat §24/§26A) — resiko regresi PWA kalau dipaksa upgrade tanpa testing menyeluruh.
+- **`xlsx` (HIGH, TIDAK ADA FIX)** — dipakai buat fitur Export Excel (`admin/helpdesk`, `admin/kendaraan`, `admin/monitor-absensi`). Kerentanannya (Prototype Pollution & ReDoS) exploitable lewat FILE `.xlsx` yang di-PARSE, bukan yang di-export/ditulis — fitur-fitur ini semuanya cuma MENULIS file Excel (export data ke `.xlsx`), TIDAK ADA fitur baca/upload `.xlsx` dari user di app ini, jadi resiko eksploitasinya rendah dalam pemakaian saat ini. Tetap dicatat sebagai utang teknis kalau suatu saat mau ganti library.
+
+**Juga dicek (bukan kode, cuma housekeeping)**: `NEXT_PUBLIC_FONNTE_TOKEN` (temuan lama §28A poin 5) — dikonfirmasi SUDAH TIDAK ADA referensinya sama sekali di kode (WA reminder sudah dihapus total di §27), jadi tinggal environment variable/secret basi yang bisa dihapus manual oleh user dari GitHub Secrets/hosting config kalau mau beres-beres, tidak ada resiko fungsional.
+
+### 35D. Verifikasi
+`npm run build`: 0 error, 46 route tetap sama. `npx eslint` (file yang disentuh): 0 error/warning baru. **SUDAH di-deploy** ke `hosting` (rules gak berubah sesi ini, gak perlu redeploy rules). `dev`+`main` sinkron & PUSH BERHASIL ke GitHub (`4aa53d9`, kredensial sudah dibenerin user).
+
+**Belum ditest visual** (constraint lingkungan sama seperti sesi-sesi sebelumnya) — terutama tampilan logo di header OB & CS Desk dan kartu label QR cetak setelah filter dihapus.
