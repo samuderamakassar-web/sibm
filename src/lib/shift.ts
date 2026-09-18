@@ -48,6 +48,17 @@ function formatTanggal(d: Date): string {
   return `${y}-${m}-${t}`;
 }
 
+/**
+ * Tanggal ISO (YYYY-MM-DD) hari ini di WITA -- dipusatkan di sini karena banyak halaman
+ * sebelumnya nulis ulang versi lokalnya sendiri dengan cara berbeda-beda (ada yang pakai
+ * Intl.DateTimeFormat, ada yang manual dari waktuWITASekarang(), bahkan ada yang salah pakai
+ * new Date().toISOString() -- itu UTC, bukan WITA, lihat dashboard/security/page.tsx). Pakai
+ * ini untuk kode BARU supaya tidak nambah bug tanggal-salah-jam-dini-hari yang sama.
+ */
+export function tanggalISOWITASekarang(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
+}
+
 export interface ShiftSesiInfo {
   tanggal_shift: string; // "YYYY-MM-DD" -- tanggal MULAI shift yang sedang aktif (bukan tanggal kalender jam sekarang)
   shift: ShiftLabel;

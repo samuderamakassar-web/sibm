@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
+import AbsensiCard from "../AbsensiCard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -177,6 +178,8 @@ export default function DashboardQHSEPage() {
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
       <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
+
+        <AbsensiCard picName={picName} departemen="QHSE" />
 
         {/* 🔹 GRID MENU UTAMA QHSE */}
         <div className="admin-grid">

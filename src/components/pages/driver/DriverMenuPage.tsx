@@ -7,6 +7,7 @@ import { db } from "../../../lib/firebase";
 import { useAuthGuard, logoutWithConfirm } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../ui/ToastProvider";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import AbsensiCard from "../../AbsensiCard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security
@@ -279,6 +280,8 @@ export default function DriverMenuPage() {
             </button>
           </div>
         </div>
+
+        <AbsensiCard picName={session?.nama || ""} departemen="Driver" />
 
         {/* 🔹 GRID MENU UTAMA DRIVER */}
         <div className="driver-menu-grid">

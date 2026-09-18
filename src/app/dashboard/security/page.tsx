@@ -8,6 +8,7 @@ import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
+import AbsensiCard from "../../../components/AbsensiCard";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -519,6 +520,8 @@ export default function SecurityDashboard() {
             </div>
           </div>
         )}
+
+        {!isMagang && <AbsensiCard picName={picName} departemen="Security" />}
 
         {/* 👑 MENU KHUSUS DANRU */}
         {isKoordinatorArea && (

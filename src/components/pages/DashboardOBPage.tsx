@@ -8,6 +8,7 @@ import { useFcmSetup } from "@/hooks/useFcmSetup";
 import { logoutWithConfirm, useAuthGuard } from "@/hooks/useAuthGuard";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useToast } from "@/components/ui/ToastProvider";
+import AbsensiCard from "@/components/AbsensiCard";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -424,6 +425,8 @@ export default function DashboardOBPage() {
             )}
           </div>
         </div>
+
+        <AbsensiCard picName={picName} departemen="OB & CS" />
 
         {/* ⚠️ BANNER PERINGATAN LOW STOCK */}
         {stokMenipis.length > 0 && (
