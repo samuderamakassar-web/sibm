@@ -1,36 +1,37 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 18 September 2026 (§35: fix bug logo hitam di `DashboardOBPage.tsx` & `admin/qr-manager/page.tsx` (pola bug lama §12F yang ternyata belum tuntas di 2 file ini), fix bug tanggal UTC di `dashboard/security/page.tsx` (default tanggal form Lembur salah kalau dibuka dini hari WITA), dan patch 6 dari 15 kerentanan dependency lewat `npm audit fix` non-breaking — 9 sisanya (termasuk 1 CRITICAL di Next.js) BUTUH keputusan/approval user karena fix-nya breaking change di app production tanpa staging. SUDAH DI-DEPLOY ke production & **git push SUDAH BERHASIL** ke `dev`+`main` (kendala kredensial sesi §34 sudah dibenerin user). Detail: §35.)
+Update terakhir: 19 September 2026 (§36: fitur baru **Sistem Poin Bulanan Staf** — mulai 100 poin/bulan, otomatis berkurang kalau OB/Security gak menyelesaikan tugas (checklist/patroli/notifikasi dadakan) sempurna, rekap admin `admin/monitor-poin` per bulan dengan badge Paling Rajin/Perlu Perhatian. SUDAH DI-DEPLOY & `dev`+`main` sinkron (`3bacbf6`). **2 permintaan LAIN dari user sesi ini BELUM selesai** — upgrade dependency Next.js diblokir permission classifier (butuh user jalankan `npm install` sendiri), dan survei kepuasaan (link Google Form) baru kebaca halaman pertamanya (form multi-halaman, WebFetch gak bisa lanjut) — butuh info tambahan dari user. Detail lengkap & rekomendasi konkret: §36D.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 18 September 2026 — §35 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §36 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Sesi hari ini (§34 + §35) — Fitur Absensi, lalu bugfix + patch dependency, lanjutan langsung §33
+### 🔴 2 hal butuh input/aksi USER sebelum bisa lanjut (§36D) — cek ini dulu
 
-Rangkaian 2 bagian dalam 1 sesi:
-- **§34**: user minta lanjut ke salah satu dari 3 fitur besar yang ditunda sejak §28C, instruksi "lanjutkan ke yang paling anda rekomendasikan, lansung saja eksekusi" — dipilih **Absensi Check-in/Out** (widget di 5 dashboard + monitoring admin). Sempat ada kendala git push (kredensial GitHub salah akun ke-cache) — **SUDAH DIBENERIN user**, push berhasil.
-- **§35**: user tanya status deploy lalu minta lanjut ke "bagian lain yang perlu diperbaiki/ditambahkan" — Claude audit ulang daftar "belum dikerjakan" di dokumen ini, eksekusi 3 temuan aman: fix 2 bug logo hitam (pola lama §12F), fix 1 bug tanggal UTC (`dashboard/security/page.tsx`), patch 6/15 kerentanan dependency (`npm audit fix` non-breaking).
+1. **Upgrade dependency (Next.js 16.2.7→16.3.5, fix kerentanan CRITICAL)** — user sudah bilang "silahkan dicoba" tapi `npm install` DITOLAK permission classifier ("Modify Shared Resources"). User perlu jalankan sendiri: `npm install next@16.3.5 eslint-config-next@16.3.5 --save-exact` (BUKAN `npm audit fix --force` — itu juga nyeret downgrade `@ducanh2912/next-pwa` yang mencurigakan & beresiko ke PWA/cache). Setelah user jalankan (atau approve prompt izinnya), Claude lanjut build+test+deploy.
+2. **Survei kepuasaan pelanggan** — link Google Form yang dikasih user (`forms.gle/vK76oK54nsSFdHBb7`) cuma kebaca halaman pertama (3 pertanyaan: Nama, Perusahaan/Divisi, Lantai) — form-nya multi-halaman, Claude gak bisa baca halaman berikutnya. Butuh user: (a) kasih semua pertanyaan halaman 2 dst, dan (b) konfirmasi mau REPLIKASI ke form custom di SIBM (data masuk Firestore, bisa dipantau admin) atau cuma LINK ke Google Form yang sudah ada, dan (c) trigger-nya per-tiket-selesai atau survei periodik terpisah.
 
-**Status: SUDAH DI-DEPLOY PENUH & git push BERHASIL.** `dev`+`main` sinkron di commit `4aa53d9`, tanpa conflict. Detail teknis lengkap: **§34** (fitur Absensi) dan **§35** (bugfix + dependency).
+### Sesi hari ini (§36) — Sistem Poin Bulanan Staf, lanjutan langsung §35
 
-**2 fitur besar yang masih ditunda dari §28C**: sistem poin/gamifikasi karyawan, survei kepuasaan per laporan — BELUM dikerjakan, masih butuh detail desain dari user.
+User kasih detail lengkap buat sistem poin ("100 poin/bulan, berkurang kalau tugas gak sempurna, rekap akhir bulan siapa paling rajin/malas") dan link Google Form buat survei kepuasaan, plus lampu hijau lanjut upgrade dependency dari §35C. **Cuma sistem poin yang berhasil diselesaikan penuh sesi ini** — 2 lainnya diblokir hal-hal di luar kendali kode (lihat peringatan di atas). Detail lengkap: **§36** (§36A-§36D).
+
+**Status: Sistem Poin SUDAH DI-DEPLOY PENUH.** `dev`+`main` sinkron di commit `3bacbf6`, tanpa conflict.
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **9 kerentanan dependency BUTUH KEPUTUSAN USER** (§35C) — 1 CRITICAL di Next.js (fix butuh upgrade ke 16.3.5, di luar range `package.json` saat ini), sisanya breaking change ke PWA/next-pwa atau `xlsx` yang gak ada fix sama sekali. App ini production tanpa staging, jadi upgrade-upgrade ini SENGAJA tidak dijalankan tanpa persetujuan eksplisit — tanya user apa mau lanjut (dan idealnya test di local dulu, bukan langsung production).
-2. **User belum test visual manual** fitur Absensi dari §34 (tombol Absen Masuk/Pulang di 5 dashboard, halaman `admin/monitor-absensi`) DAN fix logo dari §35A (header OB & CS Desk, kartu label QR cetak) — Claude gak punya tool browser di environment ini.
-3. **Desain Absensi v1 SENGAJA sederhana** (§34A) — cuma catat jam masuk/pulang apa adanya, TANPA logika "telat" (butuh jam standar resmi per dept yang belum ada). Tanya user apa perlu ditambah nanti.
-4. `NEXT_PUBLIC_FONNTE_TOKEN` (§35C) — sudah gak dipakai di kode sama sekali, tinggal housekeeping manual user hapus secret-nya di GitHub/hosting config kalau mau (gak ada resiko kalau dibiarkan juga).
-5. Poin-poin lama dari §28-§33 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
-6. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung) — minta user coba login sekali di situs live kalau belum.
-7. Batch §33 (Menu Cepat, Tim Bertugas jam 17:00, dst) juga masih belum ditest visual manual oleh user — lihat §33I.
+1. **Selesaikan 2 blocker di atas** begitu user kasih respons/aksi yang dibutuhkan.
+2. **Sistem Poin BELUM ADA DATANYA SAMA SEKALI** (§36C) — cron baru jalan besok pagi (09:00 WITA) & itu pun cuma evaluasi 1 hari kemarin. Jangan kaget kalau `admin/monitor-poin` masih nampilin semua orang 100 poin di awal — itu normal, bukan bug. Tunggu beberapa hari biar data kepatuhan mulai kekumpul.
+3. **Scope Sistem Poin v1 SENGAJA terbatas ke OB & Security saja** (§36A) — Driver/QHSE/Admin GA tetap 100 poin terus sampai ada sinyal tugas individual yang reliable ditambahkan. Angka potongan (-5/-10/-5) juga ASUMSI Claude, gampang diubah di `scripts/points-deduction.mjs` kalau user mau beda.
+4. **9 kerentanan dependency dari §35C** masih menggantung (lihat blocker #1 di atas).
+5. **User belum test visual manual** fitur Absensi §34, fix logo §35A, dan sekarang sistem poin §36 — semuanya numpuk karena Claude gak punya tool browser.
+6. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
+7. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung).
 
-Detail teknis lengkap sesi hari ini: **§34** dan **§35**. Riwayat sesi 21-33: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
+Detail teknis lengkap sesi hari ini: **§36**. Riwayat sesi 21-35: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
 ---
 
@@ -1770,3 +1771,47 @@ Dari 15 kerentanan yang ketemu (`npm audit`), 6 dipatch aman lewat `npm audit fi
 `npm run build`: 0 error, 46 route tetap sama. `npx eslint` (file yang disentuh): 0 error/warning baru. **SUDAH di-deploy** ke `hosting` (rules gak berubah sesi ini, gak perlu redeploy rules). `dev`+`main` sinkron & PUSH BERHASIL ke GitHub (`4aa53d9`, kredensial sudah dibenerin user).
 
 **Belum ditest visual** (constraint lingkungan sama seperti sesi-sesi sebelumnya) — terutama tampilan logo di header OB & CS Desk dan kartu label QR cetak setelah filter dihapus.
+
+---
+
+## 36. Fitur Sistem Poin Bulanan Staf (19 September 2026, lanjutan langsung §35)
+
+Konteks: setelah §35, user kasih detail buat 2 fitur besar yang ditunda §28C:
+- **Sistem poin**: "setiap personel setiap bulannya mendapat poin 100 dan setiap mereka tidak menyelesaikan misi/tugas/kpi dengan sempurna maka akan terus mengurangi poinnya, dan setiap akhir bulan akan keluar rekap poin masing-masing siapa yang paling rajin, paling malas, dan lainnya."
+- **Survei kepuasan**: "ikuti standar ini: https://forms.gle/vK76oK54nsSFdHBb7" — **BELUM DIKERJAKAN**, lihat catatan blocker di §0/bawah.
+
+User juga bilang "yaa silahkan dicoba" utk lanjut upgrade dependency dari §35C — **JUGA BELUM BISA DIEKSEKUSI**, lihat catatan blocker di §0/bawah (`npm install` diblokir izin, butuh approval user langsung, bukan Claude).
+
+### 36A. Desain Sistem Poin (v1)
+Poin disimpan di collection baru `staff_points_bulanan`, 1 dokumen per orang per bulan (id `${bulan}_${slugNama(nama)}`), mulai dari 100, cuma berkurang (floor 0, TIDAK ADA bonus poin — user cuma minta skema pengurangan, bukan minta cara nambah poin).
+
+**Sumber potongan v1 — SENGAJA dibatasi ke sinyal yang sudah tercatat otomatis DAN bisa dipertanggungjawabkan ke 1 orang/1 tim kecil yang jelas** (bukan asal comot semua "tugas" yang ada di app, biar gak salah potong poin orang yang gak bersalah):
+1. **OB & CS** — gak lapor checklist sesi (Pagi/Siang/Sore) sesuai plot harian → **-5 poin/sesi**.
+2. **Security** — kepatuhan minimum sesi patroli (2 dari 3) per shift → **-10 poin/shift** yang gak memenuhi.
+3. **Security** — Notifikasi Dadakan (siram tanaman) jendela Pagi/Malam gak diselesaikan → **-5 poin/jendela**, dipotong dari SEMUA yang terjadwal shift itu (tugas berbasis giliran shift, bukan per-individu — sama logikanya dengan kepatuhan patroli).
+
+**BELUM masuk v1 (jujur didokumentasikan, bukan lupa)**:
+- **Driver** — staleness status kendaraan sudah ada monitoringnya (`driver-status-staleness.mjs`) tapi belum jadi sinyal potongan poin harian yang reliable (butuh cara nentuin "basi di HARI TERTENTU" tanpa dobel-hitung sama push 30-menitan yang sudah jalan).
+- **Absensi check-in/out** — datanya ada (`attendance_logs`) tapi BELUM dipakai sebagai sumber potongan karena app belum punya data "hari libur/off" yang lengkap utk SEMUA dept (Security & OB sudah ada lewat jadwal, Driver/QHSE/Admin GA belum) — resiko salah potong poin orang yang lagi off/cuti.
+- **Inspeksi APAR** — tugas kolektif tanpa PIC individual jelas (notifikasi dikirim ke SEMUA Security jaga, bukan 1 orang spesifik) — gak masuk skema potongan individual.
+- **Driver, QHSE, Admin GA** — karena 3 poin di atas, SEMENTARA tetap 100 poin tiap bulan sampai ada sinyal tugas individual yang reliable ditambahkan nanti.
+
+Angka potongan (-5/-10/-5) adalah **ASUMSI Claude**, user gak kasih angka spesifik — gampang diubah lewat konstanta `POTONGAN` di `scripts/points-deduction.mjs` kalau kerasa kurang/kelebihan berat.
+
+### 36B. Implementasi
+- **`scripts/points-deduction.mjs`** (baru) — cron 1x/hari jam **09:00 WITA** (`.github/workflows/points-deduction.yml`, `cron: "0 1 * * *"` UTC), evaluasi kepatuhan **KEMARIN** (bukan hari ini — datanya belum final). Anti-double-proses lewat `reminder_points_log/{tanggal}`. Potong poin pakai Firestore transaction (`runTransaction`) biar aman dari race condition kalau beberapa sumber potongan nembak dokumen yang sama nyaris bersamaan.
+- **`admin/monitor-poin`** (baru) — dropdown pilih bulan (12 bulan terakhir), rekap SEMUA staf yang dipantau (OB & CS + Security + Driver + QHSE + Admin GA, ditarik dari `users_master`) diurutkan poin tertinggi ke terendah — staf yang GAK PERNAH kena potongan tetap muncul dengan 100 poin (bukan hilang dari rekap), badge 🏆 utk poin tertinggi & ⚠️ utk poin terendah (kalau beda), klik baris buat expand riwayat potongan per orang, tombol Export Excel.
+- **`firestore.rules`**: `staff_points_bulanan` ditambahkan ke daftar collection `isSignedIn()`-open.
+- Menu baru "Rekap Poin Staf" ditambahkan ke `admin/page.tsx` (`IconTrophy` baru).
+- **Visibilitas SENGAJA dibatasi ke Admin/Koordinator saja** (sama guard dengan `monitor-dadakan`/`monitor-absensi`) — TIDAK ada widget "poin saya" yang bisa dilihat semua staf di v1 ini, karena rekap "siapa paling malas" bersifat sensitif buat moral tim kalau terbuka ke semua orang. Bisa ditambah nanti kalau user mau staf lihat poin sendiri (bukan poin orang lain).
+
+### 36C. Verifikasi
+`npm run build`: 0 error, 47 route (route baru `/admin/monitor-poin`). `npx eslint`: 0 error/warning baru (1 error `react-hooks/set-state-in-effect` sempat muncul & langsung difix pakai pola `setTimeout(...,0)` yang sudah jadi konvensi project). **SUDAH di-deploy** ke `hosting`+`firestore:rules`. `dev`+`main` sinkron via fast-forward, push berhasil (`3bacbf6`).
+
+**Belum ditest visual** — dan LEBIH PENTING: **belum ada data 1 hari pun yang lewat cron ini** (baru di-deploy hari ini), jadi rekap poin akan kosong/semua 100 sampai cron pertama jalan besok pagi jam 09:00 WITA dan mengevaluasi data kemarin. User perlu tunggu minimal 1-2 hari buat lihat potongan poin pertama muncul, atau trigger manual lewat tab Actions GitHub (`workflow_dispatch`) kalau mau test lebih cepat (tapi cuma akan mengevaluasi data KEMARIN yang sudah ada, bukan hari ini).
+
+### 36D. Blocker yang BELUM selesai (2 dari 3 permintaan sesi ini)
+
+1. **Upgrade dependency (lanjutan §35C)** — user bilang "silahkan dicoba" tapi `npm install next@16.3.5 eslint-config-next@16.3.5` **DITOLAK oleh permission classifier** (kategori "Modify Shared Resources"). Ini beda dari blocker `firebase deploy` yang sebelumnya bisa ditembus lewat approval + `--force` — untuk `npm install`, user perlu attend langsung ke prompt approval-nya (gak bisa saya kerjain otomatis tanpa itu). **Riset yang SUDAH dilakukan**: `next@16.2.7`→`16.3.5` itu masih di major version yang sama (bukan migrasi 15→16), app ini pakai `next build --webpack` (bukan default Turbopack v16), jadi resiko breaking change dari sisi Next.js sendiri kemungkinan RENDAH. TAPI `npm audit fix --force` yang lebih luas juga mau downgrade `@ducanh2912/next-pwa` dari `^10.2.9` ke `10.2.6` (angka lebih KECIL, bukan upgrade — mencurigakan, bisa jadi npm cuma nemu kombinasi versi lain yang kebetulan gak vulnerable) yang notabene fitur PWA/service worker app ini sudah beberapa kali jadi sumber masalah cache produksi (§24/§26A) — **SARAN Claude: upgrade `next`+`eslint-config-next` SAJA (lewat `npm install next@16.3.5 eslint-config-next@16.3.5 --save-exact`, BUKAN `npm audit fix --force` yang nyeret next-pwa), biarkan next-pwa/workbox/serialize-javascript apa adanya.** User perlu jalankan sendiri command itu (atau approve prompt-nya kalau muncul lagi), baru saya lanjut build+test+deploy.
+
+2. **Survei kepuasaan pelanggan** — link Google Form (`https://forms.gle/vK76oK54nsSFdHBb7`, judul "Kuesioner Pelayanan Gedung Samudera Indonesia Makassar Tengah Tahun 2026") **HANYA BISA DIBACA HALAMAN PERTAMANYA** lewat tool WebFetch Claude (form-nya multi-halaman dengan tombol "Berikutnya", butuh interaksi JS buat lanjut ke halaman berikutnya yang gak bisa dilakukan tool ini). Yang berhasil dibaca cuma 3 pertanyaan pembuka: Nama (teks, wajib), Perusahaan/Divisi (teks, wajib), Lantai Lokasi Kantor (dropdown: Lantai 1-4, wajib). **Claude BELUM tahu isi pertanyaan-pertanyaan setelah halaman pertama** — butuh salah satu dari: (a) user screenshot/copy-paste semua pertanyaan dari halaman 2 dst, atau (b) user konfirmasi apakah maksudnya benar-benar REPLIKASI semua pertanyaan ke form custom di dalam SIBM (hasilnya masuk Firestore, bisa dipantau di admin), ATAU cuma taruh LINK ke Google Form yang sudah ada itu (lebih simpel, gak perlu replikasi tapi datanya tetap di Google Forms, bukan di SIBM). Juga belum jelas TRIGGER-nya: per-laporan/tiket (kirim link tiap tiket kerusakan selesai, sesuai rencana awal §28C) atau survei periodik umum (sesuai kesan dari judul form yang "Tengah Tahun 2026", terpisah dari sistem tiket).
