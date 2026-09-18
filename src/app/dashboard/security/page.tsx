@@ -9,6 +9,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import AbsensiCard from "../../../components/AbsensiCard";
+import { tanggalISOWITASekarang } from "../../../lib/shift";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -101,7 +102,9 @@ export default function SecurityDashboard() {
   const [waktuCetak, setWaktuCetak] = useState<string>("");
 
   // 💡 STATE MODAL & MULTI-ROW OVERTIME
-  const todayISO = new Date().toISOString().split("T")[0];
+  // Dulu pakai new Date().toISOString() (UTC) -- salah tanggal kalau dibuka jam 00:00-07:59 WITA.
+  // Diganti pakai helper WITA-safe yang sama dipakai file lain (lihat lib/shift.ts).
+  const todayISO = tanggalISOWITASekarang();
   const [activeModal, setActiveModal] = useState<"none" | "lembur">("none");
   const [isLemburLoading, setIsLemburLoading] = useState(false);
   const [periodeLembur, setPeriodeLembur] = useState("11 Juni - 10 Juli 2026");

@@ -219,7 +219,7 @@ export default function AdminQRManagerPage() {
                   {/* Logo / Header Perusahaan */}
                   <div style={{ marginBottom: "15px", marginTop: "5px" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/logo-samudera.png" alt="Logo" style={{ height: "25px", filter: "invert(1) brightness(0)" }} />
+                    <img src="/logo-samudera.png" alt="Logo" style={{ height: "25px" }} />
                   </div>
                   <span style={{ fontSize: "10px", fontWeight: "900", color: themeColor, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "10px" }}>
                     {activeTab === "SECURITY" ? "ASSET PATROLI SECURITY" : "ASSET CHECKLIST OB/CS"}

@@ -385,7 +385,7 @@ export default function DashboardOBPage() {
       <div className="hide-on-mobile site-header">
         <div className="site-header-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" alt="Logo" style={{ height: "30px", filter: "invert(1) brightness(0.2)" }} />
+          <img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" alt="Logo" style={{ height: "30px" }} />
           <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "16px", borderLeft: "2px solid var(--line)", paddingLeft: "10px" }}>OB & CS Desk</span>
         </div>
         <button className="logout-btn" onClick={handleKeluar}>
