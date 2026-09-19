@@ -12,12 +12,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, doc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, Timestamp } from "firebase/firestore";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
-import { hitungShiftSesi, waktuWITASekarang, ShiftLabel } from "../../lib/shift";
+import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, TOLERANSI_JENDELA_TUKAR_JAGA_MENIT, ShiftLabel } from "../../lib/shift";
 
 type IconProps = { size?: number; color?: string };
 const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -58,8 +58,16 @@ export default function TukarShiftSecurityPage() {
   const myName = session?.nama || "";
 
   const [info, setInfo] = useState(() => hitungShiftSesi(waktuWITASekarang()));
+  // Membuat QR serah terima cuma boleh PAS jam pergantian shift (08:00/20:00 WITA, +toleransi) --
+  // di luar jendela ini, tanggal_shift/shift yang tersimpan di dokumen bisa gak sinkron dengan yang
+  // dihitung petugas pengganti begitu jamnya BENERAN ganti (lihat dalamJendelaTukarJaga() di lib/shift.ts).
+  const [bolehBuatQR, setBolehBuatQR] = useState(() => dalamJendelaTukarJaga(waktuWITASekarang()));
   useEffect(() => {
-    const t = setInterval(() => setInfo(hitungShiftSesi(waktuWITASekarang())), 30000);
+    const t = setInterval(() => {
+      const now = waktuWITASekarang();
+      setInfo(hitungShiftSesi(now));
+      setBolehBuatQR(dalamJendelaTukarJaga(now));
+    }, 30000);
     return () => clearInterval(t);
   }, []);
 
@@ -119,7 +127,21 @@ export default function TukarShiftSecurityPage() {
         status: "selesai",
         waktu_scan: serverTimestamp(),
       })
-        .then(() => showToast("Serah terima berhasil dikonfirmasi!", "success"))
+        .then(() => {
+          showToast("Serah terima berhasil dikonfirmasi!", "success");
+          // Kalau sebelumnya sempat telat & ada entri security_shift_extend aktif (lihat
+          // EskalasiShiftModal.tsx / scripts/shift-handover-escalation.mjs), tutup otomatis --
+          // "distop begitu tukar jaga beneran terjadi" (dikonfirmasi user). Cron juga punya
+          // safety net yang sama kalau langkah ini somehow gagal.
+          const extendId = `${handover.tanggal_shift}_${handover.shift.replace(" ", "")}`;
+          getDoc(doc(db, "security_shift_extend", extendId)).then((snap) => {
+            if (snap.exists() && snap.data().status !== "selesai") {
+              updateDoc(doc(db, "security_shift_extend", extendId), {
+                status: "selesai", selesai_pada: serverTimestamp(), catatan_selesai: "Serah terima QR resmi selesai",
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        })
         .catch((err) => {
           console.error(err);
           showToast("Gagal menyimpan konfirmasi, coba lagi.", "error");
@@ -153,16 +175,27 @@ export default function TukarShiftSecurityPage() {
         {!handover ? (
           <div style={{ textAlign: "center", padding: "30px 20px", background: "var(--surface)", borderRadius: "18px", border: "1px dashed var(--line)" }}>
             <div style={{ color: "var(--muted)", marginBottom: "12px" }}><IconQrCode size={40} /></div>
-            <h3 style={{ margin: "0 0 8px 0", color: "var(--ink)" }}>Belum Ada Serah Terima</h3>
-            <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.6, margin: "0 0 18px 0" }}>
-              Kalau Anda sudah selesai jaga, tekan tombol di bawah untuk membuat QR serah terima, lalu tunjukkan ke petugas pengganti untuk discan.
-            </p>
-            <button
-              onClick={handleMulaiSerahTerima} disabled={isSaving}
-              style={{ padding: "13px 22px", background: "var(--info)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
-            >
-              {isSaving ? "Membuat..." : "🔄 Selesai Jaga — Buat QR Serah Terima"}
-            </button>
+            {bolehBuatQR ? (
+              <>
+                <h3 style={{ margin: "0 0 8px 0", color: "var(--ink)" }}>Belum Ada Serah Terima</h3>
+                <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.6, margin: "0 0 18px 0" }}>
+                  Kalau Anda sudah selesai jaga, tekan tombol di bawah untuk membuat QR serah terima, lalu tunjukkan ke petugas pengganti untuk discan.
+                </p>
+                <button
+                  onClick={handleMulaiSerahTerima} disabled={isSaving}
+                  style={{ padding: "13px 22px", background: "var(--info)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
+                >
+                  {isSaving ? "Membuat..." : "🔄 Selesai Jaga — Buat QR Serah Terima"}
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 style={{ margin: "0 0 8px 0", color: "var(--ink)" }}>Belum Waktunya Serah Terima</h3>
+                <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.6, margin: 0 }}>
+                  QR serah terima cuma bisa dibuat pas jam pergantian shift: <b>08:00</b> atau <b>20:00 WITA</b> (sampai {TOLERANSI_JENDELA_TUKAR_JAGA_MENIT} menit sesudahnya). Silakan kembali lagi nanti pas jam segitu.
+                </p>
+              </>
+            )}
           </div>
         ) : handover.status === "menunggu_scan" ? (
           sayaPetugasKeluar ? (
@@ -193,12 +226,14 @@ export default function TukarShiftSecurityPage() {
               {handover.petugas_keluar} &rarr; {handover.petugas_masuk}<br />
               {formatJam(handover.waktu_scan)}
             </p>
-            <button
-              onClick={handleMulaiSerahTerima} disabled={isSaving}
-              style={{ marginTop: "16px", padding: "10px 18px", background: "var(--surface)", color: "var(--ink-soft)", border: "1px solid var(--line)", borderRadius: "10px", fontWeight: 700, fontSize: "12.5px", cursor: isSaving ? "not-allowed" : "pointer" }}
-            >
-              Mulai Serah Terima Baru
-            </button>
+            {bolehBuatQR && (
+              <button
+                onClick={handleMulaiSerahTerima} disabled={isSaving}
+                style={{ marginTop: "16px", padding: "10px 18px", background: "var(--surface)", color: "var(--ink-soft)", border: "1px solid var(--line)", borderRadius: "10px", fontWeight: 700, fontSize: "12.5px", cursor: isSaving ? "not-allowed" : "pointer" }}
+              >
+                Mulai Serah Terima Baru
+              </button>
+            )}
           </div>
         )}
       </div>

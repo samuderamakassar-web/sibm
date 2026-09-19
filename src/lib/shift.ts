@@ -89,6 +89,24 @@ export function sesiMinimumTerpenuhi(sesiList: (string | undefined | null)[]): b
 }
 
 /**
+ * Jendela waktu Serah Terima Shift (Tukar Shift/Jaga): dibuka TEPAT saat pergantian shift
+ * (08:00 & 20:00 WITA) dan tertutup lagi setelah TOLERANSI_JENDELA_TUKAR_JAGA_MENIT menit.
+ * Dipakai buat MENYEMBUNYIKAN tombol "Selesai Jaga - Buat QR" di luar jendela ini -- generate QR
+ * terlalu awal (mis. jam 10 pagi buat Shift 1 yang masih berjalan sampai jam 20:00) bikin
+ * tanggal_shift/shift yang tersimpan di dokumen gak sinkron dengan yang dihitung petugas
+ * pengganti begitu jamnya BENERAN ganti (query di TukarShiftSecurityPage.tsx match by
+ * tanggal_shift+shift hasil hitungShiftSesi() SAAT ITU, bukan saat QR dibuat).
+ */
+export const TOLERANSI_JENDELA_TUKAR_JAGA_MENIT = 60;
+
+export function dalamJendelaTukarJaga(now: Date, toleransiMenit: number = TOLERANSI_JENDELA_TUKAR_JAGA_MENIT): boolean {
+  const menitSekarang = now.getHours() * 60 + now.getMinutes();
+  const dekat08 = menitSekarang >= 480 && menitSekarang < 480 + toleransiMenit;
+  const dekat20 = menitSekarang >= 1200 && menitSekarang < 1200 + toleransiMenit;
+  return dekat08 || dekat20;
+}
+
+/**
  * ------------------------------------------------------------------
  * SESI CHECKLIST OB & CS -- dipakai ChecklistOBPage supaya laporan
  * kebersihan wajib dikirim 3x sehari (Pagi/Siang/Sore), bukan bebas

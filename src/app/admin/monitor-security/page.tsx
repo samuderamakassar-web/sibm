@@ -142,6 +142,18 @@ export default function MonitorSecurityPage() {
   const [timSecurity, setTimSecurity] = useState<string[]>([]);
   const [detailPatroli, setDetailPatroli] = useState<PatroliLog | null>(null);
 
+  // Overlay "EXTEND" di tab Roster -- sama data & logika dengan dashboard/security/page.tsx
+  // (lihat EskalasiShiftModal.tsx / scripts/shift-handover-escalation.mjs).
+  const [daftarExtend, setDaftarExtend] = useState<{ id: string; tanggal_shift: string; shift: string; status: string; personil_extend: string | null; petugas_masuk: string[] }[]>([]);
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "security_shift_extend"), (snap) => {
+      setDaftarExtend(snap.docs.map((d) => ({ id: d.id, ...d.data() } as { id: string; tanggal_shift: string; shift: string; status: string; personil_extend: string | null; petugas_masuk: string[] })));
+    });
+    return () => unsub();
+  }, []);
+  const cariExtend = (tglKey: string, shiftVal: string, nama: string) =>
+    daftarExtend.find((e) => e.tanggal_shift === tglKey && e.shift === shiftVal && e.status !== "selesai" && e.petugas_masuk?.includes(nama));
+
   // Filter Bulan & Tahun Log Patroli (sama polanya dgn admin/monitor-ob)
   const [filterBulanPatroli, setFilterBulanPatroli] = useState<string>("SEMUA");
   const [filterTahunPatroli, setFilterTahunPatroli] = useState<string>("SEMUA");
@@ -724,11 +736,15 @@ export default function MonitorSecurityPage() {
                               const shift = hariData[staf] || "-";
                               const isOff = shift.toLowerCase().includes("off");
                               const isKosong = shift === "-";
-                              const chipBg = isKosong ? "transparent" : isOff ? "var(--red-50)" : shift.includes("2") ? "#f5f3ff" : "var(--info-50)";
-                              const chipColor = isKosong ? "var(--muted)" : isOff ? "var(--red-600)" : shift.includes("2") ? "var(--accent)" : "var(--info)";
+                              const extend = cariExtend(tglKey, shift, staf);
+                              const chipBg = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-50)" : "#f5f3ff") : isKosong ? "transparent" : isOff ? "var(--red-50)" : shift.includes("2") ? "#f5f3ff" : "var(--info-50)";
+                              const chipColor = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-600)" : "var(--accent)") : isKosong ? "var(--muted)" : isOff ? "var(--red-600)" : shift.includes("2") ? "var(--accent)" : "var(--info)";
+                              const label = extend
+                                ? extend.status === "menunggu_keputusan" ? "⚠️ TERLAMBAT" : `${shift} → ${extend.personil_extend} (EXTEND)`
+                                : shift;
                               return (
                                 <td key={staf} style={{ padding: "5px 6px" }}>
-                                  <span style={{ display: "inline-block", padding: isKosong ? "0" : "3px 9px", borderRadius: "20px", background: chipBg, color: chipColor, fontWeight: 700, fontSize: "10.5px" }}>{shift}</span>
+                                  <span style={{ display: "inline-block", padding: isKosong ? "0" : "3px 9px", borderRadius: "20px", background: chipBg, color: chipColor, fontWeight: 700, fontSize: "10.5px" }}>{label}</span>
                                 </td>
                               );
                             })}

@@ -10,7 +10,8 @@ import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import AbsensiCard from "../../../components/AbsensiCard";
 import NotifikasiBellButton from "../../../components/NotifikasiBellButton";
-import { tanggalISOWITASekarang, hitungShiftSesi, waktuWITASekarang } from "../../../lib/shift";
+import EskalasiShiftModal from "../../../components/EskalasiShiftModal";
+import { tanggalISOWITASekarang, hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga } from "../../../lib/shift";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -82,6 +83,49 @@ interface OvertimeItemRequest {
   alasan: string;
 }
 
+// ==========================================
+// HELPER STATUS JAGA -- dipakai badge "Jadwal Anda Hari Ini" biar kasih info lebih dari
+// sekadar ON/OFF DUTY: sudah berapa lama sejak shift terakhir berakhir (atau berapa lama
+// lagi sampai shift mulai), dan kapan jadwal jaga berikutnya.
+// ==========================================
+function formatDurasiMenit(totalMenit: number): string {
+  const jam = Math.floor(totalMenit / 60);
+  const menit = totalMenit % 60;
+  if (jam === 0) return `${menit} menit`;
+  if (menit === 0) return `${jam} jam`;
+  return `${jam} jam ${menit} menit`;
+}
+
+// Cari jadwal Shift 1/2 berikutnya (skip Off/Izin/kosong) mulai dari tanggal_shift AKTIF sekarang.
+// Kalau Shift 1 hari ini SUDAH lewat (sekarang lagi jendela Shift 2), entry Shift 1 hari itu bukan
+// "berikutnya" lagi -- mulai cari dari besok.
+function cariJagaBerikutnya(
+  finalData: Record<string, Record<string, string>>,
+  picName: string,
+  tanggalAktif: string,
+  shiftAktif: string
+): { tanggal: string; shift: string } | null {
+  const semuaTanggal = Object.keys(finalData).sort();
+  let mulaiIdx = semuaTanggal.indexOf(tanggalAktif);
+  if (mulaiIdx === -1) return null;
+  if (shiftAktif === "Shift 2" && finalData[tanggalAktif]?.[picName] === "Shift 1") mulaiIdx += 1;
+  for (let i = mulaiIdx; i < semuaTanggal.length; i++) {
+    const tgl = semuaTanggal[i];
+    const val = finalData[tgl]?.[picName];
+    if (val === "Shift 1" || val === "Shift 2") return { tanggal: tgl, shift: val };
+  }
+  return null;
+}
+
+function formatTanggalRelatif(tglISO: string, hariIniISO: string): string {
+  if (tglISO === hariIniISO) return "Hari Ini";
+  const besok = new Date(hariIniISO + "T00:00:00");
+  besok.setDate(besok.getDate() + 1);
+  const besokISO = `${besok.getFullYear()}-${String(besok.getMonth() + 1).padStart(2, "0")}-${String(besok.getDate()).padStart(2, "0")}`;
+  if (tglISO === besokISO) return "Besok";
+  return new Date(tglISO + "T00:00:00").toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "short" });
+}
+
 export default function SecurityDashboard() {
   const router = useRouter();
   const confirm = useConfirm();
@@ -107,22 +151,58 @@ export default function SecurityDashboard() {
   // lewat jam 20:00), tanpa nunggu tanggal kalender berganti -- sebelumnya badge nempel "ON DUTY"
   // sepanjang tanggal kalender yang sama walau jam shift-nya sudah lewat.
   const [sedangBertugas, setSedangBertugas] = useState<boolean>(false);
+  // Info tambahan pas OFF DUTY -- "Shift 1 Anda berakhir pukul 20:00 (3 jam 25 menit lalu)" dsb,
+  // dan kapan jadwal jaga berikutnya. Kosong kalau lagi ON DUTY (gak relevan).
+  const [statusKeterangan, setStatusKeterangan] = useState<string>("");
+  const [jagaBerikutnyaTeks, setJagaBerikutnyaTeks] = useState<string>("");
   const [namaBulanAktif, setNamaBulanAktif] = useState<string>("");
+  // Overlay "EXTEND" di papan roster (lihat EskalasiShiftModal.tsx) -- collection kecil, cuma
+  // terisi kalau ada kejadian serah terima telat, jadi aman ditarik utuh tanpa index tambahan.
+  interface EntriExtend { id: string; tanggal_shift: string; shift: string; status: string; tipe: string | null; personil_extend: string | null; petugas_masuk: string[] }
+  const [daftarExtend, setDaftarExtend] = useState<EntriExtend[]>([]);
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "security_shift_extend"), (snap) => {
+      setDaftarExtend(snap.docs.map((d) => ({ id: d.id, ...d.data() } as EntriExtend)));
+    });
+    return () => unsub();
+  }, []);
+  const cariExtend = (tglKey: string, shiftVal: string, nama: string) =>
+    daftarExtend.find((e) => e.tanggal_shift === tglKey && e.shift === shiftVal && e.status !== "selesai" && e.petugas_masuk?.includes(nama));
   const [semuaPlotBulanIni, setSemuaPlotBulanIni] = useState<Record<string, Record<string, string>>>({});
   const [waktuCetak, setWaktuCetak] = useState<string>("");
 
   // 🔄 Status Serah Terima Shift (Tukar Shift/Jaga) -- ditampilkan di sini, diproses/discan di
   // /dashboard/security/tukar-shift (TukarShiftSecurityPage.tsx).
   const [handoverStatus, setHandoverStatus] = useState<{ status: "menunggu_scan" | "selesai"; petugas_keluar: string; petugas_masuk: string | null } | null>(null);
+  // tanggal_shift+shift AKTIF dilacak lewat state (dicek ulang tiap menit), BUKAN dihitung sekali
+  // pas mount -- kalau gak, listener di bawah nempel ke shift LAMA selamanya buat dashboard yang
+  // dibiarkan terbuka lintas jam pergantian shift (mis. dibuka jam 19:00, dibiarkan sampai jam
+  // 21:00 -- tanpa ini, status serah terima Shift 1 kemarin yang keliatan, bukan Shift 2 sekarang).
+  const [infoShiftAktif, setInfoShiftAktif] = useState(() => hitungShiftSesi(waktuWITASekarang()));
   useEffect(() => {
-    const info = hitungShiftSesi(waktuWITASekarang());
+    const interval = setInterval(() => setInfoShiftAktif(hitungShiftSesi(waktuWITASekarang())), 60000);
+    return () => clearInterval(interval);
+  }, []);
+  useEffect(() => {
     const unsub = onSnapshot(
-      query(collection(db, "security_shift_handover"), where("tanggal_shift", "==", info.tanggal_shift), where("shift", "==", info.shift), orderBy("waktu_generate", "desc"), limit(1)),
+      query(collection(db, "security_shift_handover"), where("tanggal_shift", "==", infoShiftAktif.tanggal_shift), where("shift", "==", infoShiftAktif.shift), orderBy("waktu_generate", "desc"), limit(1)),
       (snap) => {
         setHandoverStatus(snap.empty ? null : (snap.docs[0].data() as { status: "menunggu_scan" | "selesai"; petugas_keluar: string; petugas_masuk: string | null }));
       }
     );
     return () => unsub();
+  }, [infoShiftAktif.tanggal_shift, infoShiftAktif.shift]);
+
+  // Kartu "Tukar Shift/Jaga" cuma relevan & muncul PAS jam pergantian shift (08:00 & 20:00 WITA),
+  // bukan sepanjang hari -- generate QR di luar jendela ini bikin tanggal_shift/shift yang tersimpan
+  // gak sinkron dengan yang dihitung petugas pengganti begitu jamnya beneran ganti (lihat
+  // dalamJendelaTukarJaga() di lib/shift.ts buat detail bug ini).
+  const [dalamJendelaTukar, setDalamJendelaTukar] = useState(false);
+  useEffect(() => {
+    const cek = () => setDalamJendelaTukar(dalamJendelaTukarJaga(waktuWITASekarang()));
+    cek();
+    const interval = setInterval(cek, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // 💡 STATE MODAL & MULTI-ROW OVERTIME
@@ -253,16 +333,49 @@ export default function SecurityDashboard() {
   useEffect(() => {
     if (!picName || Object.keys(semuaPlotBulanIni).length === 0) return;
     const perbarui = () => {
-      const infoSekarang = hitungShiftSesi(waktuWITASekarang());
+      const now = waktuWITASekarang();
+      const infoSekarang = hitungShiftSesi(now);
       const shiftTerjadwal = semuaPlotBulanIni[infoSekarang.tanggal_shift]?.[picName] || "";
       const sedangJaga = shiftTerjadwal === infoSekarang.shift;
+      const menitSekarang = now.getHours() * 60 + now.getMinutes();
+
       let label: string;
-      if (sedangJaga) label = shiftTerjadwal;
-      else if (shiftTerjadwal === "Off" || shiftTerjadwal === "Izin") label = shiftTerjadwal;
-      else if (shiftTerjadwal) label = `${shiftTerjadwal} (Belum Mulai / Sudah Berakhir)`;
-      else label = "Off / Belum Diplot";
+      let keterangan = "";
+      if (sedangJaga) {
+        label = shiftTerjadwal;
+      } else if (shiftTerjadwal === "Off" || shiftTerjadwal === "Izin") {
+        label = shiftTerjadwal;
+      } else if (shiftTerjadwal === "Shift 1" || shiftTerjadwal === "Shift 2") {
+        label = shiftTerjadwal;
+        if (infoSekarang.shift === "Shift 2") {
+          // Shift 1 (08:00-20:00) hari ini sudah berakhir pukul 20:00 -- "sekarang" bisa masih
+          // malam ini (jam >= 20:00) atau sudah lewat tengah malam (jam < 08:00), keduanya
+          // dihitung dari titik 20:00 yang sama.
+          const menitSejak20 = menitSekarang >= 1200 ? menitSekarang - 1200 : menitSekarang + 1440 - 1200;
+          keterangan = `Shift 1 Anda berakhir pukul 20:00 (${formatDurasiMenit(menitSejak20)} lalu).`;
+        } else {
+          // Shift 2 (20:00-08:00) belum mulai, masih jendela Shift 1 (08:00-20:00) sekarang.
+          const menitLagi = 1200 - menitSekarang;
+          keterangan = `Shift 2 Anda mulai pukul 20:00 (${formatDurasiMenit(menitLagi)} lagi).`;
+        }
+      } else {
+        label = "Off / Belum Diplot";
+      }
       setHariIniShift(label);
       setSedangBertugas(sedangJaga);
+      setStatusKeterangan(keterangan);
+
+      if (!sedangJaga) {
+        const berikutnya = cariJagaBerikutnya(semuaPlotBulanIni, picName, infoSekarang.tanggal_shift, infoSekarang.shift);
+        const hariIniISO = tanggalISOWITASekarang();
+        setJagaBerikutnyaTeks(
+          berikutnya
+            ? `Jaga berikutnya: ${formatTanggalRelatif(berikutnya.tanggal, hariIniISO)}, ${berikutnya.shift} (mulai ${berikutnya.shift === "Shift 1" ? "08:00" : "20:00"}).`
+            : ""
+        );
+      } else {
+        setJagaBerikutnyaTeks("");
+      }
     };
     perbarui();
     const interval = setInterval(perbarui, 60000);
@@ -564,16 +677,25 @@ export default function SecurityDashboard() {
               ? { background: "var(--red-50)", color: "var(--red-600)", borderColor: "rgba(220,38,38,0.3)" }
               : { background: "var(--ok-50)", color: "var(--ok)", borderColor: "rgba(22,163,74,0.3)" }}>
               {isOff ? (
-                <><IconAlertTriangle size={16} /> {hariIniShift.toUpperCase()}</>
+                <><IconAlertTriangle size={16} /> OFF DUTY {hariIniShift !== "Off" && hariIniShift !== "Izin" && hariIniShift !== "Off / Belum Diplot" ? `(${hariIniShift.toUpperCase()})` : hariIniShift === "Izin" ? "(IZIN)" : ""}</>
               ) : (
                 <><IconMapPin size={16} /> ON DUTY : {hariIniShift.toUpperCase()} {waktuTeks ? `(${waktuTeks})` : ""}</>
               )}
             </div>
+            {isOff && (statusKeterangan || jagaBerikutnyaTeks) && (
+              <div style={{ width: "100%", fontSize: "12.5px", color: "var(--muted)", lineHeight: 1.6, paddingTop: "4px", borderTop: "1px dashed var(--line)", marginTop: "2px" }}>
+                {statusKeterangan && <div>{statusKeterangan}</div>}
+                {jagaBerikutnyaTeks && <div style={{ fontWeight: 700, color: "var(--ink-soft)" }}>{jagaBerikutnyaTeks}</div>}
+              </div>
+            )}
           </div>
         )}
 
-        {/* 🔄 STATUS SERAH TERIMA SHIFT -- klik buat buka/scan di /dashboard/security/tukar-shift */}
-        {!isMagang && (
+        {/* 🔄 STATUS SERAH TERIMA SHIFT -- klik buat buka/scan di /dashboard/security/tukar-shift.
+            Cuma muncul dalam jendela pergantian shift ATAU kalau ada serah terima yang lagi
+            berjalan/baru selesai (biar gak hilang tiba-tiba di tengah proses kalau jendelanya
+            keburu lewat 60 menit). */}
+        {!isMagang && (dalamJendelaTukar || !!handoverStatus) && (
           <div
             className="no-print"
             onClick={() => router.push("/dashboard/security/tukar-shift")}
@@ -693,13 +815,17 @@ export default function SecurityDashboard() {
                           const isIzin = sVal.includes("Izin");
                           const isKosong = sVal === "-";
                           const displayShift = getInisialDanJam(sVal);
+                          const extend = cariExtend(tglKey, sVal, staf);
 
-                          const chipBg = isKosong ? "transparent" : isOffCell ? "var(--red-50)" : isIzin ? "var(--warn-50)" : "var(--info-50)";
-                          const chipColor = isKosong ? "var(--muted)" : isOffCell ? "var(--red-600)" : isIzin ? "var(--warn)" : "var(--info)";
+                          const chipBg = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-50)" : "#f5f3ff") : isKosong ? "transparent" : isOffCell ? "var(--red-50)" : isIzin ? "var(--warn-50)" : "var(--info-50)";
+                          const chipColor = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-600)" : "var(--accent)") : isKosong ? "var(--muted)" : isOffCell ? "var(--red-600)" : isIzin ? "var(--warn)" : "var(--info)";
+                          const label = extend
+                            ? extend.status === "menunggu_keputusan" ? "⚠️ TERLAMBAT" : `${displayShift} → ${extend.personil_extend} (EXTEND)`
+                            : displayShift;
 
                           return (
                             <td key={staf} style={{ padding: "5px 6px" }}>
-                              <span style={{ display: "inline-block", padding: isKosong ? "0" : "3px 9px", borderRadius: "20px", background: chipBg, color: chipColor, fontWeight: 700, fontSize: "10.5px", whiteSpace: "nowrap" }}>{displayShift}</span>
+                              <span style={{ display: "inline-block", padding: isKosong ? "0" : "3px 9px", borderRadius: "20px", background: chipBg, color: chipColor, fontWeight: 700, fontSize: "10.5px", whiteSpace: "nowrap" }}>{label}</span>
                             </td>
                           );
                         })}
@@ -826,6 +952,8 @@ export default function SecurityDashboard() {
           </div>
         </div>
       )}
+
+      {!isMagang && <EskalasiShiftModal picName={picName} />}
 
     </div>
   );

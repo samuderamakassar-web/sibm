@@ -259,6 +259,33 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "notifikasi_personal",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "untukNama",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dibaca",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "jenis",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "pengumuman_gedung",
       "queryScope": "COLLECTION",
       "fields": [

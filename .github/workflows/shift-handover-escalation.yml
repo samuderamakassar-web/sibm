@@ -1,0 +1,29 @@
+name: Shift Handover Escalation
+
+on:
+  schedule:
+    # Tiap 10 menit sepanjang hari -- cek serah terima shift Security yang telat (>10 menit
+    # sejak jam ganti 08:00/20:00 WITA), kirim eskalasi (modal keputusan + push) ke petugas
+    # terkait, tembusan ke Danru/Koordinator. Sengaja TANPA guard anti-double-kirim per hari
+    # (sama pola dengan patroli-push-reminder.mjs) -- justru didesain terus mengingatkan
+    # selama belum diputuskan/diselesaikan.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  eskalasi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install firebase-admin@14.4.0
+
+      - name: Jalankan eskalasi serah terima shift
+        run: node scripts/shift-handover-escalation.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}

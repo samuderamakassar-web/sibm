@@ -1,29 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§44: perbaikan tahap 1 modul Security -- badge status jaga sekarang real-time berbasis jam shift aktif (bukan tanggal kalender, otomatis pindah ON DUTY↔OFF DUTY tepat waktu), form Lapor Patroli dikunci saat staf sedang tidak bertugas (cuma bisa lihat Riwayat), filter tanggal Riwayat Patroli diganti kalender native. **SUDAH DI-DEPLOY** (hosting saja, atas konfirmasi eksplisit user) & `dev`+`main` sinkron (`3915168`), tapi **belum ditest visual di device asli**. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user, BELUM diimplementasi. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 20 September 2026 (§45: badge off-duty sekarang kasih info "sejak kapan"/"jaga berikutnya kapan", kartu Tukar Shift/Jaga cuma muncul di jendela 08:00/20:00 WITA (±60 menit, sekalian fix bug tanggal_shift/shift mismatch kalau QR dibuat kepagian), DAN fitur baru eskalasi otomatis kalau serah terima telat >10 menit (modal keputusan + push + tembusan Danru, roster ditandai EXTEND) -- desain dikonfirmasi lewat AskUserQuestion, bukan tebakan. **BELUM DI-DEPLOY, belum ditest visual/end-to-end sama sekali** (fitur eskalasi ini beneran baru, perlu kejadian nyata buat lihat alur lengkapnya). Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §44 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §45 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: deploy §44 + pilih arah §44E + 1 aksi WAJIB §43 + 1 aksi WAJIB lama (EmailJS)
+### 🔴🔴 PALING URGENT: deploy §45 (rules+indexes+hosting) + test eskalasi + pilih arah §44E + 1 aksi WAJIB lama (EmailJS)
 
-0. **BARU: test §44 di device asli (SUDAH di-deploy)** — badge status jaga real-time, kunci form Lapor Patroli, date picker Riwayat. Test: (a) badge "Jadwal Anda Hari Ini" harus otomatis ganti OFF DUTY begitu jam shift lewat (gak perlu tunggu tanggal berganti); (b) coba buka tab "Lapor" di Patroli Area saat sedang TIDAK bertugas — harus muncul panel terkunci, bukan form; (c) filter tanggal di tab Riwayat Patroli harus kalender, bukan dropdown.
+0. **BARU, PALING URGENT: deploy §45 (belum jalan sama sekali di production)** — `firebase deploy --only firestore:rules,firestore:indexes,hosting` (index `notifikasi_personal` baru WAJIB, kalau tidak modal eskalasi bakal error query). Setelah deploy: (a) test badge off-duty kasih info "berakhir X menit lalu" + "jaga berikutnya kapan" (contoh kasus Ibrahim di §45); (b) test kartu Tukar Shift/Jaga cuma muncul di jam 08:00/20:00 WITA (±60 menit), coba buka `dashboard/security/tukar-shift` di luar jam itu -- harus muncul pesan "Belum Waktunya"; (c) fitur eskalasi (§45C) BENERAN BARU & butuh skenario nyata (serah terima telat >10 menit) buat ditest -- gak bisa disimulasikan tanpa nunggu kejadian asli atau ubah manual data Firestore.
 1. **Perlu arahan user: pilih arah sistem scoring/report** (§44E) — 3 ide ditawarkan (poin bonus/positif, mekanisme banding Danru, perluas potongan ke Driver). Belum ada yang dibangun, nunggu user pilih prioritas sebelum lanjut.
-2. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F) — pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik). Sekalian test carousel muncul di halaman utama & badge lonceng muncul di 5 dashboard.
+2. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F) — pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik).
 3. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
 4. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
 5. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§44) — Perbaikan Modul Security Tahap 1: Status Jaga Real-Time, Kunci Form Patroli, Date Picker Riwayat, lanjutan langsung §43
+### Sesi hari ini (§45) — Perbaikan Modul Security Tahap 2: Badge Off-Duty Informatif, Jendela Tukar Jaga, Eskalasi Serah Terima Telat, lanjutan langsung §44
 
-User minta audit menyeluruh modul Security, mulai dari bagian shift. Fix: badge status jaga di dashboard sekarang dihitung dari jam shift yang BENERAN aktif (bukan tanggal kalender) jadi otomatis pindah ON DUTY↔OFF DUTY tepat waktu; form Lapor Patroli dikunci total (diganti panel info) kalau staf sedang tidak bertugas, tab Riwayat tetap bebas diakses kapan saja; filter tanggal Riwayat Patroli diganti kalender native. User juga nanya ide lain soal sistem scoring/report -- 3 ide ditawarkan balik (poin bonus, banding Danru, perluas ke Driver), belum diimplementasi, nunggu arahan. Detail: **§44** (§44A-§44F).
+User kirim screenshot dashboard yang masih nunjuk badge lama (kemungkinan besar cache device, §44 sendiri sudah benar) sambil minta 3 hal lanjutan: badge off-duty kasih info durasi & jaga berikutnya, kartu Tukar Shift/Jaga dibatasi cuma muncul di jam pergantian shift, DAN fitur baru: eskalasi otomatis (modal+push+tembusan Danru) kalau serah terima telat >10 menit dengan pilihan Extend permanen atau Lanjut Sementara (bisa estimasi menit), roster ditandai EXTEND. Desain detail eskalasi dikonfirmasi lewat `AskUserQuestion` sebelum dibangun. Ketemu sekalian & ikut difix: bug tanggal_shift/shift mismatch kalau QR serah terima dibuat kepagian, dan listener status serah terima yang gak pernah re-subscribe kalau dashboard dibiarkan terbuka lintas jam ganti shift. Detail: **§45** (§45A-§45G).
 
-**Status: SUDAH DI-DEPLOY** (hosting saja, atas konfirmasi eksplisit user setelah sempat diblokir permission classifier). `dev`+`main` sinkron di `3915168`. **Belum ditest visual sama sekali** — butuh device asli buat verifikasi transisi status jaga tepat waktu.
+**Status: KODE SELESAI, lolos build/lint (0 error, 0 warning baru), TAPI BELUM DI-DEPLOY SAMA SEKALI** (butuh rules+indexes+hosting, bukan cuma hosting) **dan belum ditest visual/end-to-end sama sekali** — fitur eskalasi khususnya butuh skenario nyata buat divalidasi.
+
+### Sesi sebelumnya (§44) — Perbaikan Modul Security Tahap 1: Status Jaga Real-Time, Kunci Form Patroli, Date Picker Riwayat, lanjutan langsung §43
+
+User minta audit menyeluruh modul Security, mulai dari bagian shift. Fix: badge status jaga di dashboard sekarang dihitung dari jam shift yang BENERAN aktif (bukan tanggal kalender) jadi otomatis pindah ON DUTY↔OFF DUTY tepat waktu; form Lapor Patroli dikunci total (diganti panel info) kalau staf sedang tidak bertugas, tab Riwayat tetap bebas diakses kapan saja; filter tanggal Riwayat Patroli diganti kalender native. Detail: **§44** (§44A-§44F).
+
+**Status: SUDAH DI-DEPLOY** (hosting saja, atas konfirmasi eksplisit user setelah sempat diblokir permission classifier). `dev`+`main` sinkron di `3915168`.
 
 ### Sesi sebelumnya (§43) — Carousel Pengumuman Multi-Slide + Kotak Masuk Notifikasi In-App, lanjutan langsung §42
 
@@ -2103,3 +2109,48 @@ Menunggu user pilih arah mana yang mau dikerjakan duluan (atau kombinasi, atau i
 
 ### 44F. Verifikasi
 `npm run build`: 0 error, 51 route (gak ada perubahan struktur halaman). `npx eslint` pada 2 file yang diubah: 2 warning, KEDUANYA pre-existing (dikonfirmasi lewat `git stash` sebelum/sesudah) -- tidak ada warning/error baru. **SUDAH DI-DEPLOY** (`firebase deploy --only hosting`, gak ada perubahan rules/indexes di §44 ini). **Belum ditest visual** (badge real-time & kunci form Lapor butuh device asli buat verifikasi jam shift beneran berubah tepat waktu).
+
+## 45. Perbaikan Modul Security Tahap 2: Badge Off-Duty Informatif, Jendela Tukar Jaga, Eskalasi Serah Terima Telat (20 September 2026, lanjutan langsung §44)
+
+Konteks: user kirim screenshot dashboard Ibrahim jam 23:25 yang masih nunjuk "ON DUTY: SHIFT 1 (08:00-20:00)" -- padahal §44 SUDAH di-deploy. **Kemungkinan besar ini cuma cache SW/browser yang belum ke-refresh di device itu** (kode §44 sudah benar dicek ulang & konsisten dengan hasil build; PWA sudah pakai `skipWaiting()`+`clientsClaim()`+`NetworkFirst` utk halaman, jadi harusnya kesegaran cukup baik, tapi gak ada cara verifikasi dari sisi Claude tanpa akses device asli). User sekalian minta 3 perbaikan lanjutan + 1 fitur baru besar, semua dikerjakan di sesi ini:
+
+1. Badge off-duty harus kasih info LEBIH dari cuma "OFF DUTY" -- kapan shift terakhir berakhir (sudah berapa lama), dan kapan jaga berikutnya.
+2. Tombol/kartu "Tukar Shift/Jaga" cuma boleh muncul PAS jam pergantian shift (08:00/20:00 WITA), bukan sepanjang hari.
+3. **BARU**: kalau serah terima belum selesai 10 menit setelah jam pergantian, sistem eskalasi otomatis (modal keputusan + push notif + tembusan Danru) dengan 2 pilihan: "Lanjut Jaga (Extend) - permanen" atau "Lanjut Sementara" (bisa isi estimasi menit, auto-stop begitu beneran tukar jaga). Roster ditandai EXTEND. Desain persis dikonfirmasi user lewat `AskUserQuestion` (3 pertanyaan: siapa penerima notif, apakah Danru ikut ditembuskan, apakah 2 pilihan aksi beda hasil) -- BUKAN tebakan.
+
+### 45A. Badge Off-Duty Informatif (`dashboard/security/page.tsx`)
+2 helper baru di module scope: `formatDurasiMenit()` (format "3 jam 25 menit"), `cariJagaBerikutnya()` (cari shift Shift1/Shift2 berikutnya di roster mulai dari tanggal_shift aktif, SKIP hari ini kalau Shift 1 hari itu sudah lewat & sekarang jendela Shift 2 -- biar gak salah anggap shift yang SUDAH LEWAT sebagai "berikutnya"), `formatTanggalRelatif()` ("Hari Ini"/"Besok"/nama hari). State baru `statusKeterangan` ("Shift 1 Anda berakhir pukul 20:00 (3 jam 25 menit lalu).") & `jagaBerikutnyaTeks` ("Jaga berikutnya: Besok, Shift 1 (mulai 08:00)."), ditampilkan sebagai baris tambahan di bawah badge OFF DUTY (contoh Ibrahim di screenshot user: persis skenario ini).
+
+### 45B. Jendela Tukar Jaga (08:00/20:00 WITA ± 60 menit)
+`lib/shift.ts`: helper baru `dalamJendelaTukarJaga(now, toleransiMenit=60)` + konstanta `TOLERANSI_JENDELA_TUKAR_JAGA_MENIT` -- dipakai BERSAMA oleh `dashboard/security/page.tsx` (sembunyikan kartu status serah terima di luar jendela, KECUALI ada serah terima yang lagi berjalan/baru selesai biar gak hilang mendadak) DAN `TukarShiftSecurityPage.tsx` (sembunyikan tombol "Selesai Jaga -- Buat QR" & "Mulai Serah Terima Baru" di luar jendela, ganti pesan "Belum Waktunya Serah Terima").
+
+**Bug tersembunyi yang ikut kefix**: sebelumnya tombol "Buat QR" bisa dipencet KAPAN SAJA (mis. jam 10 pagi buat Shift 1 yang masih jalan sampai jam 20:00) -- karena `tanggal_shift`/`shift` yang tersimpan di dokumen dihitung dari WAKTU SAAT ITU (`hitungShiftSesi()` global, bukan per-orang), generate QR terlalu awal bikin dokumennya ke-tag shift yang SALAH (tanggal_shift/shift shift LAMA), gak bakal pernah match dengan yang dihitung petugas pengganti begitu jamnya BENERAN ganti -- serah terima jadi gak pernah ketemu. Sekalian ditemukan: listener `handoverStatus` di dashboard sebelumnya cuma dihitung SEKALI pas mount (`useEffect(...,[])`), gak pernah re-subscribe kalau dashboard dibiarkan terbuka lintas jam pergantian shift -- ikut difix (`infoShiftAktif` sekarang direcompute tiap menit & jadi dependency listener).
+
+### 45C. Eskalasi Serah Terima Telat (FITUR BARU)
+**Collection baru**: `security_shift_extend`, 1 dokumen per tanggal_shift+shift (id deterministik `${tanggal_shift}_${shift tanpa spasi}`), field: `petugas_keluar[]`, `petugas_masuk[]` (dari roster, BUKAN cuma 1 nama -- shift bisa dijadwalkan >1 orang), `status` (`menunggu_keputusan` → `aktif`[sementara] / `permanen` → `selesai`), `tipe`, `personil_extend`, `estimasi_menit`, timestamp-timestamp terkait.
+
+**`scripts/shift-handover-escalation.mjs`** (BARU, cron tiap 10 menit via `.github/workflows/shift-handover-escalation.yml`): kalau `security_shift_handover` shift yang baru berakhir belum `"selesai"` DAN sudah ≥10 menit sejak batas shift:
+- Belum ada entri extend → buat entri `menunggu_keputusan`, kirim push+`notifikasi_personal` (jenis `keputusan_extend_shift`, trigger modal) ke SEMUA petugas keluar+masuk (union, dedup), DAN tembusan informational ke semua Danru/Koordinator Security.
+- Masih `menunggu_keputusan` → reminder ulang.
+- `aktif` (sementara) → cek estimasi: kalau habis (atau gak diisi dari awal), reminder lagi ke `personil_extend` aja.
+- `permanen` atau `selesai` → tidak ada aksi lagi.
+- Begitu `security_shift_handover` beneran `"selesai"` → entri extend yang masih aktif OTOMATIS ditutup (safety net -- penutupan UTAMA terjadi client-side seketika scan berhasil, lihat 45D).
+
+**`src/components/EskalasiShiftModal.tsx`** (BARU, dipasang di `dashboard/security/page.tsx`): dengar `notifikasi_personal` jenis `keputusan_extend_shift` buat `picName` yang bersangkutan, tampilkan modal blocking dengan 2 tombol: "Lanjut Jaga (Extend)" (langsung `status:"permanen"`) atau "Lanjut Sementara" (input estimasi menit opsional, `status:"aktif"`). Begitu salah satu diklik, SEMUA notif lain dengan `refId` yang sama (dikirim ke beberapa rekan sekaligus) ikut ditandai dibaca, biar modal gak nongol dobel ke rekan lain yang sudah kebagian keputusan orang lain.
+
+### 45D. Auto-Tutup & Overlay Roster "EXTEND"
+`TukarShiftSecurityPage.tsx`: begitu scan QR serah terima resmi sukses (`status:"selesai"`), langsung cek & tutup entri `security_shift_extend` terkait (kalau ada) -- "distop begitu tukar jaga beneran terjadi" sesuai jawaban user, TANPA nunggu cron 10 menit berikutnya.
+
+Roster overlay dipasang di 2 tempat (`dashboard/security/page.tsx` papan roster staf & `admin/monitor-security/page.tsx` tab Roster admin): tarik SELURUH collection `security_shift_extend` (kecil, aman ditarik utuh), tiap sel roster yang match `tanggal_shift+shift+nama ada di petugas_masuk[]` & status belum `"selesai"` di-override tampilannya: `⚠️ TERLAMBAT` (masih `menunggu_keputusan`) atau `{shift asli} → {personil_extend} (EXTEND)` (sudah diputuskan).
+
+### 45E. Firestore Rules & Index
+`firestore.rules`: `security_shift_extend` ditambahkan ke daftar collection terbuka. `firestore.indexes.json`: 1 index baru `notifikasi_personal` (`untukNama` ASC, `dibaca` ASC, `jenis` ASC, `waktu` DESC, `__name__` DESC) -- dipakai query modal EskalasiShiftModal (`untukNama==X && dibaca==false && jenis=="keputusan_extend_shift"` + `orderBy(waktu)`, 3 filter equality + orderBy beda field = wajib index).
+
+### 45F. Batasan yang Disengaja (jujur, bukan lupa)
+- Modal keputusan (`EskalasiShiftModal`) cuma dipasang di `dashboard/security/page.tsx` (halaman utama Security) -- KALAU staf lagi di subhalaman lain (Patroli, Buku Tamu, dll) pas notif masuk, modal baru muncul begitu mereka balik ke halaman utama. Push notification tetap jalan independen (nyampe kapan pun), jadi bukan berarti mereka gak tahu -- cuma modal keputusannya gak langsung ke-interupsi di tengah halaman lain.
+- Granularitas eskalasi & roster overlay tetap PER SHIFT (bukan per-individu) -- konsisten dengan desain `security_shift_handover` yang sudah ada sejak awal (kalau >1 orang terjadwal 1 shift, notif & overlay berlaku ke SEMUANYA, siapa pun yang klik duluan yang jadi `personil_extend`).
+
+### 45G. Verifikasi
+`npm run build`: 0 error, 51 route. `npx eslint` di 5 file yang disentuh (`dashboard/security/page.tsx`, `TukarShiftSecurityPage.tsx`, `EskalasiShiftModal.tsx`, `admin/monitor-security/page.tsx`, `lib/shift.ts`): 0 warning, 0 error. `node --check scripts/shift-handover-escalation.mjs`: lolos (syntax-only, gak ada service account lokal buat test langsung ke Firestore beneran).
+
+**Belum di-deploy, belum ditest visual/end-to-end sama sekali** -- fitur eskalasi ini BENERAN BARU (bukan cuma perbaikan tampilan), butuh nunggu kejadian nyata (serah terima telat >10 menit) buat lihat alur lengkapnya jalan di production.
