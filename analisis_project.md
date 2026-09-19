@@ -1,18 +1,25 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§39: **audit menyeluruh sistem notifikasi** OB/CS/Security/Driver — user curiga ada tugas gak dijalankan & notif gak muncul. Ketemu & DIPERBAIKI: bug status "Pulang" salah dianggap basi (spam notif salah selama 20+ jam!), Driver TIDAK PERNAH dapat token FCM kalau gak buka menu "Bawa Armada", cron `checklist-reminder.mjs` jalan 4x/hari selama berbulan-bulan tapi TIDAK PERNAH terlihat siapa pun (listener-nya gak pernah dipasang), bug urutan guard di `points-deduction.mjs`, plus semua 9 workflow di-pin versi `firebase-admin` (dicurigai jadi penyebab kegagalan serentak beberapa cron). Juga fix preventif scope service worker FCM (belum terkonfirmasi 100% jadi akar masalah, butuh test device asli). SUDAH DI-DEPLOY & `dev`+`main` sinkron (`17e9701`). Detail lengkap: §39.)
+Update terakhir: 19 September 2026 (§40: fix "kayak ke-logout" — user lapor force-close app / klik "Home" di dashboard Security bikin serasa logout. Root cause: portal utama (`/`) dari awal gak pernah ngecek sesi Firebase Auth yang masih valid (sesi aslinya SEBENARNYA gak hilang, cuma gak ditampilkan) — sekarang ada banner "Anda masih login sebagai..." + tombol 1-klik "Lanjut ke Dashboard", gak perlu login ulang. SUDAH DI-DEPLOY & `dev`+`main` sinkron (`5ce9c1e`). Sesi sebelumnya (§39): audit menyeluruh notifikasi OB/CS/Security/Driver, 3 bug kritis diperbaiki — lihat §39.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §39 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §40 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: minta user test push notification di device asli (§39B poin 6)
+### 🔴🔴 PALING URGENT: 2 hal butuh test user di device asli
 
-Ada fix PREVENTIF ke `useFcmSetup.ts` (scope service worker FCM dipisah dari SW PWA) yang KEMUNGKINAN BESAR memperbaiki push notification yang gagal sampai pas app tertutup total — TAPI ini BELUM terverifikasi 100% tanpa test di device asli. **Minta salah satu staf**: buka dashboard mereka di HP, pastikan izinkan notifikasi, TUTUP TOTAL app-nya (bukan cuma minimize), tunggu reminder terjadwal berikutnya (atau minta admin trigger manual lewat GitHub Actions tab → pilih salah satu workflow reminder → "Run workflow"), lalu cek apakah notifikasi OS beneran muncul. Kabari hasilnya di sesi berikutnya.
+1. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal (atau trigger manual lewat tab GitHub Actions), cek notifikasi OS muncul atau tidak.
+2. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul (bukan tampilan portal kosong seperti sebelumnya) → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
+
+### Sesi hari ini (§40) — Fix "Kayak Ke-logout" Portal Utama, lanjutan langsung §39
+
+User coba fitur Tukar Shift, lalu lapor force-close app & klik "Home" di dashboard Security keduanya bikin serasa ke-logout. Ternyata BUKAN kehilangan sesi beneran — portal utama (`/`) dari awal gak pernah ngecek sesi Firebase Auth yang masih valid, jadi walau sesi staf sebenarnya masih ada, mereka selalu disuguhi tampilan portal publik kosong. Fix: banner kecil "Anda masih login sebagai X" + tombol 1-klik ke dashboard, TANPA auto-redirect paksa (biar tombol Home tetap berguna buat akses form publik). Detail: **§40**.
+
+**Status: SUDAH DI-DEPLOY.** `dev`+`main` sinkron di commit `5ce9c1e`.
 
 ### Sesi hari ini (§39) — Audit Menyeluruh Sistem Notifikasi, lanjutan langsung §38
 
@@ -30,14 +37,14 @@ User curiga ada tugas yang gak dijalankan tim & minta cek SEMUA notifikasi OB/CS
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **Test push notification di device asli** (lihat peringatan paling atas) — prioritas #1 sesi depan.
+1. **2 test device asli** (lihat peringatan paling atas: push notification tertutup total, DAN banner sesi staf di portal) — prioritas #1 sesi depan.
 2. **Fitur Tukar Shift/Jaga (§38C) belum ditest end-to-end** — butuh 2 device/akun Security beneran (1 generate QR, 1 scan).
 3. **Kampanye Survei (§38A) belum ditest** — coba nyalain dari `admin/survei-kepuasan`, cek kartu muncul di Menu Cepat, isi form, nonaktifkan, pastikan kartu hilang + form nolak submit.
 4. **Limitasi yang belum diperbaiki** (§39B poin 6, dicatat bukan lupa): app gak punya indikator visual kalau notifikasi browser seorang staf ke-block/mati — kalau ada yang pernah klik "Blokir" pas prompt izin notifikasi, mereka gak akan pernah dapat push apa pun dan gak ada yang bakal tau dari dalam app. Bisa ditambahkan kalau user mau.
 5. **Sistem Poin (§36) datanya masih sedikit** — cron jalan tiap 09:00 WITA, evaluasi H-1. Cek `admin/monitor-poin` beberapa hari lagi.
 6. **Sisa 6 kerentanan dependency** (§37A) SENGAJA tidak difix — resiko breaking change. Biarkan kecuali user eksplisit minta lanjut.
-7. **User belum test visual manual** numpuk dari beberapa sesi (Absensi §34, fix logo §35A, sistem poin §36, survei §37B/§38A, tukar shift §38C) — semuanya karena Claude gak punya tool browser di environment ini.
-7. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
+7. **User belum test visual manual** numpuk dari beberapa sesi (Absensi §34, fix logo §35A, sistem poin §36, survei §37B/§38A, tukar shift §38C, banner sesi §40) — semuanya karena Claude gak punya tool browser di environment ini.
+8. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
 8. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung).
 
 Detail teknis lengkap sesi hari ini: **§36** (Sistem Poin) dan **§37** (Upgrade Next.js + Survei). Riwayat sesi 21-35: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
@@ -1920,3 +1927,27 @@ Repo ini PUBLIC di GitHub, jadi riwayat run GitHub Actions bisa diakses lewat RE
 **Yang PALING PENTING user verifikasi manual (gak bisa dites dari sini):**
 1. **Push notification pas app BENAR-BENAR tertutup** (bukan cuma minimize/tab lain) — buka salah satu dashboard (OB/Security/Driver) di HP, izinkan notifikasi, TUTUP TOTAL app-nya, lalu tunggu salah satu reminder terjadwal (atau minta admin trigger manual lewat GitHub Actions tab). Kalau notifikasi OS muncul, berarti fix scope service worker (temuan #6) berhasil. Kalau TETAP gak muncul, ini butuh investigasi lebih lanjut (kemungkinan device/browser spesifik, atau permission notifikasi yang ke-block diam-diam tanpa keliatan di UI app).
 2. **Setiap staf (OB, Security, Driver) sudah PERNAH buka dashboard mereka DAN mengizinkan notifikasi saat diminta browser** — kalau ada yang dulu KLIK "Blokir"/"Jangan Izinkan" pas prompt notifikasi muncul, mereka gak akan pernah dapat push apa pun, DAN aplikasi TIDAK PUNYA indikator visual yang bilang "notifikasi Anda mati" — ini limitasi yang belum diperbaiki (di luar scope audit ini, dicatat sebagai temuan buat sesi depan kalau user mau ditambahkan).
+
+---
+
+## 40. Fix "Kayak Ke-logout" — Portal Utama Sekarang Deteksi Sesi Staf Aktif (19 September 2026, lanjutan langsung §39)
+
+Konteks: user coba fitur Tukar Shift, lalu lapor: "saat login sebagai security dan coba force close aplikasi loginnya keluar, saya coba login lagi dan klik home di menu security malah balik ke halaman utama/logout."
+
+### 40A. Root Cause (BUKAN kehilangan sesi beneran)
+Diinvestigasi 2 bagian:
+- **PWA `start_url` di `manifest.json` selalu `"/"`** — tiap kali app di-force-close lalu dibuka lagi dari ikon home screen, PWA-nya SELALU mulai dari portal utama (`/`), TIDAK PERNAH kembali ke halaman terakhir yang dibuka (`/dashboard/security`). Ini perilaku standar PWA, bukan bug.
+- **Tombol "Home" di bottom-nav dashboard OB & Security memang SENGAJA `router.push("/")`** (dicek: pola yang SAMA di `DashboardOBPage.tsx` — bukan cuma di Security, jadi ini desain konsisten, bukan bug 1 file doang). Driver malah gak punya tombol Home sama sekali di bottom-nav-nya.
+- **Baru ketemu akar masalah SEBENARNYA**: `src/app/page.tsx` (portal utama) dari AWAL gak pernah ngecek apakah ada sesi Firebase Auth yang masih valid begitu halaman ini dibuka. Jadi walau sesi login staf **sebenarnya MASIH ada** (Firebase Auth pakai `browserLocalPersistence` bawaan, TIDAK hilang cuma karena app di-force-close), portal selalu nampilin tampilan publik kosong tanpa indikasi apa pun — user ngerasa "kayak logout" padahal sesi aslinya utuh, cuma gak ditampilkan.
+
+### 40B. Fix
+`src/app/page.tsx`: tambah `onAuthStateChanged` listener + baca `localStorage` (`pic_nama`/`pic_dept`) begitu portal ini kebuka. Kalau ketemu sesi staf yang masih valid, tampilkan **banner kecil** di bawah header: "👋 Anda masih login sebagai {nama} ({dept})" + tombol **"Lanjut ke Dashboard"** (1 klik langsung ke dashboard yang benar tanpa perlu ketik ulang email/password) + tombol "Tutup" buat yang memang mau pakai portal publik.
+
+**SENGAJA BUKAN auto-redirect paksa** — kalau dipaksa auto-redirect, tombol "Home" di bottom-nav dashboard staf jadi gak berguna sama sekali (bakal langsung mantul balik ke dashboard, gak pernah beneran nyampe portal publik) padahal itu memang cara staf akses form publik (Lacak Tamu, Resi Paket, dst) sambil tetap login. Banner + tombol manual ini kompromi yang paling aman: gak ganggu behavior lama, tapi ngilangin rasa "kayak ke-logout" karena sekarang cukup 1 klik buat balik ke dashboard, gak perlu login ulang dari nol.
+
+Sekalian dirapikan: mapping dept→path dashboard yang tadinya if/else berantai di `handleLogin()` diekstrak jadi fungsi `pathDashboardUntukDept()` — dipakai bareng oleh `handleLogin()` dan logika deteksi sesi baru ini, 1 sumber kebenaran.
+
+### 40C. Verifikasi
+`npm run build`: 0 error, 50 route (gak ada perubahan struktur halaman). `npx eslint`: 0 error/warning baru. **SUDAH di-deploy** ke `hosting`. `dev`+`main` sinkron via fast-forward, push berhasil (`5ce9c1e`).
+
+**Belum ditest visual** — user perlu coba: login sebagai staf apa pun → force-close app → buka lagi → pastikan banner "masih login sebagai..." muncul di portal (bukan tampilan kosong seperti sebelumnya) → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa perlu login ulang.
