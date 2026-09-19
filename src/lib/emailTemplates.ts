@@ -171,6 +171,33 @@ export function buildOvertimeTercatatEmailHtml(p: {
 }
 
 /**
+ * Notifikasi ke KARYAWAN (bukan PIC lembur ruangan) begitu check-in Buku Tamu Digital-nya
+ * (jenis "Karyawan") sudah lebih dari 9 jam tanpa check-out -- pengingat overtime otomatis dari
+ * pencatatan kehadiran fisik di gedung, terpisah dari alur pengajuan Overtime Gedung/AC yang sudah ada.
+ */
+export function buildOvertimeCheckinEmailHtml(p: {
+  namaKaryawan: string;
+  departemen: string;
+  jamMasuk: string;
+  jamSekarang: string;
+}): string {
+  const rows = [
+    fieldRow("Jam Masuk (Buku Tamu)", escapeHtml(p.jamMasuk)),
+    fieldRow("Sudah Berlalu Sejak", escapeHtml(p.jamSekarang)),
+    fieldRow("Departemen", escapeHtml(p.departemen)),
+  ].join("");
+
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      Halo ${escapeHtml(p.namaKaryawan)}, Anda memasuki jam overtime (lebih dari 9 jam sejak check-in di Buku Tamu Digital gedung). Mohon segera konfirmasi ke Security sampai berapa lama Anda akan lembur. <strong>Abaikan email ini kalau Anda akan segera pulang.</strong>
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+  `;
+
+  return emailShell("&#8987; Pengingat Jam Overtime", body);
+}
+
+/**
  * Notifikasi ke Admin GA saat ada pengajuan BARU masuk (ATK / Overtime Gedung / Tiket Helpdesk)
  * dari portal publik (src/app/page.tsx). Satu builder dipakai untuk ketiganya -- bentuknya sama
  * (judul + info pemohon + rincian field), cuma isi `rows`/`itemsTable`-nya beda per jenis.

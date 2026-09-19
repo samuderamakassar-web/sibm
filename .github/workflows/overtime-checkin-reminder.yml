@@ -1,0 +1,29 @@
+name: Overtime Check-in Reminder
+
+on:
+  schedule:
+    # Tiap 30 menit sepanjang hari -- ambang 9 jam gak butuh presisi ke-menit, push ke Security
+    # sengaja diulang tiap run selama karyawan yang bersangkutan belum check-out.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Versi di-pin persis (bukan "firebase-admin" polos/latest) -- ketemu pas audit notifikasi 19 Sep 2026,
+      # beberapa run gagal serentak dalam 1 hari yang dicurigai rilis firebase-admin terbaru yang
+      # sempat bermasalah, padahal skrip sendiri tidak ada bug. Update versi ini manual kalau perlu.
+      - name: Install dependencies
+        run: npm install firebase-admin@14.4.0
+
+      - name: Jalankan reminder overtime check-in
+        run: node scripts/overtime-checkin-reminder.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
