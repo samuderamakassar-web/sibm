@@ -1,23 +1,26 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§40: fix "kayak ke-logout" — user lapor force-close app / klik "Home" di dashboard Security bikin serasa logout. Root cause: portal utama (`/`) dari awal gak pernah ngecek sesi Firebase Auth yang masih valid (sesi aslinya SEBENARNYA gak hilang, cuma gak ditampilkan) — sekarang ada banner "Anda masih login sebagai..." + tombol 1-klik "Lanjut ke Dashboard", gak perlu login ulang. SUDAH DI-DEPLOY & `dev`+`main` sinkron (`5ce9c1e`). Sesi sebelumnya (§39): audit menyeluruh notifikasi OB/CS/Security/Driver, 3 bug kritis diperbaiki — lihat §39.)
+Update terakhir: 19 September 2026 (§41: fitur baru **Pengingat Overtime dari Buku Tamu Digital** — karyawan yang check-in tapi belum check-out setelah 9 jam otomatis dapat email pengingat + Security yang jaga dapat push notification berulang (bagian "paling penting" per user) sampai karyawan itu check-out. **TEMUAN PENTING**: EmailJS akun ini defaultnya blokir akses API dari luar browser (dikonfirmasi lewat test langsung, HTTP 403) — bagian PUSH ke Security tetap jalan normal, tapi bagian EMAIL BELUM BISA KIRIM sampai user aktifkan 1 setting di dashboard EmailJS. Lihat §41B untuk instruksi persis. SUDAH DI-PUSH ke `dev`+`main` (`4136bc0`), gak perlu deploy hosting (murni backend). Sesi sebelumnya (§40): fix "kayak ke-logout" di portal utama — lihat §40.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §40 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §41 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: 2 hal butuh test user di device asli
+### 🔴🔴 PALING URGENT: 1 aksi WAJIB user + 2 test device asli
 
-1. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal (atau trigger manual lewat tab GitHub Actions), cek notifikasi OS muncul atau tidak.
-2. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul (bukan tampilan portal kosong seperti sebelumnya) → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
+1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, fitur email pengingat overtime (§41) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya.
+2. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
+3. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§40) — Fix "Kayak Ke-logout" Portal Utama, lanjutan langsung §39
+### Sesi hari ini (§41) — Pengingat Overtime dari Buku Tamu Digital, lanjutan langsung §40
 
-User coba fitur Tukar Shift, lalu lapor force-close app & klik "Home" di dashboard Security keduanya bikin serasa ke-logout. Ternyata BUKAN kehilangan sesi beneran — portal utama (`/`) dari awal gak pernah ngecek sesi Firebase Auth yang masih valid, jadi walau sesi staf sebenarnya masih ada, mereka selalu disuguhi tampilan portal publik kosong. Fix: banner kecil "Anda masih login sebagai X" + tombol 1-klik ke dashboard, TANPA auto-redirect paksa (biar tombol Home tetap berguna buat akses form publik). Detail: **§40**.
+Ide baru user: karyawan yang check-in di Buku Tamu Digital tapi belum check-out setelah 9 jam kerja otomatis (1) dapat email pengingat overtime, dan (2) **"paling penting"**: Security yang sedang jaga dapat push notification berulang tiap 30 menit sampai karyawan itu check-out, supaya bisa follow-up konfirmasi. Bagian push SUDAH JALAN NORMAL. Bagian email BUTUH 1 AKSI USER dulu (lihat peringatan paling atas) — dikonfirmasi lewat test kirim langsung, BUKAN asumsi. Detail: **§41** (§41A-§41C).
+
+**Status: Kode SUDAH DI-PUSH** ke `dev`+`main` (`4136bc0`), gak perlu deploy hosting (murni backend script + 1 fungsi template yang belum dipakai UI).
 
 **Status: SUDAH DI-DEPLOY.** `dev`+`main` sinkron di commit `5ce9c1e`.
 
@@ -1951,3 +1954,27 @@ Sekalian dirapikan: mapping dept→path dashboard yang tadinya if/else berantai 
 `npm run build`: 0 error, 50 route (gak ada perubahan struktur halaman). `npx eslint`: 0 error/warning baru. **SUDAH di-deploy** ke `hosting`. `dev`+`main` sinkron via fast-forward, push berhasil (`5ce9c1e`).
 
 **Belum ditest visual** — user perlu coba: login sebagai staf apa pun → force-close app → buka lagi → pastikan banner "masih login sebagai..." muncul di portal (bukan tampilan kosong seperti sebelumnya) → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa perlu login ulang.
+
+---
+
+## 41. Fitur Pengingat Overtime dari Buku Tamu Digital (19 September 2026, lanjutan langsung §40)
+
+Konteks: ide baru dari user buat bantu Security — karyawan yang check-in di Buku Tamu Digital dan sudah lewat 9 jam kerja belum check-out, otomatis (1) dapat email pengingat overtime, dan (2) **"paling penting"**: Security yang sedang jaga dapat push notification supaya bisa follow-up konfirmasi langsung ke orangnya.
+
+### 41A. Implementasi
+- **`scripts/overtime-checkin-reminder.mjs`** (baru, cron 30 menit) — query `security_visitor_logs` (`jenis == "Karyawan"`, `status == "Di Dalam Area"`) yang `waktu_masuk`-nya sudah **>= 9 jam** lalu:
+  1. **Email ke karyawan** — HTML rapi (gaya sama dgn email lain, header merah gradient dst), isi "Anda memasuki jam overtime... mohon konfirmasi ke Security... abaikan kalau segera pulang" persis permintaan user. Email lookup dari `employees_directory` (by nama). **Sekali per sesi check-in** (guard `reminder_overtime_checkin_log/{docId}` — kalau gagal kirim, guard SENGAJA TIDAK ditulis biar dicoba ulang otomatis run berikutnya).
+  2. **Push ke Security yang sedang jaga** — diulang **TIAP RUN** (30 menit) **TANPA guard**, sengaja terus muncul selama karyawan itu belum check-out (pola sama seperti `patroli-push-reminder.mjs`/`driver-status-staleness.mjs`) — kalau ada lebih dari 1 karyawan overtime bersamaan, digabung jadi 1 notifikasi list semua nama.
+- **`src/lib/emailTemplates.ts`**: tambah `buildOvertimeCheckinEmailHtml()` sebagai referensi format resmi (HTML-nya diduplikasi manual langsung di `.mjs` karena script plain Node ESM gak bisa import TypeScript — pola sama dengan duplikasi `shift.ts` di script lain).
+
+### 41B. TEMUAN PENTING — EmailJS Blokir Akses Non-Browser (dites langsung, bukan asumsi)
+Sebelum diklaim selesai, dicoba kirim 1 email TEST sungguhan lewat REST API EmailJS dari Node (server) — **HASILNYA DITOLAK HTTP 403**: `"API access from non-browser environments is currently disabled"`. Ini pengaturan keamanan default akun EmailJS yang MEMBLOKIR semua request API yang bukan dari browser asli (mis. dari script Node/GitHub Actions).
+
+**Dampak**: bagian **PUSH ke Security TETAP JALAN NORMAL** (gak kena batasan ini sama sekali, ini yang paling penting per permintaan user). TAPI bagian **EMAIL ke karyawan BELUM BISA TERKIRIM** sampai user aktifkan izin ini.
+
+**AKSI YANG USER PERLU LAKUKAN**: buka https://dashboard.emailjs.com/admin/account/security → login pakai akun EmailJS yang dipakai app ini → cari opsi **"API access from non-browser environments"** atau serupa → **aktifkan**. Setelah itu, TIDAK PERLU tindakan lain dari sisi kode — email yang tertunda akan otomatis mulai terkirim di run cron berikutnya (paling lama 30 menit) karena guard-nya sengaja didesain untuk retry otomatis.
+
+### 41C. Verifikasi
+`npm run build`: 0 error (gak ada perubahan struktur halaman, `buildOvertimeCheckinEmailHtml()` belum dipakai halaman manapun, cuma referensi). `npx eslint`: 0 error/warning baru. Script dijalankan lokal 2x (sebelum & sesudah upgrade ke HTML email) pakai data production sungguhan — hasilnya BENAR ("Tidak ada karyawan yang overtime" karena memang gak ada yang qualify saat dites). **SUDAH di-push** ke `dev`+`main` (`4136bc0`) — TIDAK perlu deploy `hosting` terpisah (murni backend script, gak ada perubahan yang mempengaruhi situs live).
+
+**Belum bisa ditest end-to-end penuh** — butuh: (1) user aktifkan setting EmailJS di atas, (2) ada karyawan yang beneran check-in Buku Tamu Digital >9 jam tanpa check-out (bisa disimulasikan: check-in manual lewat Buku Tamu Digital, atau tunggu kejadian asli). Push ke Security sendiri sudah pasti berfungsi begitu ada kondisi yang qualify (logic-nya identik dengan script push lain yang sudah terverifikasi jalan di §39).
