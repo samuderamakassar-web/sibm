@@ -1,33 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§37: **upgrade Next.js ke 16.3.5 dikonfirmasi berhasil** (kerentanan CRITICAL sudah terpatch, cuma sisa 6 kerentanan low-priority yang sengaja dibiarkan) + fitur baru **Survei Kepuasan Gedung** — replika penuh Kuesioner Pelayanan Gedung (7 section, skala 1-5 + saran) plus 3 pertanyaan favorit staf, form publik tanpa login di `/survei-kepuasan`, dipantau admin di `admin/survei-kepuasan` (skor per kategori, saran, leaderboard favorit, export Excel), periodik otomatis 2x/tahun. SUDAH DI-DEPLOY & `dev`+`main` sinkron (`224973c`). **Semua 3 permintaan dari sesi §36 kini SELESAI** (sistem poin §36, upgrade dependency §37A, survei §37B).)
+Update terakhir: 19 September 2026 (§38: Menu Cepat portal utama dirapikan (kartu Bahaya SBO disamakan gayanya, kartu survei jadi kondisional lewat kampanye admin-controlled dengan durasi aktif), menu Monitor Absensi dicabut dari Control Panel Admin (fitur & datanya tetap ada), dan fitur baru **Tukar Shift/Jaga Security via scan QR** — petugas selesai jaga generate QR, petugas pengganti wajib scan buat konfirmasi serah terima, status real-time di dashboard utama. SUDAH DI-DEPLOY (`hosting`+`firestore:rules`+`firestore:indexes` — ada composite index baru yang WAJIB) & `dev`+`main` sinkron (`f46f906`).)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §37 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §38 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### Sesi hari ini (§36 + §37) — Sistem Poin, lalu Upgrade Next.js + Survei Kepuasaan, lanjutan langsung §35
+### 🔴 Yang PALING URGENT dicek sebelum ada yang pakai fitur Tukar Shift
 
-3 permintaan besar dari user, semuanya SELESAI sesi ini:
-- **§36 — Sistem Poin Bulanan Staf**: 100 poin/bulan, berkurang otomatis kalau OB/Security gak menyelesaikan tugas sempurna, rekap `admin/monitor-poin`.
-- **§37A — Upgrade Next.js 16.2.7→16.3.5**: sempat kelihatan "ditolak permission classifier" di akhir §36, ternyata perintahnya SUDAH SEMPAT JALAN & BERHASIL duluan — diverifikasi ulang dari nol (build+lint+audit), aman dipakai.
-- **§37B — Survei Kepuasaan Gedung**: user kirim screenshot lengkap semua halaman Google Form + jawab klarifikasi (buat ulang di SIBM, periodik 2x/tahun, tambah 3 pertanyaan favorit staf) — direplikasi penuh jadi form publik `/survei-kepuasan` + monitoring `admin/survei-kepuasan`.
+**Composite index Firestore baru buat `security_shift_handover` (§38C) perlu waktu "Building" sebentar setelah deploy** sebelum berstatus "Enabled" di Firebase Console. Kalau ada Security yang coba fitur "Tukar Shift/Jaga" TERLALU CEPAT setelah deploy dan dapat error, kemungkinan besar itu penyebabnya (bukan bug kode) — tinggal tunggu beberapa menit lalu coba lagi. Cek statusnya di Firebase Console → Firestore → Indexes kalau ada laporan error.
 
-**Status: SEMUA SUDAH DI-DEPLOY PENUH.** `npm run build` 0 error (49 route), `npx eslint src scripts` 0 error project-wide, `npm audit` turun dari 15 jadi 6 kerentanan (sisanya sengaja dibiarkan, low-priority). `dev`+`main` sinkron di commit `224973c`, tanpa conflict.
+### Sesi hari ini (§38) — Rapikan Menu Cepat, Hapus Monitor Absensi, Fitur Tukar Shift/Jaga QR, lanjutan langsung §37
+
+User kirim screenshot Menu Cepat + 3 permintaan: (1) rapikan tampilan & masukkan kartu survei TAPI aktif/nonaktifnya dikontrol admin (bikin modal pilih durasi), (2) hapus menu Monitor Absensi dari Control Panel Admin, (3) fitur baru Tukar Shift/Jaga Security — serah terima wajib scan QR ke petugas pengganti, status berubah di dashboard utama begitu sudah discan. Detail lengkap: **§38** (§38A-§38D).
+
+**Status: SEMUA SUDAH DI-DEPLOY PENUH.** `npm run build` 0 error (50 route), `npx eslint src scripts` 0 error project-wide. `dev`+`main` sinkron di commit `f46f906`, tanpa conflict. Deploy 3x terpisah: `hosting`, `firestore:rules`, DAN `firestore:indexes` (index baru wajib buat query Tukar Shift, lihat peringatan di atas).
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **Sistem Poin (§36) BELUM ADA DATANYA SAMA SEKALI** — cron baru jalan tiap 09:00 WITA & cuma evaluasi 1 hari sebelumnya. Jangan kaget kalau `admin/monitor-poin` masih nampilin semua orang 100 poin di awal — itu normal, bukan bug. Tunggu beberapa hari biar data kepatuhan mulai kekumpul.
-2. **Scope Sistem Poin v1 SENGAJA terbatas ke OB & Security saja** (§36A) — Driver/QHSE/Admin GA tetap 100 poin terus sampai ada sinyal tugas individual yang reliable ditambahkan. Angka potongan (-5/-10/-5) juga ASUMSI Claude, gampang diubah di `scripts/points-deduction.mjs`.
-3. **Survei Kepuasaan (§37B) belum ditest end-to-end** — user perlu coba isi form `/survei-kepuasan` sendiri 1x sebelum disebar ke penghuni gedung (form panjang, 7 section, pastikan gak ada yang kelewat pas discroll di HP).
-4. **Sisa 6 kerentanan dependency** (`serialize-javascript`/`next-pwa`, `xlsx`) SENGAJA tidak difix (§37A) — resiko breaking change ke PWA/cache atau gak ada fix sama sekali. Biarkan kecuali user eksplisit minta lanjut.
-5. **User belum test visual manual** numpuk dari beberapa sesi: Absensi §34, fix logo §35A, sistem poin §36, survei §37B — semuanya karena Claude gak punya tool browser di environment ini.
-6. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
-7. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung).
+1. **Fitur Tukar Shift/Jaga (§38C) belum ditest end-to-end** — butuh 2 device/akun Security beneran (1 generate QR, 1 scan) buat ketes penuh. User perlu coba manual.
+2. **Kampanye Survei (§38A) belum ditest** — coba nyalain dari `admin/survei-kepuasan` (tombol "Aktifkan Link Survei"), cek kartu muncul di Menu Cepat portal utama, coba isi form, lalu nonaktifkan & pastikan kartu hilang + form nolak submit.
+3. **Sistem Poin (§36) datanya masih sedikit/kosong** — cron jalan tiap 09:00 WITA, evaluasi H-1. Cek `admin/monitor-poin` beberapa hari lagi.
+4. **Sisa 6 kerentanan dependency** (§37A, `serialize-javascript`/`next-pwa`, `xlsx`) SENGAJA tidak difix — resiko breaking change ke PWA/cache atau gak ada fix. Biarkan kecuali user eksplisit minta lanjut.
+5. **2 fitur besar yang masih ditunda dari §28C**: sistem poin/gamifikasi (v1-nya sudah jalan tapi scope terbatas OB+Security, lihat §36A) — TIDAK ADA lagi fitur besar yang benar-benar belum disentuh selain penyempurnaan yang sudah berjalan.
+6. **User belum test visual manual** numpuk dari beberapa sesi (Absensi §34, fix logo §35A, sistem poin §36, survei §37B/§38A, tukar shift §38C) — semuanya karena Claude gak punya tool browser di environment ini.
+7. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
+8. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung).
 
 Detail teknis lengkap sesi hari ini: **§36** (Sistem Poin) dan **§37** (Upgrade Next.js + Survei). Riwayat sesi 21-35: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
@@ -1844,3 +1846,38 @@ Dari screenshot, form aslinya (setelah halaman pembuka Nama/Perusahaan-Divisi/La
 **Belum ditest visual/end-to-end** (constraint lingkungan sama seperti sesi-sesi sebelumnya) — terutama: alur isi form publik di `/survei-kepuasan` dari HP asli (form PANJANG, 7 section — pastikan gak ada yang kelewat pas discroll), validasi per-section, dan tampilan 3 tab di `admin/survei-kepuasan` begitu ada data beneran masuk. User perlu coba isi 1x sebagai tes sebelum disebar ke penghuni gedung.
 
 **Catatan buat sesi depan**: kalau nanti mau kirim link survei ke penghuni gedung via email/broadcast (bukan cuma link kecil di portal), infrastuktur EmailJS (`src/lib/notify.ts`) sudah ada dan bisa dipakai — tinggal user minta kalau perlu.
+
+---
+
+## 38. Rapikan Menu Cepat + Kampanye Survei, Hapus Monitor Absensi dari Admin, Fitur Tukar Shift/Jaga Security via QR (19 September 2026, lanjutan langsung §37)
+
+Konteks: user kirim screenshot Menu Cepat yang dirasa masih "berantakan" + 3 permintaan sekaligus: (1) rapikan tampilan + masukkan menu survei ke situ, TAPI admin yang kontrol aktif/nonaktifnya (bukan permanen), (2) hapus menu Monitor Absensi dari admin, (3) fitur baru "Tukar Shift/Jaga" buat Security — serah terima wajib scan barcode/QR ke petugas pengganti, status berubah di halaman utama begitu sudah tukar.
+
+### 38A. Fix Menu Cepat + Kampanye Survei (ganti pendekatan dari §37B)
+Root cause "berantakan" yang sebenarnya: kartu **"Bahaya SBO"** sendirian pakai gaya solid merah (icon chip merah tua + teks merah) sementara 5 kartu lain semuanya pakai gaya sama (icon chip merah muda `--red-50`, teks netral `--ink`/`--muted`) — jadi nongol beda sendiri di grid, bukan soal grid-nya. Diseragamkan: kartu Bahaya SBO sekarang pakai style default sama seperti kartu lain.
+
+**Survei Kepuasan dipindah dari "link kecil di footer" (§37B) jadi kartu Menu Cepat sungguhan, TAPI kondisional** — sesuai instruksi user "di admin buat tombol untuk munculkan dan hilangkan..., admin create link ... muncul modal untuk tentukan berapa lama linknya aktif":
+- Collection/doc baru `settings/survei_kepuasan_campaign` — `{aktif: boolean, expired_at: Timestamp, dibuat_pada, dibuat_oleh}`. Collection `settings` sudah ada di daftar terbuka Firestore Rules dari awal (dipakai `pengumuman`), jadi TIDAK perlu tambahan rules.
+- **`admin/survei-kepuasan`**: panel kontrol baru di atas — status "🟢 Aktif sampai [tanggal]" / "🔴 Tidak Aktif", tombol "Aktifkan Link Survei" → modal pilih durasi (3 Hari/1 Minggu/2 Minggu/1 Bulan/2 Bulan) → `setDoc` set `aktif:true` + `expired_at = now + durasi`; tombol "Nonaktifkan Sekarang" kalau lagi aktif.
+- **Portal utama (`src/app/page.tsx`)**: listener baru ke `settings/survei_kepuasan_campaign`, kartu "📋 Survei Kepuasan Gedung" di Menu Cepat cuma render kalau `aktif && expired_at > sekarang` — dan sengaja **melebar 1 baris penuh** (`gridColumn: "1 / -1"`, class `.qa-card-survei`) bukan ikut grid 3 kolom kartu permanen lainnya, karena sifatnya kartu "kampanye sesekali", bukan shortcut harian — jadi walau nongol/hilang gak pernah bikin grid 6-kartu yang permanen jadi ganjil.
+- **`SurveiKepuasanPage.tsx` (form publik)** ikut dikasih pengecekan yang SAMA — kalau kampanye nonaktif, form gak ditampilkan sama sekali (ganti pesan "Survei Sedang Tidak Aktif"), submit juga otomatis kepotong. Ini jaga-jaga kalau link `/survei-kepuasan` disimpan/dibagikan orang di luar jendela aktif.
+
+### 38B. Hapus Menu "Monitor Absensi" dari Admin
+Sesuai instruksi literal user ("hilangkan saja dari admin") — entry menu di `admin/page.tsx` dicabut (beserta `IconCalendarCheck` yang jadi gak kepakai). **Halaman `/admin/monitor-absensi` dan seluruh data `attendance_logs` TIDAK dihapus** — cuma link discovery-nya dari Control Panel yang dicabut, widget check-in/check-out (`AbsensiCard`) di 5 dashboard staf juga TETAP jalan seperti biasa (user cuma minta hapus dari admin, bukan hapus fiturnya total).
+
+### 38C. Fitur Baru: Tukar Shift/Jaga Security via Scan QR
+Alur sesuai permintaan user: petugas yang **selesai jaga** generate QR, petugas **pengganti** WAJIB scan QR itu buat konfirmasi serah terima, status berubah di halaman utama begitu sudah discan.
+
+- **`TukarShiftSecurityPage.tsx`** (baru) + route **`/dashboard/security/tukar-shift`**: 1 halaman dengan 3 state tergantung data `security_shift_handover` untuk shift yang sedang aktif (`hitungShiftSesi()`):
+  1. **Belum ada serah terima** → tombol "🔄 Selesai Jaga — Buat QR Serah Terima" (siapa pun yang klik jadi `petugas_keluar`, otomatis dari sesi login).
+  2. **Menunggu discan**: kalau yang buka halaman = `petugas_keluar` sendiri → tampilkan QR (generate via `api.qrserver.com`, pola sama seperti `admin/qr-manager`, isi QR = ID dokumen Firestore-nya langsung). Kalau yang buka BUKAN `petugas_keluar` → tampilkan tombol "📷 Scan Sekarang" (reuse `Html5QrcodeScanner`, pola sama seperti `InspeksiAparPage.tsx`) — scan berhasil kalau teks ke-decode cocok sama ID dokumen, langsung `updateDoc` isi `petugas_masuk` + `status: "selesai"`.
+  3. **Selesai** → ringkasan "✅ {petugas_keluar} → {petugas_masuk}, jam berapa", + tombol "Mulai Serah Terima Baru" (buat siklus shift berikutnya).
+- **Status di dashboard utama** (`dashboard/security/page.tsx`): badge baru di bawah kartu shift (klik langsung buka halaman Tukar Shift) — ⏳ kuning "Menunggu Serah Terima" / ✅ hijau "Serah Terima Selesai (X → Y)" / abu-abu "Belum Ada Serah Terima" — real-time via `onSnapshot` query yang sama.
+- Menu baru "Tukar Shift / Jaga" ditambahkan ke `menuSecurity` (`IconQrCode` baru).
+- `firestore.rules`: `security_shift_handover` ditambahkan ke daftar collection terbuka.
+- **`firestore.indexes.json`**: composite index baru `tanggal_shift ASC, shift ASC, waktu_generate DESC` — WAJIB karena query-nya 2 filter kesetaraan (`tanggal_shift`, `shift`) + `orderBy` di field berbeda (`waktu_generate`), pola yang di seluruh app ini SELALU butuh composite index eksplisit (lihat index serupa untuk `security_patrols`, `ob_checklists`, dst di file yang sama). **Index sudah di-deploy** (`firebase deploy --only firestore:indexes`) — kalau lupa, query bakal ERROR total ("query requires an index"), bukan cuma lambat.
+
+### 38D. Verifikasi
+`npm run build`: 0 error, 50 route (1 baru: `/dashboard/security/tukar-shift`). `npx eslint src scripts`: 0 error project-wide, semua warning pre-existing (dicek satu-satu, sama persis daftarnya dengan §37C). Sempat ketemu 1 error `react-hooks/purity` (`Date.now()` dipanggil di render body `admin/survei-kepuasan/page.tsx`) — langsung difix pakai `new Date().getTime()` (konvensi project, lihat catatan di `src/app/page.tsx`). **SUDAH di-deploy** ke `hosting`+`firestore:rules`+`firestore:indexes` (3 command terpisah karena index butuh command sendiri). `dev`+`main` sinkron via fast-forward, push berhasil (`f46f906`).
+
+**Belum ditest end-to-end** (constraint lingkungan sama seperti sesi-sesi sebelumnya) — terutama: alur scan QR Tukar Shift perlu 2 device/akun Security beneran buat ketes (1 generate, 1 scan), toggle aktif/nonaktif Survei di admin, dan tampilan kartu Survei yang melebar penuh di Menu Cepat pas kampanye aktif. User perlu coba manual & lapor kalau ada yang aneh — terutama pastikan composite index Firestore yang baru sudah selesai "Enabled" (bukan masih "Building") sebelum ada yang coba fitur Tukar Shift, kalau masih building query bisa gagal sesaat.
