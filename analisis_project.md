@@ -1,6 +1,6 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§43: carousel multi-pengumuman di halaman utama (ganti ticker teks statis lama) + halaman Kotak Masuk Notifikasi in-app baru (`/notifikasi`, tab Semua/Sistem/Siaran) + badge lonceng di 5 header dashboard + 6 script cron reminder sekarang ikut menulis ke kotak masuk, bukan cuma push FCM. **BELUM DI-DEPLOY** (production deploy diblokir permission session ini, butuh eksekusi manual user — index Firestore baru WAJIB dideploy dulu sebelum dipakai) dan **belum ditest visual sama sekali**. Sesi sebelumnya §42 SUDAH di-deploy & `dev`+`main` sinkron (`e7ebfb5`) — masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 19 September 2026 (§43: carousel multi-pengumuman di halaman utama (ganti ticker teks statis lama) + halaman Kotak Masuk Notifikasi in-app baru (`/notifikasi`, tab Semua/Sistem/Siaran) + badge lonceng di 5 header dashboard + 6 script cron reminder sekarang ikut menulis ke kotak masuk, bukan cuma push FCM. **SUDAH DI-DEPLOY** (rules+indexes+hosting, atas konfirmasi eksplisit user) & `dev`+`main` sinkron (`d4c0430`). Migrasi pengumuman lama (§43F) masih perlu aksi manual user, dan **belum ditest visual sama sekali**. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
@@ -10,9 +10,9 @@ Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API 
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: deploy §43 + 1 aksi WAJIB user lama + 2 test device asli
+### 🔴🔴 PALING URGENT: 1 aksi WAJIB user (§43) + 1 aksi WAJIB user lama (EmailJS) + 3 test device asli
 
-0. **BARU, PALING URGENT: deploy §43 (belum jalan sama sekali di production)** — `firebase deploy --only firestore:rules,firestore:indexes,hosting` (index Firestore baru WAJIB, kalau tidak carousel pengumuman & kotak masuk notifikasi bakal error saat dipakai). Deploy ini diblokir permission classifier auto-mode di sesi yang mengerjakannya, jadi user/sesi lain yang perlu jalankan manual. Setelah deploy: (a) buka `admin/broadcast`, buat ulang pengumuman lama yang sempat hilang (lihat §43F) kalau masih relevan; (b) cek carousel muncul di halaman utama & badge lonceng muncul di 5 dashboard (OB/Security/Driver/QHSE/Admin GA).
+0. **BARU: buat ulang pengumuman lama di `admin/broadcast`** (§43F) — §43 SUDAH DI-DEPLOY (rules+indexes+hosting, `d4c0430`), tapi pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik). Sekalian jadi kesempatan test end-to-end fitur §43: cek carousel muncul di halaman utama & badge lonceng muncul di 5 dashboard (OB/Security/Driver/QHSE/Admin GA).
 1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
 2. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
 3. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
@@ -21,7 +21,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 User kasih referensi visual dari app lain (kartu pengumuman + carousel + halaman "Notifikasi" bertab), minta: pengumuman bisa lebih dari 1 & tayang bergiliran di halaman utama (admin kontrol tayang/stop per pengumuman), plus halaman riwayat notifikasi in-app setelah login (pelengkap push/badge yang sudah ada). Dibangun: collection baru `pengumuman_gedung` (ganti skema singleton lama) & `notifikasi_personal`, rombak total `admin/broadcast`, carousel di halaman utama, halaman `/notifikasi` + badge lonceng di 5 dashboard, dan 6 script cron reminder ditambah nulis ke kotak masuk (sebelumnya cuma push FCM). Detail: **§43** (§43A-§43G).
 
-**Status: KODE SELESAI & lolos build/lint, TAPI BELUM DI-DEPLOY SAMA SEKALI** (lihat poin 0 di atas) dan belum ditest visual. Migrasi pengumuman lama juga belum dilakukan (§43F, butuh aksi manual user).
+**Status: SUDAH DI-DEPLOY** (rules+indexes+hosting, atas konfirmasi eksplisit user). `dev`+`main` sinkron di commit `d4c0430`. Migrasi pengumuman lama belum dilakukan (§43F, butuh aksi manual user, lihat poin 0 di atas) dan belum ditest visual sama sekali.
 
 ### Sesi sebelumnya (§42) — Pesan Kepatuhan Patroli Spesifik + Email Admin GA + Fix Mushallah, lanjutan langsung §41
 
@@ -2058,6 +2058,6 @@ Pengumuman lama di `settings/pengumuman` ("Mohon maaf atas ketidaknyamanan... re
 ### 43G. Verifikasi
 `npm run build`: 0 error, 51 route (nambah 1: `/notifikasi`). `npx eslint` sempat ketemu 1 error BARU (`react-hooks/set-state-in-effect` di effect clamp `slideAktif`) — difix dengan menghitung index yang aman langsung saat render (lihat §43C), bukan lewat effect. Setelah fix: 0 error. Semua 6 script `.mjs` yang diubah lolos `node --check` (syntax-only, gak dieksekusi — gak ada service account lokal buat test langsung ke Firestore beneran).
 
-**BELUM DI-DEPLOY** — deploy production (`firebase deploy`) diblokir permission classifier auto-mode session ini (kategori "Production Deploy"), butuh konfirmasi/eksekusi manual user. **Index Firestore baru (§43A) WAJIB dideploy dulu** sebelum halaman ini dipakai, kalau tidak carousel & kotak masuk akan gagal query di production.
+**SUDAH DI-DEPLOY** — `firestore:rules`, `firestore:indexes`, dan `hosting` ketiganya berhasil dideploy (index Firestore baru §43A ikut ter-deploy, jadi query carousel & kotak masuk sudah didukung di production) atas konfirmasi eksplisit user setelah sempat diblokir permission classifier auto-mode. `dev`+`main` sinkron di `d4c0430` (termasuk commit artifact build service worker/hosting cache).
 
-**Belum ditest visual sama sekali** (carousel, kotak masuk, badge lonceng, form admin broadcast baru) — semuanya karena Claude gak punya tool browser di environment ini, DAN belum di-deploy jadi belum bisa dicoba di device asli.
+**Belum ditest visual sama sekali** (carousel, kotak masuk, badge lonceng, form admin broadcast baru) — Claude gak punya tool browser di environment ini. Migrasi pengumuman lama (§43F) juga masih perlu aksi manual user.
