@@ -188,9 +188,6 @@ export default function PatroliSecurityPage() {
   const [photoTarget, setPhotoTarget] = useState<{ id: string, nama: string } | null>(null);
   const [currentTime, setCurrentTime] = useState<string>("");
   const [shiftSesiInfo, setShiftSesiInfo] = useState<ShiftSesiInfo | null>(null);
-  // Default true (optimistic) sambil roster masih dimuat -- dikoreksi begitu data roster sampai,
-  // biar staf yang BENERAN bertugas gak sempat lihat layar "terkunci" nunggu Firestore.
-  const [sedangBertugas, setSedangBertugas] = useState<boolean>(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -224,15 +221,36 @@ export default function PatroliSecurityPage() {
   // -- dicek dari roster Danru (security_monthly_schedules), bukan cuma dipercaya dari sisi client.
   // Menu Patroli sendiri sudah disembunyikan buat anak Magang (lihat dashboard/security/page.tsx),
   // jadi cek roster di sini gak akan salah kunci staf yang memang bukan bagian rotasi shift.
+  const [sedangBertugasRoster, setSedangBertugasRoster] = useState<boolean>(true);
   useEffect(() => {
     if (!picName || !shiftSesiInfo) return;
     const bulanKey = shiftSesiInfo.tanggal_shift.substring(0, 7);
     const unsub = onSnapshot(doc(db, "security_monthly_schedules", bulanKey), (snap) => {
       const shiftTerjadwal = snap.exists() ? snap.data().data_hari?.[shiftSesiInfo.tanggal_shift]?.[picName] : undefined;
-      setSedangBertugas(shiftTerjadwal === shiftSesiInfo.shift);
+      setSedangBertugasRoster(shiftTerjadwal === shiftSesiInfo.shift);
     });
     return () => unsub();
   }, [picName, shiftSesiInfo]);
+
+  // Staf yang KLIK "Lanjut Jaga (Extend)" di EskalasiShiftModal.tsx buat gantikan rekan yang
+  // belum serah terima TIDAK terdaftar di roster utk shift ini -- tanpa cek ini mereka akan
+  // KETUTUP form Lapor padahal beneran lagi jaga (bug lintas-fitur: kunci §44 gak tahu soal
+  // extend §45). security_shift_extend id-nya deterministik: tanggal_shift+shift TANPA spasi.
+  const [sedangExtend, setSedangExtend] = useState<boolean>(false);
+  useEffect(() => {
+    if (!picName || !shiftSesiInfo) return;
+    const extendId = `${shiftSesiInfo.tanggal_shift}_${shiftSesiInfo.shift.replace(" ", "")}`;
+    const unsub = onSnapshot(doc(db, "security_shift_extend", extendId), (snap) => {
+      const data = snap.data();
+      setSedangExtend(!!data && (data.status === "aktif" || data.status === "permanen") && data.personil_extend === picName);
+    });
+    return () => unsub();
+  }, [picName, shiftSesiInfo]);
+
+  // Optimistic true (default sedangBertugasRoster) sambil roster masih dimuat, dikombinasi
+  // dengan status extend -- dihitung langsung saat render (bukan effect+setState terpisah)
+  // biar gak kena lint react-hooks/set-state-in-effect, sama pola dengan slideAman di page.tsx.
+  const sedangBertugas = sedangBertugasRoster || sedangExtend;
 
   const sesiSudahLapor = useMemo(() => {
     if (!shiftSesiInfo) return [];

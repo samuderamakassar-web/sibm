@@ -123,20 +123,26 @@ async function kirimPush(namaList, judul, pesan) {
 }
 
 async function jalankan() {
-  // 1. Cek status serah terima RESMI (QR scan) shift yang baru berakhir.
+  // 1. Cek status serah terima RESMI (QR scan). PENTING: security_shift_handover disimpan
+  // dengan tanggal_shift/shift hasil hitungShiftSesi() SAAT DIBUAT/DISCAN -- karena tombol
+  // buatnya sekarang cuma bisa dipencet DALAM jendela tukar jaga (lihat dalamJendelaTukarJaga()
+  // di lib/shift.ts), waktu itu hitungShiftSesi() SUDAH FLIP ke shift yang BARU MULAI
+  // (tanggalAktif/shiftAktif), BUKAN shift yang baru berakhir (tanggalKeluar/shiftKeluar).
+  // Makanya query & doc ID extend di bawah pakai tanggalAktif/shiftAktif, sama persis dengan
+  // yang dipakai TukarShiftSecurityPage.tsx bikin & nutup dokumennya.
   const handoverSnap = await db.collection("security_shift_handover")
-    .where("tanggal_shift", "==", tanggalKeluar)
-    .where("shift", "==", shiftKeluar)
+    .where("tanggal_shift", "==", tanggalAktif)
+    .where("shift", "==", shiftAktif)
     .orderBy("waktu_generate", "desc")
     .limit(1)
     .get();
   const handover = handoverSnap.empty ? null : handoverSnap.docs[0].data();
 
-  const extendRef = db.collection("security_shift_extend").doc(`${tanggalKeluar}_${shiftKeluar.replace(" ", "")}`);
+  const extendRef = db.collection("security_shift_extend").doc(`${tanggalAktif}_${shiftAktif.replace(" ", "")}`);
   const extendSnap = await extendRef.get();
 
   if (handover?.status === "selesai") {
-    console.log(`Serah terima ${shiftKeluar} (${tanggalKeluar}) sudah selesai (${handover.petugas_keluar} -> ${handover.petugas_masuk}). Tidak ada eskalasi.`);
+    console.log(`Serah terima ${shiftAktif} (${tanggalAktif}) sudah selesai (${handover.petugas_keluar} -> ${handover.petugas_masuk}). Tidak ada eskalasi.`);
     if (extendSnap.exists && extendSnap.data().status !== "selesai") {
       await extendRef.update({ status: "selesai", selesai_pada: FieldValue.serverTimestamp(), catatan_selesai: "Serah terima QR resmi selesai" });
       console.log("  Entri extend yang masih aktif ikut ditutup (safety net -- harusnya sudah ditutup client saat scan).");
@@ -155,11 +161,13 @@ async function jalankan() {
   const daftarNamaTerkait = Array.from(new Set([...petugasKeluar, ...petugasMasuk]));
 
   if (!extendSnap.exists) {
-    // Eskalasi PERTAMA KALI utk shift ini.
+    // Eskalasi PERTAMA KALI utk shift ini. tanggal_shift/shift yang DISIMPAN pakai identitas
+    // shift AKTIF (tanggalAktif/shiftAktif) -- sama seperti security_shift_handover -- supaya
+    // overlay roster (nandai sel petugas_masuk yang belum serah terima) nunjuk ke sel yang benar.
     console.log(`Eskalasi PERTAMA: serah terima ${shiftKeluar} (${tanggalKeluar}) -> ${shiftAktif} (${tanggalAktif}) sudah ${menitSejakBatas} menit belum selesai.`);
     await extendRef.set({
-      tanggal_shift: tanggalKeluar,
-      shift: shiftKeluar,
+      tanggal_shift: tanggalAktif,
+      shift: shiftAktif,
       petugas_keluar: petugasKeluar,
       petugas_masuk: petugasMasuk,
       status: "menunggu_keputusan",
