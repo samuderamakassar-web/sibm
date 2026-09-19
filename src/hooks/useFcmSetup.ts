@@ -25,7 +25,18 @@ export function useFcmSetup(picName: string, aktif: boolean, dept?: string) {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") return;
 
-        const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+        // Scope KHUSUS (bukan default "/") -- app ini JUGA punya service worker PWA terpisah
+        // (public/sw.js, dari @ducanh2912/next-pwa, auto-register di scope "/" dan langsung
+        // ambil alih semua klien lewat skipWaiting()+clientsClaim()). Kalau firebase-messaging-sw.js
+        // didaftarkan tanpa scope eksplisit, dia ikut ke scope "/" yang sama dan gampang "ketiban"
+        // /kalah rebutan kendali sama SW PWA yang lebih agresif -- akibatnya event push dari FCM bisa
+        // gak sampai ke SW yang benar pas app-nya lagi ditutup/background. Pola scope terpisah ini
+        // resmi direkomendasikan Firebase buat kasus "app sudah punya service worker lain" (ketemu
+        // pas audit notifikasi 19 Sep 2026 -- BELUM bisa dikonfirmasi 100% ini penyebab pasti tanpa
+        // test langsung di device asli, tapi fix ini aman & additive, gak nyentuh SW PWA sama sekali).
+        const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+          scope: "/firebase-cloud-messaging-push-scope",
+        });
         const messaging = getMessaging(app);
         const token = await getToken(messaging, {
           vapidKey: VAPID_KEY,

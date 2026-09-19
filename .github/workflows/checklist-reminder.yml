@@ -1,11 +1,14 @@
 name: Reminder Checklist OB & CS
 
+# 🔴 CRON DIMATIKAN (19 Sep 2026, audit notifikasi) -- script ini nulis ke collection
+# notifikasi_checklist_ob, dibaca oleh NotifikasiChecklistListener.tsx yang TERNYATA GAK
+# PERNAH dipasang di src/app/layout.tsx sama sekali (beda dari NotifikasiPatroliListener &
+# NotifikasiKendaraanListener yang memang dipasang di sana) -- jadi reminder ini sudah
+# berbulan-bulan jalan tapi TIDAK PERNAH kelihatan oleh siapa pun. Fungsinya juga sudah
+# SEPENUHNYA digantikan scripts/fcm-reminder.mjs (push FCM asli, per-sesi, tiap 30 menit,
+# jauh lebih reliable) sejak §30. workflow_dispatch dipertahankan (bukan dihapus filenya)
+# cuma buat jaga-jaga/histori, TIDAK dijadwalkan otomatis lagi.
 on:
-  schedule:
-    - cron: "12 1 * * *" # ~09:00 WITA
-    - cron: "12 4 * * *" # ~12:00 WITA
-    - cron: "12 7 * * *" # ~15:00 WITA
-    - cron: "12 10 * * *" # ~18:00 WITA
   workflow_dispatch:
 
 jobs:
@@ -20,8 +23,11 @@ jobs:
         with:
           node-version: "20"
 
+      # Versi di-pin persis (bukan "firebase-admin" polos/latest) -- ketemu pas audit notifikasi 19 Sep 2026,
+      # beberapa run gagal serentak dalam 1 hari yang dicurigai rilis firebase-admin terbaru yang
+      # sempat bermasalah, padahal skrip sendiri tidak ada bug. Update versi ini manual kalau perlu.
       - name: Install dependencies
-        run: npm install firebase-admin
+        run: npm install firebase-admin@14.4.0
 
       - name: Jalankan reminder checklist OB
         env:

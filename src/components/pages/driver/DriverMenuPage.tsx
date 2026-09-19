@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, limit, where } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard, logoutWithConfirm } from "../../../hooks/useAuthGuard";
+import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import AbsensiCard from "../../AbsensiCard";
@@ -55,6 +56,11 @@ export default function DriverMenuPage() {
     deniedMessage: "Akses Ditolak! Halaman ini khusus Tim Driver.",
   });
   const activeDriver = session?.nama || "Driver";
+  // Dulu FCM cuma didaftarkan di DriverArmadaPage.tsx (menu "Bawa Armada") -- driver yang gak
+  // pernah buka menu itu jadi GAK PERNAH punya token FCM sama sekali, otomatis gak pernah
+  // kebagian push notif apa pun (ketemu pas audit notifikasi 19 Sep 2026). Dipindah/ditambah di
+  // sini (halaman utama Driver, pasti dibuka tiap login) biar semua driver kebagian token.
+  useFcmSetup(session?.nama || "", !!session?.nama, "Driver");
 
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
   const [isLoadingPersonel, setIsLoadingPersonel] = useState<boolean>(false);

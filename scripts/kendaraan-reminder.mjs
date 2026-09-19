@@ -24,7 +24,11 @@ const db = getFirestore();
 // Bisa di-override lewat env AMBANG_JAM_KELUAR kalau suatu saat mau diubah tanpa ubah kode.
 const AMBANG_JAM_KELUAR = Number(process.env.AMBANG_JAM_KELUAR || 6);
 
-const isStandbyLabel = (s) => !!s && (s.includes("Standby") || s.includes("Tiba"));
+// "Pulang (Selesai Tugas Hari Ini)" itu status TERMINAL juga (tugas hari itu selesai) -- BUKAN
+// cuma "Standby"/"Tiba". Sebelumnya kelewatan (ketemu saat audit notifikasi bareng bug yang sama
+// di driver-status-staleness.mjs), jadi kendaraan yang sudah "Pulang" salah ikut dianggap "lupa
+// update status Tiba" padahal memang gak ada status lanjutan yang diharapkan.
+const isStandbyLabel = (s) => !!s && (s.includes("Standby") || s.includes("Tiba") || s.includes("Pulang"));
 
 async function main() {
   console.log(`🚗 Cek kendaraan yang lupa update status (ambang: ${AMBANG_JAM_KELUAR} jam)...`);

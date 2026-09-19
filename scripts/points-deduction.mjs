@@ -218,17 +218,25 @@ async function cekNotifikasiDadakan() {
 
 async function jalankan() {
   // Anti-double-proses: 1x per tanggal kemarin (kalau cron re-run/telat, gak dobel potong).
+  // PENTING: guard ini ditulis SETELAH ketiga cek sukses, BUKAN sebelum -- kalau ditulis duluan
+  // lalu salah satu cek crash di tengah jalan, guard-nya kepasang duluan dan bikin retry manual
+  // (workflow_dispatch) ditolak "sudah pernah diproses" padahal belum beneran selesai. Konsekuensi:
+  // kalau retry dilakukan SETELAH sebagian deduksi sempat kepotong sebelum crash, orang yang sudah
+  // kepotong di percobaan pertama bisa kepotong dobel di percobaan ulang -- resiko kecil & jarang
+  // (cuma kejadian kalau crash di tengah + ada yang manual retry), diterima demi retry yang lebih
+  // reliable buat kasus umum (crash di awal sebelum sempat potong apa pun).
   const logRef = db.collection("reminder_points_log").doc(kemarin);
   const logSnap = await logRef.get();
   if (logSnap.exists) {
     console.log(`Evaluasi poin untuk tanggal ${kemarin} sudah pernah diproses, skip.`);
     return;
   }
-  await logRef.set({ diproses_pada: FieldValue.serverTimestamp() });
 
   await cekOB();
   await cekSecurityPatroli();
   await cekNotifikasiDadakan();
+
+  await logRef.set({ diproses_pada: FieldValue.serverTimestamp() });
 }
 
 jalankan()

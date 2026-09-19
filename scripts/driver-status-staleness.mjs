@@ -30,7 +30,12 @@ const messaging = getMessaging();
 // atas biar gampang diubah kalau user minta lebih ketat/longgar nanti.
 const AMBANG_STALE_MENIT = 120;
 
-const isStandbyLabel = (s) => !!s && (s.includes("Standby") || s.includes("Tiba"));
+// "Pulang (Selesai Tugas Hari Ini)" itu status TERMINAL juga (driver sudah pulang, tugas hari
+// itu selesai) -- BUKAN cuma "Standby"/"Tiba". Sebelumnya kelewatan, jadi status ini salah
+// kena tandai "belum update" & terus dikirimin notif berjam-jam padahal tugasnya memang sudah
+// tuntas (ketemu waktu audit notifikasi -- ada kendaraan yang statusnya "Pulang" udah >20 jam
+// tapi masih dianggap "basi").
+const isStandbyLabel = (s) => !!s && (s.includes("Standby") || s.includes("Tiba") || s.includes("Pulang"));
 
 const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
 

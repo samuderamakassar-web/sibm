@@ -1,3 +1,10 @@
+// 🔴 SUDAH TIDAK DIJADWALKAN (19 Sep 2026, audit notifikasi) -- lihat catatan lengkap di
+// .github/workflows/checklist-reminder.yml. Ringkas: nulis ke notifikasi_checklist_ob yang
+// TERNYATA gak ada yang baca (NotifikasiChecklistListener.tsx gak pernah dipasang di
+// src/app/layout.tsx), dan fungsinya sudah digantikan scripts/fcm-reminder.mjs (push FCM asli).
+// File TETAP dibiarkan (bukan dihapus) sesuai konvensi project buat kode yang sudah dead --
+// bisa dipanggil manual via workflow_dispatch kalau suatu saat perlu dicek lagi.
+
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
