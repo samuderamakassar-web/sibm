@@ -46,6 +46,62 @@
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
+// EmailJS -- duplikat pola yang sama dengan scripts/overtime-checkin-reminder.mjs (lihat catatan
+// lengkap di sana soal kenapa ID/key ini aman di-hardcode langsung, bukan GitHub Secret).
+const EMAILJS_SERVICE_ID = "service_0e8e85u";
+const EMAILJS_TEMPLATE_ID = "template_oriy1nw";
+const EMAILJS_PUBLIC_KEY = "qnss7aeHCQGexHTDf";
+
+async function kirimEmailViaRestApi(toEmail, toName, subject, message) {
+  const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      service_id: EMAILJS_SERVICE_ID,
+      template_id: EMAILJS_TEMPLATE_ID,
+      user_id: EMAILJS_PUBLIC_KEY,
+      template_params: { to_email: toEmail, to_name: toName, subject, message },
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`EmailJS gagal (${res.status}): ${text}`);
+  }
+}
+
+function htmlEmailPatroliTidakPatuh(daftar) {
+  const baris = daftar
+    .map((d) => `<tr><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#18181b;font-weight:700;">${d.nama}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#3f3f46;">${d.shiftLabel}</td></tr>`)
+    .join("");
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      ${daftar.length} petugas Security tidak memenuhi minimum ${MINIMUM_SESI_PATROLI} dari 3 sesi patroli pada shift kemarin (${kemarin}). Poin bulanan mereka sudah otomatis dikurangi.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr><td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">Nama</td><td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">Shift</td></tr>
+      ${baris}
+    </table>
+  `;
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; background:#f4f4f5; padding:24px 12px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e5e4;">
+      <tr><td style="background:linear-gradient(150deg,#9f1d1d 0%,#dc2626 55%,#c62828 100%);padding:22px 26px;">
+        <div style="color:#ffffff;font-size:12px;font-weight:700;letter-spacing:1px;opacity:0.85;">SIBM &middot; PT SAMUDERA</div>
+        <div style="color:#ffffff;font-size:19px;font-weight:800;margin-top:4px;">&#9888; Kepatuhan Patroli Security</div>
+      </td></tr>
+      <tr><td style="padding:26px;">${body}</td></tr>
+      <tr><td style="padding:16px 26px;background:#f7f6f5;border-top:1px solid #e7e5e4;">
+        <div style="font-size:11px;color:#71717a;">Email otomatis dari Sistem Informasi Bangunan &amp; Manajemen (SIBM). Mohon tidak membalas email ini.</div>
+      </td></tr>
+    </table>
+  </div>`;
+}
+
+async function ambilEmailAdminGA() {
+  const snap = await db.collection("users_master").where("departemen", "==", "Admin GA").get();
+  return snap.docs.map((d) => d.data()).filter((u) => u.email).map((u) => ({ nama: u.nama, email: u.email }));
+}
+
 const serviceAccount = JSON.parse(
   Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf-8")
 );
@@ -170,6 +226,7 @@ async function hitungSesiTerpenuhi(namaPetugas, tanggalShift, shiftLabel) {
 // script ini jalan jam 09:00 WITA).
 // ==========================================
 async function cekSecurityPatroli() {
+  const tidakPatuh = [];
   for (const shiftLabel of ["Shift 1", "Shift 2"]) {
     const daftarNama = await ambilPicShift(kemarin, shiftLabel);
     for (const nama of daftarNama) {
@@ -181,9 +238,11 @@ async function cekSecurityPatroli() {
           `Patroli ${shiftLabel} (${kemarin}) tidak memenuhi minimum ${MINIMUM_SESI_PATROLI} sesi`,
           POTONGAN.security_shift_tidak_patuh
         );
+        tidakPatuh.push({ nama, shiftLabel });
       }
     }
   }
+  return tidakPatuh;
 }
 
 // ==========================================
@@ -233,8 +292,27 @@ async function jalankan() {
   }
 
   await cekOB();
-  await cekSecurityPatroli();
+  const securityTidakPatuh = await cekSecurityPatroli();
   await cekNotifikasiDadakan();
+
+  // Email ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli (permintaan
+  // user) -- 1 email rekap per hari (bisa isi >1 shift/orang), bukan 1 email per orang.
+  if (securityTidakPatuh.length > 0) {
+    const adminGA = await ambilEmailAdminGA();
+    if (adminGA.length === 0) {
+      console.log("Ada Security tidak patuh tapi tidak ada email Admin GA terdaftar di users_master, skip email.");
+    } else {
+      const html = htmlEmailPatroliTidakPatuh(securityTidakPatuh);
+      for (const admin of adminGA) {
+        try {
+          await kirimEmailViaRestApi(admin.email, admin.nama, "Kepatuhan Patroli Security Tidak Terpenuhi", html);
+          console.log(`Email kepatuhan patroli terkirim ke ${admin.nama} (${admin.email})`);
+        } catch (err) {
+          console.error(`Gagal kirim email kepatuhan patroli ke ${admin.nama}:`, err.message);
+        }
+      }
+    }
+  }
 
   await logRef.set({ diproses_pada: FieldValue.serverTimestamp() });
 }

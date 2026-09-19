@@ -225,7 +225,28 @@ export default function PatroliSecurityPage() {
   }, [riwayatSaya, shiftSesiInfo]);
   const sesiUnikSudahLapor = useMemo(() => Array.from(new Set(sesiSudahLapor)), [sesiSudahLapor]);
   const kepatuhanSesiTerpenuhi = sesiMinimumTerpenuhi(sesiSudahLapor);
-  const daftarBatasSesi = shiftSesiInfo ? BATAS_SESI[shiftSesiInfo.shift] : [];
+  const daftarBatasSesi = useMemo(() => (shiftSesiInfo ? BATAS_SESI[shiftSesiInfo.shift] : []), [shiftSesiInfo]);
+
+  // Pesan kepatuhan sesi yang SPESIFIK sesuai sesi mana yang kelewat (bukan cuma pesan generik
+  // "selesaikan minimal 2 sesi") -- permintaan user biar lebih jelas apa yang harus dilakukan.
+  // "Terlewat" = sesi SEBELUM sesi yang sedang berjalan sekarang & belum ada laporannya sama
+  // sekali (sesi yang sedang berjalan/akan datang masih bisa diisi, jadi bukan "terlewat").
+  const pesanKepatuhanSesi = useMemo(() => {
+    if (!shiftSesiInfo || kepatuhanSesiTerpenuhi || daftarBatasSesi.length === 0) return null;
+    const idxSekarang = daftarBatasSesi.findIndex((b) => b.sesi === shiftSesiInfo.sesi);
+    const sesiTerlewat = daftarBatasSesi.slice(0, idxSekarang).filter((b) => !sesiUnikSudahLapor.includes(b.sesi)).map((b) => b.sesi);
+    const sesiTersisa = daftarBatasSesi.slice(idxSekarang).map((b) => b.sesi);
+
+    // 2+ sesi kelewat sebelum sesi sekarang -> matematis udah gak mungkin capai minimum 2 sesi
+    // lagi (paling banter cuma nambah 1 dari sesi yang tersisa).
+    if (sesiTerlewat.length >= MINIMUM_SESI_PER_SHIFT) {
+      return `Anda melewatkan ${sesiTerlewat.join(" dan ")} -- minimal ${MINIMUM_SESI_PER_SHIFT} sesi shift ini sudah tidak mungkin tercapai. Akan tercatat & dilaporkan ke atasan Anda, poin bulan ini akan berkurang.`;
+    }
+    if (sesiTerlewat.length === 1) {
+      return `Anda melewatkan ${sesiTerlewat[0]}, pastikan mengisi ${sesiTersisa.join(" dan ")} agar poin tidak berkurang.`;
+    }
+    return `Selesaikan minimal ${MINIMUM_SESI_PER_SHIFT} sesi patroli sebelum shift Anda berakhir.`;
+  }, [shiftSesiInfo, kepatuhanSesiTerpenuhi, daftarBatasSesi, sesiUnikSudahLapor]);
 
   // ==========================================
   // FUNGSI KAMERA
@@ -512,9 +533,9 @@ export default function PatroliSecurityPage() {
                     );
                   })}
                 </div>
-                {!kepatuhanSesiTerpenuhi && (
-                  <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "var(--warn)" }}>
-                    Selesaikan minimal {MINIMUM_SESI_PER_SHIFT} sesi patroli sebelum shift Anda berakhir.
+                {pesanKepatuhanSesi && (
+                  <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "var(--warn)", fontWeight: 600 }}>
+                    {pesanKepatuhanSesi}
                   </p>
                 )}
               </div>

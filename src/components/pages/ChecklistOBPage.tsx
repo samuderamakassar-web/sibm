@@ -237,7 +237,7 @@ const SEGMENT_MUSHALLAH_L4: SegmentConfig = {
   nama: "Mushallah Lantai 4",
   pertanyaan: [
     { id: "mus-1", teks: "Apakah lantai Mushallah sudah disapu?" },
-    { id: "mus-2", teks: "Apakah lantai Mushallah sudah dipel?" },
+    { id: "mus-2", teks: "Apakah karpet Mushallah sudah divakum?" },
     { id: "mus-3", teks: "Apakah sajadah/karpet sudah dirapikan?" },
     { id: "mus-4", teks: "Apakah area wudhu sudah dibersihkan?" },
   ],
