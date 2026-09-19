@@ -1,24 +1,28 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§41: fitur baru **Pengingat Overtime dari Buku Tamu Digital** — karyawan yang check-in tapi belum check-out setelah 9 jam otomatis dapat email pengingat + Security yang jaga dapat push notification berulang (bagian "paling penting" per user) sampai karyawan itu check-out. **TEMUAN PENTING**: EmailJS akun ini defaultnya blokir akses API dari luar browser (dikonfirmasi lewat test langsung, HTTP 403) — bagian PUSH ke Security tetap jalan normal, tapi bagian EMAIL BELUM BISA KIRIM sampai user aktifkan 1 setting di dashboard EmailJS. Lihat §41B untuk instruksi persis. SUDAH DI-PUSH ke `dev`+`main` (`4136bc0`), gak perlu deploy hosting (murni backend). Sesi sebelumnya (§40): fix "kayak ke-logout" di portal utama — lihat §40.)
+Update terakhir: 19 September 2026 (§42: pesan kepatuhan patroli Security dibuat SPESIFIK per sesi yang terlewat (bukan generik lagi), email rekap ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli, dan item checklist Mushallah "dipel" diganti "divakum" (mushallah pakai karpet). SUDAH DI-DEPLOY & `dev`+`main` sinkron (`e7ebfb5`). **Email Admin GA di §42 kena blocker EmailJS YANG SAMA dengan §41** — masih perlu 1 aksi WAJIB user, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §41 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §42 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
 ### 🔴🔴 PALING URGENT: 1 aksi WAJIB user + 2 test device asli
 
-1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, fitur email pengingat overtime (§41) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya.
+1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email BARU (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
 2. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
 3. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§41) — Pengingat Overtime dari Buku Tamu Digital, lanjutan langsung §40
+### Sesi hari ini (§42) — Pesan Kepatuhan Patroli Spesifik + Email Admin GA + Fix Mushallah, lanjutan langsung §41
 
-Ide baru user: karyawan yang check-in di Buku Tamu Digital tapi belum check-out setelah 9 jam kerja otomatis (1) dapat email pengingat overtime, dan (2) **"paling penting"**: Security yang sedang jaga dapat push notification berulang tiap 30 menit sampai karyawan itu check-out, supaya bisa follow-up konfirmasi. Bagian push SUDAH JALAN NORMAL. Bagian email BUTUH 1 AKSI USER dulu (lihat peringatan paling atas) — dikonfirmasi lewat test kirim langsung, BUKAN asumsi. Detail: **§41** (§41A-§41C).
+User fokus ke halaman Patroli Security, minta pesan peringatan yang lebih spesifik sesuai sesi mana yang kelewat (bukan generik lagi), DAN email ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli. Sekalian fix item checklist Mushallah "dipel" jadi "divakum" (mushallah berkarpet). Detail: **§42** (§42A-§42D).
+
+**Status: SUDAH DI-DEPLOY.** `dev`+`main` sinkron di commit `e7ebfb5`. Bagian email (§42B) kena blocker EmailJS yang SAMA dengan §41 — lihat poin 1 di atas.
+
+Sesi sebelumnya (§41): fitur Pengingat Overtime dari Buku Tamu Digital — lihat §41.
 
 **Status: Kode SUDAH DI-PUSH** ke `dev`+`main` (`4136bc0`), gak perlu deploy hosting (murni backend script + 1 fungsi template yang belum dipakai UI).
 
@@ -1978,3 +1982,28 @@ Sebelum diklaim selesai, dicoba kirim 1 email TEST sungguhan lewat REST API Emai
 `npm run build`: 0 error (gak ada perubahan struktur halaman, `buildOvertimeCheckinEmailHtml()` belum dipakai halaman manapun, cuma referensi). `npx eslint`: 0 error/warning baru. Script dijalankan lokal 2x (sebelum & sesudah upgrade ke HTML email) pakai data production sungguhan — hasilnya BENAR ("Tidak ada karyawan yang overtime" karena memang gak ada yang qualify saat dites). **SUDAH di-push** ke `dev`+`main` (`4136bc0`) — TIDAK perlu deploy `hosting` terpisah (murni backend script, gak ada perubahan yang mempengaruhi situs live).
 
 **Belum bisa ditest end-to-end penuh** — butuh: (1) user aktifkan setting EmailJS di atas, (2) ada karyawan yang beneran check-in Buku Tamu Digital >9 jam tanpa check-out (bisa disimulasikan: check-in manual lewat Buku Tamu Digital, atau tunggu kejadian asli). Push ke Security sendiri sudah pasti berfungsi begitu ada kondisi yang qualify (logic-nya identik dengan script push lain yang sudah terverifikasi jalan di §39).
+
+---
+
+## 42. Pesan Kepatuhan Patroli Lebih Spesifik + Email Admin GA + Fix Item Mushallah (19 September 2026, lanjutan langsung §41)
+
+Konteks: user fokus ke halaman Patroli Security (screenshot: kartu "Shift 1 · Sesi 3 Berjalan, 0/2 Sesi Minimum") — minta pesan peringatan lebih spesifik ("melewatkan Sesi 1, isi Sesi 2 & 3" / "melewatkan Sesi 2, isi Sesi 3" / "melewatkan semua, sudah dilaporkan ke atasan"), DAN email ke Reza sebagai Admin GA setiap kali ada Security yang gak penuhi minimum 2 sesi. Sekalian: item checklist Mushallah "dipel" diganti karena lantainya berkarpet (gak bisa dipel).
+
+### 42A. Pesan Kepatuhan Patroli Dinamis
+`PatroliSecurityPage.tsx`: `pesanKepatuhanSesi` baru (`useMemo`) — hitung sesi mana yang SUDAH LEWAT WAKTUNYA (index sebelum sesi aktif sekarang) tapi belum ada laporan:
+- **0 sesi kelewat**: pesan generik lama ("Selesaikan minimal 2 sesi...").
+- **1 sesi kelewat**: `"Anda melewatkan {sesi}, pastikan mengisi {sesi-sesi tersisa} agar poin tidak berkurang."` — persis wording user.
+- **2+ sesi kelewat** (matematis MUSTAHIL capai minimum 2 dari 3 lagi, walau sesi terakhir diisi): `"...sudah tidak mungkin tercapai. Akan tercatat & dilaporkan ke atasan Anda, poin bulan ini akan berkurang."` — SENGAJA pakai "akan" bukan "telah" (beda dari wording asli user) karena email-nya BENERAN baru terkirim besok pagi lewat cron `points-deduction.mjs`, bukan seketika — jujur soal timing, bukan overclaim.
+
+### 42B. Email ke Admin GA saat Security Tidak Patuh
+`scripts/points-deduction.mjs`: `cekSecurityPatroli()` sekarang RETURN daftar yang tidak patuh (bukan cuma potong poin diam-diam). Di `jalankan()`, kalau daftar itu tidak kosong, kirim **1 email rekap harian** (bisa isi >1 orang/shift sekaligus, bukan 1 email per orang) ke SEMUA Admin GA (`users_master.where("departemen","==","Admin GA")`, email dari field yang sama dipakai login). HTML email pakai gaya sama dengan email lain (`emailShell` dst, diduplikasi manual — pola sama seperti §41).
+
+**Kena blocker EmailJS yang SAMA dengan §41B** (belum diaktifkan user) — sampai itu selesai, email ini juga belum bisa terkirim, tapi otomatis jalan begitu diaktifkan (gak perlu ubah kode lagi).
+
+### 42C. Fix Item Mushallah
+`ChecklistOBPage.tsx`, `SEGMENT_MUSHALLAH_L4`: `"mus-2"` diganti dari **"Apakah lantai Mushallah sudah dipel?"** jadi **"Apakah karpet Mushallah sudah divakum?"** — user konfirmasi mushallah pakai karpet penuh, gak bisa dipel. Dipilih "divakum" (bukan "disapu") supaya gak duplikat sama "mus-1" (sudah ada "Apakah lantai Mushallah sudah disapu?") dan karena vakum memang tindakan yang benar buat karpet.
+
+### 42D. Verifikasi
+`npm run build`: 0 error, 50 route (gak ada perubahan struktur halaman). `npx eslint`: sempat ketemu 1 warning BARU (`daftarBatasSesi` bikin dependency `useMemo` gak stabil) — langsung difix dengan bungkus `daftarBatasSesi` pakai `useMemo` sendiri. Balik ke 2 warning pre-existing aja. **SUDAH di-deploy** ke `hosting`. `dev`+`main` sinkron via fast-forward, push berhasil (`e7ebfb5`).
+
+**Belum ditest visual** (pesan dinamis di Patroli) — dan **belum ditest end-to-end** (email Admin GA, sama alasan dengan §41: butuh setting EmailJS diaktifkan dulu + guard harian `points-deduction.mjs` udah kepasang hari ini jadi efeknya baru kelihatan besok pagi).
