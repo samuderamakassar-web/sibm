@@ -1,33 +1,42 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§38: Menu Cepat portal utama dirapikan (kartu Bahaya SBO disamakan gayanya, kartu survei jadi kondisional lewat kampanye admin-controlled dengan durasi aktif), menu Monitor Absensi dicabut dari Control Panel Admin (fitur & datanya tetap ada), dan fitur baru **Tukar Shift/Jaga Security via scan QR** — petugas selesai jaga generate QR, petugas pengganti wajib scan buat konfirmasi serah terima, status real-time di dashboard utama. SUDAH DI-DEPLOY (`hosting`+`firestore:rules`+`firestore:indexes` — ada composite index baru yang WAJIB) & `dev`+`main` sinkron (`f46f906`).)
+Update terakhir: 19 September 2026 (§39: **audit menyeluruh sistem notifikasi** OB/CS/Security/Driver — user curiga ada tugas gak dijalankan & notif gak muncul. Ketemu & DIPERBAIKI: bug status "Pulang" salah dianggap basi (spam notif salah selama 20+ jam!), Driver TIDAK PERNAH dapat token FCM kalau gak buka menu "Bawa Armada", cron `checklist-reminder.mjs` jalan 4x/hari selama berbulan-bulan tapi TIDAK PERNAH terlihat siapa pun (listener-nya gak pernah dipasang), bug urutan guard di `points-deduction.mjs`, plus semua 9 workflow di-pin versi `firebase-admin` (dicurigai jadi penyebab kegagalan serentak beberapa cron). Juga fix preventif scope service worker FCM (belum terkonfirmasi 100% jadi akar masalah, butuh test device asli). SUDAH DI-DEPLOY & `dev`+`main` sinkron (`17e9701`). Detail lengkap: §39.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §38 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §39 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴 Yang PALING URGENT dicek sebelum ada yang pakai fitur Tukar Shift
+### 🔴🔴 PALING URGENT: minta user test push notification di device asli (§39B poin 6)
 
-**Composite index Firestore baru buat `security_shift_handover` (§38C) perlu waktu "Building" sebentar setelah deploy** sebelum berstatus "Enabled" di Firebase Console. Kalau ada Security yang coba fitur "Tukar Shift/Jaga" TERLALU CEPAT setelah deploy dan dapat error, kemungkinan besar itu penyebabnya (bukan bug kode) — tinggal tunggu beberapa menit lalu coba lagi. Cek statusnya di Firebase Console → Firestore → Indexes kalau ada laporan error.
+Ada fix PREVENTIF ke `useFcmSetup.ts` (scope service worker FCM dipisah dari SW PWA) yang KEMUNGKINAN BESAR memperbaiki push notification yang gagal sampai pas app tertutup total — TAPI ini BELUM terverifikasi 100% tanpa test di device asli. **Minta salah satu staf**: buka dashboard mereka di HP, pastikan izinkan notifikasi, TUTUP TOTAL app-nya (bukan cuma minimize), tunggu reminder terjadwal berikutnya (atau minta admin trigger manual lewat GitHub Actions tab → pilih salah satu workflow reminder → "Run workflow"), lalu cek apakah notifikasi OS beneran muncul. Kabari hasilnya di sesi berikutnya.
 
-### Sesi hari ini (§38) — Rapikan Menu Cepat, Hapus Monitor Absensi, Fitur Tukar Shift/Jaga QR, lanjutan langsung §37
+### Sesi hari ini (§39) — Audit Menyeluruh Sistem Notifikasi, lanjutan langsung §38
 
-User kirim screenshot Menu Cepat + 3 permintaan: (1) rapikan tampilan & masukkan kartu survei TAPI aktif/nonaktifnya dikontrol admin (bikin modal pilih durasi), (2) hapus menu Monitor Absensi dari Control Panel Admin, (3) fitur baru Tukar Shift/Jaga Security — serah terima wajib scan QR ke petugas pengganti, status berubah di dashboard utama begitu sudah discan. Detail lengkap: **§38** (§38A-§38D).
+User curiga ada tugas yang gak dijalankan tim & minta cek SEMUA notifikasi OB/CS/Security/Driver beneran nyampe. Audit ini pakai data LIVE (GitHub Actions run history via API publik repo + jalankan ulang semua script reminder secara lokal buat reproduksi), bukan cuma baca kode. Ketemu **3 bug kritis + 2 bug sedang + 1 perbaikan reliability + 1 fix preventif** — semua sudah diperbaiki & di-deploy. Detail lengkap: **§39** (§39A-§39C).
 
-**Status: SEMUA SUDAH DI-DEPLOY PENUH.** `npm run build` 0 error (50 route), `npx eslint src scripts` 0 error project-wide. `dev`+`main` sinkron di commit `f46f906`, tanpa conflict. Deploy 3x terpisah: `hosting`, `firestore:rules`, DAN `firestore:indexes` (index baru wajib buat query Tukar Shift, lihat peringatan di atas).
+**Temuan paling penting** (ringkas, detail lengkap di §39B):
+1. Status "Pulang (Selesai Tugas Hari Ini)" salah dianggap "belum update" — kendaraan yang sudah kelar tugas MALAH terus di-spam notif "basi" (ketemu kasus nyata: >20 jam!). **Fixed.**
+2. Driver TIDAK PERNAH dapat token FCM sama sekali kalau gak pernah buka menu "Bawa Armada". **Fixed** — sekarang didaftarkan di halaman utama Driver juga.
+3. `checklist-reminder.mjs` jalan 4x/hari SELAMA BERBULAN-BULAN tapi gak pernah kelihatan siapa pun (listener-nya gak pernah dipasang di layout) — untungnya sudah digantikan `fcm-reminder.mjs` yang beneran jalan. Cron lama **dimatikan**.
+4. Bug urutan guard di `points-deduction.mjs` (retry manual ketolak kalau ada crash mid-run) — **fixed**.
+5. Semua 9 workflow reminder di-pin ke `firebase-admin@14.4.0` (dicurigai versi "latest" tanpa pin jadi sumber kegagalan serentak beberapa cron di hari yang sama).
+6. Fix preventif scope service worker FCM (lihat peringatan paling atas — BUTUH VERIFIKASI USER).
+
+**Status: SEMUA SUDAH DI-DEPLOY.** `npm run build` 0 error (50 route, gak ada perubahan struktur halaman). `dev`+`main` sinkron di commit `17e9701`, tanpa conflict.
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **Fitur Tukar Shift/Jaga (§38C) belum ditest end-to-end** — butuh 2 device/akun Security beneran (1 generate QR, 1 scan) buat ketes penuh. User perlu coba manual.
-2. **Kampanye Survei (§38A) belum ditest** — coba nyalain dari `admin/survei-kepuasan` (tombol "Aktifkan Link Survei"), cek kartu muncul di Menu Cepat portal utama, coba isi form, lalu nonaktifkan & pastikan kartu hilang + form nolak submit.
-3. **Sistem Poin (§36) datanya masih sedikit/kosong** — cron jalan tiap 09:00 WITA, evaluasi H-1. Cek `admin/monitor-poin` beberapa hari lagi.
-4. **Sisa 6 kerentanan dependency** (§37A, `serialize-javascript`/`next-pwa`, `xlsx`) SENGAJA tidak difix — resiko breaking change ke PWA/cache atau gak ada fix. Biarkan kecuali user eksplisit minta lanjut.
-5. **2 fitur besar yang masih ditunda dari §28C**: sistem poin/gamifikasi (v1-nya sudah jalan tapi scope terbatas OB+Security, lihat §36A) — TIDAK ADA lagi fitur besar yang benar-benar belum disentuh selain penyempurnaan yang sudah berjalan.
-6. **User belum test visual manual** numpuk dari beberapa sesi (Absensi §34, fix logo §35A, sistem poin §36, survei §37B/§38A, tukar shift §38C) — semuanya karena Claude gak punya tool browser di environment ini.
+1. **Test push notification di device asli** (lihat peringatan paling atas) — prioritas #1 sesi depan.
+2. **Fitur Tukar Shift/Jaga (§38C) belum ditest end-to-end** — butuh 2 device/akun Security beneran (1 generate QR, 1 scan).
+3. **Kampanye Survei (§38A) belum ditest** — coba nyalain dari `admin/survei-kepuasan`, cek kartu muncul di Menu Cepat, isi form, nonaktifkan, pastikan kartu hilang + form nolak submit.
+4. **Limitasi yang belum diperbaiki** (§39B poin 6, dicatat bukan lupa): app gak punya indikator visual kalau notifikasi browser seorang staf ke-block/mati — kalau ada yang pernah klik "Blokir" pas prompt izin notifikasi, mereka gak akan pernah dapat push apa pun dan gak ada yang bakal tau dari dalam app. Bisa ditambahkan kalau user mau.
+5. **Sistem Poin (§36) datanya masih sedikit** — cron jalan tiap 09:00 WITA, evaluasi H-1. Cek `admin/monitor-poin` beberapa hari lagi.
+6. **Sisa 6 kerentanan dependency** (§37A) SENGAJA tidak difix — resiko breaking change. Biarkan kecuali user eksplisit minta lanjut.
+7. **User belum test visual manual** numpuk dari beberapa sesi (Absensi §34, fix logo §35A, sistem poin §36, survei §37B/§38A, tukar shift §38C) — semuanya karena Claude gak punya tool browser di environment ini.
 7. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
 8. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung).
 
@@ -1881,3 +1890,33 @@ Alur sesuai permintaan user: petugas yang **selesai jaga** generate QR, petugas 
 `npm run build`: 0 error, 50 route (1 baru: `/dashboard/security/tukar-shift`). `npx eslint src scripts`: 0 error project-wide, semua warning pre-existing (dicek satu-satu, sama persis daftarnya dengan §37C). Sempat ketemu 1 error `react-hooks/purity` (`Date.now()` dipanggil di render body `admin/survei-kepuasan/page.tsx`) — langsung difix pakai `new Date().getTime()` (konvensi project, lihat catatan di `src/app/page.tsx`). **SUDAH di-deploy** ke `hosting`+`firestore:rules`+`firestore:indexes` (3 command terpisah karena index butuh command sendiri). `dev`+`main` sinkron via fast-forward, push berhasil (`f46f906`).
 
 **Belum ditest end-to-end** (constraint lingkungan sama seperti sesi-sesi sebelumnya) — terutama: alur scan QR Tukar Shift perlu 2 device/akun Security beneran buat ketes (1 generate, 1 scan), toggle aktif/nonaktif Survei di admin, dan tampilan kartu Survei yang melebar penuh di Menu Cepat pas kampanye aktif. User perlu coba manual & lapor kalau ada yang aneh — terutama pastikan composite index Firestore yang baru sudah selesai "Enabled" (bukan masih "Building") sebelum ada yang coba fitur Tukar Shift, kalau masih building query bisa gagal sesaat.
+
+---
+
+## 39. Audit Menyeluruh Sistem Notifikasi OB/CS/Security/Driver (19 September 2026, lanjutan langsung §38)
+
+Konteks: user curiga ada tugas yang tidak dijalankan tim, dan minta dicek apakah SEMUA notifikasi (OB, CS, Security, Driver) benar-benar sampai ke aplikasi — "jangan sampai tidak muncul notifnya". Audit ini BEDA dari sesi-sesi sebelumnya karena benar-benar diverifikasi lewat data live (GitHub Actions API publik + eksekusi lokal semua script), bukan cuma baca kode.
+
+### 39A. Metodologi
+Repo ini PUBLIC di GitHub, jadi riwayat run GitHub Actions bisa diakses lewat REST API tanpa token (`api.github.com/repos/samuderamakassar-web/sibm/actions/workflows/{id}/runs`) — dari situ ketauan **beberapa workflow reminder gagal 100% berturut-turut** (`driver-status-staleness`, `patroli-push-reminder`) atau intermiten (`checklist-reminder`, `kendaraan-reminder`, `points-deduction`). Log detail run gak bisa diambil (API `/logs` butuh admin rights, 403), jadi semua script yang dicurigai DIJALANKAN ULANG LOKAL pakai service account yang sama (`FIREBASE_SERVICE_ACCOUNT_BASE64` di-generate dari file JSON lokal) buat reproduksi error asli — ini juga sekaligus jadi cara paling akurat cek data REAL (bukan asumsi).
+
+### 39B. Temuan & Perbaikan
+
+**1. Bug "Pulang" salah dianggap basi (driver-status-staleness.mjs & kendaraan-reminder.mjs)** — `isStandbyLabel()` di kedua script cuma cek substring "Standby"/"Tiba", KELEWATAN status terminal ketiga: **"Pulang (Selesai Tugas Hari Ini)"**. Ketemu KASUS NYATA saat testing lokal: ada kendaraan berstatus "Pulang" sejak **>20 jam lalu** tapi masih dianggap "belum update", terus dikirimin push tiap 30 menit tanpa henti (driver-status-staleness gak punya anti-spam guard, sengaja by design). Ini persis jenis masalah yang bikin notifikasi "boy who cried wolf" — staf lama-lama abai karena kebanjiran notif salah. **Sudah diperbaiki** di kedua script.
+
+**2. BUG KRITIS: Driver gak pernah dapat token FCM kalau gak pernah buka "Bawa Armada"** — `useFcmSetup()` cuma dipanggil di `DriverArmadaPage.tsx`, BUKAN di `DriverMenuPage.tsx` (halaman utama/menu Driver yang pasti dibuka tiap login). Driver yang cuma pakai menu lain (Inspeksi, Servis, Absensi, dst) tanpa pernah masuk "Bawa Armada" **TIDAK PERNAH terdaftar sama sekali** buat notifikasi push apa pun — termasuk staleness reminder dari poin 1. **Sudah ditambahkan** `useFcmSetup()` di `DriverMenuPage.tsx` juga.
+
+**3. BUG KRITIS: `checklist-reminder.mjs` jalan 4x/hari selama berbulan-bulan tapi TIDAK PERNAH terlihat siapa pun** — script ini nulis ke collection `notifikasi_checklist_ob`, dibaca `NotifikasiChecklistListener.tsx` — TAPI komponen itu **TERNYATA TIDAK PERNAH dipasang di `src/app/layout.tsx`** (beda dari `NotifikasiPatroliListener` & `NotifikasiKendaraanListener` yang memang ada di sana). Komentar di `NotifikasiKendaraanListener.tsx` bahkan salah ASUMSI kalau ChecklistListener "sudah ada di sana" — ternyata gak pernah diverifikasi. Untungnya fungsinya SUDAH sepenuhnya digantikan `scripts/fcm-reminder.mjs` (push FCM asli per-sesi, jalan tiap 30 menit, terbukti 100% sukses) sejak §30 — jadi OB & CS sebenarnya SUDAH kebagian reminder yang benar lewat jalur lain, cron yang orphan ini murni buang-buang resource + bikin bingung. **Cron dimatikan** (`workflow_dispatch` doang, gak lagi ada `schedule:`), file script & listener dibiarkan sebagai dead code (konvensi project).
+
+**4. Bug urutan guard di `points-deduction.mjs`** — guard anti-double-proses (`reminder_points_log`) ditulis SEBELUM evaluasi selesai, bukan sesudah. Kalau crash di tengah jalan, retry manual (`workflow_dispatch`) bakal ditolak "sudah pernah diproses" padahal belum beneran kelar. **Dipindah** ke akhir (cuma ditulis setelah 3 fungsi cek sukses semua).
+
+**5. Reliability: semua 9 workflow reminder pin `firebase-admin`** — sebelumnya `npm install firebase-admin` TANPA versi (selalu ambil "latest" tiap kali cron jalan). Pola kegagalan yang ketemu (beberapa workflow BEDA gagal serentak di jam yang sama, lalu semua balik normal setelah dites ulang beberapa jam kemudian) mengarah ke dugaan rilis `firebase-admin` yang sempat bermasalah di npm registry — BUKAN bug di script manapun (dikonfirmasi: SEMUA script yang gagal di CI berhasil sempurna saat dijalankan ulang lokal, tanpa ubah kode apa pun). **Semua 9 workflow di-pin ke `firebase-admin@14.4.0`** (versi yang sudah diverifikasi jalan bersih) biar gak kena masalah serupa dari rilis baru yang belum tentu stabil di masa depan.
+
+**6. Risiko arsitektur service worker (preventif, BELUM terkonfirmasi 100%)** — `firebase-messaging-sw.js` (buat terima push FCM pas app tertutup/background) didaftarkan tanpa `scope` eksplisit, jadi ikut scope default `"/"` — SAMA PERSIS dengan service worker PWA (`public/sw.js`, dari `@ducanh2912/next-pwa`) yang otomatis ke-register di scope yang sama DAN agresif ambil alih kontrol semua klien lewat `self.skipWaiting()` + `clientsClaim()`. Kalau dua service worker rebutan scope yang sama, browser cuma bisa punya SATU yang aktif mengontrol — beresiko bikin push event dari FCM gak pernah sampai ke `firebase-messaging-sw.js` yang benar pas app-nya lagi ditutup/di-background (justru momen paling penting buat notifikasi push). **Fix preventif diterapkan**: `firebase-messaging-sw.js` sekarang didaftarkan di scope terpisah eksplisit (`/firebase-cloud-messaging-push-scope`) — ini pola RESMI yang direkomendasikan Firebase sendiri buat app yang sudah punya service worker lain. Fix ini aman & additive (gak nyentuh SW PWA sama sekali), TAPI **belum bisa dikonfirmasi 100% ini benar-benar akar masalahnya** tanpa test langsung di device asli (tutup app total, tunggu push masuk, cek notifikasi OS muncul atau tidak) — butuh verifikasi user.
+
+### 39C. Verifikasi
+`npm run build`: 0 error, 50 route (gak ada perubahan struktur halaman). `npx eslint`: 0 error/warning baru. Semua script yang disentuh (`driver-status-staleness.mjs`, `kendaraan-reminder.mjs`, `points-deduction.mjs`) dijalankan ulang lokal setelah fix, hasilnya BENAR (kendaraan berstatus "Pulang" gak lagi kena flag basi). **SUDAH di-deploy** ke `hosting` (workflow `.yml` otomatis aktif begitu ke-push ke GitHub, gak perlu deploy Firebase terpisah). `dev`+`main` sinkron via fast-forward, push berhasil (`17e9701`).
+
+**Yang PALING PENTING user verifikasi manual (gak bisa dites dari sini):**
+1. **Push notification pas app BENAR-BENAR tertutup** (bukan cuma minimize/tab lain) — buka salah satu dashboard (OB/Security/Driver) di HP, izinkan notifikasi, TUTUP TOTAL app-nya, lalu tunggu salah satu reminder terjadwal (atau minta admin trigger manual lewat GitHub Actions tab). Kalau notifikasi OS muncul, berarti fix scope service worker (temuan #6) berhasil. Kalau TETAP gak muncul, ini butuh investigasi lebih lanjut (kemungkinan device/browser spesifik, atau permission notifikasi yang ke-block diam-diam tanpa keliatan di UI app).
+2. **Setiap staf (OB, Security, Driver) sudah PERNAH buka dashboard mereka DAN mengizinkan notifikasi saat diminta browser** — kalau ada yang dulu KLIK "Blokir"/"Jangan Izinkan" pas prompt notifikasi muncul, mereka gak akan pernah dapat push apa pun, DAN aplikasi TIDAK PUNYA indikator visual yang bilang "notifikasi Anda mati" — ini limitasi yang belum diperbaiki (di luar scope audit ini, dicatat sebagai temuan buat sesi depan kalau user mau ditambahkan).
