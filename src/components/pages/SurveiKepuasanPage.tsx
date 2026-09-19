@@ -11,8 +11,8 @@
  * ------------------------------------------------------------------
  */
 
-import { useState } from "react";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { collection, addDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 type IconProps = { size?: number; color?: string };
@@ -139,6 +139,19 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 }
 
 export default function SurveiKepuasanPage() {
+  // Cek status kampanye -- admin nyalakan/matikan dari admin/survei-kepuasan. Form INI juga
+  // ikut nolak submit kalau nonaktif, gak cuma nyembunyiin kartu di Menu Cepat portal utama
+  // (jaga-jaga kalau link disimpan/dibagikan langsung di luar jendela aktif).
+  const [campaignStatus, setCampaignStatus] = useState<"memuat" | "aktif" | "nonaktif">("memuat");
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "survei_kepuasan_campaign"), (snap) => {
+      const aktif = snap.exists() && !!snap.data().aktif && snap.data().expired_at && snap.data().expired_at.toMillis() > Date.now();
+      setCampaignStatus(aktif ? "aktif" : "nonaktif");
+    });
+    return () => unsub();
+  }, []);
+
   const [nama, setNama] = useState("");
   const [perusahaanDivisi, setPerusahaanDivisi] = useState("");
   const [lantai, setLantai] = useState("");
@@ -247,6 +260,22 @@ export default function SurveiKepuasanPage() {
       setIsLoading(false);
     }
   };
+
+  if (campaignStatus === "memuat") return null;
+
+  if (campaignStatus === "nonaktif") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--bg, #f7f6f5)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+        <div style={{ background: "#fff", borderRadius: "20px", padding: "40px 30px", textAlign: "center", maxWidth: "420px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)" }}>
+          <div style={{ fontSize: "40px", marginBottom: "12px" }}>📋</div>
+          <h2 style={{ margin: "0 0 10px 0", color: "#18181b" }}>Survei Sedang Tidak Aktif</h2>
+          <p style={{ color: "#71717a", fontSize: "14px", lineHeight: 1.6 }}>
+            Kuesioner ini cuma dibuka pada periode tertentu. Silakan cek kembali nanti atau hubungi Admin GA kalau menurut Bapak/Ibu ini seharusnya sedang aktif.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (isSuccess) {
     return (

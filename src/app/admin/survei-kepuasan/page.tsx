@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -114,6 +114,38 @@ export default function MonitorSurveiKepuasanPage() {
   const [loading, setLoading] = useState(true);
   const [tabAktif, setTabAktif] = useState<"RINGKASAN" | "SARAN" | "RESPONDEN">("RINGKASAN");
 
+  // Kampanye Survei -- admin nyalakan/matikan link publik /survei-kepuasan lewat sini, kartu Menu
+  // Cepat di portal utama (src/app/page.tsx) baca dokumen yang sama buat nampilkan/nyembunyikan diri.
+  const [campaign, setCampaign] = useState<{ aktif: boolean; expired_at: Timestamp | null } | null>(null);
+  const [showModalAktifkan, setShowModalAktifkan] = useState(false);
+  const [durasiHari, setDurasiHari] = useState(14);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "survei_kepuasan_campaign"), (snap) => {
+      setCampaign(snap.exists() ? { aktif: !!snap.data().aktif, expired_at: snap.data().expired_at || null } : { aktif: false, expired_at: null });
+    });
+    return () => unsub();
+  }, []);
+
+  const campaignAktif = !!campaign?.aktif && !!campaign.expired_at && campaign.expired_at.toMillis() > new Date().getTime();
+
+  const handleAktifkanCampaign = async () => {
+    const expiredAt = new Date(Date.now() + durasiHari * 24 * 60 * 60 * 1000);
+    await setDoc(doc(db, "settings", "survei_kepuasan_campaign"), {
+      aktif: true,
+      expired_at: Timestamp.fromDate(expiredAt),
+      dibuat_pada: serverTimestamp(),
+      dibuat_oleh: adminName,
+    });
+    setShowModalAktifkan(false);
+    showToast(`Link survei diaktifkan sampai ${expiredAt.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}.`, "success");
+  };
+
+  const handleNonaktifkanCampaign = async () => {
+    await setDoc(doc(db, "settings", "survei_kepuasan_campaign"), { aktif: false }, { merge: true });
+    showToast("Link survei dinonaktifkan. Kartu di portal utama akan hilang.", "info");
+  };
+
   useEffect(() => {
     const t = setTimeout(() => setLoading(true), 0);
     const unsub = onSnapshot(
@@ -224,6 +256,52 @@ export default function MonitorSurveiKepuasanPage() {
       </div>
 
       <div style={{ maxWidth: "900px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+        {/* 🔗 KONTROL LINK SURVEI -- aktif/nonaktifkan kartu "Survei Kepuasan Gedung" di Menu Cepat
+            portal utama. Link publik /survei-kepuasan tetap ADA terus (bukan dihapus/dibuat ulang),
+            cuma ditampilkan/disembunyikan dari discovery + submit diblokir kalau tidak aktif. */}
+        <div style={{ background: campaignAktif ? "var(--ok-50, #f0fdf4)" : "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: `1px solid ${campaignAktif ? "rgba(22,163,74,0.3)" : "var(--line)"}`, padding: "16px 20px", marginBottom: "16px", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ flex: "1 1 220px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, color: campaignAktif ? "var(--ok)" : "var(--muted)" }}>
+              {campaignAktif ? "🟢 Link Survei AKTIF" : "🔴 Link Survei Tidak Aktif"}
+            </div>
+            <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "2px" }}>
+              {campaignAktif && campaign?.expired_at
+                ? `Kartu tampil di Menu Cepat sampai ${campaign.expired_at.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}`
+                : "Kartu Survei Kepuasan tidak tampil di portal utama & form tidak bisa disubmit."}
+            </div>
+          </div>
+          {campaignAktif ? (
+            <button onClick={handleNonaktifkanCampaign} style={{ padding: "9px 16px", borderRadius: "10px", border: "1px solid rgba(220,38,38,0.3)", cursor: "pointer", fontSize: "12.5px", fontWeight: 700, background: "var(--surface)", color: "var(--red-600)" }}>
+              Nonaktifkan Sekarang
+            </button>
+          ) : (
+            <button onClick={() => setShowModalAktifkan(true)} style={{ padding: "9px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "12.5px", fontWeight: 700, background: "var(--accent, #7c3aed)", color: "#fff" }}>
+              Aktifkan Link Survei
+            </button>
+          )}
+        </div>
+
+        {showModalAktifkan && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "20px" }} onClick={() => setShowModalAktifkan(false)}>
+            <div style={{ background: "var(--surface)", borderRadius: "18px", padding: "24px", maxWidth: "360px", width: "100%" }} onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ margin: "0 0 6px 0", fontSize: "16px", color: "var(--ink)" }}>Aktifkan Link Survei</h3>
+              <p style={{ margin: "0 0 16px 0", fontSize: "12.5px", color: "var(--muted)" }}>Kartu Survei Kepuasan akan tampil di Menu Cepat portal utama selama durasi ini.</p>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)", marginBottom: "6px" }}>Aktif selama</label>
+              <select value={durasiHari} onChange={(e) => setDurasiHari(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", marginBottom: "18px", boxSizing: "border-box" }}>
+                <option value={3}>3 Hari</option>
+                <option value={7}>1 Minggu</option>
+                <option value={14}>2 Minggu</option>
+                <option value={30}>1 Bulan</option>
+                <option value={60}>2 Bulan</option>
+              </select>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={() => setShowModalAktifkan(false)} style={{ flex: 1, padding: "11px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-soft)", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>Batal</button>
+                <button onClick={handleAktifkanCampaign} style={{ flex: 1, padding: "11px", borderRadius: "10px", border: "none", background: "var(--accent, #7c3aed)", color: "#fff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>Aktifkan</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ background: "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", padding: "18px 20px", marginBottom: "16px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
           <div>
             <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--muted)", marginBottom: "5px" }}>Periode</label>

@@ -2,14 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import AbsensiCard from "../../../components/AbsensiCard";
-import { tanggalISOWITASekarang } from "../../../lib/shift";
+import { tanggalISOWITASekarang, hitungShiftSesi, waktuWITASekarang } from "../../../lib/shift";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -66,6 +66,9 @@ const IconBook = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconDroplet = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2s7 7.5 7 12a7 7 0 0 1-14 0c0-4.5 7-12 7-12z" /></svg>
 );
+const IconQrCode = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM19 14h2M14 19h2M19 19h2" /></svg>
+);
 
 // ==========================================
 // INTERFACES
@@ -100,6 +103,20 @@ export default function SecurityDashboard() {
   const [namaBulanAktif, setNamaBulanAktif] = useState<string>("");
   const [semuaPlotBulanIni, setSemuaPlotBulanIni] = useState<Record<string, Record<string, string>>>({});
   const [waktuCetak, setWaktuCetak] = useState<string>("");
+
+  // 🔄 Status Serah Terima Shift (Tukar Shift/Jaga) -- ditampilkan di sini, diproses/discan di
+  // /dashboard/security/tukar-shift (TukarShiftSecurityPage.tsx).
+  const [handoverStatus, setHandoverStatus] = useState<{ status: "menunggu_scan" | "selesai"; petugas_keluar: string; petugas_masuk: string | null } | null>(null);
+  useEffect(() => {
+    const info = hitungShiftSesi(waktuWITASekarang());
+    const unsub = onSnapshot(
+      query(collection(db, "security_shift_handover"), where("tanggal_shift", "==", info.tanggal_shift), where("shift", "==", info.shift), orderBy("waktu_generate", "desc"), limit(1)),
+      (snap) => {
+        setHandoverStatus(snap.empty ? null : (snap.docs[0].data() as { status: "menunggu_scan" | "selesai"; petugas_keluar: string; petugas_masuk: string | null }));
+      }
+    );
+    return () => unsub();
+  }, []);
 
   // 💡 STATE MODAL & MULTI-ROW OVERTIME
   // Dulu pakai new Date().toISOString() (UTC) -- salah tanggal kalau dibuka jam 00:00-07:59 WITA.
@@ -310,6 +327,7 @@ export default function SecurityDashboard() {
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input lemburan (Back-up Shift).", path: "", action: "modal_lembur", token: "accent", icon: IconClock, hideOnMobile: false },
     { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim Security.", path: "/dashboard/security/sop", action: "link", token: "info", icon: IconBook, hideOnMobile: false },
     { title: "Notifikasi Dadakan: Siram Tanaman", desc: "Upload bukti foto siram tanaman (Pagi 06:00-07:00 / Malam 20:00-22:00).", path: "/dashboard/security/notifikasi-dadakan", action: "link", token: "ok", icon: IconDroplet, hideOnMobile: false },
+    { title: "Tukar Shift / Jaga", desc: "Serah terima jaga wajib scan QR ke petugas pengganti.", path: "/dashboard/security/tukar-shift", action: "link", token: "info", icon: IconQrCode, hideOnMobile: false },
   ];
 
   const tokenColors: Record<string, { bg: string; color: string }> = {
@@ -521,6 +539,29 @@ export default function SecurityDashboard() {
                 <><IconMapPin size={16} /> ON DUTY : {hariIniShift.toUpperCase()} {waktuTeks ? `(${waktuTeks})` : ""}</>
               )}
             </div>
+          </div>
+        )}
+
+        {/* 🔄 STATUS SERAH TERIMA SHIFT -- klik buat buka/scan di /dashboard/security/tukar-shift */}
+        {!isMagang && (
+          <div
+            className="no-print"
+            onClick={() => router.push("/dashboard/security/tukar-shift")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+              background: handoverStatus?.status === "selesai" ? "var(--ok-50)" : "var(--warn-50)",
+              border: `1px solid ${handoverStatus?.status === "selesai" ? "rgba(22,163,74,0.25)" : "rgba(217,119,6,0.25)"}`,
+              borderRadius: "14px", padding: "12px 16px", marginTop: "10px", cursor: "pointer",
+            }}
+          >
+            <span style={{ fontSize: "12.5px", fontWeight: 700, color: handoverStatus?.status === "selesai" ? "var(--ok)" : "var(--warn)" }}>
+              {handoverStatus?.status === "selesai"
+                ? `✅ Serah Terima Selesai (${handoverStatus.petugas_keluar} → ${handoverStatus.petugas_masuk})`
+                : handoverStatus?.status === "menunggu_scan"
+                ? `⏳ Menunggu Serah Terima (${handoverStatus.petugas_keluar} selesai jaga)`
+                : "🔄 Tukar Shift / Jaga — Belum Ada Serah Terima"}
+            </span>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)" }}>Buka &rarr;</span>
           </div>
         )}
 

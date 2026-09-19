@@ -66,6 +66,9 @@ const IconAlertTriangle = ({ size = 18, color = "currentColor" }: IconProps) => 
 const IconTruck = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13" /><rect x="3" y="13" width="18" height="5" rx="1.5" /><circle cx="7.5" cy="18.5" r="1.5" /><circle cx="16.5" cy="18.5" r="1.5" /></svg>
 );
+const IconClipboardSurvei = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="m9 13 2 2 4-4" /></svg>
+);
 const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z" /></svg>
 );
@@ -135,6 +138,13 @@ export default function PortalSIBM() {
   // Operasional), jadi placeholder loading yang truthy bikin sekilas salah nampilin "ada perbaikan".
   const [maintenanceInfo, setMaintenanceInfo] = useState<string>("");
   const [pengumumanGedung, setPengumumanGedung] = useState<string>("");
+
+  // Kampanye Survei Kepuasan Gedung -- admin aktifkan lewat modal di admin/survei-kepuasan
+  // (pilih durasi aktif), kartu Menu Cepat di bawah cuma tampil selama aktif & belum expired.
+  const [surveiCampaign, setSurveiCampaign] = useState<{ aktif: boolean; expired_at: Timestamp | null } | null>(null);
+  const expiredAtMs = surveiCampaign?.expired_at ? surveiCampaign.expired_at.toMillis() : 0;
+  const surveiAktif = !!surveiCampaign?.aktif && expiredAtMs > now.getTime();
+  const sisaHariSurvei = surveiAktif ? Math.max(1, Math.ceil((expiredAtMs - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
   // STATE HERO / RINGKASAN
   const [staffFotoMap, setStaffFotoMap] = useState<Record<string, string>>({});
@@ -357,7 +367,16 @@ export default function PortalSIBM() {
       }
     });
 
-    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
+    // 8. Tarik status kampanye Survei Kepuasan Gedung (aktif/tidak + kapan expired)
+    const unsubSurveiCampaign = onSnapshot(doc(db, "settings", "survei_kepuasan_campaign"), (docSnap) => {
+      if (docSnap.exists()) {
+        setSurveiCampaign({ aktif: !!docSnap.data().aktif, expired_at: docSnap.data().expired_at || null });
+      } else {
+        setSurveiCampaign({ aktif: false, expired_at: null });
+      }
+    });
+
+    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubSurveiCampaign(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
   }, [todayISO, tomorrowISO, previewBesokAktif, tanggalPreviewOB, seninMingguIni, mingguMingguIni]);
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
@@ -1023,6 +1042,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           .qa-card p { display: block; }
         }
         .qa-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: rgba(220,38,38,0.28); }
+        /* Kartu Survei Kepuasan cuma tampil sesekali (kampanye aktif admin) & melebar 1 baris penuh
+           (bukan ikut grid 3 kolom kartu lain) -- tetap tampilkan subtitle "X hari lagi" bahkan di
+           mobile (beda dari .qa-card biasa yang nyembunyiin <p> di layar kecil). */
+        .qa-card-survei { flex-direction: row !important; text-align: left; }
+        .qa-card-survei p { display: block !important; }
+        .qa-card-survei:hover { border-color: rgba(124,58,237,0.35) !important; }
         .qa-icon-chip {
           width: 44px; height: 44px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
           display: flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -1160,11 +1185,20 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               </div>
             </div>
             <div className="desktop-only-hide">
-              <div className="qa-card" onClick={() => setActiveModal("sbo")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px", borderColor: "rgba(220,38,38,0.35)" }}>
-                <div className="qa-icon-chip" style={{ background: "var(--red-600)", color: "#fff" }}><IconAlertTriangle size={20} /></div>
-                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--red-700)", fontSize: "14px", fontWeight: 800 }}>Bahaya SBO</h2><p style={{ margin: 0, color: "var(--red-600)", fontSize: "11px", fontWeight: 700 }}>Temuan kondisi darurat</p></div>
+              <div className="qa-card" onClick={() => setActiveModal("sbo")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="qa-icon-chip"><IconAlertTriangle size={20} /></div>
+                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Bahaya SBO</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Temuan kondisi darurat</p></div>
               </div>
             </div>
+            {surveiAktif && (
+              <div className="qa-card qa-card-survei" onClick={() => router.push("/survei-kepuasan")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px", gridColumn: "1 / -1" }}>
+                <div className="qa-icon-chip" style={{ background: "var(--accent-50, #f5f3ff)", color: "var(--accent, #7c3aed)" }}><IconClipboardSurvei size={20} /></div>
+                <div>
+                  <h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>📋 Survei Kepuasan Gedung</h2>
+                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Isi kuesioner pelayanan gedung — {sisaHariSurvei} hari lagi</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1368,15 +1402,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               )}
             </div>
           </Card>
-
-          {/* 📋 LINK SURVEI KEPUASAN GEDUNG -- periodik 2x setahun, sengaja gak masuk Menu
-              Cepat (bukan aksi harian) cukup link kecil di bawah biar tetap ketemu pas
-              periode survei lagi jalan. */}
-          <div style={{ textAlign: "center", marginTop: "24px", marginBottom: "10px" }}>
-            <a href="/survei-kepuasan" style={{ fontSize: "12.5px", color: "var(--muted)", textDecoration: "underline" }}>
-              📋 Isi Survei Kepuasan Gedung
-            </a>
-          </div>
 
         </div>
       </div>
