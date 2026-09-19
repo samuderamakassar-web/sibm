@@ -1,37 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§36: fitur baru **Sistem Poin Bulanan Staf** — mulai 100 poin/bulan, otomatis berkurang kalau OB/Security gak menyelesaikan tugas (checklist/patroli/notifikasi dadakan) sempurna, rekap admin `admin/monitor-poin` per bulan dengan badge Paling Rajin/Perlu Perhatian. SUDAH DI-DEPLOY & `dev`+`main` sinkron (`3bacbf6`). **2 permintaan LAIN dari user sesi ini BELUM selesai** — upgrade dependency Next.js diblokir permission classifier (butuh user jalankan `npm install` sendiri), dan survei kepuasaan (link Google Form) baru kebaca halaman pertamanya (form multi-halaman, WebFetch gak bisa lanjut) — butuh info tambahan dari user. Detail lengkap & rekomendasi konkret: §36D.)
+Update terakhir: 19 September 2026 (§37: **upgrade Next.js ke 16.3.5 dikonfirmasi berhasil** (kerentanan CRITICAL sudah terpatch, cuma sisa 6 kerentanan low-priority yang sengaja dibiarkan) + fitur baru **Survei Kepuasan Gedung** — replika penuh Kuesioner Pelayanan Gedung (7 section, skala 1-5 + saran) plus 3 pertanyaan favorit staf, form publik tanpa login di `/survei-kepuasan`, dipantau admin di `admin/survei-kepuasan` (skor per kategori, saran, leaderboard favorit, export Excel), periodik otomatis 2x/tahun. SUDAH DI-DEPLOY & `dev`+`main` sinkron (`224973c`). **Semua 3 permintaan dari sesi §36 kini SELESAI** (sistem poin §36, upgrade dependency §37A, survei §37B).)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §36 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §37 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴 2 hal butuh input/aksi USER sebelum bisa lanjut (§36D) — cek ini dulu
+### Sesi hari ini (§36 + §37) — Sistem Poin, lalu Upgrade Next.js + Survei Kepuasaan, lanjutan langsung §35
 
-1. **Upgrade dependency (Next.js 16.2.7→16.3.5, fix kerentanan CRITICAL)** — user sudah bilang "silahkan dicoba" tapi `npm install` DITOLAK permission classifier ("Modify Shared Resources"). User perlu jalankan sendiri: `npm install next@16.3.5 eslint-config-next@16.3.5 --save-exact` (BUKAN `npm audit fix --force` — itu juga nyeret downgrade `@ducanh2912/next-pwa` yang mencurigakan & beresiko ke PWA/cache). Setelah user jalankan (atau approve prompt izinnya), Claude lanjut build+test+deploy.
-2. **Survei kepuasaan pelanggan** — link Google Form yang dikasih user (`forms.gle/vK76oK54nsSFdHBb7`) cuma kebaca halaman pertama (3 pertanyaan: Nama, Perusahaan/Divisi, Lantai) — form-nya multi-halaman, Claude gak bisa baca halaman berikutnya. Butuh user: (a) kasih semua pertanyaan halaman 2 dst, dan (b) konfirmasi mau REPLIKASI ke form custom di SIBM (data masuk Firestore, bisa dipantau admin) atau cuma LINK ke Google Form yang sudah ada, dan (c) trigger-nya per-tiket-selesai atau survei periodik terpisah.
+3 permintaan besar dari user, semuanya SELESAI sesi ini:
+- **§36 — Sistem Poin Bulanan Staf**: 100 poin/bulan, berkurang otomatis kalau OB/Security gak menyelesaikan tugas sempurna, rekap `admin/monitor-poin`.
+- **§37A — Upgrade Next.js 16.2.7→16.3.5**: sempat kelihatan "ditolak permission classifier" di akhir §36, ternyata perintahnya SUDAH SEMPAT JALAN & BERHASIL duluan — diverifikasi ulang dari nol (build+lint+audit), aman dipakai.
+- **§37B — Survei Kepuasaan Gedung**: user kirim screenshot lengkap semua halaman Google Form + jawab klarifikasi (buat ulang di SIBM, periodik 2x/tahun, tambah 3 pertanyaan favorit staf) — direplikasi penuh jadi form publik `/survei-kepuasan` + monitoring `admin/survei-kepuasan`.
 
-### Sesi hari ini (§36) — Sistem Poin Bulanan Staf, lanjutan langsung §35
-
-User kasih detail lengkap buat sistem poin ("100 poin/bulan, berkurang kalau tugas gak sempurna, rekap akhir bulan siapa paling rajin/malas") dan link Google Form buat survei kepuasaan, plus lampu hijau lanjut upgrade dependency dari §35C. **Cuma sistem poin yang berhasil diselesaikan penuh sesi ini** — 2 lainnya diblokir hal-hal di luar kendali kode (lihat peringatan di atas). Detail lengkap: **§36** (§36A-§36D).
-
-**Status: Sistem Poin SUDAH DI-DEPLOY PENUH.** `dev`+`main` sinkron di commit `3bacbf6`, tanpa conflict.
+**Status: SEMUA SUDAH DI-DEPLOY PENUH.** `npm run build` 0 error (49 route), `npx eslint src scripts` 0 error project-wide, `npm audit` turun dari 15 jadi 6 kerentanan (sisanya sengaja dibiarkan, low-priority). `dev`+`main` sinkron di commit `224973c`, tanpa conflict.
 
 ### Yang PALING PENTING buat sesi depan (urutan prioritas)
 
-1. **Selesaikan 2 blocker di atas** begitu user kasih respons/aksi yang dibutuhkan.
-2. **Sistem Poin BELUM ADA DATANYA SAMA SEKALI** (§36C) — cron baru jalan besok pagi (09:00 WITA) & itu pun cuma evaluasi 1 hari kemarin. Jangan kaget kalau `admin/monitor-poin` masih nampilin semua orang 100 poin di awal — itu normal, bukan bug. Tunggu beberapa hari biar data kepatuhan mulai kekumpul.
-3. **Scope Sistem Poin v1 SENGAJA terbatas ke OB & Security saja** (§36A) — Driver/QHSE/Admin GA tetap 100 poin terus sampai ada sinyal tugas individual yang reliable ditambahkan. Angka potongan (-5/-10/-5) juga ASUMSI Claude, gampang diubah di `scripts/points-deduction.mjs` kalau user mau beda.
-4. **9 kerentanan dependency dari §35C** masih menggantung (lihat blocker #1 di atas).
-5. **User belum test visual manual** fitur Absensi §34, fix logo §35A, dan sekarang sistem poin §36 — semuanya numpuk karena Claude gak punya tool browser.
+1. **Sistem Poin (§36) BELUM ADA DATANYA SAMA SEKALI** — cron baru jalan tiap 09:00 WITA & cuma evaluasi 1 hari sebelumnya. Jangan kaget kalau `admin/monitor-poin` masih nampilin semua orang 100 poin di awal — itu normal, bukan bug. Tunggu beberapa hari biar data kepatuhan mulai kekumpul.
+2. **Scope Sistem Poin v1 SENGAJA terbatas ke OB & Security saja** (§36A) — Driver/QHSE/Admin GA tetap 100 poin terus sampai ada sinyal tugas individual yang reliable ditambahkan. Angka potongan (-5/-10/-5) juga ASUMSI Claude, gampang diubah di `scripts/points-deduction.mjs`.
+3. **Survei Kepuasaan (§37B) belum ditest end-to-end** — user perlu coba isi form `/survei-kepuasan` sendiri 1x sebelum disebar ke penghuni gedung (form panjang, 7 section, pastikan gak ada yang kelewat pas discroll di HP).
+4. **Sisa 6 kerentanan dependency** (`serialize-javascript`/`next-pwa`, `xlsx`) SENGAJA tidak difix (§37A) — resiko breaking change ke PWA/cache atau gak ada fix sama sekali. Biarkan kecuali user eksplisit minta lanjut.
+5. **User belum test visual manual** numpuk dari beberapa sesi: Absensi §34, fix logo §35A, sistem poin §36, survei §37B — semuanya karena Claude gak punya tool browser di environment ini.
 6. Poin-poin lama dari §28-§35 yang belum berubah — lihat penutup masing-masing kalau perlu detail.
 7. **User belum sempat test login manual pakai password asli sendiri** (dari §28, masih menggantung).
 
-Detail teknis lengkap sesi hari ini: **§36**. Riwayat sesi 21-35: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
+Detail teknis lengkap sesi hari ini: **§36** (Sistem Poin) dan **§37** (Upgrade Next.js + Survei). Riwayat sesi 21-35: lihat ringkasan masing-masing section atau git history dokumen ini kalau perlu. Open questions lama yang masih nunggu: lihat §6.
 
 ---
 
@@ -1810,8 +1808,39 @@ Angka potongan (-5/-10/-5) adalah **ASUMSI Claude**, user gak kasih angka spesif
 
 **Belum ditest visual** — dan LEBIH PENTING: **belum ada data 1 hari pun yang lewat cron ini** (baru di-deploy hari ini), jadi rekap poin akan kosong/semua 100 sampai cron pertama jalan besok pagi jam 09:00 WITA dan mengevaluasi data kemarin. User perlu tunggu minimal 1-2 hari buat lihat potongan poin pertama muncul, atau trigger manual lewat tab Actions GitHub (`workflow_dispatch`) kalau mau test lebih cepat (tapi cuma akan mengevaluasi data KEMARIN yang sudah ada, bukan hari ini).
 
-### 36D. Blocker yang BELUM selesai (2 dari 3 permintaan sesi ini)
+### 36D. Blocker sesi §36 — SEMUA SUDAH BERES di §37 (lihat di bawah)
 
-1. **Upgrade dependency (lanjutan §35C)** — user bilang "silahkan dicoba" tapi `npm install next@16.3.5 eslint-config-next@16.3.5` **DITOLAK oleh permission classifier** (kategori "Modify Shared Resources"). Ini beda dari blocker `firebase deploy` yang sebelumnya bisa ditembus lewat approval + `--force` — untuk `npm install`, user perlu attend langsung ke prompt approval-nya (gak bisa saya kerjain otomatis tanpa itu). **Riset yang SUDAH dilakukan**: `next@16.2.7`→`16.3.5` itu masih di major version yang sama (bukan migrasi 15→16), app ini pakai `next build --webpack` (bukan default Turbopack v16), jadi resiko breaking change dari sisi Next.js sendiri kemungkinan RENDAH. TAPI `npm audit fix --force` yang lebih luas juga mau downgrade `@ducanh2912/next-pwa` dari `^10.2.9` ke `10.2.6` (angka lebih KECIL, bukan upgrade — mencurigakan, bisa jadi npm cuma nemu kombinasi versi lain yang kebetulan gak vulnerable) yang notabene fitur PWA/service worker app ini sudah beberapa kali jadi sumber masalah cache produksi (§24/§26A) — **SARAN Claude: upgrade `next`+`eslint-config-next` SAJA (lewat `npm install next@16.3.5 eslint-config-next@16.3.5 --save-exact`, BUKAN `npm audit fix --force` yang nyeret next-pwa), biarkan next-pwa/workbox/serialize-javascript apa adanya.** User perlu jalankan sendiri command itu (atau approve prompt-nya kalau muncul lagi), baru saya lanjut build+test+deploy.
+Awalnya 2 dari 3 permintaan sesi §36 terhambat: (1) `npm install` sempat kelihatan ditolak permission classifier, dan (2) survei cuma kebaca halaman pertama Google Form-nya. **Keduanya sudah dituntaskan di §37** — user kirim screenshot lengkap semua halaman form + jawab pertanyaan klarifikasi.
 
-2. **Survei kepuasaan pelanggan** — link Google Form (`https://forms.gle/vK76oK54nsSFdHBb7`, judul "Kuesioner Pelayanan Gedung Samudera Indonesia Makassar Tengah Tahun 2026") **HANYA BISA DIBACA HALAMAN PERTAMANYA** lewat tool WebFetch Claude (form-nya multi-halaman dengan tombol "Berikutnya", butuh interaksi JS buat lanjut ke halaman berikutnya yang gak bisa dilakukan tool ini). Yang berhasil dibaca cuma 3 pertanyaan pembuka: Nama (teks, wajib), Perusahaan/Divisi (teks, wajib), Lantai Lokasi Kantor (dropdown: Lantai 1-4, wajib). **Claude BELUM tahu isi pertanyaan-pertanyaan setelah halaman pertama** — butuh salah satu dari: (a) user screenshot/copy-paste semua pertanyaan dari halaman 2 dst, atau (b) user konfirmasi apakah maksudnya benar-benar REPLIKASI semua pertanyaan ke form custom di dalam SIBM (hasilnya masuk Firestore, bisa dipantau di admin), ATAU cuma taruh LINK ke Google Form yang sudah ada itu (lebih simpel, gak perlu replikasi tapi datanya tetap di Google Forms, bukan di SIBM). Juga belum jelas TRIGGER-nya: per-laporan/tiket (kirim link tiap tiket kerusakan selesai, sesuai rencana awal §28C) atau survei periodik umum (sesuai kesan dari judul form yang "Tengah Tahun 2026", terpisah dari sistem tiket).
+---
+
+## 37. Upgrade Next.js (Ternyata Berhasil) + Fitur Survei Kepuasaan Gedung (19 September 2026, lanjutan langsung §36)
+
+Konteks: user kirim screenshot lengkap 8 halaman Google Form "Kuesioner Pelayanan Gedung Samudera Indonesia Makassar Tengah Tahun 2026", dan jawab 3 klarifikasi: (1) buat ulang form di SIBM (bukan cuma link ke Google Form), dipantau langsung admin, (2) survei periodik **2x setahun**, (3) tambah 3 pertanyaan baru: "Siapa Pengamanan Favorite Anda?" (Ibrahim/Awal/Agus), "Siapa Pelayanan Favorite Anda?" (Syahrul/Hilal/Enal/Ahmad), "Siapa Teman Jalan Favorite Anda?" (Amal/Naldy).
+
+### 37A. Upgrade Dependency — Ternyata SUDAH BERHASIL Duluan
+Sebelum mulai kerjain survei, dicek ulang status `npm install next@16.3.5 eslint-config-next@16.3.5 --save-exact` yang di §36D dicatat "ditolak permission classifier" — ternyata **perintahnya SUDAH SEMPAT JALAN dan BERHASIL** sebelum penolakan itu tercatat (`node_modules/next/package.json` sudah versi `16.3.5`, `package.json`/`package-lock.json` juga sudah keupdate). Kemungkinan penolakan itu buat percobaan lain/duplikat, bukan yang beneran jalan. **Diverifikasi ulang dari nol**: `npm ls next eslint-config-next` → `next@16.3.5` dipakai konsisten (termasuk oleh `@ducanh2912/next-pwa@10.2.9`, TIDAK ada duplikat versi), `npm run build` → 0 error 49 route, `npx eslint src scripts` → 0 error, semua warning pre-existing, `npm audit` → turun dari 15 jadi **6 kerentanan** (CRITICAL di Next.js + `postcss`/`sharp` SUDAH TERPATCH). Sisa 6 kerentanan (`serialize-javascript`→`next-pwa` breaking change, `xlsx` tanpa fix) SENGAJA TETAP TIDAK disentuh sesuai rekomendasi §36D (resiko ke PWA/cache, dan `xlsx` cuma dipakai buat MENULIS bukan MEMBACA file jadi resiko rendah).
+
+### 37B. Fitur Survei Kepuasan Gedung
+Dari screenshot, form aslinya (setelah halaman pembuka Nama/Perusahaan-Divisi/Lantai) terbagi 7 section, semuanya direplikasi persis:
+1. **KEBERSIHAN** — grid skala 1-5 (Area Parkir, Halaman Gedung, Koridor, Lobby Utama, Musala, Pantry Gedung, Ruang Meeting, Toilet) + skala tunggal "Kualitas Petugas Kebersihan" + kotak saran.
+2. **KEAMANAN** — grid (Keamanan area dalam/luar gedung) + skala tunggal "Kinerja Petugas Keamanan" + kotak saran.
+3. **KESELAMATAN & KESEHATAN LINGKUNGAN KERJA (K3)** — grid (Cold Fogging, Fire & Safety Equipment, Safety Induction, Training Floor Warden, Rambu-rambu, Simulasi Tanggap Darurat) + kotak saran.
+4. **PELAYANAN TEKNIS** — grid (Air & Sanitasi, AC, Penerangan Area Umum, Stabilitas Listrik) + kotak saran.
+5. **FASILITAS UMUM** — grid (Lobby, Toilet, Koridor, Area Parkir) + 2 kotak saran (peningkatan + sarana tambahan yang diharapkan).
+6. **PENGELOLA GEDUNG** — 3 skala tunggal (kemudahan prosedur keluhan, kecepatan respon, kepuasan penanganan) + kotak saran.
+7. **FAVORIT** (section BARU, permintaan user) — 3 pertanyaan pilihan (bukan skala): Pengamanan/Pelayanan/Teman Jalan Favorit, opsi sesuai nama yang dikasih user.
+
+**Implementasi:**
+- **`SurveiKepuasanPage.tsx`** (baru) + route **publik** `/survei-kepuasan` (TANPA login — konsisten dengan halaman publik lain seperti `/qr-apar` & portal utama, karena responden survei ini penghuni gedung, bukan cuma staf SIBM yang punya akun). Validasi wajib per section sebelum submit (semua grid + skala tunggal wajib, semua kotak saran & 3 pertanyaan favorit opsional).
+- Data masuk collection baru **`survei_kepuasan_gedung`**, ditandai `periode` otomatis (`YYYY-H1`/`YYYY-H2` berdasarkan bulan submit — Jan-Jun = H1, Jul-Des = H2) supaya rekap 2x setahun bisa difilter rapi tanpa perlu user pilih periode manual saat isi form.
+- **`admin/survei-kepuasan`** (baru) — 3 tab: **Ringkasan Skor** (rata-rata tiap kategori + skala tunggal, bar chart sederhana, DAN leaderboard 3 favorit dengan badge 🏆 juara), **Masukan & Saran** (semua kotak saran teks bebas, dikelompokkan per section, sumbernya ditandai nama+perusahaan), **Daftar Responden** (list nama/perusahaan/lantai). Filter periode (dropdown 3 tahun terakhir x 2 semester), export Excel (flatten semua kolom grid jadi kolom terpisah).
+- Link **"📋 Isi Survei Kepuasan Gedung"** ditambahkan di footer portal utama (`src/app/page.tsx`) — SENGAJA kecil/gak masuk Menu Cepat karena ini aksi periodik (2x/tahun), bukan aksi harian, biar gak mengulang masalah "Menu Cepat berantakan" dari §33A.
+- `firestore.rules`: `survei_kepuasan_gedung` ditambahkan ke daftar collection terbuka (butuh public WRITE karena form tanpa login, sama seperti `helpdesk_tickets` dkk yang juga diisi publik dari portal).
+
+### 37C. Verifikasi
+`npm run build`: 0 error, 49 route (2 baru: `/survei-kepuasan`, `/admin/survei-kepuasan`). `npx eslint`: 0 error, 1 warning kecil (`SKALA_LABEL` unused) ketemu & langsung dihapus karena legend-nya sudah ditulis inline di JSX. **SUDAH di-deploy** ke `hosting`+`firestore:rules` (dibarengkan 1 command bareng rules `staff_points_bulanan` dari §36 yang belum sempat redeploy). `dev`+`main` sinkron via fast-forward, push berhasil (`224973c`).
+
+**Belum ditest visual/end-to-end** (constraint lingkungan sama seperti sesi-sesi sebelumnya) — terutama: alur isi form publik di `/survei-kepuasan` dari HP asli (form PANJANG, 7 section — pastikan gak ada yang kelewat pas discroll), validasi per-section, dan tampilan 3 tab di `admin/survei-kepuasan` begitu ada data beneran masuk. User perlu coba isi 1x sebagai tes sebelum disebar ke penghuni gedung.
+
+**Catatan buat sesi depan**: kalau nanti mau kirim link survei ke penghuni gedung via email/broadcast (bukan cuma link kecil di portal), infrastuktur EmailJS (`src/lib/notify.ts`) sudah ada dan bisa dipakai — tinggal user minta kalau perlu.
