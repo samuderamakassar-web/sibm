@@ -9,6 +9,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import AbsensiCard from "../../../components/AbsensiCard";
+import NotifikasiBellButton from "../../../components/NotifikasiBellButton";
 import { tanggalISOWITASekarang, hitungShiftSesi, waktuWITASekarang } from "../../../lib/shift";
 
 // ==========================================
@@ -497,6 +498,9 @@ export default function SecurityDashboard() {
 
       {/* 🔹 HERO SECTION */}
       <div className="admin-hero no-print">
+        <div className="no-print" style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
+          <NotifikasiBellButton picName={picName} variant="terang" />
+        </div>
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>COMMAND CENTER</h1>
           <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Sistem Pengamanan Terpadu SIBM</p>

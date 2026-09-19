@@ -19,7 +19,7 @@
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
 import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
 const serviceAccount = JSON.parse(
@@ -28,6 +28,15 @@ const serviceAccount = JSON.parse(
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 const messaging = getMessaging();
+
+// Tulis 1 entri notifikasi_personal per penerima, dibaca oleh kotak masuk in-app
+// (NotifikasiInboxPage.tsx) & badge lonceng (NotifikasiBellButton.tsx) -- pelengkap push FCM,
+// bukan pengganti, supaya tetap kelihatan kalau push-nya kelewat/gak diklik.
+async function tulisNotifPersonal(namaList, judul, pesan) {
+  await Promise.all(namaList.map((nama) =>
+    db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
 
 // ==========================================
 // SHIFT & SESI -- duplikat manual dari src/lib/shift.ts (script plain Node ESM,
@@ -118,15 +127,14 @@ async function jalankan() {
   }
 
   console.log(`Mengirim reminder patroli ke ${tokens.length} petugas:`, belumPatuh.join(", "));
+  const bodyPesan = `Sesi patroli minimum (${MINIMUM_SESI_PER_SHIFT} dari 3) belum terpenuhi untuk ${shiftLabel} ini. Yuk lanjut patroli.`;
   const response = await messaging.sendEachForMulticast({
     tokens,
-    notification: {
-      title: "Pengingat Patroli",
-      body: `Sesi patroli minimum (${MINIMUM_SESI_PER_SHIFT} dari 3) belum terpenuhi untuk ${shiftLabel} ini. Yuk lanjut patroli.`,
-    },
+    notification: { title: "Pengingat Patroli", body: bodyPesan },
     webpush: { notification: { icon: "/icons/icon-192.png" } },
   });
   console.log(`${response.successCount} sukses, ${response.failureCount} gagal.`);
+  await tulisNotifPersonal(belumPatuh, "Pengingat Patroli", bodyPesan);
 }
 
 jalankan()

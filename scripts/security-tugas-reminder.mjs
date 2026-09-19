@@ -97,6 +97,13 @@ async function ambilPicShift2(tanggalShift) {
   return namaTerjadwal.map((nama) => semuaStaf.find((u) => u.nama === nama)).filter((u) => u).map((u) => u.nama);
 }
 
+// Duplikat dari patroli-push-reminder.mjs -- lihat catatan sinkronisasi di sana.
+async function tulisNotifPersonal(namaList, judul, pesan) {
+  await Promise.all(namaList.map((nama) =>
+    db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
+
 async function jalankan() {
   const idLogHariIni = `${slotAktif.tanggalShift}_${slotAktif.id}`;
   const logRef = db.collection("reminder_security_tugas_log").doc(idLogHariIni);
@@ -133,6 +140,7 @@ async function jalankan() {
     webpush: { notification: { icon: "/icons/icon-192.png" } },
   });
   console.log(`${response.successCount} sukses, ${response.failureCount} gagal.`);
+  await tulisNotifPersonal(daftarNama, "Tugas Tambahan Security", slotAktif.pesan);
 }
 
 jalankan()

@@ -1,22 +1,29 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§42: pesan kepatuhan patroli Security dibuat SPESIFIK per sesi yang terlewat (bukan generik lagi), email rekap ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli, dan item checklist Mushallah "dipel" diganti "divakum" (mushallah pakai karpet). SUDAH DI-DEPLOY & `dev`+`main` sinkron (`e7ebfb5`). **Email Admin GA di §42 kena blocker EmailJS YANG SAMA dengan §41** — masih perlu 1 aksi WAJIB user, lihat peringatan di bawah.)
+Update terakhir: 19 September 2026 (§43: carousel multi-pengumuman di halaman utama (ganti ticker teks statis lama) + halaman Kotak Masuk Notifikasi in-app baru (`/notifikasi`, tab Semua/Sistem/Siaran) + badge lonceng di 5 header dashboard + 6 script cron reminder sekarang ikut menulis ke kotak masuk, bukan cuma push FCM. **BELUM DI-DEPLOY** (production deploy diblokir permission session ini, butuh eksekusi manual user — index Firestore baru WAJIB dideploy dulu sebelum dipakai) dan **belum ditest visual sama sekali**. Sesi sebelumnya §42 SUDAH di-deploy & `dev`+`main` sinkron (`e7ebfb5`) — masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §42 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §43 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: 1 aksi WAJIB user + 2 test device asli
+### 🔴🔴 PALING URGENT: deploy §43 + 1 aksi WAJIB user lama + 2 test device asli
 
-1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email BARU (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
+0. **BARU, PALING URGENT: deploy §43 (belum jalan sama sekali di production)** — `firebase deploy --only firestore:rules,firestore:indexes,hosting` (index Firestore baru WAJIB, kalau tidak carousel pengumuman & kotak masuk notifikasi bakal error saat dipakai). Deploy ini diblokir permission classifier auto-mode di sesi yang mengerjakannya, jadi user/sesi lain yang perlu jalankan manual. Setelah deploy: (a) buka `admin/broadcast`, buat ulang pengumuman lama yang sempat hilang (lihat §43F) kalau masih relevan; (b) cek carousel muncul di halaman utama & badge lonceng muncul di 5 dashboard (OB/Security/Driver/QHSE/Admin GA).
+1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
 2. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
 3. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§42) — Pesan Kepatuhan Patroli Spesifik + Email Admin GA + Fix Mushallah, lanjutan langsung §41
+### Sesi hari ini (§43) — Carousel Pengumuman Multi-Slide + Kotak Masuk Notifikasi In-App, lanjutan langsung §42
+
+User kasih referensi visual dari app lain (kartu pengumuman + carousel + halaman "Notifikasi" bertab), minta: pengumuman bisa lebih dari 1 & tayang bergiliran di halaman utama (admin kontrol tayang/stop per pengumuman), plus halaman riwayat notifikasi in-app setelah login (pelengkap push/badge yang sudah ada). Dibangun: collection baru `pengumuman_gedung` (ganti skema singleton lama) & `notifikasi_personal`, rombak total `admin/broadcast`, carousel di halaman utama, halaman `/notifikasi` + badge lonceng di 5 dashboard, dan 6 script cron reminder ditambah nulis ke kotak masuk (sebelumnya cuma push FCM). Detail: **§43** (§43A-§43G).
+
+**Status: KODE SELESAI & lolos build/lint, TAPI BELUM DI-DEPLOY SAMA SEKALI** (lihat poin 0 di atas) dan belum ditest visual. Migrasi pengumuman lama juga belum dilakukan (§43F, butuh aksi manual user).
+
+### Sesi sebelumnya (§42) — Pesan Kepatuhan Patroli Spesifik + Email Admin GA + Fix Mushallah, lanjutan langsung §41
 
 User fokus ke halaman Patroli Security, minta pesan peringatan yang lebih spesifik sesuai sesi mana yang kelewat (bukan generik lagi), DAN email ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli. Sekalian fix item checklist Mushallah "dipel" jadi "divakum" (mushallah berkarpet). Detail: **§42** (§42A-§42D).
 
@@ -2007,3 +2014,50 @@ Konteks: user fokus ke halaman Patroli Security (screenshot: kartu "Shift 1 · S
 `npm run build`: 0 error, 50 route (gak ada perubahan struktur halaman). `npx eslint`: sempat ketemu 1 warning BARU (`daftarBatasSesi` bikin dependency `useMemo` gak stabil) — langsung difix dengan bungkus `daftarBatasSesi` pakai `useMemo` sendiri. Balik ke 2 warning pre-existing aja. **SUDAH di-deploy** ke `hosting`. `dev`+`main` sinkron via fast-forward, push berhasil (`e7ebfb5`).
 
 **Belum ditest visual** (pesan dinamis di Patroli) — dan **belum ditest end-to-end** (email Admin GA, sama alasan dengan §41: butuh setting EmailJS diaktifkan dulu + guard harian `points-deduction.mjs` udah kepasang hari ini jadi efeknya baru kelihatan besok pagi).
+
+## 43. Carousel Pengumuman Gedung (Multi-Slide) + Kotak Masuk Notifikasi In-App (19 September 2026, lanjutan langsung §42)
+
+Konteks: user kasih 4 screenshot referensi dari app lain ("Edu HSI") — kartu pengumuman bergaya banner, carousel gambar dengan dot indicator di halaman utama, dan halaman "Notifikasi" dengan tab Semua/Sistem/Siaran. Permintaan: (1) tiap pengumuman baru otomatis jadi kartu visual yang bisa di-slide di halaman utama, bisa lebih dari 1 pengumuman aktif sekaligus, admin bisa tayang/hentikan masing-masing kapan saja; (2) setelah login, ada halaman riwayat notifikasi in-app, bukan cuma push/badge. User kasih keleluasaan penuh soal detail tampilan ("sisanya silahkan sesuaikan agar lebih user friendly").
+
+**Keputusan desain (belum dikonfirmasi user, ini interpretasi)**: "otomatis mengconvert jadi gambar" diartikan sebagai kartu bergradasi warna (styled card), BUKAN generate file gambar sungguhan di server — lebih reliable & gampang di-maintain (gak butuh library image-generation/canvas server-side yang gak ada di static export + GitHub Actions), efek visual "banner" tetap dapat.
+
+### 43A. Collection Baru: `pengumuman_gedung` & `notifikasi_personal`
+Ganti skema lama `settings/pengumuman` (1 dokumen singleton, cuma 1 pengumuman aktif) jadi 2 collection baru:
+- **`pengumuman_gedung`**: `{judul, teks, warnaTema, aktif, dibuatPada, dibuatOleh}` — banyak dokumen sekaligus, tiap dokumen 1 pengumuman independen (tayang/berhenti masing-masing).
+- **`notifikasi_personal`**: `{untukNama, judul, pesan, dibaca, waktu}` — kotak masuk in-app per staf, ditulis oleh script cron yang SUDAH mengirim push FCM (lihat §43C), dibaca oleh `NotifikasiInboxPage.tsx` & badge `NotifikasiBellButton.tsx`.
+
+`firestore.rules`: kedua collection ditambahkan ke daftar collection terbuka (pola sama seperti collection transaksional lain — lihat catatan panjang di rules soal kenapa `isSignedIn()` belum dipakai buat semua). `firestore.indexes.json`: 2 index composite baru (`pengumuman_gedung`: `aktif` ASC + `dibuatPada` DESC; `notifikasi_personal`: `untukNama` ASC + `waktu` DESC) — **WAJIB dideploy sebelum fitur ini dipakai**, kalau tidak query carousel & kotak masuk bakal error di runtime.
+
+### 43B. Halaman Admin: `admin/broadcast/page.tsx` (Rombak Total)
+Sebelumnya cuma form 1 field (textarea tunggal, overwrite `settings/pengumuman`). Sekarang:
+- Form buat pengumuman baru: judul + isi + pilih 1 dari 6 tema warna gradasi (preview live sebelum submit).
+- Daftar semua pengumuman (baru→lama) — tiap kartu ada toggle "🟢 Tayang / ⚪ Berhenti" (`aktif`) dan tombol hapus permanen.
+- **Fix bonus**: halaman ini sebelumnya pakai `useAuthGuard` dengan `redirectTo` yang salah (nyasar ke rute lama) — sudah dibetulkan sekalian jadi `redirectTo: "/"` dengan pesan ditolak yang jelas.
+
+### 43C. Halaman Utama: Carousel Pengumuman (`src/app/page.tsx`)
+Ticker teks statis lama diganti carousel kartu: baca semua dokumen `pengumuman_gedung` dengan `aktif == true` (listener realtime), auto-geser tiap 6 detik kalau lebih dari 1, ada dot indicator buat lompat manual + tap kartu buat next. Index slide (`slideAktif`) sengaja DIBULATKAN saat render (`slideAktif % daftarPengumuman.length`), bukan lewat `useEffect` + `setState` terpisah — supaya gak kena lint `react-hooks/set-state-in-effect` (cascading render) sekaligus lebih sederhana.
+
+### 43D. Kotak Masuk Notifikasi + Bell Badge (BARU)
+- `src/components/pages/NotifikasiInboxPage.tsx` + route `src/app/notifikasi/page.tsx`: tab **Semua/Sistem/Siaran** — "Sistem" gabungan dari `notifikasi_personal` (personal, ada status dibaca/belum), "Siaran" dari `pengumuman_gedung` (broadcast semua orang, sama data yang dipakai carousel). Klik item "Sistem" yang belum dibaca otomatis `updateDoc({dibaca:true})`.
+- `src/components/NotifikasiBellButton.tsx`: ikon lonceng + badge merah jumlah belum dibaca (query realtime `notifikasi_personal` where `untukNama==picName && dibaca==false`), klik → navigasi ke `/notifikasi`. Dipasang di 5 header dashboard: OB, Security, Driver, QHSE, Admin GA (variant "terang" buat background gelap/hero merah, "gelap" default buat Driver yang headernya terang).
+
+### 43E. Wiring Penulis `notifikasi_personal` (6 Script Cron)
+Sebelum sesi ini, `notifikasi_personal` cuma DIBACA oleh UI baru, TIDAK ADA yang menulis — kotak masuk bakal selalu kosong. Ditambahkan 1 helper `tulisNotifPersonal(namaList, judul, pesan)` (duplikat kecil per file, pola sama seperti duplikasi shift-schedule lookup di script lain) yang dipanggil TEPAT SETELAH push FCM berhasil dikirim, di 6 script:
+- `patroli-push-reminder.mjs` — utk semua Security `belumPatuh` (bukan cuma yang punya token FCM, biar tetap kelihatan di kotak masuk walau device belum daftar token).
+- `driver-status-staleness.mjs` — driver + Security jaga yang jadi `penerima` tiap kendaraan basi.
+- `fcm-reminder.mjs` — semua PIC OB/CS `picBelumLapor`.
+- `overtime-checkin-reminder.mjs` — HANYA Security jaga (bukan karyawan overtime-nya — karyawan itu belum tentu punya akun login staf, cuma dikirim email).
+- `apar-reminder.mjs` — ditambahkan DI SAMPING `notifikasi_apar` yang sudah ada (beda tujuan: `notifikasi_apar` dipakai `AparInspectionBanner` monitoring admin, `notifikasi_personal` buat kotak masuk personal Security/Admin GA/QHSE).
+- `security-tugas-reminder.mjs` — PIC Shift 2 yang dapat tugas siram tanaman/cek AC.
+
+**Sengaja TIDAK diguard anti-double-tulis** — samain persis kondisi push FCM-nya (kalau push-nya boleh berulang tiap 30 menit, notifikasi in-app-nya ikut berulang juga, konsisten).
+
+### 43F. Migrasi Data Lama — BELUM DILAKUKAN
+Pengumuman lama di `settings/pengumuman` ("Mohon maaf atas ketidaknyamanan... relokasi ruangan Lantai 2 ke Lantai 3 & 4", oleh Reza Rahmat) **TIDAK dimigrasi otomatis** — sesi ini gak punya akses `FIREBASE_SERVICE_ACCOUNT_BASE64` lokal buat jalanin script migrasi (beda dari sesi-sesi audit sebelumnya yang punya akses ini). **Aksi manual user**: buka `admin/broadcast`, buat ulang pengumuman itu lewat form (30 detik) kalau masih relevan ditampilkan.
+
+### 43G. Verifikasi
+`npm run build`: 0 error, 51 route (nambah 1: `/notifikasi`). `npx eslint` sempat ketemu 1 error BARU (`react-hooks/set-state-in-effect` di effect clamp `slideAktif`) — difix dengan menghitung index yang aman langsung saat render (lihat §43C), bukan lewat effect. Setelah fix: 0 error. Semua 6 script `.mjs` yang diubah lolos `node --check` (syntax-only, gak dieksekusi — gak ada service account lokal buat test langsung ke Firestore beneran).
+
+**BELUM DI-DEPLOY** — deploy production (`firebase deploy`) diblokir permission classifier auto-mode session ini (kategori "Production Deploy"), butuh konfirmasi/eksekusi manual user. **Index Firestore baru (§43A) WAJIB dideploy dulu** sebelum halaman ini dipakai, kalau tidak carousel & kotak masuk akan gagal query di production.
+
+**Belum ditest visual sama sekali** (carousel, kotak masuk, badge lonceng, form admin broadcast baru) — semuanya karena Claude gak punya tool browser di environment ini, DAN belum di-deploy jadi belum bisa dicoba di device asli.

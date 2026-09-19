@@ -135,6 +135,13 @@ async function ambilKaryawanOvertime() {
   return hasil;
 }
 
+// Duplikat dari patroli-push-reminder.mjs -- lihat catatan sinkronisasi di sana.
+async function tulisNotifPersonal(namaList, judul, pesan) {
+  await Promise.all(namaList.map((nama) =>
+    db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
+
 async function ambilEmailKaryawan(nama) {
   const snap = await db.collection("employees_directory").where("nama", "==", nama).limit(1).get();
   if (snap.empty) return "";
@@ -208,6 +215,7 @@ async function jalankan() {
     webpush: { notification: { icon: "/icons/icon-192.png" } },
   });
   console.log(`Push overtime dikirim ke ${tokens.length} Security (${securityJaga.join(", ")}) -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
+  await tulisNotifPersonal(securityJaga, "Karyawan Overtime Perlu Konfirmasi", body);
 }
 
 jalankan()

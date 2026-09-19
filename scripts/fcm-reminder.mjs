@@ -11,7 +11,7 @@
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
 import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
 const serviceAccount = JSON.parse(
@@ -20,6 +20,13 @@ const serviceAccount = JSON.parse(
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 const messaging = getMessaging();
+
+// Duplikat dari patroli-push-reminder.mjs -- lihat catatan sinkronisasi di sana.
+async function tulisNotifPersonal(namaList, judul, pesan) {
+  await Promise.all(namaList.map((nama) =>
+    db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
 
 // ==========================================
 // WAKTU SEKARANG (WITA)
@@ -113,12 +120,10 @@ async function jalankan() {
 
   console.log(`Mengirim reminder sesi ${sesiSekarang} ke ${target.length} PIC yang belum lapor:`, target.map((t) => t.nama).join(", "));
 
+  const bodyPesan = "Checklist kebersihan area kamu hari ini belum disubmit. Yuk selesaikan sebelum sesi berikutnya.";
   const response = await messaging.sendEachForMulticast({
     tokens: target.map((t) => t.token),
-    notification: {
-      title: `Pengingat Checklist Sesi ${sesiSekarang}`,
-      body: "Checklist kebersihan area kamu hari ini belum disubmit. Yuk selesaikan sebelum sesi berikutnya.",
-    },
+    notification: { title: `Pengingat Checklist Sesi ${sesiSekarang}`, body: bodyPesan },
     webpush: {
       notification: { icon: "/icons/icon-192.png" },
     },
@@ -130,6 +135,7 @@ async function jalankan() {
       console.log(`Gagal kirim ke ${target[idx].nama}:`, res.error?.code);
     }
   });
+  await tulisNotifPersonal(picBelumLapor, `Pengingat Checklist Sesi ${sesiSekarang}`, bodyPesan);
 }
 
 jalankan()

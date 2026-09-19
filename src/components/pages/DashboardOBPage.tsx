@@ -6,6 +6,7 @@ import { collection, doc, onSnapshot, query, where, addDoc, serverTimestamp } fr
 import { db } from "@/lib/firebase";
 import { useFcmSetup } from "@/hooks/useFcmSetup";
 import { logoutWithConfirm, useAuthGuard } from "@/hooks/useAuthGuard";
+import NotifikasiBellButton from "@/components/NotifikasiBellButton";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useToast } from "@/components/ui/ToastProvider";
 import AbsensiCard from "@/components/AbsensiCard";
@@ -395,6 +396,9 @@ export default function DashboardOBPage() {
 
       {/* 🔹 HERO SECTION */}
       <div className="admin-hero">
+        <div style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
+          <NotifikasiBellButton picName={picName} variant="terang" />
+        </div>
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>CLEANING CENTER</h1>
           <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Manajemen Kebersihan & Fasilitas Gedung</p>

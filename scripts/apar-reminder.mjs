@@ -75,12 +75,22 @@ async function kirimPushKeSemua(picList, pesan) {
   console.log(`Push APAR: ${response.successCount} sukses, ${response.failureCount} gagal.`);
 }
 
+// Kotak masuk in-app terpusat (NotifikasiInboxPage.tsx / NotifikasiBellButton.tsx) --
+// TERPISAH dari notifikasi_apar di atas (itu dipakai AparInspectionBanner khusus monitoring
+// admin/apar, sudah ada sejak sebelum fitur kotak masuk ini dibuat, sengaja tidak diganggu).
+async function tulisNotifPersonal(picList, judul, pesan) {
+  await Promise.all(picList.map((pic) =>
+    db.collection("notifikasi_personal").add({ untukNama: pic.nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
+
 async function kirimKeSemua(picList, pesan, jenis) {
   if (picList.length === 0) {
     console.log(`Tidak ada penerima untuk jenis "${jenis}", skip kirim.`);
     return;
   }
   await Promise.all(picList.map((pic) => tulisNotifApp(pic.nama, pesan, jenis)));
+  await tulisNotifPersonal(picList, "Pengingat Inspeksi APAR", pesan);
   picList.forEach((pic) => console.log(`Notifikasi in-app ditulis untuk ${pic.nama}`));
 }
 

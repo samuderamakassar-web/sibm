@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
+import NotifikasiBellButton from "../../components/NotifikasiBellButton";
 
 // Ikon SVG garis — set sama dengan portal utama (src/app/page.tsx) & shell subhalaman admin
 type IconProps = { size?: number; color?: string };
@@ -303,6 +304,9 @@ export default function AdminDashboardPage() {
 
       {/* 🔹 HERO SECTION */}
       <div className="admin-hero">
+        <div style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
+          <NotifikasiBellButton picName={adminName} variant="terang" />
+        </div>
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 36px)", fontWeight: "900", letterSpacing: "1px" }}>CONTROL PANEL</h1>
           <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Kendali Sistem Informasi Building Management</p>

@@ -9,6 +9,7 @@ import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import AbsensiCard from "../../AbsensiCard";
+import NotifikasiBellButton from "../../NotifikasiBellButton";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security
@@ -247,9 +248,12 @@ export default function DriverMenuPage() {
       {/* 🔹 TOP BAR NAVBAR */}
       <div className="driver-site-header">
         <div style={{ fontWeight: "900", color: "var(--red-600)", fontSize: "18px", letterSpacing: "1px" }}>SIBM <span style={{color:"var(--ink)"}}>DRIVER</span></div>
-        <button onClick={handleLogout} style={{ background: "var(--red-50)", color: "var(--red-600)", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(220,38,38,0.2)", cursor: "pointer", fontFamily: "inherit" }}>
-          Keluar ➔
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <NotifikasiBellButton picName={activeDriver} />
+          <button onClick={handleLogout} style={{ background: "var(--red-50)", color: "var(--red-600)", padding: "8px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "1px solid rgba(220,38,38,0.2)", cursor: "pointer", fontFamily: "inherit" }}>
+            Keluar ➔
+          </button>
+        </div>
       </div>
 
       {/* 🔹 HERO SECTION PROFILE */}

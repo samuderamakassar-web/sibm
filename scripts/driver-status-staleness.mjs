@@ -16,7 +16,7 @@
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
 import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
 const serviceAccount = JSON.parse(
@@ -25,6 +25,13 @@ const serviceAccount = JSON.parse(
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 const messaging = getMessaging();
+
+// Duplikat dari patroli-push-reminder.mjs -- lihat catatan sinkronisasi di sana.
+async function tulisNotifPersonal(namaList, judul, pesan) {
+  await Promise.all(namaList.map((nama) =>
+    db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
 
 // Ambang waktu "belum diupdate" -- default 2 jam. Sengaja dibuat konstanta di
 // atas biar gampang diubah kalau user minta lebih ketat/longgar nanti.
@@ -126,15 +133,14 @@ async function jalankan() {
     }
 
     const jamStr = `${Math.floor(k.menitBerlalu / 60)} jam ${k.menitBerlalu % 60} menit`;
+    const bodyPesan = `${k.kendaraan} masih berstatus "${k.status}" sejak ${jamStr} lalu. Mohon update statusnya.`;
     const response = await messaging.sendEachForMulticast({
       tokens,
-      notification: {
-        title: "Status Kendaraan Belum Diupdate",
-        body: `${k.kendaraan} masih berstatus "${k.status}" sejak ${jamStr} lalu. Mohon update statusnya.`,
-      },
+      notification: { title: "Status Kendaraan Belum Diupdate", body: bodyPesan },
       webpush: { notification: { icon: "/icons/icon-192.png" } },
     });
     console.log(`${k.kendaraan}: mengirim ke ${tokens.length} penerima (${Array.from(penerima).join(", ")}) -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
+    await tulisNotifPersonal(Array.from(penerima), "Status Kendaraan Belum Diupdate", bodyPesan);
   }
 }
 

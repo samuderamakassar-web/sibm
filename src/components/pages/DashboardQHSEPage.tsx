@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../AbsensiCard";
+import NotifikasiBellButton from "../NotifikasiBellButton";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -167,6 +168,9 @@ export default function DashboardQHSEPage() {
 
       {/* 🔹 HERO SECTION */}
       <div className="admin-hero">
+        <div style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
+          <NotifikasiBellButton picName={picName} variant="terang" />
+        </div>
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>QHSE COMMAND CENTER</h1>
           <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Sistem Pemantauan Keselamatan & Lingkungan Kerja Gedung</p>
