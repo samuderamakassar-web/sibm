@@ -240,6 +240,29 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "security_shift_handover",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tanggal_shift",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "shift",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_generate",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "sop_documents",
       "queryScope": "COLLECTION",
       "fields": [
