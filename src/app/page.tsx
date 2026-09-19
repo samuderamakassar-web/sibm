@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import { kirimEmail } from "../lib/notify";
 import { buildRequestBaruEmailHtml, buildSboEmailHtml, buildOvertimeTercatatEmailHtml } from "../lib/emailTemplates";
@@ -74,6 +74,18 @@ const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
 );
 
 // Geser tanggal ISO (YYYY-MM-DD) sejumlah n hari, lewat komponen Y/M/D langsung (aman dari isu timezone)
+// Dept -> path dashboard, dipakai handleLogin() DAN deteksi sesi staf yang masih aktif
+// (lihat useEffect sesiStafAktif) -- 1 tempat biar kalau ada dept baru gak kelewat salah satu.
+function pathDashboardUntukDept(dept: string): string | null {
+  if (dept === "Admin GA") return "/admin";
+  if (dept === "Management") return "/management";
+  if (dept === "OB & CS") return "/dashboard/ob";
+  if (dept === "Security") return "/dashboard/security";
+  if (dept === "Driver") return "/dashboard/driver";
+  if (dept === "QHSE") return "/dashboard/qhse";
+  return null;
+}
+
 const geserTanggalISO = (iso: string, n: number) => {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, m - 1, d + n);
@@ -145,6 +157,30 @@ export default function PortalSIBM() {
   const expiredAtMs = surveiCampaign?.expired_at ? surveiCampaign.expired_at.toMillis() : 0;
   const surveiAktif = !!surveiCampaign?.aktif && expiredAtMs > now.getTime();
   const sisaHariSurvei = surveiAktif ? Math.max(1, Math.ceil((expiredAtMs - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+
+  // Deteksi sesi staf yang MASIH AKTIF (Firebase Auth + localStorage) begitu portal ini kebuka --
+  // ketemu pas laporan user "force close app lalu kebuka lagi kayak logout, klik Home di dashboard
+  // juga balik ke sini kayak logout". Root cause: PWA start_url selalu "/" (lihat manifest.json),
+  // dan halaman ini SEBELUMNYA gak pernah ngecek sesi yang masih valid sama sekali -- jadi walau
+  // sesi Firebase Auth-nya sendiri sebenarnya MASIH ada (persist normal), user tetap harus login
+  // ULANG dari nol tiap kali balik ke "/". Sengaja BUKAN auto-redirect paksa (biar tombol "Home" di
+  // bottom-nav dashboard staf tetap bisa dipakai buat akses form publik portal ini beneran), cukup
+  // banner kecil dgn 1 tombol "Lanjut ke Dashboard" biar gak perlu ketik ulang email+password.
+  const [sesiStafAktif, setSesiStafAktif] = useState<{ nama: string; dept: string; path: string } | null>(null);
+  const [bannerSesiDitutup, setBannerSesiDitutup] = useState(false);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        setSesiStafAktif(null);
+        return;
+      }
+      const nama = localStorage.getItem("pic_nama") || "";
+      const dept = localStorage.getItem("pic_dept") || "";
+      const path = pathDashboardUntukDept(dept);
+      setSesiStafAktif(nama && path ? { nama, dept, path } : null);
+    });
+    return () => unsub();
+  }, []);
 
   // STATE HERO / RINGKASAN
   const [staffFotoMap, setStaffFotoMap] = useState<Record<string, string>>({});
@@ -735,12 +771,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       localStorage.setItem("pic_dept", uData.departemen);
       localStorage.setItem("pic_role", uData.role);
 
-      if (uData.departemen === "Admin GA") router.push("/admin");
-      else if (uData.departemen === "Management") router.push("/management");
-      else if (uData.departemen === "OB & CS") router.push("/dashboard/ob");
-      else if (uData.departemen === "Security") router.push("/dashboard/security");
-      else if (uData.departemen === "Driver") router.push("/dashboard/driver");
-      else if (uData.departemen === "QHSE") router.push("/dashboard/qhse");
+      const tujuan = pathDashboardUntukDept(uData.departemen);
+      if (tujuan) router.push(tujuan);
       else showToast(`Akses belum tersedia untuk ${uData.departemen}`, "warning");
     } catch (error) {
       const code = (error as { code?: string })?.code;
@@ -1118,6 +1150,25 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </Button>
         </div>
       </div>
+
+      {/* 👋 SESI STAF MASIH AKTIF -- lihat catatan lengkap di deklarasi state sesiStafAktif */}
+      {sesiStafAktif && !bannerSesiDitutup && (
+        <div style={{ background: "var(--info-50, #eff6ff)", borderBottom: "1px solid rgba(37,99,235,0.2)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", flexWrap: "wrap", fontSize: "12.5px" }}>
+          <span style={{ color: "var(--info, #2563eb)", fontWeight: 700 }}>👋 Anda masih login sebagai {sesiStafAktif.nama} ({sesiStafAktif.dept})</span>
+          <button
+            onClick={() => router.push(sesiStafAktif.path)}
+            style={{ padding: "5px 14px", background: "var(--info, #2563eb)", color: "#fff", border: "none", borderRadius: "20px", fontWeight: 700, fontSize: "11.5px", cursor: "pointer" }}
+          >
+            Lanjut ke Dashboard
+          </button>
+          <button
+            onClick={() => setBannerSesiDitutup(true)}
+            style={{ padding: "5px 10px", background: "none", border: "none", color: "var(--muted, #71717a)", fontWeight: 700, fontSize: "11.5px", cursor: "pointer" }}
+          >
+            Tutup
+          </button>
+        </div>
+      )}
 
       {/* 📢 PENGUMUMAN GA */}
       {pengumumanGedung && (
