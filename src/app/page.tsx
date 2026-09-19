@@ -1369,6 +1369,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             </div>
           </Card>
 
+          {/* 📋 LINK SURVEI KEPUASAN GEDUNG -- periodik 2x setahun, sengaja gak masuk Menu
+              Cepat (bukan aksi harian) cukup link kecil di bawah biar tetap ketemu pas
+              periode survei lagi jalan. */}
+          <div style={{ textAlign: "center", marginTop: "24px", marginBottom: "10px" }}>
+            <a href="/survei-kepuasan" style={{ fontSize: "12.5px", color: "var(--muted)", textDecoration: "underline" }}>
+              📋 Isi Survei Kepuasan Gedung
+            </a>
+          </div>
+
         </div>
       </div>
 

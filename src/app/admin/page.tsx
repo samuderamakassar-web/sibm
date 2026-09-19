@@ -67,6 +67,9 @@ const IconCalendarCheck = ({ size = 18, color = "currentColor" }: IconProps) => 
 const IconTrophy = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4" /><path d="M7 4h10v6a5 5 0 0 1-10 0V4z" /><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4" /><path d="M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4" /></svg>
 );
+const IconClipboardList = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 12h6M9 16h4" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -192,6 +195,13 @@ export default function AdminDashboardPage() {
       path: "/admin/monitor-poin",
       token: "accent",
       icon: IconTrophy,
+    },
+    {
+      title: "Survei Kepuasan Gedung",
+      desc: "Rekap kuesioner pelayanan gedung periodik (2x/tahun) — skor per kategori, saran, dan favorit staf.",
+      path: "/admin/survei-kepuasan",
+      token: "info",
+      icon: IconClipboardList,
     },
   ];
 
