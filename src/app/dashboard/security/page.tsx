@@ -101,6 +101,12 @@ export default function SecurityDashboard() {
 
   const [securityStaff, setSecurityStaff] = useState<string[]>([]);
   const [hariIniShift, setHariIniShift] = useState<string>("Tidak Ada Shift / Belum Diplot");
+  // Status jaga REAL-TIME (bukan cuma "ada plot utk tanggal kalender hari ini") -- true hanya kalau
+  // shift yang terjadwal PERSIS SAMA dengan shift yang sedang aktif sekarang (lihat hitungShiftSesi()).
+  // Ini yang bikin badge otomatis berubah jadi OFF DUTY begitu jam shift berakhir (mis. Shift 1
+  // lewat jam 20:00), tanpa nunggu tanggal kalender berganti -- sebelumnya badge nempel "ON DUTY"
+  // sepanjang tanggal kalender yang sama walau jam shift-nya sudah lewat.
+  const [sedangBertugas, setSedangBertugas] = useState<boolean>(false);
   const [namaBulanAktif, setNamaBulanAktif] = useState<string>("");
   const [semuaPlotBulanIni, setSemuaPlotBulanIni] = useState<Record<string, Record<string, string>>>({});
   const [waktuCetak, setWaktuCetak] = useState<string>("");
@@ -223,10 +229,6 @@ export default function SecurityDashboard() {
       }
 
       setSemuaPlotBulanIni(finalData);
-
-      const localTodayStr = getLocalDateString(new Date());
-      const shiftKuHariIni = finalData[localTodayStr]?.[picName] || "Off / Belum Diplot";
-      setHariIniShift(shiftKuHariIni);
       setIsDataReady(true);
     };
 
@@ -242,6 +244,30 @@ export default function SecurityDashboard() {
 
     return () => { unsub1(); unsub2(); };
   }, [picName]);
+
+  // Status jaga dihitung ULANG tiap menit (bukan cuma pas roster berubah) -- pakai tanggal_shift
+  // dari shift yang SEDANG AKTIF sekarang (bukan tanggal kalender hari ini), biar Shift 2
+  // (20:00-08:00, lewat tengah malam) & momen pergantian shift kesiangan (08:00/20:00) sama-sama
+  // benar. Ini yang bikin badge otomatis pindah ke OFF DUTY begitu jam shift berakhir, tanpa nunggu
+  // tanggal kalender berganti atau halaman di-refresh manual.
+  useEffect(() => {
+    if (!picName || Object.keys(semuaPlotBulanIni).length === 0) return;
+    const perbarui = () => {
+      const infoSekarang = hitungShiftSesi(waktuWITASekarang());
+      const shiftTerjadwal = semuaPlotBulanIni[infoSekarang.tanggal_shift]?.[picName] || "";
+      const sedangJaga = shiftTerjadwal === infoSekarang.shift;
+      let label: string;
+      if (sedangJaga) label = shiftTerjadwal;
+      else if (shiftTerjadwal === "Off" || shiftTerjadwal === "Izin") label = shiftTerjadwal;
+      else if (shiftTerjadwal) label = `${shiftTerjadwal} (Belum Mulai / Sudah Berakhir)`;
+      else label = "Off / Belum Diplot";
+      setHariIniShift(label);
+      setSedangBertugas(sedangJaga);
+    };
+    perbarui();
+    const interval = setInterval(perbarui, 60000);
+    return () => clearInterval(interval);
+  }, [picName, semuaPlotBulanIni]);
 
   const handleKeluar = () => logoutWithConfirm(confirm, router);
 
@@ -314,7 +340,7 @@ export default function SecurityDashboard() {
     }
   };
 
-  const isOff = hariIniShift.includes("Off") || hariIniShift.includes("Belum") || hariIniShift.includes("Izin");
+  const isOff = !sedangBertugas;
   const waktuTeks = getWaktuShift(hariIniShift);
 
   // MENU UTAMA SECURITY — warna dipetakan ke token desain (lihat tokenColors di bawah)

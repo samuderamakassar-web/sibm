@@ -1,27 +1,35 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 19 September 2026 (§43: carousel multi-pengumuman di halaman utama (ganti ticker teks statis lama) + halaman Kotak Masuk Notifikasi in-app baru (`/notifikasi`, tab Semua/Sistem/Siaran) + badge lonceng di 5 header dashboard + 6 script cron reminder sekarang ikut menulis ke kotak masuk, bukan cuma push FCM. **SUDAH DI-DEPLOY** (rules+indexes+hosting, atas konfirmasi eksplisit user) & `dev`+`main` sinkron (`d4c0430`). Migrasi pengumuman lama (§43F) masih perlu aksi manual user, dan **belum ditest visual sama sekali**. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 19 September 2026 (§44: perbaikan tahap 1 modul Security -- badge status jaga sekarang real-time berbasis jam shift aktif (bukan tanggal kalender, otomatis pindah ON DUTY↔OFF DUTY tepat waktu), form Lapor Patroli dikunci saat staf sedang tidak bertugas (cuma bisa lihat Riwayat), filter tanggal Riwayat Patroli diganti kalender native. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user, BELUM diimplementasi. **BELUM DI-DEPLOY, belum ditest visual.** Sesi sebelumnya §43 (carousel pengumuman + kotak masuk notifikasi) SUDAH di-deploy & `dev`+`main` sinkron (`478da26`). Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §43 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 19 September 2026 — §44 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: 1 aksi WAJIB user (§43) + 1 aksi WAJIB user lama (EmailJS) + 3 test device asli
+### 🔴🔴 PALING URGENT: deploy §44 + pilih arah §44E + 1 aksi WAJIB §43 + 1 aksi WAJIB lama (EmailJS)
 
-0. **BARU: buat ulang pengumuman lama di `admin/broadcast`** (§43F) — §43 SUDAH DI-DEPLOY (rules+indexes+hosting, `d4c0430`), tapi pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik). Sekalian jadi kesempatan test end-to-end fitur §43: cek carousel muncul di halaman utama & badge lonceng muncul di 5 dashboard (OB/Security/Driver/QHSE/Admin GA).
-1. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
-2. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
-3. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
+0. **BARU, PALING URGENT: deploy §44 (belum jalan sama sekali di production)** — perbaikan status jaga real-time, kunci form Lapor Patroli, dan date picker Riwayat murni kode frontend (gak ada perubahan rules/indexes), jadi cukup `firebase deploy --only hosting`. Setelah deploy, test di device asli: (a) badge "Jadwal Anda Hari Ini" harus otomatis ganti OFF DUTY begitu jam shift lewat (gak perlu tunggu tanggal berganti); (b) coba buka tab "Lapor" di Patroli Area saat sedang TIDAK bertugas — harus muncul panel terkunci, bukan form; (c) filter tanggal di tab Riwayat Patroli harus kalender, bukan dropdown.
+1. **Perlu arahan user: pilih arah sistem scoring/report** (§44E) — 3 ide ditawarkan (poin bonus/positif, mekanisme banding Danru, perluas potongan ke Driver). Belum ada yang dibangun, nunggu user pilih prioritas sebelum lanjut.
+2. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F) — pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik). Sekalian test carousel muncul di halaman utama & badge lonceng muncul di 5 dashboard.
+3. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
+4. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
+5. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§43) — Carousel Pengumuman Multi-Slide + Kotak Masuk Notifikasi In-App, lanjutan langsung §42
+### Sesi hari ini (§44) — Perbaikan Modul Security Tahap 1: Status Jaga Real-Time, Kunci Form Patroli, Date Picker Riwayat, lanjutan langsung §43
+
+User minta audit menyeluruh modul Security, mulai dari bagian shift. Fix: badge status jaga di dashboard sekarang dihitung dari jam shift yang BENERAN aktif (bukan tanggal kalender) jadi otomatis pindah ON DUTY↔OFF DUTY tepat waktu; form Lapor Patroli dikunci total (diganti panel info) kalau staf sedang tidak bertugas, tab Riwayat tetap bebas diakses kapan saja; filter tanggal Riwayat Patroli diganti kalender native. User juga nanya ide lain soal sistem scoring/report -- 3 ide ditawarkan balik (poin bonus, banding Danru, perluas ke Driver), belum diimplementasi, nunggu arahan. Detail: **§44** (§44A-§44F).
+
+**Status: KODE SELESAI, lolos build/lint (0 error, 2 warning pre-existing), TAPI BELUM DI-DEPLOY & belum ditest visual sama sekali** — butuh device asli buat verifikasi transisi status jaga tepat waktu.
+
+### Sesi sebelumnya (§43) — Carousel Pengumuman Multi-Slide + Kotak Masuk Notifikasi In-App, lanjutan langsung §42
 
 User kasih referensi visual dari app lain (kartu pengumuman + carousel + halaman "Notifikasi" bertab), minta: pengumuman bisa lebih dari 1 & tayang bergiliran di halaman utama (admin kontrol tayang/stop per pengumuman), plus halaman riwayat notifikasi in-app setelah login (pelengkap push/badge yang sudah ada). Dibangun: collection baru `pengumuman_gedung` (ganti skema singleton lama) & `notifikasi_personal`, rombak total `admin/broadcast`, carousel di halaman utama, halaman `/notifikasi` + badge lonceng di 5 dashboard, dan 6 script cron reminder ditambah nulis ke kotak masuk (sebelumnya cuma push FCM). Detail: **§43** (§43A-§43G).
 
-**Status: SUDAH DI-DEPLOY** (rules+indexes+hosting, atas konfirmasi eksplisit user). `dev`+`main` sinkron di commit `d4c0430`. Migrasi pengumuman lama belum dilakukan (§43F, butuh aksi manual user, lihat poin 0 di atas) dan belum ditest visual sama sekali.
+**Status: SUDAH DI-DEPLOY** (rules+indexes+hosting, atas konfirmasi eksplisit user). `dev`+`main` sinkron di commit `478da26`. Migrasi pengumuman lama belum dilakukan (§43F, butuh aksi manual user, lihat poin 2 di atas) dan belum ditest visual sama sekali.
 
 ### Sesi sebelumnya (§42) — Pesan Kepatuhan Patroli Spesifik + Email Admin GA + Fix Mushallah, lanjutan langsung §41
 
@@ -2061,3 +2069,37 @@ Pengumuman lama di `settings/pengumuman` ("Mohon maaf atas ketidaknyamanan... re
 **SUDAH DI-DEPLOY** — `firestore:rules`, `firestore:indexes`, dan `hosting` ketiganya berhasil dideploy (index Firestore baru §43A ikut ter-deploy, jadi query carousel & kotak masuk sudah didukung di production) atas konfirmasi eksplisit user setelah sempat diblokir permission classifier auto-mode. `dev`+`main` sinkron di `d4c0430` (termasuk commit artifact build service worker/hosting cache).
 
 **Belum ditest visual sama sekali** (carousel, kotak masuk, badge lonceng, form admin broadcast baru) — Claude gak punya tool browser di environment ini. Migrasi pengumuman lama (§43F) juga masih perlu aksi manual user.
+
+## 44. Perbaikan Modul Security Tahap 1: Status Jaga Real-Time, Kunci Form Patroli, Date Picker Riwayat (19 September 2026, lanjutan langsung §43)
+
+Konteks: user minta audit menyeluruh modul Security, mulai dari bagian shift. 3 keluhan konkret: (1) badge "Jadwal Anda Hari Ini" gak akurat -- masih nunjuk "ON DUTY" walau jam shift-nya udah lewat, baru berubah pas tanggal kalender ganti; (2) staf yang lagi TIDAK bertugas seharusnya gak bisa isi laporan patroli baru, cuma bisa lihat riwayat; (3) filter tanggal di tab Riwayat Patroli pakai dropdown, minta diganti kalender. User juga nanya ide lain soal sistem scoring & report -- itu dijawab terpisah sebagai rekomendasi (BELUM diimplementasi, nunggu konfirmasi user), lihat catatan di bawah §44D.
+
+### 44A. Akar Masalah: Status Jaga Berbasis Tanggal Kalender, Bukan Jam Shift Aktif
+`dashboard/security/page.tsx` sebelumnya nentuin `hariIniShift` cuma dari `finalData[tanggalKalenderHariIni]?.[picName]` -- akurat buat Shift 1 (08:00-20:00, satu tanggal kalender penuh) TAPI salah di 2 arah:
+- **Shift 1 lewat jam 20:00**: badge masih "ON DUTY: Shift 1" sampai tengah malam (tanggal kalender belum ganti), padahal shift-nya udah kelar 4 jam lalu.
+- **Shift 2 (20:00-08:00, lewat tengah malam)**: begitu tanggal kalender ganti jam 00:00, badge bisa salah baca plot tanggal BARU (yang mungkin "Off") padahal petugas itu masih bertugas sampai jam 08:00.
+
+### 44B. Fix: `sedangBertugas` Dihitung dari `hitungShiftSesi()`, Bukan Tanggal Kalender
+`dashboard/security/page.tsx`: state baru `sedangBertugas` (boolean) dihitung dari `finalData[tanggal_shift_AKTIF]?.[picName] === shift_AKTIF` (pakai `hitungShiftSesi(waktuWITASekarang())` dari `lib/shift.ts`, SUDAH menangani tanggal_shift yang benar buat Shift 2 lintas tengah malam). Dihitung ulang tiap 60 detik via `setInterval` (efek terpisah dari fetch roster) supaya badge otomatis pindah ON DUTY ↔ OFF DUTY tepat waktu tanpa perlu refresh manual. `isOff` diganti dari string-matching (`hariIniShift.includes("Off")`) jadi `!sedangBertugas` -- lebih akurat. Label ditambah kasus baru "Shift X (Belum Mulai / Sudah Berakhir)" buat staf yang terjadwal shift lain hari itu tapi jamnya belum/sudah lewat.
+
+`PatroliSecurityPage.tsx` (halaman Lapor Patroli) pakai logika yang SAMA (query `security_monthly_schedules` utk `tanggal_shift` aktif, bandingkan dgn `shiftSesiInfo.shift`) lewat state `sedangBertugas` sendiri -- independen dari dashboard, supaya tetap benar walau dashboard gak pernah dibuka duluan.
+
+### 44C. Kunci Tab "Lapor" Kalau Tidak Bertugas
+`PatroliSecurityPage.tsx`: tab "Lapor" sekarang cek `sedangBertugas` -- kalau `false`, form checklist patroli/kamera SAMA SEKALI gak dirender, diganti panel "Anda Sedang Tidak Bertugas" + tombol pintas ke tab Riwayat. Tab "Riwayat" TETAP bisa diakses kapan saja (tidak dikunci) -- staf bisa lihat semua laporan lama miliknya tanpa batas.
+
+**Kenapa aman buat anak Magang**: menu Patroli sendiri sudah disembunyikan total dari anak Magang di `dashboard/security/page.tsx` (`isMagang` filter, sudah ada sebelum sesi ini) -- mereka gak pernah dijadwalkan di roster (`security_monthly_schedules`) sama sekali, jadi gak akan pernah nyasar ketutup fitur ini karena memang gak pernah bisa buka halamannya.
+
+**Catatan jujur soal batas fitur ini**: ini pengaman di sisi TAMPILAN (client), BUKAN Firestore Rules -- `security_patrols` masih collection terbuka (lihat catatan besar di `firestore.rules` soal kenapa sebagian besar collection belum `isSignedIn()`). Konsisten dengan pola kunci-sisi-client lain yang sudah ada di app ini (mis. jendela sesi Checklist OB).
+
+### 44D. Date Picker Riwayat Patroli
+`PatroliSecurityPage.tsx`, tab Riwayat: filter "Tanggal Shift" diganti dari `<select>` dropdown (isinya cuma tanggal yang PERNAH ada laporan) jadi `<input type="date">` (kalender native browser/HP) + tombol ✕ buat reset ke "semua tanggal". Info kecil di bawahnya kasih tau berapa tanggal yang punya laporan, biar tetap ada konteks yang dulu didapat dari dropdown.
+
+### 44E. Rekomendasi Sistem Scoring & Report (BELUM DIIMPLEMENTASI -- nunggu arahan user)
+User nanya ide lain soal sistem poin & report. Kondisi sekarang (`scripts/points-deduction.mjs`): tiap staf mulai 100 poin/bulan, cuma BERKURANG (gak ada bonus), potongan cuma dari OB/CS (checklist) & Security (patroli, notifikasi dadakan) -- Driver/QHSE/Admin GA masih "gratis" 100 terus karena belum ada sinyal tugas individual yang reliable buat mereka (didokumentasikan sebagai gap yang disengaja, bukan lupa). Ide yang ditawarkan balik ke user (belum dibangun):
+1. **Tambah poin bonus/positif**, bukan cuma pengurangan -- supaya "paling rajin" di rekap bulanan beneran diukur dari pencapaian positif (mis. 100% kepatuhan sesi patroli sebulan penuh), bukan cuma "siapa yang paling sedikit dipotong".
+2. **Mekanisme banding/catatan Danru** -- saat ini potongan poin 100% otomatis dari cron, gak ada cara Danru menandai "ini ada alasan sah" (misal sakit mendadak, izin darurat) sebelum poin kepotong. Risiko: staf yang punya alasan valid tetap kepotong poin.
+3. **Perluas ke Driver** setelah `driver-status-staleness.mjs` matang jadi sinyal potongan harian yang reliable -- biar keadilan lebih merata antar departemen.
+Menunggu user pilih arah mana yang mau dikerjakan duluan (atau kombinasi, atau ide lain) sebelum implementasi.
+
+### 44F. Verifikasi
+`npm run build`: 0 error, 51 route (gak ada perubahan struktur halaman). `npx eslint` pada 2 file yang diubah: 2 warning, KEDUANYA pre-existing (dikonfirmasi lewat `git stash` sebelum/sesudah) -- tidak ada warning/error baru. **Belum di-deploy, belum ditest visual** (badge real-time & kunci form Lapor butuh device asli buat verifikasi jam shift beneran berubah tepat waktu).

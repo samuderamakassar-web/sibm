@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, doc, Timestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
@@ -188,6 +188,9 @@ export default function PatroliSecurityPage() {
   const [photoTarget, setPhotoTarget] = useState<{ id: string, nama: string } | null>(null);
   const [currentTime, setCurrentTime] = useState<string>("");
   const [shiftSesiInfo, setShiftSesiInfo] = useState<ShiftSesiInfo | null>(null);
+  // Default true (optimistic) sambil roster masih dimuat -- dikoreksi begitu data roster sampai,
+  // biar staf yang BENERAN bertugas gak sempat lihat layar "terkunci" nunggu Firestore.
+  const [sedangBertugas, setSedangBertugas] = useState<boolean>(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -216,6 +219,20 @@ export default function PatroliSecurityPage() {
     const interval = setInterval(perbaruiSesi, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Kunci form Lapor kalau petugas SEDANG TIDAK BERTUGAS (shift sudah berakhir/belum mulai/Off/Izin)
+  // -- dicek dari roster Danru (security_monthly_schedules), bukan cuma dipercaya dari sisi client.
+  // Menu Patroli sendiri sudah disembunyikan buat anak Magang (lihat dashboard/security/page.tsx),
+  // jadi cek roster di sini gak akan salah kunci staf yang memang bukan bagian rotasi shift.
+  useEffect(() => {
+    if (!picName || !shiftSesiInfo) return;
+    const bulanKey = shiftSesiInfo.tanggal_shift.substring(0, 7);
+    const unsub = onSnapshot(doc(db, "security_monthly_schedules", bulanKey), (snap) => {
+      const shiftTerjadwal = snap.exists() ? snap.data().data_hari?.[shiftSesiInfo.tanggal_shift]?.[picName] : undefined;
+      setSedangBertugas(shiftTerjadwal === shiftSesiInfo.shift);
+    });
+    return () => unsub();
+  }, [picName, shiftSesiInfo]);
 
   const sesiSudahLapor = useMemo(() => {
     if (!shiftSesiInfo) return [];
@@ -504,7 +521,21 @@ export default function PatroliSecurityPage() {
         {/* ========================================================= */}
         {/* TAB 1: FORM PENGISIAN PATROLI                             */}
         {/* ========================================================= */}
-        {activeTab === "FORM" && (
+        {activeTab === "FORM" && !sedangBertugas && (
+          <div className="panel" style={{ animation: "fadeIn 0.3s", textAlign: "center", padding: "50px 25px" }}>
+            <div style={{ color: "var(--muted)", marginBottom: "15px", display: "flex", justifyContent: "center" }}><IconAlertTriangle size={40} color="var(--warn)" /></div>
+            <h3 style={{ color: "var(--ink)", margin: "0 0 10px 0", fontSize: "17px" }}>Anda Sedang Tidak Bertugas</h3>
+            <p style={{ color: "var(--muted)", fontSize: "13.5px", margin: "0 0 20px 0", lineHeight: 1.6 }}>
+              Menu Lapor Patroli cuma bisa diisi selama jam shift Anda sedang berjalan sesuai jadwal Danru.
+              {shiftSesiInfo ? ` Sekarang ${shiftSesiInfo.shift} · ${shiftSesiInfo.sesi} untuk petugas yang terjadwal.` : ""} Anda tetap bisa melihat seluruh riwayat laporan Anda.
+            </p>
+            <button onClick={() => setActiveTab("HISTORY")} style={{ padding: "12px 22px", background: "var(--info)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "inherit" }}>
+              <IconHistory size={14} /> Lihat Riwayat Lengkap
+            </button>
+          </div>
+        )}
+
+        {activeTab === "FORM" && sedangBertugas && (
           <div style={{ animation: "fadeIn 0.3s" }}>
             {/* KARTU KEPATUHAN SESI PATROLI */}
             {shiftSesiInfo && (
@@ -718,14 +749,29 @@ export default function PatroliSecurityPage() {
               </select>
 
               <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Tanggal Shift</label>
-              <select
-                value={filterTanggalRiwayat}
-                onChange={(e) => { setFilterTanggalRiwayat(e.target.value); setSudahCekRiwayat(false); }}
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", marginBottom: "18px", outline: "none", background: "var(--bg)" }}
-              >
-                <option value="">Semua Tanggal</option>
-                {tanggalTersedia.map(t => <option key={t} value={t}>{new Date(t + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</option>)}
-              </select>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "18px" }}>
+                <input
+                  type="date"
+                  value={filterTanggalRiwayat}
+                  onChange={(e) => { setFilterTanggalRiwayat(e.target.value); setSudahCekRiwayat(false); }}
+                  style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", outline: "none", background: "var(--bg)", fontFamily: "inherit", color: "var(--ink)" }}
+                />
+                {filterTanggalRiwayat && (
+                  <button
+                    type="button"
+                    onClick={() => { setFilterTanggalRiwayat(""); setSudahCekRiwayat(false); }}
+                    title="Tampilkan semua tanggal"
+                    style={{ padding: "0 14px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}
+                  >
+                    <IconX size={13} />
+                  </button>
+                )}
+              </div>
+              {tanggalTersedia.length > 0 && (
+                <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "-12px", marginBottom: "16px" }}>
+                  Ada laporan di {tanggalTersedia.length} tanggal shift berbeda. Kosongkan untuk lihat semua tanggal.
+                </div>
+              )}
 
               <button
                 onClick={() => setSudahCekRiwayat(true)}
