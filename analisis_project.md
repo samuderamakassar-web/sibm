@@ -12,7 +12,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 ### 🔴🔴 PALING URGENT: push+deploy §49 + konfirmasi fix §46 jalan + pilih arah §44E
 
-0. **BELUM DI-PUSH: §49 (Handbook Magang)** — push ke `dev`+`main`, lalu `firebase deploy --only firestore:rules,firestore:indexes,hosting` (ada collection & index baru: `handbook_magang`). Setelah deploy, **coba upload 1 PDF & 1 video via `admin/handbook-magang`** buat konfirmasi upload beneran jalan (terutama video -- lihat batasan 10MB di §49C, belum pernah ditest langsung).
+0. **§49 SUDAH di-push+deploy (Handbook Magang)** — **coba upload 1 PDF & 1 video via `admin/handbook-magang`** buat konfirmasi upload beneran jalan (terutama video -- lihat batasan 10MB di §49C, belum pernah ditest langsung).
 1. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
 2. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — buat daftarin token FCM mereka yang PERTAMA KALI, tanpa ini SEMUA notifikasi Admin GA (patroli/siram tanaman/checklist OB/status kendaraan/laporan baru/inspeksi fasilitas) gak akan sampai sebagai push.
 3. **Konfirmasi fix §46 (insiden cron gagal massal) beneran jalan** — sudah di-push (`20427cd`), user pilih nunggu jadwal otomatis (bukan trigger manual). Cek email "Run succeeded" dari GitHub Actions (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau BELUM ada konfirmasi sukses, itu prioritas #1 sebelum lanjut apa pun.
@@ -27,7 +27,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 User minta menu baru buat Admin upload handbook magang (PDF & video), muncul otomatis begitu anak magang login. Dicek dulu: konsep "magang" cuma ada di Security (`security_magang_directory`), gak ada di dept lain. Dibangun: collection `handbook_magang`, halaman admin `admin/handbook-magang` (reuse `uploadDokumen.ts` yang sudah ada, bukan bikin fungsi upload baru), dan komponen `HandbookMagangList.tsx` dipasang paling atas dashboard Security khusus buat staf magang. Detail: **§49** (§49A-§49G).
 
-**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+**Status: SUDAH DI-DEPLOY** (rules+indexes+hosting). `dev`+`main` sinkron di `6a96fe3`.
 
 ### Sesi sebelumnya (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru, lanjutan langsung §47
 
@@ -2298,4 +2298,4 @@ Dipasang di `dashboard/security/page.tsx`, PALING ATAS konten (di atas semua ele
 `firestore.rules`: `handbook_magang` ditambahkan ke daftar collection terbuka. `firestore.indexes.json`: 1 index baru (`aktif` ASC, `dibuatPada` DESC, `__name__` DESC) -- pola identik dengan `pengumuman_gedung`.
 
 ### 49G. Verifikasi
-`npm run build`: 0 error, 52 route (nambah 1: `/admin/handbook-magang`). `npx eslint` pada semua file yang disentuh/baru: 0 error, 0 warning (sempat ada 1 warning "unused eslint-disable directive" yang gak perlu, langsung dihapus). **Belum di-deploy** (butuh rules+indexes+hosting karena ada collection & index baru). **Belum ditest visual/end-to-end sama sekali** -- terutama upload video (butuh dicoba langsung buat konfirmasi batas 10MB beneran seperti yang didokumentasikan, dan buat lihat apakah preset Cloudinary project ini beneran menerima resource_type video/raw lewat endpoint `/auto/upload`).
+`npm run build`: 0 error, 52 route (nambah 1: `/admin/handbook-magang`). `npx eslint` pada semua file yang disentuh/baru: 0 error, 0 warning (sempat ada 1 warning "unused eslint-disable directive" yang gak perlu, langsung dihapus). **SUDAH DI-DEPLOY** (`firestore:rules`, `firestore:indexes`, `hosting` -- ketiganya berhasil). `dev`+`main` sinkron di `6a96fe3`. **Belum ditest visual/end-to-end sama sekali** -- terutama upload video (butuh dicoba langsung buat konfirmasi batas 10MB beneran seperti yang didokumentasikan, dan buat lihat apakah preset Cloudinary project ini beneran menerima resource_type video/raw lewat endpoint `/auto/upload`).
