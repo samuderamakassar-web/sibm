@@ -12,7 +12,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 ### 🔴🔴 PALING URGENT: push+deploy §51 (Sistem Evaluasi & Skor) + konfirmasi fix §50A jalan
 
-0. **BELUM DI-PUSH: Sistem Evaluasi & Skor (§51)** — push ke `dev`+`main`, lalu `firebase deploy --only firestore:rules,hosting` (ada collection baru `evaluasi_manual`, gak butuh index baru). Setelah deploy, **coba evaluasi 1 laporan** dari `admin/monitor-security`/`monitor-ob`/`monitor-driver` buat konfirmasi transaksi poin (`runTransaction`) beneran jalan, belum pernah ditest langsung.
+0. **Sistem Evaluasi & Skor (§51) SUDAH di-push+deploy** — **coba evaluasi 1 laporan** dari `admin/monitor-security`/`monitor-ob`/`monitor-driver` buat konfirmasi transaksi poin (`runTransaction`) beneran jalan, belum pernah ditest langsung.
 1. **Konfirmasi fix §50A (root cause SEBENARNYA insiden cron)** — SUDAH di-push (`dec5fa0`, pure `package.json`, gak butuh deploy). `firebase-admin` sebelumnya salah ditaruh di `devDependencies` (bukan `dependencies`), bikin `npm ci` di GitHub Actions diam-diam skip install-nya. Pantau run berikutnya (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau MASIH gagal dengan error yang sama, kirim screenshot lagi.
 2. **Coba `admin/monitor-cron`** (§50) — pastikan fetch API publik GitHub beneran jalan dari browser (belum pernah ditest, resiko CORS/rate-limit).
 3. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
@@ -31,7 +31,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 User jawab 3 pertanyaan klarifikasi (semua pilih opsi rekomendasi) buat fitur evaluasi besar yang diminta: poin +/- manual dengan alasan (nambah ke poin otomatis), berlaku ke semua jenis laporan tim lewat halaman monitoring yang sudah ada, rekap 6 bulan/1 tahun = rata-rata poin bulanan. Dibangun: komponen `EvaluasiManualButton.tsx` dipasang di monitor-security/monitor-ob/monitor-driver, dan `admin/monitor-poin` dirombak jadi 3 kartu per departemen (Admin GA/QHSE/Magang DIHAPUS dari skor) + selector periode Bulanan/6 Bulan/1 Tahun. Detail: **§51** (§51A-§51G).
 
-**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+**Status: SUDAH DI-DEPLOY** (`firestore:rules`+`hosting`). `dev`+`main` sinkron di `d3e9c0b`.
 
 ### Sesi sebelumnya (§50) — Root Cause Sebenarnya Insiden Cron + 3 Menu Admin Baru + Reorganisasi Menu
 
@@ -2368,4 +2368,4 @@ Sempat direncanakan digabung ke sini (§50B), tapi ternyata gak cocok -- magang 
 Ditemukan pas nambah kolom Evaluasi: tabel-tabel di `admin/monitor-ob` (Checklist, Stock, Plot) TERNYATA TIDAK PUNYA pola transformasi mobile (card-view di layar kecil) sama sekali -- beda dari `admin/monitor-security`/`admin/monitor-driver` yang sudah punya lewat `@media (max-width: 768px)`. Selama ini cuma mengandalkan scroll horizontal (`overflowX: auto`). Ini PRE-EXISTING (bukan yang diperkenalkan sesi ini), tapi kolom Evaluasi baru menambah 1 kolom lagi ke tabel yang sudah agak sempit di HP. BELUM diperbaiki sesi ini (di luar scope perubahan minimal buat fitur evaluasi) -- dicatat sebagai kandidat kuat kalau user mau lanjut ke audit/perbaikan mobile yang lebih menyeluruh.
 
 ### 51G. Verifikasi
-`npm run build`: 0 error, 54 route (gak ada halaman baru, cuma nambah komponen & kolom). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di effect fetch multi-bulan `monitor-poin`) -- langsung difix pola yang sama seperti sebelumnya. Setelah fix: 0 error, 0 warning di semua file yang disentuh. **Belum di-deploy, belum ditest end-to-end** -- terutama transaksi Firestore (`runTransaction`) buat evaluasi manual belum pernah dicoba langsung, dan rata-rata 6 bulan/1 tahun baru bisa benar-benar bermakna setelah ada beberapa bulan data poin terkumpul.
+`npm run build`: 0 error, 54 route (gak ada halaman baru, cuma nambah komponen & kolom). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di effect fetch multi-bulan `monitor-poin`) -- langsung difix pola yang sama seperti sebelumnya. Setelah fix: 0 error, 0 warning di semua file yang disentuh. **SUDAH DI-DEPLOY** (`firestore:rules`+`hosting`, berhasil tanpa hambatan). `dev`+`main` sinkron di `d3e9c0b`. **Belum ditest end-to-end** -- terutama transaksi Firestore (`runTransaction`) buat evaluasi manual belum pernah dicoba langsung, dan rata-rata 6 bulan/1 tahun baru bisa benar-benar bermakna setelah ada beberapa bulan data poin terkumpul.
