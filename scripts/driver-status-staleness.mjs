@@ -13,6 +13,12 @@
 // patroli-push-reminder.mjs, memang didesain terus muncul lagi tiap 30 menit
 // selama status belum diupdate, baru berhenti otomatis begitu statusnya berubah.
 //
+// NOTIFIKASI ADMIN GA (20 Sep 2026): Admin GA JUGA dapat 1 push/in-app rekap per run (bukan per
+// kendaraan) kalau ada kendaraan basi -- ikut pola "terus muncul tiap 30 menit" yang sama sampai
+// statusnya diupdate, KONSISTEN dengan driver/Security, TAPI ini artinya Admin GA bisa dapat
+// notif berulang tiap 30 menit kalau ada kendaraan yang lama gak diupdate -- kalau kerasa
+// berisik, gampang ditambah guard 1x/hari nanti.
+//
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
 import { initializeApp, cert } from "firebase-admin/app";
@@ -31,6 +37,35 @@ async function tulisNotifPersonal(namaList, judul, pesan) {
   await Promise.all(namaList.map((nama) =>
     db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
   ));
+}
+
+// Tembusan ke Admin GA -- permintaan user: notifikasi Admin GA tiap kali ada kendaraan yang
+// statusnya gak diupdate (driver dianggap gak menjalankan tugas pelaporan). 1 push rekap per run
+// (bisa isi >1 kendaraan), bukan 1 push per kendaraan -- sama pola dgn recap patroli di
+// points-deduction.mjs. Ambil token/nama LANGSUNG di sini (bukan reuse tokenPerNama di jalankan())
+// karena butuh dept "Admin GA" spesifik, bukan semua token.
+async function kirimNotifAdminGA(judul, pesan) {
+  const usersSnap = await db.collection("users_master").where("departemen", "==", "Admin GA").get();
+  const namaAdmin = usersSnap.docs.map((d) => d.data().nama).filter(Boolean);
+  if (namaAdmin.length === 0) {
+    console.log("Tidak ada Admin GA terdaftar di users_master, skip notifikasi Admin GA.");
+    return;
+  }
+  await tulisNotifPersonal(namaAdmin, judul, pesan);
+
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "Admin GA").get();
+  const tokens = [];
+  tokenSnap.forEach((d) => { if (d.data().token) tokens.push(d.data().token); });
+  if (tokens.length === 0) {
+    console.log("Notifikasi in-app Admin GA ditulis, tapi belum ada token FCM Admin GA, skip push.");
+    return;
+  }
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title: judul, body: pesan },
+    webpush: { notification: { icon: "/icons/icon-192.png" } },
+  });
+  console.log(`Push ke ${tokens.length} Admin GA -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
 }
 
 // Ambang waktu "belum diupdate" -- default 2 jam. Sengaja dibuat konstanta di
@@ -142,6 +177,16 @@ async function jalankan() {
     console.log(`${k.kendaraan}: mengirim ke ${tokens.length} penerima (${Array.from(penerima).join(", ")}) -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
     await tulisNotifPersonal(Array.from(penerima), "Status Kendaraan Belum Diupdate", bodyPesan);
   }
+
+  // Tembusan ke Admin GA -- 1 rekap per run, isi semua kendaraan basi yang ditemukan barusan.
+  const daftar = kendaraanStale.map((k) => {
+    const jamStr = `${Math.floor(k.menitBerlalu / 60)} jam ${k.menitBerlalu % 60} menit`;
+    return `${k.kendaraan} (${k.status}, ${jamStr}, driver: ${k.driver || "-"})`;
+  }).join("; ");
+  await kirimNotifAdminGA(
+    "🚚 Status Kendaraan Belum Diupdate",
+    `${kendaraanStale.length} kendaraan belum update status: ${daftar}.`
+  );
 }
 
 jalankan()

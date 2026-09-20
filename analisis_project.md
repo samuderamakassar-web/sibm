@@ -1,30 +1,37 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 20 September 2026 (**§46 -- INSIDEN**: hampir SEMUA cron reminder gagal sejak 18 Sep malam, `Error: Cannot find module '@google-cloud/firestore'` -- akar masalah: `firebase-admin` diinstall ad-hoc tiap run tanpa lockfile, jadi rentan begitu ada rilis baru sub-dependency-nya di npm. Fix: `firebase-admin` jadi devDependency asli + `package-lock.json` regenerated + semua 11 workflow ganti `npm install firebase-admin@X` jadi `npm ci`. PURE CI-side, gak butuh `firebase deploy`. **PERLU DI-PUSH SEGERA**, lihat §46. §45 (badge off-duty informatif, jendela tukar jaga, eskalasi serah terima telat) SUDAH DI-DEPLOY sebelumnya, masih **belum ditest end-to-end**. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 20 September 2026 (**§47**: notifikasi push Admin GA ditambahkan buat pelanggaran kepatuhan -- patroli Security, Notifikasi Dadakan/siram tanaman, checklist OB/CS (lewat `points-deduction.mjs`), dan status kendaraan Driver (`driver-status-staleness.mjs`); sekalian ketauan & difix Admin GA belum PERNAH punya token FCM sama sekali (`useFcmSetup` gak pernah dipasang di `admin/page.tsx`). **BELUM di-push/deploy.** §46 -- INSIDEN sebelumnya (hampir semua cron gagal `Cannot find module '@google-cloud/firestore'` sejak 18 Sep malam, akar masalah `firebase-admin` diinstall ad-hoc tanpa lockfile) **SUDAH DI-PUSH & FIXED**, tapi hasil run pertama pasca-fix belum dikonfirmasi. §45 (badge off-duty, jendela tukar jaga, eskalasi serah terima) SUDAH DI-DEPLOY, masih belum ditest end-to-end. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §46 TERBARU, INSIDEN)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §47 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴🔴 PALING URGENT: push fix §46 (insiden cron gagal massal) SEKARANG
+### 🔴🔴 PALING URGENT: push §47 + konfirmasi fix §46 jalan + pilih arah §44E
 
-0. **PALING URGENT, BELUM DI-PUSH: fix §46** — hampir SEMUA cron reminder (Patroli Push, Driver Status Staleness, Patroli Reminder, Security Tugas, Overtime Check-in, FCM Reminder OB & CS, Shift Handover Escalation) gagal sejak 18 Sep malam dengan `Cannot find module '@google-cloud/firestore'`. Fix SUDAH SELESAI & terverifikasi lokal (`npm ci` bersih, modul resolve, script lolos sampai titik yang benar) tapi **BELUM di-`git push`**. Cukup push ke `dev`+`main` (TIDAK butuh `firebase deploy`, ini pure CI-side: `package.json`, `package-lock.json`, 11 file workflow `.yml`). Setelah push, pantau email "Run succeeded" dari GitHub Actions di run berikutnya (Patroli Push Reminder jalan tiap 30 menit, paling cepat kelihatan hasilnya).
-1. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty kasih info "berakhir X menit lalu" + "jaga berikutnya kapan"; (b) kartu Tukar Shift/Jaga cuma muncul di jam 08:00/20:00 WITA (±60 menit); (c) fitur eskalasi (§45C) butuh skenario nyata (serah terima telat >10 menit) buat ditest penuh -- sekarang harusnya sudah jalan lagi berkat fix §46.
-2. **Perlu arahan user: pilih arah sistem scoring/report** (§44E) — 3 ide ditawarkan (poin bonus/positif, mekanisme banding Danru, perluas potongan ke Driver). Belum ada yang dibangun, nunggu user pilih prioritas sebelum lanjut.
-3. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F) — pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik).
-4. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Setelah diaktifkan, TIDAK perlu aksi lain — otomatis jalan di cron berikutnya, gak perlu ubah kode lagi.
-5. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
-6. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
+0. **BELUM DI-PUSH: §47 (notifikasi Admin GA)** — push ke `dev`+`main`. Frontend-only + script `.mjs` (`admin/page.tsx` dapat `useFcmSetup`, `points-deduction.mjs` & `driver-status-staleness.mjs` kirim notif Admin GA) -- butuh `firebase deploy --only hosting` SETELAH push (karena ada perubahan `src/`), tapi script `.mjs`-nya sendiri otomatis aktif begitu push ke `main` (gak perlu deploy buat itu). **PENTING**: setelah deploy, minta Admin GA login & izinkan notifikasi browser sekali (buat daftarin token FCM mereka yang pertama kali) -- tanpa ini pushnya gak akan sampai kemana-mana walau kodenya sudah benar.
+1. **Konfirmasi fix §46 (insiden cron gagal massal) beneran jalan** — sudah di-push (`20427cd`), user pilih nunggu jadwal otomatis (bukan trigger manual). Cek email "Run succeeded" dari GitHub Actions (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau BELUM ada konfirmasi sukses, itu prioritas #1 sebelum lanjut apa pun.
+2. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty kasih info "berakhir X menit lalu" + "jaga berikutnya kapan"; (b) kartu Tukar Shift/Jaga cuma muncul di jam 08:00/20:00 WITA (±60 menit); (c) fitur eskalasi (§45C) butuh skenario nyata (serah terima telat >10 menit) buat ditest penuh.
+3. **Perlu arahan user: pilih arah sistem scoring/report** (§44E) — 3 ide ditawarkan (poin bonus/positif, mekanisme banding Danru, perluas potongan ke Driver). Belum ada yang dibangun, nunggu user pilih prioritas sebelum lanjut.
+4. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F) — pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik).
+5. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Sejak §47, notifikasi Admin GA sudah tetap sampai lewat push+in-app terlepas dari EmailJS, tapi email tetap berguna sebagai kanal tambahan begitu diaktifkan.
+6. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
+7. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§46) — INSIDEN: Cron Reminder Gagal Massal Sejak 18 September
+### Sesi hari ini (§47) — Push Notifikasi Admin GA: Patroli, Siram Tanaman, Checklist OB/CS, Status Kendaraan
+
+User minta ditambahkan notifikasi push ke Admin GA tiap kali ada pelanggaran kepatuhan -- Security tidak patroli/tidak siram tanaman, dan juga Driver & OB/CS. Ketemu masalah tersembunyi duluan: Admin GA TERNYATA belum pernah punya token FCM sama sekali (`useFcmSetup` gak pernah dipasang di dashboard mereka) -- difix dulu sebelum nulis notifikasinya. Detail: **§47** (§47A-§47D).
+
+**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+
+### Sesi sebelumnya (§46) — INSIDEN: Cron Reminder Gagal Massal Sejak 18 September
 
 User forward banyak email "Run failed" GitHub Actions sambil minta dicek + jelasin ke bahasa awam. Ternyata HAMPIR SEMUA script reminder gagal sejak 18 Sep malam karena `firebase-admin` diinstall ad-hoc tiap run tanpa lockfile (`npm install firebase-admin@14.4.0` langsung di root, gak pernah tercatat di `package-lock.json` app) -- begitu ada rilis baru salah satu sub-dependency-nya (`@google-cloud/firestore`) di registry npm, instalasi jadi pincang. Fix: `firebase-admin` jadi devDependency asli + lockfile diregenerate + semua 11 workflow ganti ke `npm ci` (install deterministik). Detail: **§46** (§46A-§46D).
 
-**Status: FIX SELESAI & terverifikasi lokal, TAPI BELUM DI-PUSH.** Ini prioritas #1 buat sesi berikutnya -- push dulu sebelum kerjaan lain, karena production sedang aktif kehilangan beberapa jenis reminder.
+**Status: SUDAH DI-PUSH** (`20427cd`). Hasil run pertama pasca-fix belum dikonfirmasi user (pilih nunggu jadwal otomatis).
 
 ### Sesi sebelumnya (§45) — Perbaikan Modul Security Tahap 2: Badge Off-Duty Informatif, Jendela Tukar Jaga, Eskalasi Serah Terima Telat, lanjutan langsung §44
 
@@ -2196,6 +2203,27 @@ Semua workflow reminder (`*.yml`) install `firebase-admin` dengan cara AD-HOC: `
 - `npm run build` tetap 0 error, 51 route (firebase-admin cuma dipakai scripts/, gak pernah ke-import dari `src/`, jadi gak ada resiko bocor ke bundle client).
 
 ### 46D. Status & Yang Masih Perlu Dicek
-**BELUM di-push/deploy saat dokumentasi ini ditulis** -- fix ini PURE CI/cron-side (package.json + package-lock.json + workflow YAML), **TIDAK butuh `firebase deploy` sama sekali** (gak ada perubahan ke `src/`, rules, atau indexes), cukup `git push` ke `main` supaya GitHub Actions checkout versi yang sudah benar di run berikutnya.
+**SUDAH DI-PUSH** ke `dev`+`main` (`20427cd`) -- fix ini PURE CI/cron-side (package.json + package-lock.json + workflow YAML), **TIDAK butuh `firebase deploy` sama sekali** (gak ada perubahan ke `src/`, rules, atau indexes).
 
-Setelah push, PERLU dipantau: run berikutnya dari workflow mana pun (terutama yang jadwalnya rutin tiap 30 menit seperti Patroli Push Reminder) buat konfirmasi statusnya balik jadi ✅ success. User bisa cek langsung dari email "Run failed"/"Run succeeded" yang otomatis terkirim GitHub, gak perlu buka Actions tab manual.
+User pilih nunggu jadwal otomatis (bukan trigger manual) buat verifikasi -- Patroli Push Reminder (tiap 30 menit) yang paling cepat kelihatan hasilnya lewat email "Run succeeded"/"Run failed" otomatis dari GitHub. **Belum ada konfirmasi hasil run pertama pasca-fix saat dokumentasi ini ditulis.**
+
+## 47. Push Notifikasi Admin GA: Patroli, Siram Tanaman, Checklist OB/CS, Status Kendaraan
+
+Permintaan user: tambahkan notifikasi push ke Admin GA setiap kali ada pelanggaran kepatuhan -- Security tidak patroli, tidak menyiram tanaman (Notifikasi Dadakan), dan juga untuk Driver serta OB/CS.
+
+### 47A. Masalah Tersembunyi: Admin GA Belum Pernah Punya Token FCM Sama Sekali
+Dicek dulu sebelum nulis notifikasi apa pun: `useFcmSetup()` (hook pendaftar token push) SUDAH dipasang di dashboard OB, Security, dan Driver -- tapi **belum PERNAH dipasang di `admin/page.tsx`** sama sekali. Artinya Admin GA gak akan pernah dapat push apa pun sampai sekarang, terlepas dari script mana pun yang coba kirim. **Fixed**: tambah `useFcmSetup(session?.nama, ..., "Admin GA")` di `admin/page.tsx` -- begitu Admin GA login & izinkan notifikasi (sama seperti dept lain), token FCM mereka baru mulai terdaftar dengan `dept: "Admin GA"`.
+
+### 47B. `scripts/points-deduction.mjs` -- Notifikasi Admin GA utk 3 Pelanggaran
+Script ini SUDAH mengevaluasi 3 kondisi tiap hari (checklist OB/CS, patroli Security, Notifikasi Dadakan) buat potong poin -- sekarang ketiganya JUGA memicu notifikasi ke Admin GA (push + kotak masuk in-app `notifikasi_personal`), TERPISAH dari email lama (§42B) yang masih terblokir EmailJS:
+- `cekOB()` & `cekNotifikasiDadakan()` diubah supaya RETURN daftar pelanggaran (sebelumnya cuma potong poin diam-diam), sama pola dengan `cekSecurityPatroli()` yang sudah begini dari §42.
+- Helper baru `ambilNamaAdminGA()` (semua nama Admin GA, TANPA syarat punya email -- beda dari `ambilEmailAdminGA()` yang dipakai email) + `kirimPushAdminGA(judul, pesan)` (tulis `notifikasi_personal` + kirim push FCM ke dept "Admin GA").
+- 3 notifikasi berbeda dikirim kalau ada pelanggaran: "🧹 Checklist OB/CS Tidak Lengkap", "🚨 Kepatuhan Patroli Security Tidak Terpenuhi", "🌱 Notifikasi Dadakan (Siram Tanaman) Tidak Diselesaikan" -- masing-masing isi daftar nama yang bersangkutan.
+
+### 47C. `scripts/driver-status-staleness.mjs` -- Notifikasi Admin GA utk Status Kendaraan
+Helper baru `kirimNotifAdminGA()` (duplikat kecil, pola sama dgn 47B tapi mandiri di file ini) dipanggil di akhir `jalankan()` kalau ada kendaraan basi -- 1 notifikasi rekap per run (bisa isi >1 kendaraan), bukan 1 per kendaraan.
+
+**Catatan desain**: script ini jalan tiap 30 menit TANPA guard anti-double-kirim (memang disengaja sejak awal, biar terus mengingatkan Driver/Security sampai statusnya diupdate) -- notifikasi Admin GA ikut pola yang sama, artinya Admin GA BISA dapat notifikasi berulang tiap 30 menit kalau ada kendaraan yang lama gak diupdate. Belum ada guard 1x/hari -- gampang ditambah kalau kerasa berisik buat user.
+
+### 47D. Verifikasi
+`npm run build`: 0 error, 51 route. `npx eslint src/app/admin/page.tsx`: 0 warning. `node --check` pada `points-deduction.mjs` & `driver-status-staleness.mjs`: lolos. **Belum di-deploy, belum ditest end-to-end** (`points-deduction.mjs` jalan 1x/hari jam 09:00 WITA, jadi efeknya baru kelihatan besok pagi; `driver-status-staleness.mjs` butuh kendaraan beneran basi >2 jam buat ke-trigger).

@@ -41,10 +41,19 @@
 // Driver/QHSE/Admin GA karena itu SEMENTARA tetap 100 poin tiap bulan sampai
 // ada sinyal tugas individual yang reliable ditambahkan.
 //
+// NOTIFIKASI ADMIN GA (20 Sep 2026): selain potong poin, sekarang JUGA kirim push + kotak masuk
+// in-app ke Admin GA tiap kali ada pelanggaran #1-#3 di atas (checklist OB/CS tidak lengkap,
+// patroli Security tidak patuh, Notifikasi Dadakan/siram tanaman tidak diselesaikan) -- TIDAK
+// bergantung EmailJS sama sekali (beda dari email lama di §42B yang masih diblokir), jadi tetap
+// sampai walau EmailJS belum diaktifkan usernya. Notifikasi driver (status kendaraan basi) ada
+// di scripts/driver-status-staleness.mjs sendiri, bukan di sini (jalan tiap 30 menit, bukan
+// harian, jadi terpisah dari alur potong poin).
+//
 // Reuse secret yang sama kayak script reminder lain: FIREBASE_SERVICE_ACCOUNT_BASE64
 
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 // EmailJS -- duplikat pola yang sama dengan scripts/overtime-checkin-reminder.mjs (lihat catatan
 // lengkap di sana soal kenapa ID/key ini aman di-hardcode langsung, bukan GitHub Secret).
@@ -102,11 +111,51 @@ async function ambilEmailAdminGA() {
   return snap.docs.map((d) => d.data()).filter((u) => u.email).map((u) => ({ nama: u.nama, email: u.email }));
 }
 
+// Push + kotak masuk in-app ke Admin GA -- SENGAJA TERPISAH dari ambilEmailAdminGA() (butuh SEMUA
+// nama Admin GA, bukan cuma yang punya email terdaftar) supaya notifikasi kepatuhan (patroli,
+// siram tanaman, checklist OB) tetap sampai ke Admin GA meski email masih diblokir EmailJS
+// (lihat catatan §41B/§42B di analisis_project.md) -- push & in-app TIDAK bergantung ke EmailJS
+// sama sekali.
+async function ambilNamaAdminGA() {
+  const snap = await db.collection("users_master").where("departemen", "==", "Admin GA").get();
+  return snap.docs.map((d) => d.data().nama).filter(Boolean);
+}
+
+async function tulisNotifPersonal(namaList, judul, pesan) {
+  await Promise.all(namaList.map((nama) =>
+    db.collection("notifikasi_personal").add({ untukNama: nama, judul, pesan, dibaca: false, waktu: FieldValue.serverTimestamp() })
+  ));
+}
+
+async function kirimPushAdminGA(judul, pesan) {
+  const namaAdmin = await ambilNamaAdminGA();
+  if (namaAdmin.length === 0) {
+    console.log("  Tidak ada Admin GA terdaftar di users_master, skip notifikasi.");
+    return;
+  }
+  await tulisNotifPersonal(namaAdmin, judul, pesan);
+
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "Admin GA").get();
+  const tokens = [];
+  tokenSnap.forEach((d) => { if (d.data().token) tokens.push(d.data().token); });
+  if (tokens.length === 0) {
+    console.log("  Notifikasi in-app ditulis, tapi belum ada token FCM Admin GA terdaftar, skip push.");
+    return;
+  }
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title: judul, body: pesan },
+    webpush: { notification: { icon: "/icons/icon-192.png" } },
+  });
+  console.log(`  Push ke ${tokens.length} Admin GA -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
+}
+
 const serviceAccount = JSON.parse(
   Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf-8")
 );
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
+const messaging = getMessaging();
 
 const POIN_AWAL_BULAN = 100;
 const POTONGAN = {
@@ -160,18 +209,19 @@ async function potongPoin(nama, departemen, alasan, jumlah) {
 // 1. OB & CS -- sesi checklist yang gak dilaporkan kemarin
 // ==========================================
 async function cekOB() {
+  const tidakLengkap = [];
   if (isWeekend(kemarin)) {
     console.log("OB & CS: kemarin weekend, skip (gak ada jadwal).");
-    return;
+    return tidakLengkap;
   }
   const plotSnap = await db.collection("daily_plots").doc(kemarin).get();
   if (!plotSnap.exists) {
     console.log("OB & CS: tidak ada plot untuk kemarin, skip.");
-    return;
+    return tidakLengkap;
   }
   const plotLantai = plotSnap.data().plot_lantai || {};
   const picUnik = Array.from(new Set(Object.values(plotLantai).filter((n) => n && n !== "Semua / All")));
-  if (picUnik.length === 0) return;
+  if (picUnik.length === 0) return tidakLengkap;
 
   const checklistSnap = await db.collection("ob_checklists").where("tanggal", "==", kemarin).get();
   const sesiPerNama = {};
@@ -193,8 +243,10 @@ async function cekOB() {
         `Tidak lapor checklist sesi ${terlewat.join(", ")} (${kemarin})`,
         POTONGAN.ob_sesi_terlewat * terlewat.length
       );
+      tidakLengkap.push({ nama, terlewat });
     }
   }
+  return tidakLengkap;
 }
 
 // ==========================================
@@ -252,10 +304,11 @@ async function cekSecurityPatroli() {
 // giliran shift, bukan per-individu -- lihat catatan scope di atas).
 // ==========================================
 async function cekNotifikasiDadakan() {
+  const jendelaTerlewat = [];
   const shift2Kemarin = await ambilPicShift(kemarin, "Shift 2");
   if (shift2Kemarin.length === 0) {
     console.log("Notifikasi Dadakan: tidak ada Security Shift 2 terjadwal kemarin, skip.");
-    return;
+    return jendelaTerlewat;
   }
 
   const [malamKemarinDoc, pagiHariIniDoc] = await Promise.all([
@@ -267,12 +320,15 @@ async function cekNotifikasiDadakan() {
     for (const nama of shift2Kemarin) {
       await potongPoin(nama, "Security", `Notifikasi Dadakan jendela Malam (${kemarin}) tidak diselesaikan`, POTONGAN.security_dadakan_terlewat);
     }
+    jendelaTerlewat.push({ jendela: "Malam", tanggal: kemarin, petugas: shift2Kemarin });
   }
   if (!pagiHariIniDoc.exists) {
     for (const nama of shift2Kemarin) {
       await potongPoin(nama, "Security", `Notifikasi Dadakan jendela Pagi (${hariIni}) tidak diselesaikan`, POTONGAN.security_dadakan_terlewat);
     }
+    jendelaTerlewat.push({ jendela: "Pagi", tanggal: hariIni, petugas: shift2Kemarin });
   }
+  return jendelaTerlewat;
 }
 
 async function jalankan() {
@@ -291,9 +347,9 @@ async function jalankan() {
     return;
   }
 
-  await cekOB();
+  const obTidakLengkap = await cekOB();
   const securityTidakPatuh = await cekSecurityPatroli();
-  await cekNotifikasiDadakan();
+  const dadakanTerlewat = await cekNotifikasiDadakan();
 
   // Email ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli (permintaan
   // user) -- 1 email rekap per hari (bisa isi >1 shift/orang), bukan 1 email per orang.
@@ -311,6 +367,35 @@ async function jalankan() {
           console.error(`Gagal kirim email kepatuhan patroli ke ${admin.nama}:`, err.message);
         }
       }
+    }
+  }
+
+  // Push + kotak masuk in-app ke Admin GA -- TIDAK bergantung EmailJS sama sekali, jadi tetap
+  // sampai walau email di atas gagal/terblokir. Permintaan user: notifikasi Admin GA setiap kali
+  // ada Security yang gak patroli/gak siram tanaman, DAN OB/CS yang gak lengkap checklist.
+  if (obTidakLengkap.length > 0) {
+    console.log(`Kirim notifikasi Admin GA: ${obTidakLengkap.length} staf OB/CS checklist tidak lengkap.`);
+    const daftar = obTidakLengkap.map((o) => `${o.nama} (${o.terlewat.join(", ")})`).join("; ");
+    await kirimPushAdminGA(
+      "🧹 Checklist OB/CS Tidak Lengkap",
+      `${obTidakLengkap.length} staf OB/CS tidak lengkap checklist kemarin (${kemarin}): ${daftar}.`
+    );
+  }
+  if (securityTidakPatuh.length > 0) {
+    console.log(`Kirim notifikasi Admin GA: ${securityTidakPatuh.length} petugas Security tidak patroli.`);
+    const daftar = securityTidakPatuh.map((s) => `${s.nama} (${s.shiftLabel})`).join("; ");
+    await kirimPushAdminGA(
+      "🚨 Kepatuhan Patroli Security Tidak Terpenuhi",
+      `${securityTidakPatuh.length} petugas Security tidak memenuhi minimum ${MINIMUM_SESI_PATROLI} sesi patroli shift kemarin (${kemarin}): ${daftar}.`
+    );
+  }
+  if (dadakanTerlewat.length > 0) {
+    for (const d of dadakanTerlewat) {
+      console.log(`Kirim notifikasi Admin GA: Notifikasi Dadakan jendela ${d.jendela} tidak diselesaikan.`);
+      await kirimPushAdminGA(
+        "🌱 Notifikasi Dadakan (Siram Tanaman) Tidak Diselesaikan",
+        `Jendela ${d.jendela} (${d.tanggal}) tidak diselesaikan oleh Security Shift 2 yang bertugas: ${d.petugas.join(", ")}.`
+      );
     }
   }
 

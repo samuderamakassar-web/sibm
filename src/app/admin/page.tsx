@@ -5,6 +5,7 @@ import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
 import NotifikasiBellButton from "../../components/NotifikasiBellButton";
+import { useFcmSetup } from "../../hooks/useFcmSetup";
 
 // Ikon SVG garis — set sama dengan portal utama (src/app/page.tsx) & shell subhalaman admin
 type IconProps = { size?: number; color?: string };
@@ -78,6 +79,11 @@ export default function AdminDashboardPage() {
     redirectTo: "/",
     deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
   });
+  // Admin GA belum pernah pasang push notif sama sekali sebelum ini -- dibutuhkan supaya
+  // notifikasi kepatuhan (patroli, siram tanaman, checklist OB, status kendaraan) dari
+  // scripts/points-deduction.mjs & driver-status-staleness.mjs beneran bisa nyampe sebagai
+  // push, bukan cuma masuk kotak masuk in-app.
+  useFcmSetup(session?.nama || "", !!session?.nama, "Admin GA");
 
   const handleLogout = () => logoutWithConfirm(confirm, router);
 
