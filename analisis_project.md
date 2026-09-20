@@ -12,7 +12,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 ### 🔴🔴🔴 PALING URGENT: push+deploy §50 (3 menu admin baru) + konfirmasi fix §50A jalan + jawab klarifikasi Evaluasi
 
-0. **BELUM DI-PUSH: 3 menu admin baru + reorganisasi (§50B/§50C)** — push ke `dev`+`main`, lalu `firebase deploy --only hosting`.
+0. **3 menu admin baru + reorganisasi (§50B/§50C) SUDAH di-push+deploy.**
 1. **Konfirmasi fix §50A (root cause SEBENARNYA insiden cron)** — SUDAH di-push (`dec5fa0`, pure `package.json`, gak butuh deploy). `firebase-admin` sebelumnya salah ditaruh di `devDependencies` (bukan `dependencies`), bikin `npm ci` di GitHub Actions diam-diam skip install-nya. Pantau run berikutnya (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau MASIH gagal dengan error yang sama, kirim screenshot lagi.
 2. **Perlu jawaban user: 3 pertanyaan soal Sistem Evaluasi & Skor** (§50D) — fitur besar yang diminta user (evaluasi manual semua laporan/inspeksi tim, pengaruh ke skor, juara per dept, rekap 6 bulan/1 tahun) belum bisa mulai dibangun tanpa beberapa keputusan desain, ditanyakan balik di percakapan.
 3. **Coba `admin/monitor-cron` begitu di-deploy** — pastikan fetch API publik GitHub beneran jalan dari browser (belum pernah ditest, resiko CORS/rate-limit).
@@ -30,7 +30,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 User forward screenshot: semua cron MASIH gagal jam-jam setelah fix §46. Ternyata fix §46 (`npm install` → `npm ci`) belum menyentuh akar masalah SEBENARNYA: `firebase-admin` salah ditaruh di `devDependencies`. Dikonfirmasi lewat pengujian langsung (`npm ci --omit=dev`), difix, dan di-push segera. Sekalian dikerjakan (user setuju eksekusi langsung): `admin/monitor-driver` (parallel dgn monitor-ob/monitor-security), `admin/monitor-cron` (kesehatan notifikasi, fetch API GitHub), link Hasil Uji Emisi ditambahkan ke menu Admin GA, dan reorganisasi menu Admin GA jadi 6 kelompok logis. Manajemen Data Magang (ide ke-4) DIGABUNG ke rencana Evaluasi & Skor (§50D, belum dikerjakan, nunggu klarifikasi). Detail: **§50** (§50A-§50E).
 
-**Status: fix §50A SUDAH di-push. 3 menu baru + reorganisasi (§50B/§50C) KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+**Status: SEMUANYA SUDAH DI-DEPLOY** (fix §50A pure package.json, 3 menu baru + reorganisasi via hosting). `dev`+`main` sinkron di `72c484e`.
 
 ### Sesi sebelumnya (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru, lanjutan langsung §47
 
@@ -2328,4 +2328,4 @@ Menu yang sebelumnya cuma daftar rata (urutan gak jelas) dikelompokkan jadi 6 ba
 User minta fitur besar: menu evaluasi manual (Admin GA bisa menilai laporan/inspeksi APAPUN dari Security/OB-CS/Driver kapan saja), yang mempengaruhi skor bulanan, PLUS rekap juara 1 per departemen (OB/CS, Security, Driver -- Admin GA/Magang/QHSE SENGAJA gak ikut diskor), PLUS rekap 6 bulan & 1 tahun. Ini secara struktural akan mengubah/memperluas sistem poin yang sudah ada (`points-deduction.mjs`, `admin/monitor-poin`) -- BELUM dikerjakan, ada beberapa keputusan desain yang cuma bisa dijawab user (lihat pertanyaan yang diajukan balik ke user di percakapan), supaya gak salah bangun & harus diulang.
 
 ### 50E. Verifikasi
-`npm run build`: 0 error, 54 route (nambah 2: `/admin/monitor-driver`, `/admin/monitor-cron`). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di `monitor-cron`, fetch GitHub API) -- langsung difix (pindahkan `setLoading`/`setErrorMsg` ke dalam IIFE async, bukan di awal effect body). Setelah fix: 0 error, 0 warning. Mobile CSS di 2 halaman baru REUSE pola card-transform yang sudah terbukti di `admin/monitor-security` (bukan pola baru yang belum teruji). **Belum di-deploy, belum ditest visual/end-to-end** -- terutama `admin/monitor-cron` perlu dicoba langsung buat konfirmasi fetch API publik GitHub beneran jalan dari browser (CORS dkk).
+`npm run build`: 0 error, 54 route (nambah 2: `/admin/monitor-driver`, `/admin/monitor-cron`). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di `monitor-cron`, fetch GitHub API) -- langsung difix (pindahkan `setLoading`/`setErrorMsg` ke dalam IIFE async, bukan di awal effect body). Setelah fix: 0 error, 0 warning. Mobile CSS di 2 halaman baru REUSE pola card-transform yang sudah terbukti di `admin/monitor-security` (bukan pola baru yang belum teruji). **SUDAH DI-DEPLOY** (`firebase deploy --only hosting`). `dev`+`main` sinkron di `72c484e`. **Belum ditest visual/end-to-end** -- terutama `admin/monitor-cron` perlu dicoba langsung buat konfirmasi fetch API publik GitHub beneran jalan dari browser (CORS dkk).
