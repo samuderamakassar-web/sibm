@@ -36,6 +36,12 @@ const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconGraduationCap = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg>
 );
+const IconCar = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11" /><rect x="3" y="11" width="18" height="6" rx="1.5" /><circle cx="7.5" cy="17" r="1.5" /><circle cx="16.5" cy="17" r="1.5" /></svg>
+);
+const IconActivity = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2 8 4-16 2 8h6" /></svg>
+);
 const IconChevronRight = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
 );
@@ -90,7 +96,12 @@ export default function AdminDashboardPage() {
 
   const handleLogout = () => logoutWithConfirm(confirm, router);
 
+  // Dikelompokkan per fungsi (Manajemen Dasar → Layanan GA → Pantau Laporan Tim → Alat/Master
+  // Data → Skor & Pengembangan → Laporan & Sistem) -- sebelumnya cuma daftar rata tanpa urutan
+  // jelas, dirapikan 20 Sep 2026 sekalian nambah 3 menu baru yang tadinya belum ada tempatnya
+  // (Pantau Laporan Driver, Hasil Uji Emisi belum ke-link dari sini, Kesehatan Notifikasi).
   const menuAdmin = [
+    // --- Manajemen Dasar ---
     {
       title: "Manajemen Pengguna",
       desc: "Tambah, edit, hapus akun login untuk staf operasional.",
@@ -112,6 +123,14 @@ export default function AdminDashboardPage() {
       token: "ok",
       icon: IconTruck,
     },
+    {
+      title: "Hasil Uji Emisi Kendaraan",
+      desc: "Rekap hasil uji emisi & jadwal servis armada per kendaraan.",
+      path: "/admin/uji-emisi",
+      token: "ok",
+      icon: IconCar,
+    },
+    // --- Layanan GA ---
     {
       title: "Pengumuman Gedung",
       desc: "Update teks berjalan (Info GA) di halaman utama Portal SIBM.",
@@ -140,6 +159,7 @@ export default function AdminDashboardPage() {
       token: "warn",
       icon: IconWrench,
     },
+    // --- Pantau Laporan Tim (dikelompokkan bareng, sebelumnya kepisah-pisah) ---
     {
       title: "Pantau Laporan OB & CS",
       desc: "Monitoring data checklist harian dan stok gudang.",
@@ -155,6 +175,21 @@ export default function AdminDashboardPage() {
       icon: IconShield,
     },
     {
+      title: "Pantau Laporan Driver",
+      desc: "Riwayat pergerakan armada & status kendaraan terkini per driver.",
+      path: "/admin/monitor-driver",
+      token: "info",
+      icon: IconTruck,
+    },
+    {
+      title: "Pantau Notifikasi Dadakan",
+      desc: "Cek bukti foto siram tanaman Security (jendela Pagi/Malam) per hari.",
+      path: "/admin/monitor-dadakan",
+      token: "ok",
+      icon: IconDroplet,
+    },
+    // --- Alat & Master Data ---
+    {
       title: "Master Data APAR",
       desc: "Kelola data APAR per lantai & cetak QR inspeksi bulanan.",
       path: "/admin/apar",
@@ -168,12 +203,13 @@ export default function AdminDashboardPage() {
       token: "accent",
       icon: IconPrinter,
     },
+    // --- Skor & Pengembangan Staf ---
     {
-      title: "Laporan Eksekutif",
-      desc: "Cetak rekapitulasi data operasional & logistik bulanan (PDF/Print).",
-      path: "/admin/report",
-      token: "info",
-      icon: IconFileText,
+      title: "Rekap Poin Staf",
+      desc: "Poin bulanan tiap staf (mulai 100, berkurang kalau tugas tidak sempurna) — siapa paling rajin & perlu perhatian.",
+      path: "/admin/monitor-poin",
+      token: "accent",
+      icon: IconTrophy,
     },
     {
       title: "Update Dokumen SOP",
@@ -183,18 +219,11 @@ export default function AdminDashboardPage() {
       icon: IconBook,
     },
     {
-      title: "Pantau Notifikasi Dadakan",
-      desc: "Cek bukti foto siram tanaman Security (jendela Pagi/Malam) per hari.",
-      path: "/admin/monitor-dadakan",
-      token: "ok",
-      icon: IconDroplet,
-    },
-    {
-      title: "Rekap Poin Staf",
-      desc: "Poin bulanan tiap staf (mulai 100, berkurang kalau tugas tidak sempurna) — siapa paling rajin & perlu perhatian.",
-      path: "/admin/monitor-poin",
+      title: "Handbook Magang",
+      desc: "Upload materi belajar (PDF/Video) untuk anak magang Security — langsung tampil begitu mereka login.",
+      path: "/admin/handbook-magang",
       token: "accent",
-      icon: IconTrophy,
+      icon: IconGraduationCap,
     },
     {
       title: "Survei Kepuasan Gedung",
@@ -203,12 +232,20 @@ export default function AdminDashboardPage() {
       token: "info",
       icon: IconClipboardList,
     },
+    // --- Laporan & Sistem ---
     {
-      title: "Handbook Magang",
-      desc: "Upload materi belajar (PDF/Video) untuk anak magang Security — langsung tampil begitu mereka login.",
-      path: "/admin/handbook-magang",
-      token: "accent",
-      icon: IconGraduationCap,
+      title: "Laporan Eksekutif",
+      desc: "Cetak rekapitulasi data operasional & logistik bulanan (PDF/Print).",
+      path: "/admin/report",
+      token: "info",
+      icon: IconFileText,
+    },
+    {
+      title: "Kesehatan Notifikasi",
+      desc: "Status run terakhir tiap cron reminder (push/email) — cek sendiri kalau ada yang gagal.",
+      path: "/admin/monitor-cron",
+      token: "warn",
+      icon: IconActivity,
     },
   ];
 

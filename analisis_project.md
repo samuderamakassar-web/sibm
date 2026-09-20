@@ -1,33 +1,36 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 20 September 2026 (**§49**: menu baru Admin GA `admin/handbook-magang` buat upload materi belajar PDF/Video untuk anak magang Security -- langsung tampil paling atas begitu mereka login dashboard. Upload PDF/video pakai ulang `uploadDokumen.ts` yang sudah ada (batas 10MB, video besar disarankan pakai opsi Link YouTube/Drive alih-alih upload file). **BELUM di-push/deploy** (butuh rules+indexes+hosting). §48 (reminder Inspeksi Fasilitas mingguan + notifikasi laporan baru SBO/Kerusakan/Overtime/ATK) SUDAH DI-DEPLOY. §47 (notifikasi Admin GA: patroli/siram tanaman/checklist OB/status kendaraan) SUDAH DI-DEPLOY. §46 -- INSIDEN (hampir semua cron gagal `Cannot find module '@google-cloud/firestore'`) SUDAH DI-PUSH & FIXED, hasil run pertama pasca-fix belum dikonfirmasi user. §45 (badge off-duty, jendela tukar jaga, eskalasi serah terima) SUDAH DI-DEPLOY, masih belum ditest end-to-end. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 20 September 2026 (**§50 -- LANJUTAN INSIDEN §46**: root cause SEBENARNYA dari cron gagal massal akhirnya ketemu -- `firebase-admin` salah ditaruh di `devDependencies` bukan `dependencies`, bikin `npm ci` di GitHub Actions diam-diam skip install-nya walau step "Install dependencies" tetap sukses. **SUDAH DI-PUSH** (`dec5fa0`, pure package.json, gak butuh deploy). Sekalian ditambah 3 menu Admin baru (`admin/monitor-driver`, `admin/monitor-cron`, link Hasil Uji Emisi) + reorganisasi menu Admin GA jadi 6 kelompok logis -- **BELUM di-push/deploy**. Sistem Evaluasi & Skor besar yang diminta user (§50D) BELUM dikerjakan, nunggu klarifikasi. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §49 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §50 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: push+deploy §49 + konfirmasi fix §46 jalan + pilih arah §44E
+### 🔴🔴🔴 PALING URGENT: push+deploy §50 (3 menu admin baru) + konfirmasi fix §50A jalan + jawab klarifikasi Evaluasi
 
-0. **§49 SUDAH di-push+deploy (Handbook Magang)** — **coba upload 1 PDF & 1 video via `admin/handbook-magang`** buat konfirmasi upload beneran jalan (terutama video -- lihat batasan 10MB di §49C, belum pernah ditest langsung).
-1. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
-2. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — buat daftarin token FCM mereka yang PERTAMA KALI, tanpa ini SEMUA notifikasi Admin GA (patroli/siram tanaman/checklist OB/status kendaraan/laporan baru/inspeksi fasilitas) gak akan sampai sebagai push.
-3. **Konfirmasi fix §46 (insiden cron gagal massal) beneran jalan** — sudah di-push (`20427cd`), user pilih nunggu jadwal otomatis (bukan trigger manual). Cek email "Run succeeded" dari GitHub Actions (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau BELUM ada konfirmasi sukses, itu prioritas #1 sebelum lanjut apa pun.
-4. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty kasih info "berakhir X menit lalu" + "jaga berikutnya kapan"; (b) kartu Tukar Shift/Jaga cuma muncul di jam 08:00/20:00 WITA (±60 menit); (c) fitur eskalasi (§45C) butuh skenario nyata (serah terima telat >10 menit) buat ditest penuh.
-5. **Perlu arahan user: pilih arah sistem scoring/report** (§44E) — 3 ide ditawarkan (poin bonus/positif, mekanisme banding Danru, perluas potongan ke Driver). Belum ada yang dibangun, nunggu user pilih prioritas sebelum lanjut.
-6. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F) — pengumuman lama ("relokasi ruangan Lantai 2 ke Lantai 3 & 4") tersimpan di skema singleton lama yang sudah tidak dipakai UI baru, jadi TIDAK otomatis pindah. Kalau masih relevan ditampilkan, buat ulang manual lewat form `admin/broadcast` (30 detik).
-7. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B) — buka https://dashboard.emailjs.com/admin/account/security, aktifkan **"API access from non-browser environments"**. TANPA ini, 2 fitur email (pengingat overtime §41, DAN email kepatuhan patroli ke Admin GA §42B) TIDAK AKAN PERNAH terkirim (dikonfirmasi HTTP 403 lewat test langsung). Sejak §47/§48, sebagian besar notifikasi Admin GA/QHSE sudah tetap sampai lewat push+in-app terlepas dari EmailJS, tapi email tetap berguna sebagai kanal tambahan begitu diaktifkan.
-8. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
-9. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
+0. **BELUM DI-PUSH: 3 menu admin baru + reorganisasi (§50B/§50C)** — push ke `dev`+`main`, lalu `firebase deploy --only hosting`.
+1. **Konfirmasi fix §50A (root cause SEBENARNYA insiden cron)** — SUDAH di-push (`dec5fa0`, pure `package.json`, gak butuh deploy). `firebase-admin` sebelumnya salah ditaruh di `devDependencies` (bukan `dependencies`), bikin `npm ci` di GitHub Actions diam-diam skip install-nya. Pantau run berikutnya (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau MASIH gagal dengan error yang sama, kirim screenshot lagi.
+2. **Perlu jawaban user: 3 pertanyaan soal Sistem Evaluasi & Skor** (§50D) — fitur besar yang diminta user (evaluasi manual semua laporan/inspeksi tim, pengaruh ke skor, juara per dept, rekap 6 bulan/1 tahun) belum bisa mulai dibangun tanpa beberapa keputusan desain, ditanyakan balik di percakapan.
+3. **Coba `admin/monitor-cron` begitu di-deploy** — pastikan fetch API publik GitHub beneran jalan dari browser (belum pernah ditest, resiko CORS/rate-limit).
+4. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
+5. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — tanpa ini SEMUA notifikasi Admin GA gak akan sampai sebagai push.
+6. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49) — belum pernah ditest langsung, terutama video (batas 10MB).
+7. **Pertimbangkan upgrade Firebase ke Blaze plan** — Firestore Spark plan (gratis) sudah "approaching no-cost limits" per Firebase Console (55K reads/24 jam, limit 50K/hari) -- keputusan billing, bukan sesuatu yang bisa dieksekusi dari sini.
+8. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty; (b) jendela Tukar Shift/Jaga; (c) fitur eskalasi (§45C) butuh skenario nyata.
+9. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F).
+10. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B).
+11. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6).
+12. **Banner "masih login sebagai..." di portal utama** (§40).
 
-### Sesi hari ini (§49) — Handbook Magang: Menu Upload Admin (PDF/Video) + Tampil Otomatis Saat Login Magang
+### Sesi hari ini (§50) — Root Cause Sebenarnya Insiden Cron + 3 Menu Admin Baru + Reorganisasi Menu
 
-User minta menu baru buat Admin upload handbook magang (PDF & video), muncul otomatis begitu anak magang login. Dicek dulu: konsep "magang" cuma ada di Security (`security_magang_directory`), gak ada di dept lain. Dibangun: collection `handbook_magang`, halaman admin `admin/handbook-magang` (reuse `uploadDokumen.ts` yang sudah ada, bukan bikin fungsi upload baru), dan komponen `HandbookMagangList.tsx` dipasang paling atas dashboard Security khusus buat staf magang. Detail: **§49** (§49A-§49G).
+User forward screenshot: semua cron MASIH gagal jam-jam setelah fix §46. Ternyata fix §46 (`npm install` → `npm ci`) belum menyentuh akar masalah SEBENARNYA: `firebase-admin` salah ditaruh di `devDependencies`. Dikonfirmasi lewat pengujian langsung (`npm ci --omit=dev`), difix, dan di-push segera. Sekalian dikerjakan (user setuju eksekusi langsung): `admin/monitor-driver` (parallel dgn monitor-ob/monitor-security), `admin/monitor-cron` (kesehatan notifikasi, fetch API GitHub), link Hasil Uji Emisi ditambahkan ke menu Admin GA, dan reorganisasi menu Admin GA jadi 6 kelompok logis. Manajemen Data Magang (ide ke-4) DIGABUNG ke rencana Evaluasi & Skor (§50D, belum dikerjakan, nunggu klarifikasi). Detail: **§50** (§50A-§50E).
 
-**Status: SUDAH DI-DEPLOY** (rules+indexes+hosting). `dev`+`main` sinkron di `6a96fe3`.
+**Status: fix §50A SUDAH di-push. 3 menu baru + reorganisasi (§50B/§50C) KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
 
 ### Sesi sebelumnya (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru, lanjutan langsung §47
 
@@ -2299,3 +2302,30 @@ Dipasang di `dashboard/security/page.tsx`, PALING ATAS konten (di atas semua ele
 
 ### 49G. Verifikasi
 `npm run build`: 0 error, 52 route (nambah 1: `/admin/handbook-magang`). `npx eslint` pada semua file yang disentuh/baru: 0 error, 0 warning (sempat ada 1 warning "unused eslint-disable directive" yang gak perlu, langsung dihapus). **SUDAH DI-DEPLOY** (`firestore:rules`, `firestore:indexes`, `hosting` -- ketiganya berhasil). `dev`+`main` sinkron di `6a96fe3`. **Belum ditest visual/end-to-end sama sekali** -- terutama upload video (butuh dicoba langsung buat konfirmasi batas 10MB beneran seperti yang didokumentasikan, dan buat lihat apakah preset Cloudinary project ini beneran menerima resource_type video/raw lewat endpoint `/auto/upload`).
+
+## 50. INSIDEN LANJUTAN: Root Cause Sebenarnya (devDependencies) + 3 Menu Admin Baru + Reorganisasi Menu
+
+User forward screenshot lanjutan: SEMUA cron reminder MASIH gagal jam-jam setelah fix §46 di-push, dengan error PERSIS SAMA (`Cannot find module '@google-cloud/firestore'`). Ini artinya fix §46 (`npm install` ad-hoc → `npm ci`) TIDAK cukup -- ada akar masalah lebih dalam yang gak ketauan sebelumnya.
+
+### 50A. Root Cause Sebenarnya: `firebase-admin` Salah Ditaruh di `devDependencies`
+Ditemukan lewat pengujian LANGSUNG (bukan tebakan): `npm ci --omit=dev` (mensimulasikan environment yang skip devDependencies -- diduga kuat ini yang terjadi di runner GitHub Actions, kemungkinan `NODE_ENV=production` ter-set) **TIDAK PERNAH menginstall `firebase-admin` sama sekali** karena §46 menaruhnya di `devDependencies`, bukan `dependencies`. Ini menjelaskan SEMUA gejala yang terlihat: step "Install dependencies" tetap SUKSES (exit 0, karena semua dependency PRODUKSI terinstall normal) tapi script langsung gagal begitu `require()` modul yang gak pernah ke-install. Kesalahan kategorisasi ini murni salah taksir sesi sebelumnya -- alasannya waktu itu "firebase-admin gak pernah diimport dari src/, jadi harusnya devDependency" ternyata SALAH: kriteria yang benar adalah "apakah script yang jalan via `npm ci` di lingkungan APA PUN butuh modul ini ter-install", bukan "apakah kepakai di bundle aplikasi".
+
+**Fix**: `firebase-admin` dipindah dari `devDependencies` ke `dependencies` di `package.json`, `package-lock.json` diregenerate. **Dikonfirmasi lokal** dengan cara yang sama persis dipakai buat nemuin bug-nya: `npm ci --omit=dev` sekarang BERHASIL menginstall `firebase-admin` & `@google-cloud/firestore` (`require.resolve()` sukses) -- sebelumnya (sebelum fix ini) simulasi yang sama pasti gagal.
+
+**PENTING**: fix ini PURE `package.json`/`package-lock.json`, TIDAK ada perubahan `src/` -- jadi cuma butuh `git push`, TIDAK butuh `firebase deploy` sama sekali.
+
+### 50B. 3 Menu Admin Baru (dari analisa gap + permintaan user)
+User setuju & minta eksekusi langsung 4 ide gap admin yang ditawarkan sebelumnya. 3 dari 4 dikerjakan sekarang (yang ke-4, Manajemen Data Magang, DIGABUNG ke rencana sistem Evaluasi/Skor yang baru diminta user -- lihat §50D, biar gak dobel kerja):
+
+- **`admin/monitor-driver`** (BARU) -- "Pantau Laporan Driver", pola SAMA PERSIS dengan `admin/monitor-security`/`admin/monitor-ob` (tabel kronologis + search + filter bulan/tahun + transformasi kartu di mobile) tapi buat `operational_vehicle_logs` -- selama ini Driver satu-satunya dept dengan dashboard sendiri TANPA halaman monitoring gabungan sejenis (yang ada cuma `admin/kendaraan`, itu pun per-KENDARAAN drill-down, bukan feed kronologis semua aktivitas). Sekalian tampilkan status TERKINI tiap kendaraan di bagian atas.
+- **`admin/monitor-cron`** (BARU) -- "Kesehatan Notifikasi", fetch LANGSUNG dari GitHub REST API publik (repo ini public, gak butuh token) buat nampilin status run TERAKHIR tiap cron reminder (sukses/gagal/kapan) + link buka log lengkapnya di GitHub. Dibuat PERSIS supaya kejadian §46/§50A (semua notifikasi mati berhari-hari tanpa ada yang sadar) gak terulang tanpa terdeteksi -- Admin GA bisa cek sendiri kapan saja. **Catatan resiko**: API publik GitHub dibatasi 60 request/jam per IP, halaman ini pakai ~12 request tiap dibuka -- cukup aman buat cek sesekali, JANGAN di-refresh berkali-kali dalam waktu singkat.
+- **Link "Hasil Uji Emisi Kendaraan" ditambahkan ke menu Admin GA** -- halaman `admin/uji-emisi` sebelumnya cuma bisa diakses dari dashboard QHSE, sekarang juga muncul di menu utama Admin GA sendiri.
+
+### 50C. Reorganisasi Menu `admin/page.tsx`
+Menu yang sebelumnya cuma daftar rata (urutan gak jelas) dikelompokkan jadi 6 bagian logis: Manajemen Dasar, Layanan GA, Pantau Laporan Tim (OB/Security/Driver/Dadakan dikumpulkan jadi satu blok berurutan -- sebelumnya kepisah-pisah), Alat & Master Data, Skor & Pengembangan Staf, Laporan & Sistem. Murni penataan ULANG array (bukan komponen baru) -- resiko rendah, gak nambah kerjaan render baru.
+
+### 50D. BELUM DIKERJAKAN: Sistem Evaluasi & Skor (permintaan baru, butuh klarifikasi dulu)
+User minta fitur besar: menu evaluasi manual (Admin GA bisa menilai laporan/inspeksi APAPUN dari Security/OB-CS/Driver kapan saja), yang mempengaruhi skor bulanan, PLUS rekap juara 1 per departemen (OB/CS, Security, Driver -- Admin GA/Magang/QHSE SENGAJA gak ikut diskor), PLUS rekap 6 bulan & 1 tahun. Ini secara struktural akan mengubah/memperluas sistem poin yang sudah ada (`points-deduction.mjs`, `admin/monitor-poin`) -- BELUM dikerjakan, ada beberapa keputusan desain yang cuma bisa dijawab user (lihat pertanyaan yang diajukan balik ke user di percakapan), supaya gak salah bangun & harus diulang.
+
+### 50E. Verifikasi
+`npm run build`: 0 error, 54 route (nambah 2: `/admin/monitor-driver`, `/admin/monitor-cron`). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di `monitor-cron`, fetch GitHub API) -- langsung difix (pindahkan `setLoading`/`setErrorMsg` ke dalam IIFE async, bukan di awal effect body). Setelah fix: 0 error, 0 warning. Mobile CSS di 2 halaman baru REUSE pola card-transform yang sudah terbukti di `admin/monitor-security` (bukan pola baru yang belum teruji). **Belum di-deploy, belum ditest visual/end-to-end** -- terutama `admin/monitor-cron` perlu dicoba langsung buat konfirmasi fetch API publik GitHub beneran jalan dari browser (CORS dkk).
