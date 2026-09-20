@@ -43,7 +43,10 @@ interface BarisRekap {
 }
 
 const POIN_AWAL_BULAN = 100;
-const DAFTAR_DEPT_DIPANTAU = ["OB & CS", "Security", "Driver", "QHSE", "Admin GA"];
+// Admin GA, Magang, dan QHSE SENGAJA gak ikut diskor (dikonfirmasi user 20 Sep 2026) --
+// cuma OB & CS, Security, Driver yang punya sinyal tugas rutin harian/mingguan yang bisa
+// dievaluasi adil. Staf Magang difilter terpisah lewat field `role` (lihat fetch semuaStaf).
+const DAFTAR_DEPT_DIPANTAU = ["OB & CS", "Security", "Driver"];
 
 const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 function formatBulanLabel(bulanISO: string): string {
@@ -74,8 +77,15 @@ export default function MonitorPoinPage() {
   const adminName = session?.nama || "Admin";
 
   const [filterBulan, setFilterBulan] = useState(tanggalISOWITASekarang().substring(0, 7));
+  // Periode "bulanan" = 1 bulan seperti sebelumnya (filterBulan berlaku, riwayat per-hari
+  // bisa ditampilkan). Periode "6bulan"/"1tahun" = rata-rata poin bulanan sepanjang N bulan
+  // TERAKHIR dari filterBulan (dikonfirmasi user: cukup rata-rata dari poin bulanan yang
+  // sudah ada, gak perlu logika konsistensi baru) -- riwayat per-hari gak relevan lagi di
+  // mode ini (beda bulan beda riwayat), jadi baris gak bisa di-expand.
+  const [periode, setPeriode] = useState<"bulanan" | "6bulan" | "1tahun">("bulanan");
   const [semuaStaf, setSemuaStaf] = useState<{ nama: string; departemen: string }[]>([]);
   const [poinBulanIni, setPoinBulanIni] = useState<StaffPointDoc[]>([]);
+  const [poinMultiBulan, setPoinMultiBulan] = useState<Record<string, StaffPointDoc[]>>({}); // key = bulan "YYYY-MM"
   const [loading, setLoading] = useState(true);
   const [expandedNama, setExpandedNama] = useState<string | null>(null);
 
@@ -85,11 +95,15 @@ export default function MonitorPoinPage() {
   useEffect(() => {
     (async () => {
       const snap = await getDocs(query(collection(db, "users_master"), where("departemen", "in", DAFTAR_DEPT_DIPANTAU)));
-      setSemuaStaf(snap.docs.map((d) => ({ nama: d.data().nama, departemen: d.data().departemen })));
+      const staf = snap.docs
+        .map((d) => ({ nama: d.data().nama as string, departemen: d.data().departemen as string, role: (d.data().role || "") as string }))
+        .filter((u) => !u.role.toLowerCase().includes("magang")); // anak magang gak ikut diskor
+      setSemuaStaf(staf.map((u) => ({ nama: u.nama, departemen: u.departemen })));
     })();
   }, []);
 
   useEffect(() => {
+    if (periode !== "bulanan") return;
     const t = setTimeout(() => setLoading(true), 0);
     const unsub = onSnapshot(
       query(collection(db, "staff_points_bulanan"), where("bulan", "==", filterBulan)),
@@ -99,27 +113,81 @@ export default function MonitorPoinPage() {
       }
     );
     return () => { clearTimeout(t); unsub(); };
-  }, [filterBulan]);
+  }, [filterBulan, periode]);
+
+  // N bulan TERAKHIR dari filterBulan (termasuk filterBulan sendiri) -- dipakai mode 6bulan/1tahun.
+  function daftarBulanMundur(bulanAkhir: string, n: number): string[] {
+    const [y, m] = bulanAkhir.split("-").map(Number);
+    const hasil: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const d = new Date(y, m - 1 - i, 1);
+      hasil.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    return hasil;
+  }
+
+  useEffect(() => {
+    if (periode === "bulanan") return;
+    const daftarBulan = daftarBulanMundur(filterBulan, periode === "6bulan" ? 6 : 12);
+    let batal = false;
+    (async () => {
+      setLoading(true);
+      const hasil: Record<string, StaffPointDoc[]> = {};
+      await Promise.all(daftarBulan.map(async (b) => {
+        const snap = await getDocs(query(collection(db, "staff_points_bulanan"), where("bulan", "==", b)));
+        hasil[b] = snap.docs.map((d) => d.data() as StaffPointDoc);
+      }));
+      if (!batal) {
+        setPoinMultiBulan(hasil);
+        setLoading(false);
+      }
+    })();
+    return () => { batal = true; };
+  }, [filterBulan, periode]);
 
   const rekap: BarisRekap[] = useMemo(() => {
-    const poinPerNama: Record<string, StaffPointDoc> = {};
-    poinBulanIni.forEach((p) => { poinPerNama[p.nama] = p; });
+    if (periode === "bulanan") {
+      const poinPerNama: Record<string, StaffPointDoc> = {};
+      poinBulanIni.forEach((p) => { poinPerNama[p.nama] = p; });
 
+      return semuaStaf
+        .map((s) => {
+          const data = poinPerNama[s.nama];
+          return {
+            nama: s.nama,
+            departemen: s.departemen,
+            poin: data ? data.poin : POIN_AWAL_BULAN,
+            riwayat: data ? [...data.riwayat].sort((a, b) => b.tanggal.localeCompare(a.tanggal)) : [],
+          };
+        })
+        .sort((a, b) => b.poin - a.poin || a.nama.localeCompare(b.nama));
+    }
+
+    // Mode 6bulan/1tahun: rata-rata poin bulanan tiap staf sepanjang periode (bulan tanpa data
+    // dianggap 100, konsisten dengan default bulanan) -- riwayat dikosongkan (gak relevan lintas bulan).
+    const daftarBulan = Object.keys(poinMultiBulan);
     return semuaStaf
       .map((s) => {
-        const data = poinPerNama[s.nama];
-        return {
-          nama: s.nama,
-          departemen: s.departemen,
-          poin: data ? data.poin : POIN_AWAL_BULAN,
-          riwayat: data ? [...data.riwayat].sort((a, b) => b.tanggal.localeCompare(a.tanggal)) : [],
-        };
+        const totalPoin = daftarBulan.reduce((sum, b) => {
+          const data = (poinMultiBulan[b] || []).find((p) => p.nama === s.nama);
+          return sum + (data ? data.poin : POIN_AWAL_BULAN);
+        }, 0);
+        const rataRata = daftarBulan.length > 0 ? Math.round(totalPoin / daftarBulan.length) : POIN_AWAL_BULAN;
+        return { nama: s.nama, departemen: s.departemen, poin: rataRata, riwayat: [] as RiwayatPotongan[] };
       })
       .sort((a, b) => b.poin - a.poin || a.nama.localeCompare(b.nama));
-  }, [semuaStaf, poinBulanIni]);
+  }, [semuaStaf, poinBulanIni, poinMultiBulan, periode]);
 
-  const poinTertinggi = rekap.length > 0 ? rekap[0].poin : null;
-  const poinTerendah = rekap.length > 0 ? rekap[rekap.length - 1].poin : null;
+  // Dikelompokkan per departemen -- tiap dept punya "Juara 1" SENDIRI (dikonfirmasi user:
+  // "siapa yang juara 1 dari masing-masing OB/CS, Security, Driver"), bukan 1 juara gabungan.
+  const rekapPerDept = useMemo(() => {
+    const hasil: Record<string, BarisRekap[]> = {};
+    DAFTAR_DEPT_DIPANTAU.forEach((dept) => {
+      hasil[dept] = rekap.filter((r) => r.departemen === dept);
+    });
+    return hasil;
+  }, [rekap]);
+
 
   const handleExportExcel = () => {
     if (rekap.length === 0) {
@@ -132,7 +200,7 @@ export default function MonitorPoinPage() {
       r.departemen,
       r.poin,
       r.riwayat.length,
-      r.riwayat.map((x) => `${x.tanggal}: ${x.alasan} (-${x.potongan})`).join(" | "),
+      r.riwayat.map((x) => `${x.tanggal}: ${x.alasan} (${x.potongan < 0 ? `+${-x.potongan}` : `-${x.potongan}`})`).join(" | "),
     ]);
     const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     sheet["!cols"] = [{ wch: 22 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 60 }];
@@ -205,7 +273,17 @@ export default function MonitorPoinPage() {
       <div style={{ maxWidth: "900px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
         <div style={{ background: "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", padding: "18px 20px", marginBottom: "16px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
           <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--muted)", marginBottom: "5px" }}>Bulan</label>
+            <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--muted)", marginBottom: "5px" }}>Periode</label>
+            <div style={{ display: "flex", gap: "6px" }}>
+              {([["bulanan", "Bulanan"], ["6bulan", "6 Bulan"], ["1tahun", "1 Tahun"]] as const).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setPeriode(key)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid var(--line)", cursor: "pointer", fontSize: "12.5px", fontWeight: 700, background: periode === key ? "var(--info)" : "var(--bg)", color: periode === key ? "#fff" : "var(--ink-soft)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--muted)", marginBottom: "5px" }}>{periode === "bulanan" ? "Bulan" : "Sampai Bulan"}</label>
             <select
               value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)}
               style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none" }}
@@ -218,55 +296,73 @@ export default function MonitorPoinPage() {
           </button>
         </div>
 
-        <div style={{ background: "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>
-            {formatBulanLabel(filterBulan)} &middot; {rekap.length} staf dipantau
+        {periode !== "bulanan" && (
+          <div style={{ background: "var(--info-50)", color: "var(--info)", padding: "12px 16px", borderRadius: "12px", fontSize: "12px", fontWeight: 600, marginBottom: "16px" }}>
+            Rata-rata poin bulanan {periode === "6bulan" ? "6 bulan" : "1 tahun"} terakhir (sampai {formatBulanLabel(filterBulan)}). Bulan tanpa data dianggap 100 poin.
           </div>
-          {loading ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Memuat...</div>
-          ) : rekap.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Belum ada data staf untuk dipantau.</div>
-          ) : (
-            rekap.map((r) => {
-              const isTop = r.poin === poinTertinggi;
-              const isBottom = r.poin === poinTerendah && poinTertinggi !== poinTerendah;
-              const warnaBar = r.poin >= 80 ? "var(--ok)" : r.poin >= 50 ? "var(--warn)" : "var(--red-600)";
-              return (
-                <div key={r.nama}>
-                  <div className="poin-row" onClick={() => setExpandedNama(expandedNama === r.nama ? null : r.nama)}>
-                    <div style={{ flex: "0 0 150px", minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: "var(--ink)", fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {isTop && "🏆 "}{isBottom && "⚠️ "}{r.nama}
+        )}
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)", background: "var(--surface)", borderRadius: "20px", border: "1px solid var(--line)" }}>Memuat...</div>
+        ) : rekap.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)", background: "var(--surface)", borderRadius: "20px", border: "1px solid var(--line)" }}>Belum ada data staf untuk dipantau.</div>
+        ) : (
+          // Dikelompokkan per departemen -- tiap dept punya "Juara 1" (peringkat 1) SENDIRI,
+          // bukan dibandingkan lintas departemen (dikonfirmasi user).
+          DAFTAR_DEPT_DIPANTAU.map((dept) => {
+            const daftarDept = rekapPerDept[dept] || [];
+            if (daftarDept.length === 0) return null;
+            const poinTertinggiDept = daftarDept[0].poin;
+            const poinTerendahDept = daftarDept[daftarDept.length - 1].poin;
+            return (
+              <div key={dept} style={{ background: "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", overflow: "hidden", marginBottom: "16px" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>
+                  {dept} &middot; {daftarDept.length} staf dipantau
+                </div>
+                {daftarDept.map((r) => {
+                  const isTop = r.poin === poinTertinggiDept;
+                  const isBottom = r.poin === poinTerendahDept && poinTertinggiDept !== poinTerendahDept;
+                  const warnaBar = r.poin >= 80 ? "var(--ok)" : r.poin >= 50 ? "var(--warn)" : "var(--red-600)";
+                  return (
+                    <div key={r.nama}>
+                      <div className="poin-row" onClick={() => periode === "bulanan" && setExpandedNama(expandedNama === r.nama ? null : r.nama)} style={{ cursor: periode === "bulanan" ? "pointer" : "default" }}>
+                        <div style={{ flex: "0 0 150px", minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, color: "var(--ink)", fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {isTop && "🏆 "}{isBottom && "⚠️ "}{r.nama}
+                          </div>
+                        </div>
+                        <div className="poin-bar-track">
+                          <div className="poin-bar-fill" style={{ width: `${r.poin}%`, background: warnaBar }} />
+                        </div>
+                        <div style={{ fontWeight: 800, fontSize: "14px", color: warnaBar, width: "40px", textAlign: "right" }}>{r.poin}</div>
+                        {periode === "bulanan" && <IconChevronDown size={14} color="var(--muted)" />}
                       </div>
-                      <div style={{ fontSize: "10.5px", color: "var(--muted)" }}>{r.departemen}</div>
-                    </div>
-                    <div className="poin-bar-track">
-                      <div className="poin-bar-fill" style={{ width: `${r.poin}%`, background: warnaBar }} />
-                    </div>
-                    <div style={{ fontWeight: 800, fontSize: "14px", color: warnaBar, width: "40px", textAlign: "right" }}>{r.poin}</div>
-                    <IconChevronDown size={14} color="var(--muted)" />
-                  </div>
-                  {expandedNama === r.nama && (
-                    <div style={{ padding: "10px 20px 16px 20px", background: "var(--bg)", fontSize: "12px" }}>
-                      {r.riwayat.length === 0 ? (
-                        <div style={{ color: "var(--muted)" }}>Tidak ada potongan bulan ini — pertahankan! 🎉</div>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          {r.riwayat.map((h, i) => (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: "10px", padding: "6px 10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid var(--line)" }}>
-                              <span style={{ color: "var(--ink-soft)" }}>{h.tanggal} &middot; {h.alasan}</span>
-                              <span style={{ fontWeight: 800, color: "var(--red-600)", flexShrink: 0 }}>-{h.potongan}</span>
+                      {periode === "bulanan" && expandedNama === r.nama && (
+                        <div style={{ padding: "10px 20px 16px 20px", background: "var(--bg)", fontSize: "12px" }}>
+                          {r.riwayat.length === 0 ? (
+                            <div style={{ color: "var(--muted)" }}>Tidak ada potongan bulan ini — pertahankan! 🎉</div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {/* potongan NEGATIF = evaluasi manual Admin GA yang MENAMBAH poin (bonus), lihat
+                                  EvaluasiManualButton.tsx -- ditampilkan hijau "+X", beda dari potongan otomatis
+                                  (selalu positif, dikurangi) yang tetap merah "-X" seperti sebelumnya. */}
+                              {r.riwayat.map((h, i) => (
+                                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: "10px", padding: "6px 10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid var(--line)" }}>
+                                  <span style={{ color: "var(--ink-soft)" }}>{h.tanggal} &middot; {h.alasan}</span>
+                                  <span style={{ fontWeight: 800, color: h.potongan < 0 ? "var(--ok)" : "var(--red-600)", flexShrink: 0 }}>{h.potongan < 0 ? `+${-h.potongan}` : `-${h.potongan}`}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

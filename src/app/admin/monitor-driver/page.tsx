@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import EvaluasiManualButton from "../../../components/EvaluasiManualButton";
 
 // Ikon SVG garis — konsisten dengan admin/monitor-security & admin/monitor-ob
 type IconProps = { size?: number; color?: string };
@@ -195,14 +196,16 @@ export default function MonitorDriverPage() {
                   <th style={{ width: "16%" }}>Waktu</th>
                   <th style={{ width: "18%" }}>Kendaraan</th>
                   <th style={{ width: "16%" }}>Driver Bertugas</th>
-                  <th style={{ width: "16%" }}>Status</th>
-                  <th style={{ width: "20%" }}>Tujuan/Keperluan</th>
-                  <th style={{ width: "14%" }}>KM &middot; Dicatat Oleh</th>
+                  <th style={{ width: "14%" }}>Status</th>
+                  <th style={{ width: "18%" }}>Tujuan/Keperluan</th>
+                  <th style={{ width: "12%" }}>KM &middot; Dicatat Oleh</th>
+                  <th style={{ width: "12%", textAlign: "center" }}>Evaluasi</th>
                 </tr>
               </thead>
               <tbody>
                 {fLogs.length > 0 ? fLogs.map((l) => {
                   const st = classifyStatus(l.status_kendaraan);
+                  const tanggalLog = l.waktu_catat?.toDate().toISOString().substring(0, 10) || "";
                   return (
                     <tr key={l.id}>
                       <td data-label="Waktu" style={{ color: "var(--muted)" }}>{formatWaktu(l.waktu_catat)}</td>
@@ -213,9 +216,14 @@ export default function MonitorDriverPage() {
                       </td>
                       <td data-label="Tujuan/Keperluan" style={{ color: "var(--ink-soft)" }}>{l.tujuan_keperluan || "-"}</td>
                       <td data-label="KM · Dicatat Oleh" style={{ color: "var(--muted)", fontSize: "12px" }}>{l.kilometer_kendaraan || "-"} &middot; {l.petugas_security || "-"}</td>
+                      <td data-label="Evaluasi" style={{ textAlign: "center" }}>
+                        {l.driver_bertugas && l.driver_bertugas !== "-" && tanggalLog && (
+                          <EvaluasiManualButton nama={l.driver_bertugas} departemen="Driver" sumberJenis="Log Kendaraan Driver" sumberId={l.id} tanggalLaporan={tanggalLog} dievaluasiOleh={adminName} />
+                        )}
+                      </td>
                     </tr>
                   );
-                }) : <tr><td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log pergerakan armada yang cocok.</td></tr>}
+                }) : <tr><td colSpan={7} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log pergerakan armada yang cocok.</td></tr>}
               </tbody>
             </table>
           </div>

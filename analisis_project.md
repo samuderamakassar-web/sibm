@@ -1,44 +1,51 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 20 September 2026 (**§50 -- LANJUTAN INSIDEN §46**: root cause SEBENARNYA dari cron gagal massal akhirnya ketemu -- `firebase-admin` salah ditaruh di `devDependencies` bukan `dependencies`, bikin `npm ci` di GitHub Actions diam-diam skip install-nya walau step "Install dependencies" tetap sukses. **SUDAH DI-PUSH** (`dec5fa0`, pure package.json, gak butuh deploy). Sekalian ditambah 3 menu Admin baru (`admin/monitor-driver`, `admin/monitor-cron`, link Hasil Uji Emisi) + reorganisasi menu Admin GA jadi 6 kelompok logis -- **BELUM di-push/deploy**. Sistem Evaluasi & Skor besar yang diminta user (§50D) BELUM dikerjakan, nunggu klarifikasi. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 20 September 2026 (**§51**: Sistem Evaluasi Manual & Skor Per Departemen -- Admin GA bisa kasih poin +/- dengan alasan langsung dari halaman monitoring (Security/OB/Driver), `admin/monitor-poin` dirombak jadi 3 kartu terpisah per dept (Admin GA/QHSE/Magang DIHAPUS dari sistem skor) + selector periode Bulanan/6 Bulan/1 Tahun. **BELUM di-push/deploy.** §50 (fix root cause devDependencies + 3 menu admin baru + reorganisasi) SUDAH DI-DEPLOY sebelumnya. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §50 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §51 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴🔴 PALING URGENT: push+deploy §50 (3 menu admin baru) + konfirmasi fix §50A jalan + jawab klarifikasi Evaluasi
+### 🔴🔴 PALING URGENT: push+deploy §51 (Sistem Evaluasi & Skor) + konfirmasi fix §50A jalan
 
-0. **3 menu admin baru + reorganisasi (§50B/§50C) SUDAH di-push+deploy.**
+0. **BELUM DI-PUSH: Sistem Evaluasi & Skor (§51)** — push ke `dev`+`main`, lalu `firebase deploy --only firestore:rules,hosting` (ada collection baru `evaluasi_manual`, gak butuh index baru). Setelah deploy, **coba evaluasi 1 laporan** dari `admin/monitor-security`/`monitor-ob`/`monitor-driver` buat konfirmasi transaksi poin (`runTransaction`) beneran jalan, belum pernah ditest langsung.
 1. **Konfirmasi fix §50A (root cause SEBENARNYA insiden cron)** — SUDAH di-push (`dec5fa0`, pure `package.json`, gak butuh deploy). `firebase-admin` sebelumnya salah ditaruh di `devDependencies` (bukan `dependencies`), bikin `npm ci` di GitHub Actions diam-diam skip install-nya. Pantau run berikutnya (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau MASIH gagal dengan error yang sama, kirim screenshot lagi.
-2. **Perlu jawaban user: 3 pertanyaan soal Sistem Evaluasi & Skor** (§50D) — fitur besar yang diminta user (evaluasi manual semua laporan/inspeksi tim, pengaruh ke skor, juara per dept, rekap 6 bulan/1 tahun) belum bisa mulai dibangun tanpa beberapa keputusan desain, ditanyakan balik di percakapan.
-3. **Coba `admin/monitor-cron` begitu di-deploy** — pastikan fetch API publik GitHub beneran jalan dari browser (belum pernah ditest, resiko CORS/rate-limit).
-4. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
-5. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — tanpa ini SEMUA notifikasi Admin GA gak akan sampai sebagai push.
-6. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49) — belum pernah ditest langsung, terutama video (batas 10MB).
-7. **Pertimbangkan upgrade Firebase ke Blaze plan** — Firestore Spark plan (gratis) sudah "approaching no-cost limits" per Firebase Console (55K reads/24 jam, limit 50K/hari) -- keputusan billing, bukan sesuatu yang bisa dieksekusi dari sini.
-8. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty; (b) jendela Tukar Shift/Jaga; (c) fitur eskalasi (§45C) butuh skenario nyata.
-9. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F).
-10. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B).
-11. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6).
-12. **Banner "masih login sebagai..." di portal utama** (§40).
+2. **Coba `admin/monitor-cron`** (§50) — pastikan fetch API publik GitHub beneran jalan dari browser (belum pernah ditest, resiko CORS/rate-limit).
+3. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
+4. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — tanpa ini SEMUA notifikasi Admin GA gak akan sampai sebagai push.
+5. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49) — belum pernah ditest langsung, terutama video (batas 10MB).
+6. **Pertimbangkan upgrade Firebase ke Blaze plan** — Firestore Spark plan (gratis) sudah "approaching no-cost limits" per Firebase Console (55K reads/24 jam, limit 50K/hari) -- keputusan billing, bukan sesuatu yang bisa dieksekusi dari sini.
+7. **Manajemen Data Magang** (§51E) — ide yang tadinya digabung ke Evaluasi ternyata gak cocok (magang dikeluarkan dari skor), masih jadi ide terpisah kalau user mau lanjut.
+8. **Audit/perbaikan mobile `admin/monitor-ob`** (§51F) — ditemukan gak punya pola transformasi kartu di HP sama sekali (beda dari monitor-security/monitor-driver), cuma scroll horizontal. Belum diperbaiki, dicatat sebagai kandidat kalau user mau lanjut ke audit mobile lebih menyeluruh.
+9. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty; (b) jendela Tukar Shift/Jaga; (c) fitur eskalasi (§45C) butuh skenario nyata.
+10. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F).
+11. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B).
+12. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6).
+13. **Banner "masih login sebagai..." di portal utama** (§40).
 
-### Sesi hari ini (§50) — Root Cause Sebenarnya Insiden Cron + 3 Menu Admin Baru + Reorganisasi Menu
+### Sesi hari ini (§51) — Sistem Evaluasi Manual & Skor Per Departemen, lanjutan langsung §50
 
-User forward screenshot: semua cron MASIH gagal jam-jam setelah fix §46. Ternyata fix §46 (`npm install` → `npm ci`) belum menyentuh akar masalah SEBENARNYA: `firebase-admin` salah ditaruh di `devDependencies`. Dikonfirmasi lewat pengujian langsung (`npm ci --omit=dev`), difix, dan di-push segera. Sekalian dikerjakan (user setuju eksekusi langsung): `admin/monitor-driver` (parallel dgn monitor-ob/monitor-security), `admin/monitor-cron` (kesehatan notifikasi, fetch API GitHub), link Hasil Uji Emisi ditambahkan ke menu Admin GA, dan reorganisasi menu Admin GA jadi 6 kelompok logis. Manajemen Data Magang (ide ke-4) DIGABUNG ke rencana Evaluasi & Skor (§50D, belum dikerjakan, nunggu klarifikasi). Detail: **§50** (§50A-§50E).
+User jawab 3 pertanyaan klarifikasi (semua pilih opsi rekomendasi) buat fitur evaluasi besar yang diminta: poin +/- manual dengan alasan (nambah ke poin otomatis), berlaku ke semua jenis laporan tim lewat halaman monitoring yang sudah ada, rekap 6 bulan/1 tahun = rata-rata poin bulanan. Dibangun: komponen `EvaluasiManualButton.tsx` dipasang di monitor-security/monitor-ob/monitor-driver, dan `admin/monitor-poin` dirombak jadi 3 kartu per departemen (Admin GA/QHSE/Magang DIHAPUS dari skor) + selector periode Bulanan/6 Bulan/1 Tahun. Detail: **§51** (§51A-§51G).
 
-**Status: SEMUANYA SUDAH DI-DEPLOY** (fix §50A pure package.json, 3 menu baru + reorganisasi via hosting). `dev`+`main` sinkron di `72c484e`.
+**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
 
-### Sesi sebelumnya (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru, lanjutan langsung §47
+### Sesi sebelumnya (§50) — Root Cause Sebenarnya Insiden Cron + 3 Menu Admin Baru + Reorganisasi Menu
 
-User minta ditambahkan: pengingat jadwal inspeksi utk OB/CS (APAR sudah ada, Inspeksi Fasilitas Mingguan belum), dan notifikasi push ke admin tiap ada laporan baru masuk (Bahaya SBO, Kerusakan, Overtime Gedung, Request ATK). Riset dulu pakai subagent Explore sebelum nulis kode -- ketemu QHSE JUGA belum pernah punya token FCM sama sekali (sama masalah dengan Admin GA di §47), difix dulu. Detail: **§48** (§48A-§48E).
+User forward screenshot: semua cron MASIH gagal jam-jam setelah fix §46. Ternyata fix §46 (`npm install` → `npm ci`) belum menyentuh akar masalah SEBENARNYA: `firebase-admin` salah ditaruh di `devDependencies`. Dikonfirmasi lewat pengujian langsung (`npm ci --omit=dev`), difix, dan di-push segera. Sekalian dikerjakan: `admin/monitor-driver`, `admin/monitor-cron`, link Hasil Uji Emisi, reorganisasi menu Admin GA jadi 6 kelompok logis. Detail: **§50** (§50A-§50E).
 
-**Status: SUDAH DI-DEPLOY** (hosting). `dev`+`main` sinkron di `15fde61`.
+**Status: SEMUANYA SUDAH DI-DEPLOY.** `dev`+`main` sinkron di `72c484e`.
 
-**Status: SUDAH DI-DEPLOY** (hosting). `dev`+`main` sinkron di `15fde61`.
+### Sesi sebelumnya (§49) — Handbook Magang
+
+Menu baru Admin GA `admin/handbook-magang` buat upload materi belajar PDF/Video untuk anak magang Security. Detail: **§49**. **Status: SUDAH DI-DEPLOY**, `dev`+`main` sinkron di `6a96fe3`.
+
+### Sesi sebelumnya (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru
+
+User minta ditambahkan pengingat jadwal inspeksi utk OB/CS (APAR sudah ada, Inspeksi Fasilitas Mingguan belum), dan notifikasi push ke admin tiap ada laporan baru masuk (Bahaya SBO, Kerusakan, Overtime Gedung, Request ATK). Ketemu QHSE JUGA belum pernah punya token FCM sama sekali. Detail: **§48** (§48A-§48E). **Status: SUDAH DI-DEPLOY**, `dev`+`main` sinkron di `15fde61`.
 
 ### Sesi sebelumnya (§47) — Push Notifikasi Admin GA: Patroli, Siram Tanaman, Checklist OB/CS, Status Kendaraan
 
@@ -2329,3 +2336,36 @@ User minta fitur besar: menu evaluasi manual (Admin GA bisa menilai laporan/insp
 
 ### 50E. Verifikasi
 `npm run build`: 0 error, 54 route (nambah 2: `/admin/monitor-driver`, `/admin/monitor-cron`). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di `monitor-cron`, fetch GitHub API) -- langsung difix (pindahkan `setLoading`/`setErrorMsg` ke dalam IIFE async, bukan di awal effect body). Setelah fix: 0 error, 0 warning. Mobile CSS di 2 halaman baru REUSE pola card-transform yang sudah terbukti di `admin/monitor-security` (bukan pola baru yang belum teruji). **SUDAH DI-DEPLOY** (`firebase deploy --only hosting`). `dev`+`main` sinkron di `72c484e`. **Belum ditest visual/end-to-end** -- terutama `admin/monitor-cron` perlu dicoba langsung buat konfirmasi fetch API publik GitHub beneran jalan dari browser (CORS dkk).
+
+## 51. Sistem Evaluasi Manual & Skor Per Departemen (Juara Bulanan/6 Bulan/1 Tahun)
+
+Lanjutan §50D setelah user jawab 3 pertanyaan klarifikasi (semua pilih opsi "Rekomendasi"): evaluasi manual = poin +/- dengan alasan (nambah ke poin otomatis yang sudah ada), berlaku ke SEMUA jenis laporan tim, rekap 6 bulan/1 tahun = rata-rata poin bulanan (bukan logika konsistensi baru).
+
+### 51A. `src/components/EvaluasiManualButton.tsx` (BARU) -- Komponen Reusable
+Tombol "⭐ Evaluasi" + modal kecil (input poin +/- dan alasan), dipasang di baris laporan APA PUN dari halaman monitoring yang SUDAH ADA (bukan halaman evaluasi terpisah -- sesuai jawaban user "tombol evaluasi ditambahkan langsung di halaman monitoring yang sudah ada"). Submit langsung transaksi ke `staff_points_bulanan/{bulan}_{slugNama}` (dokumen SAMA yang dipakai `scripts/points-deduction.mjs`) -- `bulan` diambil dari TANGGAL LAPORAN itu sendiri (bukan selalu bulan berjalan), jadi evaluasi laporan lama otomatis kena ke bulan yang benar. Sekalian tulis 1 dokumen audit trail ke collection baru `evaluasi_manual` (nunjuk balik ke laporan sumbernya, siapa yang evaluasi, kapan).
+
+**Keputusan desain penting**: field `riwayat[].potongan` di `staff_points_bulanan` DIPERTAHANKAN APA ADANYA (bukan field baru) -- potongan POSITIF (seperti sebelumnya, dari cron otomatis) = pengurangan, potongan NEGATIF (BARU, cuma bisa lewat evaluasi manual) = penambahan/bonus. Ini dipilih supaya `scripts/points-deduction.mjs` TIDAK PERLU diubah sama sekali. `admin/monitor-poin` disesuaikan buat nampilin tanda +/- yang benar (sebelumnya hardcode "-{potongan}", sekarang cek tanda dulu). Poin akhir tetap di-clamp 0-100 (evaluasi gak bisa bikin staf melebihi 100 atau minus).
+
+### 51B. Tombol Evaluasi Dipasang di 3 Halaman Monitoring
+- `admin/monitor-security` -- tab Patroli, di bawah tombol "Lihat Laporan" tiap baris (`tanggal_shift` laporan dipakai sebagai tanggal evaluasi).
+- `admin/monitor-ob` -- tab Checklist (kolom baru "Evaluasi", `colSpan` baris detail expand disesuaikan dari 5 ke 6) DAN tab Inspeksi Fasilitas (kartu, `minggu_mulai` dipakai sebagai tanggal evaluasi).
+- `admin/monitor-driver` (dari §50) -- kolom baru "Evaluasi", cuma muncul kalau `driver_bertugas` diketahui.
+
+Buku Tamu & Log Paket SENGAJA TIDAK dikasih tombol evaluasi -- itu catatan transaksional (siapa masuk/keluar, resi apa), bukan "laporan tugas rutin" yang mencerminkan performa staf dengan cara yang sama seperti patroli/checklist/inspeksi.
+
+### 51C. `admin/monitor-poin` Dirombak: Per-Departemen + Periode 6 Bulan/1 Tahun
+- `DAFTAR_DEPT_DIPANTAU` dipangkas dari `["OB & CS", "Security", "Driver", "QHSE", "Admin GA"]` jadi cuma `["OB & CS", "Security", "Driver"]` -- QHSE & Admin GA SENGAJA dihapus dari sistem skor (dikonfirmasi user). Roster staf yang ditarik JUGA difilter buang role yang mengandung "magang" (sebelumnya gak difilter sama sekali -- anak magang Security kemungkinan ikut kehitung di rekap poin Security selama ini, padahal harusnya enggak).
+- Tampilan diubah dari 1 daftar gabungan jadi 3 KARTU TERPISAH per departemen, masing-masing punya "🏆" sendiri buat peringkat 1 DI DALAM departemen itu (sebelumnya cuma ada 1 juara gabungan lintas dept).
+- Selector Periode baru: **Bulanan** (perilaku lama, bisa expand lihat riwayat harian) / **6 Bulan** / **1 Tahun** (rata-rata poin bulanan sepanjang N bulan mundur dari bulan yang dipilih, bulan tanpa data dianggap 100 -- riwayat harian gak relevan lagi di mode ini, baris gak bisa di-expand).
+
+### 51D. Firestore Rules
+`evaluasi_manual` ditambahkan ke daftar collection terbuka. Gak butuh index baru (`EvaluasiManualButton` cuma nulis `addDoc`, gak ada query dgn filter+orderBy ke collection ini).
+
+### 51E. BELUM Dikerjakan: Manajemen Data Magang
+Sempat direncanakan digabung ke sini (§50B), tapi ternyata gak cocok -- magang JUSTRU dikeluarkan dari sistem skor, jadi gak ada tempat alami buat "data magang" nempel di alur evaluasi/skor ini. Tetap jadi ide terpisah yang belum dikerjakan (start/akhir masa magang, supervisor, evaluasi) kalau user masih mau.
+
+### 51F. Catatan Jujur: Mobile pada `admin/monitor-ob`
+Ditemukan pas nambah kolom Evaluasi: tabel-tabel di `admin/monitor-ob` (Checklist, Stock, Plot) TERNYATA TIDAK PUNYA pola transformasi mobile (card-view di layar kecil) sama sekali -- beda dari `admin/monitor-security`/`admin/monitor-driver` yang sudah punya lewat `@media (max-width: 768px)`. Selama ini cuma mengandalkan scroll horizontal (`overflowX: auto`). Ini PRE-EXISTING (bukan yang diperkenalkan sesi ini), tapi kolom Evaluasi baru menambah 1 kolom lagi ke tabel yang sudah agak sempit di HP. BELUM diperbaiki sesi ini (di luar scope perubahan minimal buat fitur evaluasi) -- dicatat sebagai kandidat kuat kalau user mau lanjut ke audit/perbaikan mobile yang lebih menyeluruh.
+
+### 51G. Verifikasi
+`npm run build`: 0 error, 54 route (gak ada halaman baru, cuma nambah komponen & kolom). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di effect fetch multi-bulan `monitor-poin`) -- langsung difix pola yang sama seperti sebelumnya. Setelah fix: 0 error, 0 warning di semua file yang disentuh. **Belum di-deploy, belum ditest end-to-end** -- terutama transaksi Firestore (`runTransaction`) buat evaluasi manual belum pernah dicoba langsung, dan rata-rata 6 bulan/1 tahun baru bisa benar-benar bermakna setelah ada beberapa bulan data poin terkumpul.

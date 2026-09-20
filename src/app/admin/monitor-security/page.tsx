@@ -6,6 +6,7 @@ import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp
 import { db } from "../../../lib/firebase";
 import { MINIMUM_SESI_PER_SHIFT } from "../../../lib/shift";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import EvaluasiManualButton from "../../../components/EvaluasiManualButton";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -559,9 +560,14 @@ export default function MonitorSecurityPage() {
                         )}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        <button onClick={() => setDetailPatroli(p)} style={{ background: "var(--info-50)", color: "var(--info)", border: "1px solid var(--info)", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", width: "100%" }}>
-                          📸 Lihat Laporan
-                        </button>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <button onClick={() => setDetailPatroli(p)} style={{ background: "var(--info-50)", color: "var(--info)", border: "1px solid var(--info)", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", width: "100%" }}>
+                            📸 Lihat Laporan
+                          </button>
+                          {p.tanggal_shift && (
+                            <EvaluasiManualButton nama={p.petugas} departemen="Security" sumberJenis="Patroli Security" sumberId={p.id} tanggalLaporan={p.tanggal_shift} dievaluasiOleh={adminName} />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )) : <tr><td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log patroli yang cocok dengan pencarian.</td></tr>}

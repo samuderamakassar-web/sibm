@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import EvaluasiManualButton from "../../../components/EvaluasiManualButton";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -530,6 +531,7 @@ export default function MonitorOBPage() {
                       <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Area</th>
                       <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Status Kebersihan</th>
                       <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Detail</th>
+                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Evaluasi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -538,6 +540,7 @@ export default function MonitorOBPage() {
                       const isOpen = expandedId === item.id;
                       const isBersih = statusRingkas === "Bersih Sempurna";
                       const isKosong = statusRingkas === "Belum Ada Data";
+                      const tanggalItem = item.tanggal || item.waktu_selesai?.toDate().toISOString().substring(0, 10) || "";
                       return (
                         <Fragment key={item.id}>
                           <tr style={{ borderBottom: "1px solid var(--line)" }}>
@@ -561,11 +564,16 @@ export default function MonitorOBPage() {
                                 {isOpen ? "Tutup ▲" : "Lihat Detail ▼"}
                               </button>
                             </td>
+                            <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                              {tanggalItem && (
+                                <EvaluasiManualButton nama={item.pic_bertugas} departemen="OB & CS" sumberJenis="Checklist OB" sumberId={item.id} tanggalLaporan={tanggalItem} dievaluasiOleh={adminName} />
+                              )}
+                            </td>
                           </tr>
 
                           {isOpen && (
                             <tr>
-                              <td colSpan={5} style={{ padding: "0", background: "var(--bg)" }}>
+                              <td colSpan={6} style={{ padding: "0", background: "var(--bg)" }}>
                                 <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "15px" }}>
                                   {(item.detail_segmen || []).map((segment, sIdx) => (
                                     <div key={sIdx} style={{ background: "var(--surface)", padding: "15px", borderRadius: "12px", border: "1px solid var(--line)" }}>
@@ -607,7 +615,7 @@ export default function MonitorOBPage() {
                         </Fragment>
                       );
                     }) : (
-                      <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{(filterBulanChecklist !== "SEMUA" || filterTahunChecklist !== "SEMUA") ? " di periode ini" : ""}.</td></tr>
+                      <tr><td colSpan={6} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{(filterBulanChecklist !== "SEMUA" || filterTahunChecklist !== "SEMUA") ? " di periode ini" : ""}.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -749,9 +757,12 @@ export default function MonitorOBPage() {
                           <h3 style={{ margin: "0 0 3px 0", color: "var(--ink)", fontSize: "15px" }}>{log.area}</h3>
                           <span style={{ fontSize: "11px", color: "var(--muted)" }}>{log.pic_bertugas} &middot; Minggu {log.minggu_mulai} &middot; {formatWaktu(log.waktu_selesai)}</span>
                         </div>
-                        <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
-                          {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
+                            {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
+                          </span>
+                          <EvaluasiManualButton nama={log.pic_bertugas} departemen="OB & CS" sumberJenis="Inspeksi Fasilitas" sumberId={log.id} tanggalLaporan={log.minggu_mulai} dievaluasiOleh={adminName} />
+                        </div>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                         {log.hasil.map((h, i) => (
