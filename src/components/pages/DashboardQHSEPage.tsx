@@ -5,6 +5,7 @@ import { useConfirm } from "../ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../AbsensiCard";
 import NotifikasiBellButton from "../NotifikasiBellButton";
+import { useFcmSetup } from "../../hooks/useFcmSetup";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -40,6 +41,10 @@ export default function DashboardQHSEPage() {
     redirectTo: "/",
     deniedMessage: "Akses Ditolak! Halaman ini khusus divisi QHSE.",
   });
+  // QHSE belum pernah pasang push notif sama sekali sebelum ini -- dibutuhkan supaya
+  // notifikasi Laporan Bahaya SBO baru (scripts/laporan-baru-reminder.mjs) beneran bisa
+  // nyampe sebagai push, bukan cuma masuk kotak masuk in-app.
+  useFcmSetup(session?.nama || "", !!session?.nama, "QHSE");
 
   const handleKeluar = () => logoutWithConfirm(confirm, router);
 

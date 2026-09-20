@@ -1,0 +1,29 @@
+name: Laporan Baru Reminder
+
+on:
+  schedule:
+    # Tiap 15 menit sepanjang hari -- notifikasi Admin GA/QHSE begitu ada laporan baru masuk
+    # dari Menu Cepat portal utama (SBO, Kerusakan, Overtime Gedung, Request ATK).
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # buat test manual dari tab Actions
+
+jobs:
+  notifikasi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # npm ci (install deterministik dari package-lock.json) -- lihat catatan lengkap soal
+      # kenapa cara ad-hoc lama ("npm install firebase-admin@X") berbahaya di
+      # apar-reminder.yml / analisis_project.md §46.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Jalankan notifikasi laporan baru
+        run: node scripts/laporan-baru-reminder.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
