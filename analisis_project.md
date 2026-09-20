@@ -12,7 +12,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 ### 🔴🔴 PALING URGENT: push+deploy §48 + konfirmasi fix §46 jalan + pilih arah §44E
 
-0. **BELUM DI-PUSH: §48 (reminder Inspeksi Fasilitas + notifikasi laporan baru)** — push ke `dev`+`main`, lalu `firebase deploy --only hosting` (ada perubahan `src/` -- `DashboardQHSEPage.tsx` dapat `useFcmSetup`). 2 script `.mjs` barunya (`inspeksi-fasilitas-reminder.mjs`, `laporan-baru-reminder.mjs`) otomatis aktif begitu push ke `main`, gak perlu deploy buat itu.
+0. **§48 SUDAH di-push+deploy** (reminder Inspeksi Fasilitas + notifikasi laporan baru).
 1. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
 2. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — buat daftarin token FCM mereka yang PERTAMA KALI, tanpa ini SEMUA notifikasi Admin GA (patroli/siram tanaman/checklist OB/status kendaraan/laporan baru/inspeksi fasilitas) gak akan sampai sebagai push.
 3. **Konfirmasi fix §46 (insiden cron gagal massal) beneran jalan** — sudah di-push (`20427cd`), user pilih nunggu jadwal otomatis (bukan trigger manual). Cek email "Run succeeded" dari GitHub Actions (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau BELUM ada konfirmasi sukses, itu prioritas #1 sebelum lanjut apa pun.
@@ -27,7 +27,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 User minta ditambahkan: pengingat jadwal inspeksi utk OB/CS (APAR sudah ada, Inspeksi Fasilitas Mingguan belum), dan notifikasi push ke admin tiap ada laporan baru masuk (Bahaya SBO, Kerusakan, Overtime Gedung, Request ATK). Riset dulu pakai subagent Explore sebelum nulis kode -- ketemu QHSE JUGA belum pernah punya token FCM sama sekali (sama masalah dengan Admin GA di §47), difix dulu. Detail: **§48** (§48A-§48E).
 
-**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+**Status: SUDAH DI-DEPLOY** (hosting). `dev`+`main` sinkron di `15fde61`.
 
 ### Sesi sebelumnya (§47) — Push Notifikasi Admin GA: Patroli, Siram Tanaman, Checklist OB/CS, Status Kendaraan
 
@@ -2263,4 +2263,4 @@ Persis masalah yang sama dengan Admin GA di §47A -- `useFcmSetup()` belum perna
 `.github/workflows/inspeksi-fasilitas-reminder.yml` (cron harian `10 0 * * *` = ~08:10 WITA) dan `.github/workflows/laporan-baru-reminder.yml` (cron tiap 15 menit `*/15 * * * *`) -- keduanya SUDAH pakai `npm ci` dari awal (bukan `npm install firebase-admin@X` ad-hoc), belajar langsung dari insiden §46.
 
 ### 48E. Verifikasi
-`npm run build`: 0 error, 51 route. `npx eslint src/components/pages/DashboardQHSEPage.tsx`: 0 warning. `node --check` pada kedua script baru: lolos. **Belum di-deploy, belum ditest end-to-end** -- `inspeksi-fasilitas-reminder.mjs` efeknya baru kelihatan Kamis/Jumat minggu ini (atau minggu depan kalau sudah lewat Jumat pas dideploy); `laporan-baru-reminder.mjs` butuh ada laporan baru BENERAN masuk lewat salah satu dari 4 form itu setelah checkpoint pertama ke-set; DAN QHSE (sama seperti Admin GA) perlu login + izinkan notifikasi browser dulu biar token FCM-nya terdaftar.
+`npm run build`: 0 error, 51 route. `npx eslint src/components/pages/DashboardQHSEPage.tsx`: 0 warning. `node --check` pada kedua script baru: lolos. **SUDAH DI-DEPLOY** (`firebase deploy --only hosting`). `dev`+`main` sinkron di `15fde61`. **Belum ditest end-to-end** -- `inspeksi-fasilitas-reminder.mjs` efeknya baru kelihatan Kamis/Jumat minggu ini (atau minggu depan kalau sudah lewat Jumat pas dideploy); `laporan-baru-reminder.mjs` butuh ada laporan baru BENERAN masuk lewat salah satu dari 4 form itu setelah checkpoint pertama ke-set; DAN QHSE (sama seperti Admin GA) perlu login + izinkan notifikasi browser dulu biar token FCM-nya terdaftar.
