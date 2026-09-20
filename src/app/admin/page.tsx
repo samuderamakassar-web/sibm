@@ -33,6 +33,9 @@ const IconTruck = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z" /></svg>
 );
+const IconGraduationCap = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg>
+);
 const IconChevronRight = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
 );
@@ -199,6 +202,13 @@ export default function AdminDashboardPage() {
       path: "/admin/survei-kepuasan",
       token: "info",
       icon: IconClipboardList,
+    },
+    {
+      title: "Handbook Magang",
+      desc: "Upload materi belajar (PDF/Video) untuk anak magang Security — langsung tampil begitu mereka login.",
+      path: "/admin/handbook-magang",
+      token: "accent",
+      icon: IconGraduationCap,
     },
   ];
 

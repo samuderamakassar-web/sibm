@@ -11,6 +11,7 @@ import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import AbsensiCard from "../../../components/AbsensiCard";
 import NotifikasiBellButton from "../../../components/NotifikasiBellButton";
 import EskalasiShiftModal from "../../../components/EskalasiShiftModal";
+import HandbookMagangList from "../../../components/HandbookMagangList";
 import { tanggalISOWITASekarang, hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga } from "../../../lib/shift";
 
 // ==========================================
@@ -663,6 +664,9 @@ export default function SecurityDashboard() {
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
       <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
+
+        {/* 🎓 HANDBOOK MAGANG -- muncul PALING ATAS begitu anak magang login, sesuai permintaan user */}
+        {isMagang && <HandbookMagangList />}
 
         {/* 📢 KARTU SHIFT HARI INI — gak relevan buat magang karena gak ikut plotting shift */}
         {!isMagang && (

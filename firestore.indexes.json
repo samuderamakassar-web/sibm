@@ -286,6 +286,25 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "handbook_magang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "aktif",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dibuatPada",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "pengumuman_gedung",
       "queryScope": "COLLECTION",
       "fields": [

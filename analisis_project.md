@@ -1,18 +1,18 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 20 September 2026 (**§48**: 2 script cron baru -- `inspeksi-fasilitas-reminder.mjs` (pengingat mingguan Inspeksi Fasilitas OB/CS, analog APAR yang sudah ada) dan `laporan-baru-reminder.mjs` (notifikasi Admin GA/QHSE tiap ada laporan baru: SBO, Kerusakan, Overtime Gedung, Request ATK, sebelumnya cuma email EmailJS). Sekalian ketauan & difix: QHSE JUGA belum pernah punya token FCM (sama masalah dengan Admin GA di §47). **BELUM di-push/deploy.** §47 (notifikasi Admin GA: patroli/siram tanaman/checklist OB/status kendaraan) SUDAH DI-DEPLOY. §46 -- INSIDEN (hampir semua cron gagal `Cannot find module '@google-cloud/firestore'`) SUDAH DI-PUSH & FIXED, hasil run pertama pasca-fix belum dikonfirmasi user. §45 (badge off-duty, jendela tukar jaga, eskalasi serah terima) SUDAH DI-DEPLOY, masih belum ditest end-to-end. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
+Update terakhir: 20 September 2026 (**§49**: menu baru Admin GA `admin/handbook-magang` buat upload materi belajar PDF/Video untuk anak magang Security -- langsung tampil paling atas begitu mereka login dashboard. Upload PDF/video pakai ulang `uploadDokumen.ts` yang sudah ada (batas 10MB, video besar disarankan pakai opsi Link YouTube/Drive alih-alih upload file). **BELUM di-push/deploy** (butuh rules+indexes+hosting). §48 (reminder Inspeksi Fasilitas mingguan + notifikasi laporan baru SBO/Kerusakan/Overtime/ATK) SUDAH DI-DEPLOY. §47 (notifikasi Admin GA: patroli/siram tanaman/checklist OB/status kendaraan) SUDAH DI-DEPLOY. §46 -- INSIDEN (hampir semua cron gagal `Cannot find module '@google-cloud/firestore'`) SUDAH DI-PUSH & FIXED, hasil run pertama pasca-fix belum dikonfirmasi user. §45 (badge off-duty, jendela tukar jaga, eskalasi serah terima) SUDAH DI-DEPLOY, masih belum ditest end-to-end. Rekomendasi sistem scoring/report (§44E) masih nunggu arahan user. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §48 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §49 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
 
-### 🔴🔴 PALING URGENT: push+deploy §48 + konfirmasi fix §46 jalan + pilih arah §44E
+### 🔴🔴 PALING URGENT: push+deploy §49 + konfirmasi fix §46 jalan + pilih arah §44E
 
-0. **§48 SUDAH di-push+deploy** (reminder Inspeksi Fasilitas + notifikasi laporan baru).
+0. **BELUM DI-PUSH: §49 (Handbook Magang)** — push ke `dev`+`main`, lalu `firebase deploy --only firestore:rules,firestore:indexes,hosting` (ada collection & index baru: `handbook_magang`). Setelah deploy, **coba upload 1 PDF & 1 video via `admin/handbook-magang`** buat konfirmasi upload beneran jalan (terutama video -- lihat batasan 10MB di §49C, belum pernah ditest langsung).
 1. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
 2. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — buat daftarin token FCM mereka yang PERTAMA KALI, tanpa ini SEMUA notifikasi Admin GA (patroli/siram tanaman/checklist OB/status kendaraan/laporan baru/inspeksi fasilitas) gak akan sampai sebagai push.
 3. **Konfirmasi fix §46 (insiden cron gagal massal) beneran jalan** — sudah di-push (`20427cd`), user pilih nunggu jadwal otomatis (bukan trigger manual). Cek email "Run succeeded" dari GitHub Actions (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau BELUM ada konfirmasi sukses, itu prioritas #1 sebelum lanjut apa pun.
@@ -23,9 +23,17 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 8. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6) — fix preventif scope service worker FCM sudah diterapkan, BELUM terverifikasi 100%. Buka dashboard di HP, izinkan notifikasi, TUTUP TOTAL app-nya, tunggu reminder terjadwal, cek notifikasi OS muncul atau tidak.
 9. **Banner "masih login sebagai..." di portal utama** (§40) — login sebagai staf apa pun → force-close app → buka lagi → pastikan banner muncul → klik "Lanjut ke Dashboard" → pastikan langsung masuk tanpa login ulang.
 
-### Sesi hari ini (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru, lanjutan langsung §47
+### Sesi hari ini (§49) — Handbook Magang: Menu Upload Admin (PDF/Video) + Tampil Otomatis Saat Login Magang
+
+User minta menu baru buat Admin upload handbook magang (PDF & video), muncul otomatis begitu anak magang login. Dicek dulu: konsep "magang" cuma ada di Security (`security_magang_directory`), gak ada di dept lain. Dibangun: collection `handbook_magang`, halaman admin `admin/handbook-magang` (reuse `uploadDokumen.ts` yang sudah ada, bukan bikin fungsi upload baru), dan komponen `HandbookMagangList.tsx` dipasang paling atas dashboard Security khusus buat staf magang. Detail: **§49** (§49A-§49G).
+
+**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+
+### Sesi sebelumnya (§48) — Notifikasi Jadwal Inspeksi (Fasilitas Mingguan) + Notifikasi Laporan Baru, lanjutan langsung §47
 
 User minta ditambahkan: pengingat jadwal inspeksi utk OB/CS (APAR sudah ada, Inspeksi Fasilitas Mingguan belum), dan notifikasi push ke admin tiap ada laporan baru masuk (Bahaya SBO, Kerusakan, Overtime Gedung, Request ATK). Riset dulu pakai subagent Explore sebelum nulis kode -- ketemu QHSE JUGA belum pernah punya token FCM sama sekali (sama masalah dengan Admin GA di §47), difix dulu. Detail: **§48** (§48A-§48E).
+
+**Status: SUDAH DI-DEPLOY** (hosting). `dev`+`main` sinkron di `15fde61`.
 
 **Status: SUDAH DI-DEPLOY** (hosting). `dev`+`main` sinkron di `15fde61`.
 
@@ -2264,3 +2272,30 @@ Persis masalah yang sama dengan Admin GA di §47A -- `useFcmSetup()` belum perna
 
 ### 48E. Verifikasi
 `npm run build`: 0 error, 51 route. `npx eslint src/components/pages/DashboardQHSEPage.tsx`: 0 warning. `node --check` pada kedua script baru: lolos. **SUDAH DI-DEPLOY** (`firebase deploy --only hosting`). `dev`+`main` sinkron di `15fde61`. **Belum ditest end-to-end** -- `inspeksi-fasilitas-reminder.mjs` efeknya baru kelihatan Kamis/Jumat minggu ini (atau minggu depan kalau sudah lewat Jumat pas dideploy); `laporan-baru-reminder.mjs` butuh ada laporan baru BENERAN masuk lewat salah satu dari 4 form itu setelah checkpoint pertama ke-set; DAN QHSE (sama seperti Admin GA) perlu login + izinkan notifikasi browser dulu biar token FCM-nya terdaftar.
+
+## 49. Handbook Magang: Menu Upload Admin (PDF/Video) + Tampil Otomatis Saat Login Magang
+
+User minta menu baru untuk Admin upload "handbook magang" (PDF & video), dan begitu anak magang login, materinya langsung muncul untuk dipelajari.
+
+### 49A. Cakupan: Magang Cuma Ada di Security
+Dicek dulu -- kata "magang" cuma muncul di file-file terkait Security (`security_magang_directory`, filter `role.toLowerCase().includes("magang")` di `dashboard/security/page.tsx`). Gak ada konsep magang di OB/CS, Driver, atau QHSE di app ini. Jadi fitur ini dipasang khusus di `dashboard/security/page.tsx`, tampil untuk staf berstatus magang (`isMagang`, variable yang sudah ada dari sebelumnya).
+
+### 49B. Collection Baru: `handbook_magang`
+`{judul, jenis: "pdf"|"video", url, deskripsi, aktif, dibuatPada, dibuatOleh}` -- pola CRUD (create/toggle aktif/hapus) SAMA PERSIS dengan `pengumuman_gedung` di `admin/broadcast` (§43B), cuma beda di ada upload file, bukan cuma teks.
+
+### 49C. Upload File: Reuse `src/lib/uploadDokumen.ts` yang Sudah Ada
+BUKAN bikin fungsi upload baru -- pakai ulang `handleDokumenUpload()`/`uploadDokumenToCloudinary()` yang sudah dipakai & terbukti jalan di `admin/sop` (upload dokumen SOP/IK). Pakai endpoint Cloudinary `/auto/upload` (deteksi tipe file otomatis: gambar/video/dokumen), jadi PDF & video sama-sama bisa lewat jalur yang sama.
+
+**Batasan PENTING yang harus diketahui user**: plan Cloudinary yang dipakai project ini membatasi upload unsigned di kisaran **10MB per file** (`MAX_UKURAN_DOKUMEN_MB`, konstanta yang sudah ada, dicek duluan sebelum upload dicoba). PDF biasanya aman di bawah itu, tapi **video umumnya JAUH lebih besar dari 10MB** -- upload file video kemungkinan besar bakal gagal/ditolak Cloudinary buat video yang lebih dari beberapa detik. Solusi yang ditawarkan di form: opsi **"Link Video"** (paste link YouTube/Google Drive/dll) sebagai alternatif upload file langsung -- gak ada batas ukuran karena cuma nyimpen URL, anak magang tinggal klik buat buka linknya. Form Admin punya toggle jelas antara 2 opsi ini.
+
+### 49D. Halaman Admin: `admin/handbook-magang` (BARU)
+Form: judul, deskripsi (opsional), pilih jenis (PDF/Video), untuk Video ada sub-pilihan Link vs Upload File (dengan peringatan ukuran). Daftar materi yang sudah ada: toggle Tampil/Disembunyikan + hapus, sama pola dengan `admin/broadcast`. Ditambahkan ke menu `admin/page.tsx` (ikon graduation cap baru).
+
+### 49E. Tampilan Magang: `src/components/HandbookMagangList.tsx` (BARU)
+Dipasang di `dashboard/security/page.tsx`, PALING ATAS konten (di atas semua elemen lain) khusus kalau `isMagang` true -- persis sesuai permintaan "pada login magang akan muncul". Baca `handbook_magang` where `aktif==true`. Tiap item jadi kartu bisa diklik (buka PDF/link di tab baru); KHUSUS video yang di-upload langsung (bukan link YouTube/Drive, dideteksi dari ekstensi file `.mp4/.webm/.mov/.m4v`), langsung diputar inline pakai elemen `<video controls>` di bawah kartunya -- link eksternal (YouTube dll) cuma bisa dibuka di tab baru, gak bisa di-embed inline dengan cara sederhana ini.
+
+### 49F. Firestore Rules & Index
+`firestore.rules`: `handbook_magang` ditambahkan ke daftar collection terbuka. `firestore.indexes.json`: 1 index baru (`aktif` ASC, `dibuatPada` DESC, `__name__` DESC) -- pola identik dengan `pengumuman_gedung`.
+
+### 49G. Verifikasi
+`npm run build`: 0 error, 52 route (nambah 1: `/admin/handbook-magang`). `npx eslint` pada semua file yang disentuh/baru: 0 error, 0 warning (sempat ada 1 warning "unused eslint-disable directive" yang gak perlu, langsung dihapus). **Belum di-deploy** (butuh rules+indexes+hosting karena ada collection & index baru). **Belum ditest visual/end-to-end sama sekali** -- terutama upload video (butuh dicoba langsung buat konfirmasi batas 10MB beneran seperti yang didokumentasikan, dan buat lihat apakah preset Cloudinary project ini beneran menerima resource_type video/raw lewat endpoint `/auto/upload`).
