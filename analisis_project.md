@@ -12,7 +12,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 ### 🔴🔴 PALING URGENT: push §47 + konfirmasi fix §46 jalan + pilih arah §44E
 
-0. **BELUM DI-PUSH: §47 (notifikasi Admin GA)** — push ke `dev`+`main`. Frontend-only + script `.mjs` (`admin/page.tsx` dapat `useFcmSetup`, `points-deduction.mjs` & `driver-status-staleness.mjs` kirim notif Admin GA) -- butuh `firebase deploy --only hosting` SETELAH push (karena ada perubahan `src/`), tapi script `.mjs`-nya sendiri otomatis aktif begitu push ke `main` (gak perlu deploy buat itu). **PENTING**: setelah deploy, minta Admin GA login & izinkan notifikasi browser sekali (buat daftarin token FCM mereka yang pertama kali) -- tanpa ini pushnya gak akan sampai kemana-mana walau kodenya sudah benar.
+0. **BARU, PENTING: §47 SUDAH di-push+deploy** — minta Admin GA login & izinkan notifikasi browser sekali (buat daftarin token FCM mereka yang PERTAMA KALI, sebelum ini mereka gak pernah punya token sama sekali) -- tanpa ini notifikasi patroli/siram tanaman/checklist OB/status kendaraan gak akan sampai ke Admin GA walau kodenya sudah benar.
 1. **Konfirmasi fix §46 (insiden cron gagal massal) beneran jalan** — sudah di-push (`20427cd`), user pilih nunggu jadwal otomatis (bukan trigger manual). Cek email "Run succeeded" dari GitHub Actions (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau BELUM ada konfirmasi sukses, itu prioritas #1 sebelum lanjut apa pun.
 2. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty kasih info "berakhir X menit lalu" + "jaga berikutnya kapan"; (b) kartu Tukar Shift/Jaga cuma muncul di jam 08:00/20:00 WITA (±60 menit); (c) fitur eskalasi (§45C) butuh skenario nyata (serah terima telat >10 menit) buat ditest penuh.
 3. **Perlu arahan user: pilih arah sistem scoring/report** (§44E) — 3 ide ditawarkan (poin bonus/positif, mekanisme banding Danru, perluas potongan ke Driver). Belum ada yang dibangun, nunggu user pilih prioritas sebelum lanjut.
@@ -25,7 +25,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 User minta ditambahkan notifikasi push ke Admin GA tiap kali ada pelanggaran kepatuhan -- Security tidak patroli/tidak siram tanaman, dan juga Driver & OB/CS. Ketemu masalah tersembunyi duluan: Admin GA TERNYATA belum pernah punya token FCM sama sekali (`useFcmSetup` gak pernah dipasang di dashboard mereka) -- difix dulu sebelum nulis notifikasinya. Detail: **§47** (§47A-§47D).
 
-**Status: KODE SELESAI, lolos build/lint, TAPI BELUM DI-PUSH/DEPLOY.**
+**Status: SUDAH DI-DEPLOY** (hosting). `dev`+`main` sinkron di `4773eb3`. **Belum ditest end-to-end** -- Admin GA perlu login & izinkan notifikasi browser sekali dulu supaya token FCM-nya terdaftar (lihat poin 0 di §0).
 
 ### Sesi sebelumnya (§46) — INSIDEN: Cron Reminder Gagal Massal Sejak 18 September
 
@@ -2226,4 +2226,4 @@ Helper baru `kirimNotifAdminGA()` (duplikat kecil, pola sama dgn 47B tapi mandir
 **Catatan desain**: script ini jalan tiap 30 menit TANPA guard anti-double-kirim (memang disengaja sejak awal, biar terus mengingatkan Driver/Security sampai statusnya diupdate) -- notifikasi Admin GA ikut pola yang sama, artinya Admin GA BISA dapat notifikasi berulang tiap 30 menit kalau ada kendaraan yang lama gak diupdate. Belum ada guard 1x/hari -- gampang ditambah kalau kerasa berisik buat user.
 
 ### 47D. Verifikasi
-`npm run build`: 0 error, 51 route. `npx eslint src/app/admin/page.tsx`: 0 warning. `node --check` pada `points-deduction.mjs` & `driver-status-staleness.mjs`: lolos. **Belum di-deploy, belum ditest end-to-end** (`points-deduction.mjs` jalan 1x/hari jam 09:00 WITA, jadi efeknya baru kelihatan besok pagi; `driver-status-staleness.mjs` butuh kendaraan beneran basi >2 jam buat ke-trigger).
+`npm run build`: 0 error, 51 route. `npx eslint src/app/admin/page.tsx`: 0 warning. `node --check` pada `points-deduction.mjs` & `driver-status-staleness.mjs`: lolos. **SUDAH DI-DEPLOY** (`firebase deploy --only hosting`, berhasil tanpa hambatan). `dev`+`main` sinkron di `4773eb3`. **Belum ditest end-to-end** (`points-deduction.mjs` jalan 1x/hari jam 09:00 WITA, jadi efeknya baru kelihatan besok pagi; `driver-status-staleness.mjs` butuh kendaraan beneran basi >2 jam buat ke-trigger; DAN Admin GA perlu login + izinkan notifikasi browser dulu biar token FCM-nya terdaftar).
