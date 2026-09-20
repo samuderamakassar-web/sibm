@@ -19,11 +19,16 @@ jobs:
         with:
           node-version: 20
 
-      # Versi di-pin persis (bukan "firebase-admin" polos/latest) -- ketemu pas audit notifikasi 19 Sep 2026,
-      # beberapa run gagal serentak dalam 1 hari yang dicurigai rilis firebase-admin terbaru yang
-      # sempat bermasalah, padahal skrip sendiri tidak ada bug. Update versi ini manual kalau perlu.
+      # npm ci (BUKAN "npm install firebase-admin@X" ad-hoc lagi) -- install DETERMINISTIK dari
+      # package-lock.json, firebase-admin sekarang jadi devDependency asli di package.json.
+      # Ditemukan 20 Sep 2026: cara lama re-resolve SELURUH dependency tree firebase-admin dari
+      # registry tiap kali cron jalan, TANPA lockfile sama sekali utk sub-dependency-nya (mis.
+      # @google-cloud/firestore) -- begitu versi baru ter-publish di registry, instalasi bisa
+      # pincang (modul hilang) TANPA peringatan apa pun, bikin SEMUA cron gagal serentak
+      # "Cannot find module '@google-cloud/firestore'". npm ci hilangkan resiko ini total karena
+      # selalu install versi PERSIS yang terkunci di package-lock.json.
       - name: Install dependencies
-        run: npm install firebase-admin@14.4.0
+        run: npm ci
 
       - name: Jalankan push reminder patroli
         run: node scripts/patroli-push-reminder.mjs

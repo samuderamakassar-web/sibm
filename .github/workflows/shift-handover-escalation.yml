@@ -20,8 +20,12 @@ jobs:
         with:
           node-version: 20
 
+      # npm ci (BUKAN "npm install firebase-admin@X" ad-hoc) -- install DETERMINISTIK dari
+      # package-lock.json, firebase-admin sekarang jadi devDependency asli di package.json.
+      # Lihat catatan lengkap di apar-reminder.yml soal kenapa cara lama bikin SEMUA cron gagal
+      # serentak "Cannot find module '@google-cloud/firestore'" (ditemukan 20 Sep 2026).
       - name: Install dependencies
-        run: npm install firebase-admin@14.4.0
+        run: npm ci
 
       - name: Jalankan eskalasi serah terima shift
         run: node scripts/shift-handover-escalation.mjs
