@@ -2369,3 +2369,18 @@ Ditemukan pas nambah kolom Evaluasi: tabel-tabel di `admin/monitor-ob` (Checklis
 
 ### 51G. Verifikasi
 `npm run build`: 0 error, 54 route (gak ada halaman baru, cuma nambah komponen & kolom). `npx eslint`: sempat ketemu 1 error baru (`react-hooks/set-state-in-effect` di effect fetch multi-bulan `monitor-poin`) -- langsung difix pola yang sama seperti sebelumnya. Setelah fix: 0 error, 0 warning di semua file yang disentuh. **SUDAH DI-DEPLOY** (`firestore:rules`+`hosting`, berhasil tanpa hambatan). `dev`+`main` sinkron di `d3e9c0b`. **Belum ditest end-to-end** -- terutama transaksi Firestore (`runTransaction`) buat evaluasi manual belum pernah dicoba langsung, dan rata-rata 6 bulan/1 tahun baru bisa benar-benar bermakna setelah ada beberapa bulan data poin terkumpul.
+
+## 52. Tombol Evaluasi: Sembunyi Setelah Dievaluasi + Preset Poin 5/10/15/20/25 (24 September 2026, lanjutan langsung §51)
+
+User: *"saya mau tombol evaluasi tidak lagi muncul setelah di evaluasi dan lasung saja munculkan angka 5,10,15,20,25"* -- 2 keluhan UX dari §51 yang baru dipakai.
+
+### 52A. `EvaluasiManualButton.tsx` -- Badge Menggantikan Tombol
+Prop baru `sumberCollection` (nama collection dokumen sumber) + `evaluasiSebelumnya` (data evaluasi kalau sudah pernah ada, di-export sebagai interface `EvaluasiManualData`). Setelah submit sukses, SELAIN transaksi poin & audit trail seperti §51, sekarang JUGA `updateDoc` balik ke dokumen sumbernya sendiri (`sumberCollection/sumberId`) nulis field `evaluasiManual: {delta, alasan, dievaluasiOleh, waktu}`. Kalau prop `evaluasiSebelumnya` terisi (dibaca listener monitoring dari field itu), komponen render badge ringkas ("✓ +15" / "✓ −10", warna hijau/merah sesuai tanda) BUKAN tombol -- gak bisa dievaluasi ulang dari UI ini.
+
+Input poin diganti dari `<input type="number">` bebas jadi 2 lapis: toggle arah (+ Tambah Poin / − Kurangi Poin) lalu grid tombol preset `[5, 10, 15, 20, 25]` yang tinggal diklik (gak ada lagi ngetik angka manual).
+
+### 52B. 3 Halaman Monitoring Disesuaikan
+`admin/monitor-security`, `admin/monitor-ob` (2 lokasi: Checklist & Inspeksi Fasilitas), `admin/monitor-driver` -- interface data masing-masing (`PatroliLog`, `ChecklistOB`, `InspeksiLog`, `KendaraanLog`) dapat field baru `evaluasiManual?: EvaluasiManualData | null`, dan tiap pemanggilan `<EvaluasiManualButton>` dikasih `sumberCollection` yang sesuai (`security_patrols`, `ob_checklists`, `inspeksi_fasilitas`, `operational_vehicle_logs`) + `evaluasiSebelumnya={data.evaluasiManual}`.
+
+### 52C. Verifikasi
+`npm run build`: 0 error, 54 route (gak ada halaman baru). `npx eslint` ke 4 file yang disentuh: 0 error, 0 warning. Firestore rules dicek ulang -- keempat collection sumber DAN `evaluasi_manual` sudah ada di daftar collection terbuka (§51D), jadi `updateDoc` balik ke dokumen sumber gak butuh perubahan rules. **SUDAH DI-DEPLOY** (`hosting` saja, gak ada perubahan rules/index). `dev`+`main` sinkron. **Belum ditest end-to-end** -- badge & preset poin belum pernah diklik langsung di production oleh admin sungguhan.
