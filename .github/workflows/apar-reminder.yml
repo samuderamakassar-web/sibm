@@ -13,7 +13,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          # PENTING (insiden 24 Sep 2026): firebase-admin@14.x DAN @google-cloud/firestore
+          # sekarang mensyaratkan Node >=22 di masing-masing package.json-nya. @google-cloud/firestore
+          # terdaftar sebagai OPTIONAL dependency firebase-admin -- npm ci DIAM-DIAM MELEWATI
+          # paket optional yang gagal cek engines TANPA membuat npm ci exit non-zero, jadi
+          # step "Install dependencies" tetap "sukses" walau modulnya beneran gak kepasang.
+          # Baru ketahuan pas script jalan: "Cannot find module '@google-cloud/firestore'".
+          # JANGAN turunkan node-version di bawah 22 lagi.
 
       # npm ci (BUKAN "npm install firebase-admin@X" ad-hoc lagi) -- install DETERMINISTIK dari
       # package-lock.json, firebase-admin sekarang jadi devDependency asli di package.json.
