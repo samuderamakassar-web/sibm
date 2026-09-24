@@ -2384,3 +2384,29 @@ Input poin diganti dari `<input type="number">` bebas jadi 2 lapis: toggle arah 
 
 ### 52C. Verifikasi
 `npm run build`: 0 error, 54 route (gak ada halaman baru). `npx eslint` ke 4 file yang disentuh: 0 error, 0 warning. Firestore rules dicek ulang -- keempat collection sumber DAN `evaluasi_manual` sudah ada di daftar collection terbuka (§51D), jadi `updateDoc` balik ke dokumen sumber gak butuh perubahan rules. **SUDAH DI-DEPLOY** (`hosting` saja, gak ada perubahan rules/index). `dev`+`main` sinkron. **Belum ditest end-to-end** -- badge & preset poin belum pernah diklik langsung di production oleh admin sungguhan.
+
+## 53. INSIDEN §46/§50A TERNYATA BELUM SELESAI: Root Cause SEBENARNYA -- Node 20 vs `engines: >=22` (24 September 2026, lanjutan langsung §52)
+
+User screenshot `admin/monitor-cron` (dibuat di §50B) nunjukin **13 dari 13 cron MASIH gagal**, 4 hari setelah fix §50A yang sudah diverifikasi lokal. Diminta cek ulang dari nol.
+
+### 53A. Kenapa Fix §46 & §50A Gak Cukup
+Dicek lewat GitHub API publik: step "Install dependencies" (`npm ci`) ternyata **SUKSES** di semua run terbaru (fix §50A soal `devDependencies` MEMANG benar dan MEMANG kepasang) -- tapi step "Jalankan reminder" tetap gagal 100% identik di ke-13 workflow, di script manapun. Karena API gak pernah kasih isi error asli (cuma "Process completed with exit code 1"), diminta 1 screenshot lagi dari user: log lengkap step "Jalankan reminder" pada run `APAR Inspection Reminder` (23 Sept) yang JELAS pakai kode ter-update -- ternyata errornya **PERSIS SAMA** seperti insiden lama: `Cannot find module '@google-cloud/firestore'`, padahal `npm ci` di atasnya sukses 19 detik.
+
+### 53B. Root Cause SEBENARNYA (baru ketemu sekarang)
+Dicek langsung isi `package-lock.json`: entry `node_modules/@google-cloud/firestore` (versi 9.2.0, resolusi HASIL LANGSUNG dari fix §46) tercatat:
+```
+"optional": true,
+"engines": { "node": ">=22" }
+```
+`firebase-admin` sendiri JUGA mensyaratkan `"engines": {"node": ">=22"}` (dicek langsung di `node_modules/firebase-admin/package.json`) -- tapi SEMUA 13 workflow `.github/workflows/*.yml` masih pakai `node-version: 20` (gak pernah diubah sejak awal dibuat). Mekanismenya: karena `@google-cloud/firestore` didaftarkan `firebase-admin` sebagai **OPTIONAL dependency**, npm punya perilaku KHUSUS untuk optional deps yang gagal cek `engines` -- **DIAM-DIAM DILEWATI, TANPA membuat keseluruhan `npm ci` exit non-zero**. Beda dengan dependency wajib (yang cuma dikasih warning tapi tetap dipaksa install), paket optional yang "gak cocok platform/versi" dianggap "gak apa-apa, kan optional" oleh npm -- padahal firebase-admin SECARA INTERNAL tetap `require()` modul itu tanpa pengecekan try/catch.
+
+Ini menjelaskan SEMUA kejanggalan sebelumnya:
+- Kenapa lokal selalu "berhasil diverifikasi" tapi production tetap gagal: mesin lokal pakai **Node v22.11.0** (memenuhi `>=22`), jadi optional dependency itu SELALU ke-install normal di lokal -- simulasi `npm ci --omit=dev` di §50A cuma nguji soal dev/prod categorization, TIDAK PERNAH menguji di bawah Node 20 sama sekali.
+- Kenapa error text-nya identik dengan insiden §46 yang "sudah difix": karena ini memang gejala yang sama, tapi 2 penyebab BERBEDA yang kebetulan menghasilkan pesan error sama persis (`Cannot find module '@google-cloud/firestore'`) -- §46 fix devDependencies-nya BENAR dan MEMANG perlu, tapi bukan penyebab TUNGGAL/TERAKHIR.
+- Kenapa baru muncul sekitar 18 September: kemungkinan besar versi `@google-cloud/firestore` yang ter-resolve waktu itu baru saja naik syarat engine-nya ke `>=22` di rilis npm registry-nya sendiri.
+
+### 53C. Fix: Naikkan `node-version` dari 20 ke 22 di Semua Workflow
+Ke-13 file `.github/workflows/*.yml` diubah `node-version: "20"`/`node-version: 20` → `node-version: 22`, plus komentar penjelasan ditambahkan di tiap file (persis di bawah baris `node-version: 22`) supaya gak ada yang iseng nurunin lagi tanpa tau alasannya. Divalidasi: semua 13 file lolos parsing YAML (`js-yaml`) setelah diedit, gak ada kerusakan struktur.
+
+### 53D. Verifikasi
+Perubahan PURE `.github/workflows/*.yml` -- gak ada perubahan `src/`, `package.json`, atau rules, jadi **TIDAK butuh `firebase deploy`**. `dev`+`main` sinkron (`ad064cd`). **Belum ada konfirmasi run sukses pasca-fix** -- ini baru bisa dipastikan setelah salah satu dari 13 cron jalan lagi sesuai jadwalnya (atau di-trigger manual lewat tab Actions → pilih workflow → "Run workflow", semua sudah punya `workflow_dispatch` buat testing cepat tanpa nunggu jadwal).
