@@ -5,27 +5,28 @@
  * ------------------------------------------------------------------
  * Tombol + modal "Evaluasi" -- dipasang Admin GA di baris laporan/inspeksi
  * APA PUN (Patroli Security, Checklist OB, Inspeksi Fasilitas, Log
- * Kendaraan Driver) lewat halaman monitoring yang sudah ada. Admin kasih
- * poin +/- dengan alasan, LANGSUNG mempengaruhi total poin bulanan staf
- * itu di `staff_points_bulanan` (dokumen yang SAMA dipakai
- * scripts/points-deduction.mjs) -- desain dikonfirmasi user: "poin +/-
- * dengan alasan, ditambahkan ke total poin otomatis yang sudah ada".
+ * Kendaraan Driver) lewat halaman monitoring yang sudah ada. Admin pilih
+ * poin dari preset +/-5/10/15/20/25 dengan alasan, LANGSUNG mempengaruhi
+ * total poin bulanan staf itu di `staff_points_bulanan` (dokumen yang SAMA
+ * dipakai scripts/points-deduction.mjs).
  *
  * Field `riwayat[].potongan` dipertahankan APA ADANYA (bukan field baru)
  * biar gak perlu ubah scripts/points-deduction.mjs ATAU logika baca di
  * admin/monitor-poin -- cuma konvensinya diperluas: potongan POSITIF
  * (seperti sebelumnya) = pengurangan otomatis/manual, potongan NEGATIF
- * (BARU, cuma bisa dari sini) = penambahan/bonus manual. admin/monitor-poin
- * sudah disesuaikan buat nampilin tanda +/- yang benar.
+ * (BARU, cuma bisa dari sini) = penambahan/bonus manual.
  *
  * Setiap evaluasi JUGA dicatat di collection `evaluasi_manual` (audit
- * trail terpisah, nunjuk balik ke laporan sumbernya) -- staff_points_bulanan
- * cuma nyimpen TOTAL, evaluasi_manual nyimpen SIAPA nge-evaluasi APA kapan.
+ * trail terpisah) DAN ditulis balik ke field `evaluasiManual` pada
+ * dokumen SUMBERnya sendiri (`sumberCollection`/`sumberId`) -- field ini
+ * yang dipakai halaman monitoring buat MENYEMBUNYIKAN tombol & ganti jadi
+ * badge "Sudah Dievaluasi" begitu 1 laporan sudah pernah dievaluasi
+ * (dikonfirmasi user: tombol gak boleh muncul lagi setelah dievaluasi).
  * ------------------------------------------------------------------
  */
 
 import { useState } from "react";
-import { collection, addDoc, doc, runTransaction, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useToast } from "./ui/ToastProvider";
 
@@ -33,33 +34,46 @@ type IconProps = { size?: number; color?: string };
 const IconStar = ({ size = 13, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8l-6.2 3.3 1.2-6.9-5-4.9 6.9-1z" /></svg>
 );
+const IconCheck = ({ size = 12, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+);
+
+const PRESET_POIN = [5, 10, 15, 20, 25];
 
 function slugNama(nama: string): string {
   return nama.trim().replace(/\//g, "-");
+}
+
+export interface EvaluasiManualData {
+  delta: number;
+  alasan: string;
+  dievaluasiOleh: string;
+  waktu?: { toDate: () => Date } | null;
 }
 
 interface Props {
   nama: string;
   departemen: string;
   sumberJenis: string; // label buat audit trail, mis. "Patroli Security", "Checklist OB", "Inspeksi Fasilitas", "Log Kendaraan Driver"
+  sumberCollection: string; // nama collection dokumen sumber -- dipakai nulis balik field evaluasiManual
   sumberId: string;
   tanggalLaporan: string; // "YYYY-MM-DD" -- nentuin bulan MANA yang kena pengaruh (bukan selalu bulan berjalan)
   dievaluasiOleh: string;
+  evaluasiSebelumnya?: EvaluasiManualData | null; // kalau sudah ada, tampilkan badge -- bukan tombol
 }
 
-export default function EvaluasiManualButton({ nama, departemen, sumberJenis, sumberId, tanggalLaporan, dievaluasiOleh }: Props) {
+export default function EvaluasiManualButton({ nama, departemen, sumberJenis, sumberCollection, sumberId, tanggalLaporan, dievaluasiOleh, evaluasiSebelumnya }: Props) {
   const showToast = useToast();
   const [showModal, setShowModal] = useState(false);
-  const [delta, setDelta] = useState("");
+  const [arah, setArah] = useState<"plus" | "minus">("plus");
+  const [delta, setDelta] = useState<number | null>(null);
   const [alasan, setAlasan] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async () => {
-    const jumlah = Number(delta);
-    if (!delta.trim() || !Number.isFinite(jumlah) || jumlah === 0) {
-      return showToast("Isi jumlah poin dulu (boleh negatif, contoh: 5 atau -10).", "warning");
-    }
+    if (delta === null) return showToast("Pilih jumlah poin dulu.", "warning");
     if (!alasan.trim()) return showToast("Isi alasan evaluasi dulu.", "warning");
+    const jumlah = arah === "plus" ? delta : -delta;
 
     setIsSaving(true);
     try {
@@ -84,9 +98,15 @@ export default function EvaluasiManualButton({ nama, departemen, sumberJenis, su
         nama, departemen, sumberJenis, sumberId, tanggalLaporan, delta: jumlah, alasan, dievaluasiOleh, waktu: serverTimestamp(),
       });
 
+      // Tulis balik ke dokumen sumbernya -- inilah yang bikin tombol gak muncul lagi & ganti jadi
+      // badge di halaman monitoring (lihat baca field ini di monitor-security/monitor-ob/monitor-driver).
+      await updateDoc(doc(db, sumberCollection, sumberId), {
+        evaluasiManual: { delta: jumlah, alasan, dievaluasiOleh, waktu: serverTimestamp() },
+      });
+
       showToast(`Evaluasi tersimpan: ${jumlah > 0 ? `+${jumlah}` : jumlah} poin untuk ${nama}.`, "success");
       setShowModal(false);
-      setDelta("");
+      setDelta(null);
       setAlasan("");
     } catch (err) {
       console.error(err);
@@ -95,6 +115,15 @@ export default function EvaluasiManualButton({ nama, departemen, sumberJenis, su
       setIsSaving(false);
     }
   };
+
+  if (evaluasiSebelumnya) {
+    const d = evaluasiSebelumnya.delta;
+    return (
+      <span title={evaluasiSebelumnya.alasan} style={{ background: d < 0 ? "var(--red-50, #fef2f2)" : "var(--ok-50, #f0fdf4)", color: d < 0 ? "var(--red-600, #dc2626)" : "var(--ok, #16a34a)", padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "5px" }}>
+        <IconCheck size={11} /> {d > 0 ? `+${d}` : d}
+      </span>
+    );
+  }
 
   return (
     <>
@@ -111,11 +140,31 @@ export default function EvaluasiManualButton({ nama, departemen, sumberJenis, su
             <h3 style={{ margin: "0 0 4px 0", fontSize: "15.5px", fontWeight: 800, color: "#18181b" }}>Evaluasi: {nama}</h3>
             <p style={{ margin: "0 0 16px 0", fontSize: "12px", color: "#71717a" }}>{sumberJenis} &middot; {tanggalLaporan}</p>
 
-            <label style={{ display: "block", fontSize: "11.5px", fontWeight: 700, color: "#3f3f46", marginBottom: "6px" }}>Poin (boleh negatif untuk pengurangan)</label>
-            <input
-              type="number" value={delta} onChange={(e) => setDelta(e.target.value)} placeholder="Contoh: 5 atau -10"
-              style={{ width: "100%", padding: "11px 12px", borderRadius: "10px", border: "1px solid #e7e5e4", fontSize: "14px", marginBottom: "14px", boxSizing: "border-box", fontFamily: "inherit" }}
-            />
+            <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+              <button type="button" onClick={() => setArah("plus")} style={{ flex: 1, padding: "9px", borderRadius: "10px", border: "1px solid " + (arah === "plus" ? "var(--ok, #16a34a)" : "#e7e5e4"), background: arah === "plus" ? "var(--ok-50, #f0fdf4)" : "#fff", color: arah === "plus" ? "var(--ok, #16a34a)" : "#71717a", fontWeight: 800, fontSize: "13px", cursor: "pointer" }}>
+                + Tambah Poin
+              </button>
+              <button type="button" onClick={() => setArah("minus")} style={{ flex: 1, padding: "9px", borderRadius: "10px", border: "1px solid " + (arah === "minus" ? "var(--red-600, #dc2626)" : "#e7e5e4"), background: arah === "minus" ? "var(--red-50, #fef2f2)" : "#fff", color: arah === "minus" ? "var(--red-600, #dc2626)" : "#71717a", fontWeight: 800, fontSize: "13px", cursor: "pointer" }}>
+                − Kurangi Poin
+              </button>
+            </div>
+
+            <label style={{ display: "block", fontSize: "11.5px", fontWeight: 700, color: "#3f3f46", marginBottom: "8px" }}>Jumlah Poin</label>
+            <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" }}>
+              {PRESET_POIN.map((p) => (
+                <button
+                  key={p} type="button" onClick={() => setDelta(p)}
+                  style={{
+                    flex: "1 1 50px", padding: "10px 0", borderRadius: "10px", fontWeight: 800, fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
+                    border: "1px solid " + (delta === p ? (arah === "plus" ? "var(--ok, #16a34a)" : "var(--red-600, #dc2626)") : "#e7e5e4"),
+                    background: delta === p ? (arah === "plus" ? "var(--ok, #16a34a)" : "var(--red-600, #dc2626)") : "#f7f6f5",
+                    color: delta === p ? "#fff" : "#3f3f46",
+                  }}
+                >
+                  {arah === "plus" ? "+" : "−"}{p}
+                </button>
+              ))}
+            </div>
 
             <label style={{ display: "block", fontSize: "11.5px", fontWeight: 700, color: "#3f3f46", marginBottom: "6px" }}>Alasan *</label>
             <textarea

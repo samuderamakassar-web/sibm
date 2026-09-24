@@ -6,7 +6,7 @@ import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp
 import { db } from "../../../lib/firebase";
 import { MINIMUM_SESI_PER_SHIFT } from "../../../lib/shift";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import EvaluasiManualButton from "../../../components/EvaluasiManualButton";
+import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/EvaluasiManualButton";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -42,6 +42,7 @@ interface PatroliLog {
   tanggal_shift?: string;
   shift?: string;
   sesi?: string;
+  evaluasiManual?: EvaluasiManualData | null;
 }
 
 interface VisitorLog {
@@ -565,7 +566,7 @@ export default function MonitorSecurityPage() {
                             📸 Lihat Laporan
                           </button>
                           {p.tanggal_shift && (
-                            <EvaluasiManualButton nama={p.petugas} departemen="Security" sumberJenis="Patroli Security" sumberId={p.id} tanggalLaporan={p.tanggal_shift} dievaluasiOleh={adminName} />
+                            <EvaluasiManualButton nama={p.petugas} departemen="Security" sumberJenis="Patroli Security" sumberCollection="security_patrols" sumberId={p.id} tanggalLaporan={p.tanggal_shift} dievaluasiOleh={adminName} evaluasiSebelumnya={p.evaluasiManual} />
                           )}
                         </div>
                       </td>

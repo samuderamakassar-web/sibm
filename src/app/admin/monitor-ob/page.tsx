@@ -5,7 +5,7 @@ import { Fragment, useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import EvaluasiManualButton from "../../../components/EvaluasiManualButton";
+import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/EvaluasiManualButton";
 
 // Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
 type IconProps = { size?: number; color?: string };
@@ -40,6 +40,7 @@ interface ChecklistOB {
   waktu_selesai: Timestamp | null;
   detail_segmen: SegmentLog[];
   foto_bukti: FotoPasangan[];
+  evaluasiManual?: EvaluasiManualData | null;
 }
 
 const getStatusRingkas = (segmen: SegmentLog[]) => {
@@ -157,6 +158,7 @@ interface InspeksiLog {
   minggu_mulai: string;
   waktu_selesai: Timestamp | null;
   hasil: { nama: string; kondisi: Kondisi; catatan: string; foto: string }[];
+  evaluasiManual?: EvaluasiManualData | null;
 }
 
 // Sama polanya dgn getTahunBulanChecklist -- minggu_mulai selalu ada (field wajib), jadi gak perlu fallback.
@@ -566,7 +568,7 @@ export default function MonitorOBPage() {
                             </td>
                             <td style={{ padding: "12px 15px", textAlign: "center" }}>
                               {tanggalItem && (
-                                <EvaluasiManualButton nama={item.pic_bertugas} departemen="OB & CS" sumberJenis="Checklist OB" sumberId={item.id} tanggalLaporan={tanggalItem} dievaluasiOleh={adminName} />
+                                <EvaluasiManualButton nama={item.pic_bertugas} departemen="OB & CS" sumberJenis="Checklist OB" sumberCollection="ob_checklists" sumberId={item.id} tanggalLaporan={tanggalItem} dievaluasiOleh={adminName} evaluasiSebelumnya={item.evaluasiManual} />
                               )}
                             </td>
                           </tr>
@@ -761,7 +763,7 @@ export default function MonitorOBPage() {
                           <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
                             {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
                           </span>
-                          <EvaluasiManualButton nama={log.pic_bertugas} departemen="OB & CS" sumberJenis="Inspeksi Fasilitas" sumberId={log.id} tanggalLaporan={log.minggu_mulai} dievaluasiOleh={adminName} />
+                          <EvaluasiManualButton nama={log.pic_bertugas} departemen="OB & CS" sumberJenis="Inspeksi Fasilitas" sumberCollection="inspeksi_fasilitas" sumberId={log.id} tanggalLaporan={log.minggu_mulai} dievaluasiOleh={adminName} evaluasiSebelumnya={log.evaluasiManual} />
                         </div>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>

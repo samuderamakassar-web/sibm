@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import EvaluasiManualButton from "../../../components/EvaluasiManualButton";
+import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/EvaluasiManualButton";
 
 // Ikon SVG garis — konsisten dengan admin/monitor-security & admin/monitor-ob
 type IconProps = { size?: number; color?: string };
@@ -28,6 +28,7 @@ interface KendaraanLog {
   tujuan_keperluan: string;
   kilometer_kendaraan: string;
   waktu_catat: Timestamp | null;
+  evaluasiManual?: EvaluasiManualData | null;
 }
 
 const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -218,7 +219,7 @@ export default function MonitorDriverPage() {
                       <td data-label="KM · Dicatat Oleh" style={{ color: "var(--muted)", fontSize: "12px" }}>{l.kilometer_kendaraan || "-"} &middot; {l.petugas_security || "-"}</td>
                       <td data-label="Evaluasi" style={{ textAlign: "center" }}>
                         {l.driver_bertugas && l.driver_bertugas !== "-" && tanggalLog && (
-                          <EvaluasiManualButton nama={l.driver_bertugas} departemen="Driver" sumberJenis="Log Kendaraan Driver" sumberId={l.id} tanggalLaporan={tanggalLog} dievaluasiOleh={adminName} />
+                          <EvaluasiManualButton nama={l.driver_bertugas} departemen="Driver" sumberJenis="Log Kendaraan Driver" sumberCollection="operational_vehicle_logs" sumberId={l.id} tanggalLaporan={tanggalLog} dievaluasiOleh={adminName} evaluasiSebelumnya={l.evaluasiManual} />
                         )}
                       </td>
                     </tr>
