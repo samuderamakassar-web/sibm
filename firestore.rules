@@ -116,7 +116,7 @@ service cloud.firestore {
           'fcm_tokens', 'notifikasi_dadakan_siram', 'attendance_logs',
           'staff_points_bulanan', 'survei_kepuasan_gedung', 'security_shift_handover',
           'pengumuman_gedung', 'notifikasi_personal', 'security_shift_extend',
-          'handbook_magang', 'evaluasi_manual', 'master_laptop'
+          'handbook_magang', 'evaluasi_manual', 'master_laptop', 'master_legalitas'
         ];
     }
 

@@ -349,7 +349,14 @@ export default function AdminLaptopPage() {
                         <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{item.merk_model}</div>
                         {item.no_seri && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "3px" }}>S/N: {item.no_seri}</div>}
                       </td>
-                      <td data-label="Masa Sewa" style={{ color: "var(--ink-soft)", fontSize: "12.5px" }}>{formatTanggal(item.tanggal_mulai)} &rarr; {formatTanggal(item.tanggal_berakhir)}</td>
+                      <td data-label="Masa Sewa" style={{ color: "var(--ink-soft)", fontSize: "12.5px" }}>
+                        {formatTanggal(item.tanggal_mulai)} &rarr; {formatTanggal(item.tanggal_berakhir)}
+                        {!item.dikembalikan && st.sisaHari !== null && (
+                          <div style={{ marginTop: "3px", fontSize: "11px", fontWeight: 700, color: st.sisaHari < 0 ? "var(--red-600)" : st.sisaHari <= BATAS_HARI_MAU_HABIS ? "var(--warn)" : "var(--muted)" }}>
+                            {st.sisaHari < 0 ? `Lewat ${Math.abs(st.sisaHari)} hari` : `${st.sisaHari} hari lagi`}
+                          </div>
+                        )}
+                      </td>
                       <td data-label="Vendor & Biaya" style={{ color: "var(--muted)", fontSize: "12px" }}>{item.vendor || "-"}<br />{formatRupiah(item.biaya_sewa)}</td>
                       <td data-label="Status">
                         <span style={{ background: st.bg, color: st.color, padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", display: "inline-block", whiteSpace: "nowrap" }}>{st.label}</span>

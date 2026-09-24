@@ -81,6 +81,9 @@ const IconClipboardList = ({ size = 18, color = "currentColor" }: IconProps) => 
 const IconLaptop = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5" /><path d="M2 19h20" /><path d="M9 19l1-2h4l1 2" /></svg>
 );
+const IconStamp = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3h8l2 6H6l2-6z" /><path d="M10 9v4a2 2 0 0 0 4 0V9" /><path d="M4 21l1.5-5h13L20 21" /><path d="M4 21h16" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -139,6 +142,13 @@ export default function AdminDashboardPage() {
       path: "/admin/laptop",
       token: "info",
       icon: IconLaptop,
+    },
+    {
+      title: "Legalitas & Perizinan",
+      desc: "Dokumen legalitas, perizinan, dan perjanjian — riwayat versi tersimpan tiap diperpanjang.",
+      path: "/admin/legalitas",
+      token: "accent",
+      icon: IconStamp,
     },
     // --- Layanan GA ---
     {
