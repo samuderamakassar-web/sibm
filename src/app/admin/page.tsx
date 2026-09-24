@@ -78,6 +78,9 @@ const IconTrophy = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconClipboardList = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 12h6M9 16h4" /></svg>
 );
+const IconLaptop = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5" /><path d="M2 19h20" /><path d="M9 19l1-2h4l1 2" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -129,6 +132,13 @@ export default function AdminDashboardPage() {
       path: "/admin/uji-emisi",
       token: "ok",
       icon: IconCar,
+    },
+    {
+      title: "Master Data Laptop",
+      desc: "Data masa sewa laptop tiap user — pantau kapan harus diperpanjang.",
+      path: "/admin/laptop",
+      token: "info",
+      icon: IconLaptop,
     },
     // --- Layanan GA ---
     {
