@@ -1,13 +1,20 @@
-import admin from "firebase-admin";
+import { initializeApp, cert } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 // ==========================================
 // SETUP FIREBASE ADMIN
 // ==========================================
+// PENTING (ditemukan 24 Sep 2026): dulu pakai "import admin from 'firebase-admin'" + API
+// namespace lama (admin.credential.cert, admin.firestore()) -- ini SEMPAT jalan, tapi begitu
+// insiden module-not-found (lihat §46/§53) kebenerin dan script ini akhirnya bisa jalan lagi,
+// ketauan API namespace lama itu gak lagi diekspos lewat ESM default import di firebase-admin
+// versi terbaru ("Cannot read properties of undefined (reading 'cert')"). Ganti ke API
+// modular (sama seperti SEMUA script reminder lain) yang memang didesain buat ESM.
 const serviceAccount = JSON.parse(
   Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf-8")
 );
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-const db = admin.firestore();
+initializeApp({ credential: cert(serviceAccount) });
+const db = getFirestore();
 
 // ==========================================
 // WAKTU SEKARANG (WITA)
@@ -129,7 +136,7 @@ async function tulisNotifApp(namaPic, pesan, jenis) {
     untuk_nama: namaPic,
     pesan,
     jenis,
-    waktu: admin.firestore.FieldValue.serverTimestamp(),
+    waktu: FieldValue.serverTimestamp(),
     dibaca: false,
   });
 }
@@ -168,7 +175,7 @@ async function jalankan() {
   }
   await logRef.set({
     slot: slotAktif.id,
-    diproses_pada: admin.firestore.FieldValue.serverTimestamp(),
+    diproses_pada: FieldValue.serverTimestamp(),
   });
 
   if (slotAktif.jenis === "reminder") {
