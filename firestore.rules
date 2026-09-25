@@ -66,8 +66,11 @@ service cloud.firestore {
     // yang sudah lolos semua batasan role/dept. Admin biasa (role admin, daerah != 'PUSAT')
     // disebut "Admin Daerah" -- cuma boleh kelola akun & (nanti, bertahap) data di
     // daerahnya sendiri. Lihat analisis_project.md §56 untuk skema lengkap & rencana lanjutan.
+    // .get('daerah', '') (bukan .daerah langsung) SENGAJA dipakai -- field ini BARU, akun
+    // lama belum semuanya di-backfill lewat scripts/migrate-add-daerah.mjs. Akses field yang
+    // gak ada lewat dot-notation bikin rule ERROR (dianggap deny), bukan graceful null.
     function myDaerah() {
-      return hasProfile() ? myProfile().daerah : '';
+      return hasProfile() ? myProfile().get('daerah', '') : '';
     }
 
     function isSuperAdmin() {
@@ -89,9 +92,11 @@ service cloud.firestore {
       // bisa bikin akun buat daerah lain, gak bisa "pindahkan" akun ke daerah lain, gak
       // bisa hapus/edit akun daerah lain. Dipisah create/update/delete (bukan 1 `write`
       // gabungan) karena request.resource gak ada saat delete & resource gak ada saat create.
+      // .get('daerah', '') dipakai buat AKUN LAMA yang belum di-backfill migrate-add-daerah.mjs
+      // (dot-notation ke field yang gak ada bikin rule error/deny, bukan graceful null).
       allow create: if isSuperAdmin() || (isAdmin() && request.resource.data.daerah == myDaerah());
-      allow update: if isSuperAdmin() || (isAdmin() && resource.data.daerah == myDaerah() && request.resource.data.daerah == myDaerah());
-      allow delete: if isSuperAdmin() || (isAdmin() && resource.data.daerah == myDaerah());
+      allow update: if isSuperAdmin() || (isAdmin() && resource.data.get('daerah', '') == myDaerah() && request.resource.data.daerah == myDaerah());
+      allow delete: if isSuperAdmin() || (isAdmin() && resource.data.get('daerah', '') == myDaerah());
     }
 
     // --------------------------------------------------------------------
