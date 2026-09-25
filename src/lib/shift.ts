@@ -106,6 +106,21 @@ export function dalamJendelaTukarJaga(now: Date, toleransiMenit: number = TOLERA
   return dekat08 || dekat20;
 }
 
+/** Ambang menit keterlambatan serah terima -- SAMA PERSIS dengan AMBANG_ESKALASI_MENIT di
+ *  scripts/shift-handover-escalation.mjs (kalau salah satu diubah, ubah juga yang lain) --
+ *  dipakai TukarShiftSecurityPage.tsx buat nentuin kapan wajib minta "Alasan Telat" saat scan. */
+export const AMBANG_TELAT_SERAH_TERIMA_MENIT = 10;
+
+/** Menit yang sudah berlalu sejak batas jam pergantian shift TERAKHIR (08:00/20:00 WITA) yang
+ *  berlaku untuk waktu `now` -- duplikat dari perhitungan `menitSejakBatas` di
+ *  scripts/shift-handover-escalation.mjs, diekspos di sini supaya UI (TukarShiftSecurityPage)
+ *  bisa deteksi keterlambatan TEPAT SAAT SCAN, bukan cuma lewat cron yang jalan tiap 10 menit. */
+export function menitSejakBatasShift(now: Date): number {
+  const menitSekarang = now.getHours() * 60 + now.getMinutes();
+  if (menitSekarang >= 480 && menitSekarang < 1200) return menitSekarang - 480;
+  return menitSekarang >= 1200 ? menitSekarang - 1200 : menitSekarang + 1440 - 1200;
+}
+
 /**
  * ------------------------------------------------------------------
  * SESI CHECKLIST OB & CS -- dipakai ChecklistOBPage supaya laporan

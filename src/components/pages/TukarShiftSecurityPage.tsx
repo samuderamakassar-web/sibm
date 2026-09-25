@@ -17,7 +17,7 @@ import { Html5QrcodeScanner } from "html5-qrcode";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
-import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, TOLERANSI_JENDELA_TUKAR_JAGA_MENIT, ShiftLabel } from "../../lib/shift";
+import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, menitSejakBatasShift, AMBANG_TELAT_SERAH_TERIMA_MENIT, TOLERANSI_JENDELA_TUKAR_JAGA_MENIT, ShiftLabel } from "../../lib/shift";
 
 type IconProps = { size?: number; color?: string };
 const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -39,6 +39,9 @@ interface HandoverDoc {
   status: "menunggu_scan" | "selesai";
   waktu_generate: Timestamp | null;
   waktu_scan: Timestamp | null;
+  terlambat?: boolean;
+  menit_terlambat?: number | null;
+  alasan_telat?: string | null;
 }
 
 function formatJam(ts: Timestamp | null): string {
@@ -74,6 +77,12 @@ export default function TukarShiftSecurityPage() {
   const [handover, setHandover] = useState<HandoverDoc | null | undefined>(undefined);
   const [isScanning, setIsScanning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Kalau QR discan LEBIH DARI AMBANG_TELAT_SERAH_TERIMA_MENIT sejak jam pergantian shift,
+  // wajib isi alasan dulu sebelum serah terima beneran ditandai selesai (permintaan user: butuh
+  // rekap siapa telat kapan & kenapa, bukan cuma tau ADA yang telat lewat eskalasi extend).
+  const [showAlasanTelat, setShowAlasanTelat] = useState(false);
+  const [menitTerlambatPending, setMenitTerlambatPending] = useState(0);
+  const [alasanTelat, setAlasanTelat] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -112,6 +121,42 @@ export default function TukarShiftSecurityPage() {
     }
   };
 
+  const selesaikanHandover = async (handoverDoc: HandoverDoc, menitTerlambat: number, alasan: string | null) => {
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, "security_shift_handover", handoverDoc.id), {
+        petugas_masuk: myName,
+        status: "selesai",
+        waktu_scan: serverTimestamp(),
+        terlambat: menitTerlambat > AMBANG_TELAT_SERAH_TERIMA_MENIT,
+        menit_terlambat: menitTerlambat > AMBANG_TELAT_SERAH_TERIMA_MENIT ? menitTerlambat : null,
+        alasan_telat: menitTerlambat > AMBANG_TELAT_SERAH_TERIMA_MENIT ? alasan : null,
+        // Dibaca & di-set true oleh scripts/shift-handover-escalation.mjs setelah kirim
+        // notifikasi (push+email) keterlambatan ke Admin GA -- lihat catatan di sana.
+        notif_terlambat_terkirim: false,
+      });
+      showToast("Serah terima berhasil dikonfirmasi!", "success");
+      // Kalau sebelumnya sempat telat & ada entri security_shift_extend aktif (lihat
+      // EskalasiShiftModal.tsx / scripts/shift-handover-escalation.mjs), tutup otomatis --
+      // "distop begitu tukar jaga beneran terjadi" (dikonfirmasi user). Cron juga punya
+      // safety net yang sama kalau langkah ini somehow gagal.
+      const extendId = `${handoverDoc.tanggal_shift}_${handoverDoc.shift.replace(" ", "")}`;
+      const extendSnap = await getDoc(doc(db, "security_shift_extend", extendId));
+      if (extendSnap.exists() && extendSnap.data().status !== "selesai") {
+        await updateDoc(doc(db, "security_shift_extend", extendId), {
+          status: "selesai", selesai_pada: serverTimestamp(), catatan_selesai: "Serah terima QR resmi selesai",
+        }).catch(() => {});
+      }
+      setShowAlasanTelat(false);
+      setAlasanTelat("");
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal menyimpan konfirmasi, coba lagi.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (!isScanning || !handover) return;
     const scanner = new Html5QrcodeScanner("reader-handover", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
@@ -122,30 +167,14 @@ export default function TukarShiftSecurityPage() {
       }
       scanner.clear().catch(() => {});
       setIsScanning(false);
-      updateDoc(doc(db, "security_shift_handover", handover.id), {
-        petugas_masuk: myName,
-        status: "selesai",
-        waktu_scan: serverTimestamp(),
-      })
-        .then(() => {
-          showToast("Serah terima berhasil dikonfirmasi!", "success");
-          // Kalau sebelumnya sempat telat & ada entri security_shift_extend aktif (lihat
-          // EskalasiShiftModal.tsx / scripts/shift-handover-escalation.mjs), tutup otomatis --
-          // "distop begitu tukar jaga beneran terjadi" (dikonfirmasi user). Cron juga punya
-          // safety net yang sama kalau langkah ini somehow gagal.
-          const extendId = `${handover.tanggal_shift}_${handover.shift.replace(" ", "")}`;
-          getDoc(doc(db, "security_shift_extend", extendId)).then((snap) => {
-            if (snap.exists() && snap.data().status !== "selesai") {
-              updateDoc(doc(db, "security_shift_extend", extendId), {
-                status: "selesai", selesai_pada: serverTimestamp(), catatan_selesai: "Serah terima QR resmi selesai",
-              }).catch(() => {});
-            }
-          }).catch(() => {});
-        })
-        .catch((err) => {
-          console.error(err);
-          showToast("Gagal menyimpan konfirmasi, coba lagi.", "error");
-        });
+      const menitTerlambat = menitSejakBatasShift(waktuWITASekarang());
+      if (menitTerlambat > AMBANG_TELAT_SERAH_TERIMA_MENIT) {
+        // Jangan langsung selesaikan -- minta alasan dulu lewat modal di bawah.
+        setMenitTerlambatPending(menitTerlambat);
+        setShowAlasanTelat(true);
+      } else {
+        selesaikanHandover(handover, menitTerlambat, null);
+      }
     }, () => {});
 
     return () => { scanner.clear().catch(() => {}); };
@@ -237,6 +266,33 @@ export default function TukarShiftSecurityPage() {
           </div>
         )}
       </div>
+
+      {showAlasanTelat && handover && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "18px", maxWidth: "400px", width: "100%", padding: "24px 22px", boxShadow: "0 20px 40px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: "30px", textAlign: "center", marginBottom: "6px" }}>⏰</div>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: "16px", fontWeight: 800, color: "var(--ink)", textAlign: "center" }}>Serah Terima Terlambat</h3>
+            <p style={{ margin: "0 0 16px 0", fontSize: "12.5px", color: "var(--muted)", textAlign: "center", lineHeight: 1.6 }}>
+              Scan ini {menitTerlambatPending} menit setelah jam pergantian shift. Mohon isi alasan keterlambatan — dicatat untuk rekap bulanan Admin GA.
+            </p>
+            <textarea
+              value={alasanTelat} onChange={(e) => setAlasanTelat(e.target.value)}
+              placeholder="Cth: Macet di jalan, petugas sebelumnya masih di lokasi lain, dll."
+              style={{ width: "100%", minHeight: "80px", padding: "12px 14px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", resize: "vertical", marginBottom: "16px", boxSizing: "border-box", fontFamily: "inherit" }}
+            />
+            <button
+              onClick={() => {
+                if (!alasanTelat.trim()) return showToast("Isi alasan keterlambatan dulu.", "warning");
+                selesaikanHandover(handover, menitTerlambatPending, alasanTelat.trim());
+              }}
+              disabled={isSaving}
+              style={{ width: "100%", padding: "13px", background: "var(--info)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
+            >
+              {isSaving ? "Menyimpan..." : "Kirim & Selesaikan Serah Terima"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

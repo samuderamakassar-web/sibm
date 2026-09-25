@@ -34,6 +34,89 @@ initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 const messaging = getMessaging();
 
+// EmailJS -- duplikat pola yang sama dengan scripts/points-deduction.mjs & script reminder lain.
+const EMAILJS_SERVICE_ID = "service_0e8e85u";
+const EMAILJS_TEMPLATE_ID = "template_oriy1nw";
+const EMAILJS_PUBLIC_KEY = "qnss7aeHCQGexHTDf";
+
+async function kirimEmailViaRestApi(toEmail, toName, subject, message) {
+  const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      service_id: EMAILJS_SERVICE_ID,
+      template_id: EMAILJS_TEMPLATE_ID,
+      user_id: EMAILJS_PUBLIC_KEY,
+      template_params: { to_email: toEmail, to_name: toName, subject, message },
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`EmailJS gagal (${res.status}): ${text}`);
+  }
+}
+
+function emailShellSederhana(judulHeader, bodyHtml) {
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; background:#f4f4f5; padding:24px 12px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e5e4;">
+      <tr><td style="background:linear-gradient(150deg,#9f1d1d 0%,#dc2626 55%,#c62828 100%);padding:22px 26px;">
+        <div style="color:#ffffff;font-size:12px;font-weight:700;letter-spacing:1px;opacity:0.85;">SIBM &middot; PT SAMUDERA</div>
+        <div style="color:#ffffff;font-size:19px;font-weight:800;margin-top:4px;">${judulHeader}</div>
+      </td></tr>
+      <tr><td style="padding:26px;">${bodyHtml}</td></tr>
+      <tr><td style="padding:16px 26px;background:#f7f6f5;border-top:1px solid #e7e5e4;">
+        <div style="font-size:11px;color:#71717a;">Email otomatis dari Sistem Informasi Bangunan &amp; Manajemen (SIBM). Mohon tidak membalas email ini.</div>
+      </td></tr>
+    </table>
+  </div>`;
+}
+
+async function ambilEmailAdminGA() {
+  const snap = await db.collection("users_master").where("departemen", "==", "Admin GA").get();
+  return snap.docs.map((d) => d.data()).filter((u) => u.email).map((u) => ({ nama: u.nama, email: u.email }));
+}
+
+async function kirimEmailKeAdminGA(subject, bodyHtml) {
+  const adminGA = await ambilEmailAdminGA();
+  if (adminGA.length === 0) {
+    console.log("  Tidak ada email Admin GA terdaftar, skip email.");
+    return;
+  }
+  for (const admin of adminGA) {
+    try {
+      await kirimEmailViaRestApi(admin.email, admin.nama, subject, bodyHtml);
+      console.log(`  Email terkirim ke ${admin.nama} (${admin.email})`);
+    } catch (err) {
+      console.error(`  Gagal kirim email ke ${admin.nama}:`, err.message);
+    }
+  }
+}
+
+async function ambilNamaAdminGA() {
+  const snap = await db.collection("users_master").where("departemen", "==", "Admin GA").get();
+  return snap.docs.map((d) => d.data().nama).filter(Boolean);
+}
+
+async function kirimPushAdminGA(judul, pesan) {
+  const namaAdmin = await ambilNamaAdminGA();
+  if (namaAdmin.length === 0) return;
+  await tulisNotifPersonal(namaAdmin, judul, pesan);
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "Admin GA").get();
+  const tokens = [];
+  tokenSnap.forEach((d) => { if (d.data().token) tokens.push(d.data().token); });
+  if (tokens.length === 0) {
+    console.log("  Notifikasi in-app Admin GA ditulis, tapi belum ada token FCM, skip push.");
+    return;
+  }
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title: judul, body: pesan },
+    webpush: { notification: { icon: "/icons/icon-192.png" } },
+  });
+  console.log(`  Push ke ${tokens.length} Admin GA -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
+}
+
 const AMBANG_ESKALASI_MENIT = 10;
 
 // ==========================================
@@ -122,7 +205,48 @@ async function kirimPush(namaList, judul, pesan) {
   console.log(`  Push ke ${tokens.length} penerima -> ${response.successCount} sukses, ${response.failureCount} gagal.`);
 }
 
+// Notifikasi keterlambatan SCAN (beda dari eskalasi extend di bawah) -- dipicu client
+// (TukarShiftSecurityPage.tsx) begitu petugas pengganti scan QR LEBIH DARI 10 menit sejak jam
+// pergantian shift, dengan alasan yang mereka isi sendiri. Dicek TERPISAH dari logika
+// tanggalAktif/shiftAktif di atas karena keterlambatan bisa baru "selesai" (discan) di mana pun
+// dalam beberapa run terakhir -- query langsung ke flag notif_terlambat_terkirim, bukan
+// terikat ke 1 shift tertentu.
+async function cekHandoverTelatBelumDinotif() {
+  const snap = await db.collection("security_shift_handover")
+    .where("terlambat", "==", true)
+    .where("notif_terlambat_terkirim", "==", false)
+    .get();
+  if (snap.empty) {
+    console.log("Tidak ada serah terima telat yang belum dinotifikasi.");
+    return;
+  }
+
+  const daftar = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  console.log(`Ditemukan ${daftar.length} serah terima telat yang belum dinotifikasi ke Admin GA.`);
+
+  const baris = daftar.map((h) =>
+    `<tr><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#18181b;font-weight:700;">${h.petugas_keluar} &rarr; ${h.petugas_masuk}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#71717a;">${h.tanggal_shift} &middot; ${h.shift}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;font-weight:700;color:#dc2626;">${h.menit_terlambat} menit</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#3f3f46;font-style:italic;">${h.alasan_telat || "-"}</td></tr>`
+  ).join("");
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">${daftar.length} serah terima shift Security tercatat TELAT scan QR. Detail & alasan yang diisi petugas:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr><td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">Petugas</td><td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">Shift</td><td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">Telat</td><td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">Alasan</td></tr>
+      ${baris}
+    </table>
+  `;
+  await kirimEmailKeAdminGA("Serah Terima Shift Security Tercatat Telat", emailShellSederhana("⏰ Serah Terima Telat Scan", bodyHtml));
+
+  const pesanPush = daftar.length === 1
+    ? `${daftar[0].petugas_masuk} telat ${daftar[0].menit_terlambat} menit scan serah terima (${daftar[0].tanggal_shift} ${daftar[0].shift}). Alasan: ${daftar[0].alasan_telat || "-"}`
+    : `${daftar.length} serah terima tercatat telat scan. Cek menu Pantau Tukar Shift untuk detail & alasan.`;
+  await kirimPushAdminGA("⏰ Serah Terima Shift Security Telat", pesanPush);
+
+  await Promise.all(daftar.map((h) => db.collection("security_shift_handover").doc(h.id).update({ notif_terlambat_terkirim: true })));
+}
+
 async function jalankan() {
+  await cekHandoverTelatBelumDinotif();
+
   // 1. Cek status serah terima RESMI (QR scan). PENTING: security_shift_handover disimpan
   // dengan tanggal_shift/shift hasil hitungShiftSesi() SAAT DIBUAT/DISCAN -- karena tombol
   // buatnya sekarang cuma bisa dipencet DALAM jendela tukar jaga (lihat dalamJendelaTukarJaga()
@@ -190,6 +314,15 @@ async function jalankan() {
       await tulisNotifPersonal(danru, "🔔 Info: Serah Terima Terlambat", pesanDanru, null, extendRef.id);
       await kirimPush(danru, "🔔 Info: Serah Terima Terlambat", pesanDanru);
     }
+
+    // Admin GA JUGA dapat tembusan (push + email) -- permintaan user: butuh tau setiap kali ada
+    // "extra time" karena keterlambatan, bukan cuma Danru/Koordinator Security.
+    const pesanAdmin = `Serah terima ${shiftKeluar} (${tanggalKeluar}) &rarr; ${shiftAktif} belum selesai ${menitSejakBatas} menit. Petugas terkait: ${daftarNamaTerkait.join(", ") || "-"}. Cek menu Pantau Tukar Shift untuk detail.`;
+    await kirimPushAdminGA("🔔 Serah Terima Shift Security Terlambat", pesanAdmin.replace(/&rarr;/, "->"));
+    await kirimEmailKeAdminGA(
+      "Serah Terima Shift Security Terlambat",
+      emailShellSederhana("⚠️ Serah Terima Shift Terlambat", `<p style="margin:0 0 12px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">${pesanAdmin}</p>`)
+    );
     return;
   }
 

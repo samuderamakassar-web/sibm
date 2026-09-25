@@ -84,6 +84,9 @@ const IconLaptop = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconStamp = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3h8l2 6H6l2-6z" /><path d="M10 9v4a2 2 0 0 0 4 0V9" /><path d="M4 21l1.5-5h13L20 21" /><path d="M4 21h16" /></svg>
 );
+const IconRefreshCw = ({ size = 18, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></svg>
+);
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -207,6 +210,13 @@ export default function AdminDashboardPage() {
       path: "/admin/monitor-dadakan",
       token: "ok",
       icon: IconDroplet,
+    },
+    {
+      title: "Pantau Tukar Shift",
+      desc: "Riwayat scan serah terima, extend jaga, dan rekap keterlambatan Security tiap bulan.",
+      path: "/admin/monitor-tukar-shift",
+      token: "red",
+      icon: IconRefreshCw,
     },
     // --- Alat & Master Data ---
     {
