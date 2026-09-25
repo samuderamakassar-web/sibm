@@ -2445,3 +2445,29 @@ Cron harian (`.github/workflows/legalitas-reminder.yml`, ~09:20 WITA), BEDA dari
 
 ### 54F. Verifikasi
 `npm run build`: 0 error, 56 route (+1 baru: `/admin/legalitas`). `node --check` ke kedua script baru: OK. `npx eslint` ke semua file yang disentuh: 0 error, 0 warning. Kedua file workflow YAML baru divalidasi parse (`js-yaml`): OK, langsung pakai `node-version: 22` (pelajaran dari insiden §53, gak ada workflow baru yang lupa dipasangi). Gak butuh index Firestore baru (semua query cron cuma `where` tunggal yang sudah pernah dipakai script lain, atau `.get()` tanpa filter). **SUDAH DI-DEPLOY** (`firestore:rules`+`hosting`). `dev`+`main` sinkron (`ab9d409`). **Belum ditest end-to-end sama sekali** -- form tambah/perbarui legalitas, upload scan, dan kedua cron reminder (laptop & legalitas) belum pernah dicoba dengan data asli; data `master_laptop`/`master_legalitas` juga masih kosong di production, jadi reminder-nya belum ada yang benar-benar terpicu.
+
+## 55. Rekap Keterlambatan Tukar Shift Security + Notifikasi Admin GA (25 September 2026, lanjutan langsung §54)
+
+User laporan 1 cron masih error di `admin/monitor-cron` (`Reminder Checklist OB & CS`, "Quota exceeded") -- ternyata cuma sisa run manual LAMA (workflow ini sudah dimatikan jadwalnya sejak §46A, digantikan `fcm-reminder.mjs`), bukan masalah aktif. **Belum dihapus** -- percobaan `git rm` file workflow+script+listener yatimnya (`checklist-reminder.yml`, `checklist-reminder.mjs`, `NotifikasiChecklistListener.tsx`, dikonfirmasi semuanya gak dipakai lagi lewat grep) diblokir classifier keamanan ("Irreversible Local Destruction") -- perlu konfirmasi eksplisit user dulu sebelum dieksekusi ulang.
+
+Permintaan utama sesi ini: user mau BENAR-BENAR tau kapan tim Security scan barcode tukar shift & extend jaga, terutama yang TELAT -- dengan alasan tercatat, notifikasi ke Admin GA, dan rekap bulanan.
+
+### 55A. `TukarShiftSecurityPage.tsx` -- Wajib Isi Alasan Kalau Scan Telat
+Ditambah `menitSejakBatasShift()` + `AMBANG_TELAT_SERAH_TERIMA_MENIT = 10` di `lib/shift.ts` (diekspos dari perhitungan yang sudah ada di `shift-handover-escalation.mjs`, biar UI bisa deteksi telat SAAT SCAN, bukan nunggu cron 10 menit jalan). Begitu petugas pengganti scan QR &gt;10 menit sejak jam pergantian shift (08:00/20:00 WITA), serah terima BELUM langsung ditandai selesai -- modal wajib isi "Alasan Telat" muncul dulu, baru submit setelah diisi. Field baru di dokumen `security_shift_handover`: `terlambat`, `menit_terlambat`, `alasan_telat`, `notif_terlambat_terkirim` (checkpoint, dipakai cron).
+
+### 55B. `shift-handover-escalation.mjs` -- Admin GA Ikut Dinotif (Email + Push)
+2 penambahan ke cron yang SUDAH jalan tiap 10 menit (gak bikin cron baru):
+- Eskalasi extend PERTAMA kali terpicu: SEBELUMNYA cuma Danru/Koordinator dapat tembusan, SEKARANG Admin GA juga dapat push + email (pola `kirimEmailViaRestApi`/`ambilEmailAdminGA` di-duplikat lagi, konsisten dengan script lain).
+- Fungsi baru `cekHandoverTelatBelumDinotif()`: query `security_shift_handover` yang `terlambat==true && notif_terlambat_terkirim==false` (murni filter kesetaraan, TIDAK butuh composite index), kirim 1 email+push rekap (nama, tanggal, menit telat, alasan) ke Admin GA, lalu tandai checkpoint-nya.
+
+**Batasan jujur**: notifikasi ini lewat cron (jalan tiap 10 menit), BUKAN instan -- app ini static export tanpa Cloud Functions, jadi push notification cuma bisa dikirim server-side lewat Admin SDK yang berjalan di GitHub Actions, sama seperti SEMUA notifikasi lain di app ini. Sudah dijelaskan ke user sebagai bagian dari desain, bukan disembunyikan.
+
+### 55C. `admin/monitor-tukar-shift` (BARU) -- 3 Tab
+- **Riwayat Serah Terima**: semua dokumen `security_shift_handover`, badge telat (+menit +alasan) atau "Tepat Waktu".
+- **Riwayat Extend**: semua dokumen `security_shift_extend`, status (menunggu keputusan/sementara aktif/permanen/selesai), siapa yang memutuskan, estimasi menit.
+- **Rekap Keterlambatan**: dikelompokkan per nama petugas yang scan telat, difilter bulan/tahun (default bulan berjalan), diurutkan dari yang paling sering telat -- jawaban langsung buat "rekap mereka telat kapan saja setiap bulannya". Filter bulan/tahun & search nama berlaku ke ketiga tab. Pola mobile-responsive (card-transform) di-reuse dari `admin/monitor-driver`.
+
+Menu ditambahkan ke grup "Pantau Laporan Tim" di `admin/page.tsx`.
+
+### 55D. Verifikasi
+`npm run build`: 0 error, 57 route (+1 baru: `/admin/monitor-tukar-shift`). `npx eslint` ke semua file yang disentuh (`lib/shift.ts`, `TukarShiftSecurityPage.tsx`, `monitor-tukar-shift/page.tsx`, `admin/page.tsx`): 0 error, 0 warning. `node --check scripts/shift-handover-escalation.mjs`: OK. Gak butuh perubahan Firestore rules (kedua collection sudah ada di daftar terbuka sejak §45) atau index baru. **SUDAH DI-DEPLOY** (`hosting` saja). `dev`+`main` sinkron (`909aa29`). **Belum ditest end-to-end** -- alur "scan telat -> wajib isi alasan -> tersimpan -> muncul di rekap -> Admin GA dapat notif" belum pernah dicoba dengan skenario telat sungguhan; juga belum ada histori data lama (`terlambat` field baru ada mulai commit ini, jadi handover-handover SEBELUM ini gak akan punya nilai `terlambat` sama sekali di rekap, dianggap "tidak ada data" bukan "tepat waktu").
