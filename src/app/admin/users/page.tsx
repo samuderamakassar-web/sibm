@@ -16,6 +16,15 @@ const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
 );
+const IconPencil = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
+);
+const IconKey = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.6 12.4 8-8" /><path d="M17 8l3 3" /><path d="M14 11l2.5 2.5" /></svg>
+);
+const IconTrash = ({ size = 14, color = "currentColor" }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+);
 
 // Daftar kota besar Indonesia buat dropdown Wilayah/Daerah -- dibuat FIXED (bukan isian
 // bebas) supaya gak ada typo yang bikin scoping wilayah meleset (mis. "Makasar" vs
@@ -300,39 +309,32 @@ export default function UserManagementPage() {
     <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
       <style dangerouslySetInnerHTML={{__html: `
         :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
+          --ink: #1f2328; --ink-soft: #4b5563; --muted: #8b8f97; --line: #e4e4e7;
+          --bg: #f8f8f7; --surface: #ffffff;
+          --red-600: #cf222e; --red-50: #fdeeee;
+          --ok: #1a7f37; --ok-50: #ecf7ee; --info: #2563eb; --info-50: #eef4ff;
+          --warn: #9a6700; --warn-50: #fdf6e3; --accent: #5b5bd6; --accent-50: #f0f0fc;
         }
         .site-header {
           position: sticky; top: 0; z-index: 30;
           display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+          padding: 12px 24px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
           border-bottom: 1px solid var(--line);
         }
         .back-btn {
           display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
+          color: var(--ink-soft); font-size: 13px; font-weight: 600; font-family: inherit; padding: 6px 4px;
         }
-        .back-btn:hover { color: var(--red-600); }
+        .back-btn:hover { color: var(--ink); }
         .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
+          display: flex; align-items: center; gap: 6px; background: var(--bg); color: var(--ink-soft);
+          padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--line);
         }
         .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
+          background: var(--surface); border-bottom: 1px solid var(--line);
+          padding: 22px 24px;
         }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
+        .admin-hero-content { max-width: 1200px; margin: 0 auto; }
       `}} />
 
       {/* 💡 CSS RESPONSIVE & ANTI-OVERFLOW MAGIC */}
@@ -340,23 +342,36 @@ export default function UserManagementPage() {
         /* Reset Box Sizing Global untuk anti-overflow */
         * { box-sizing: border-box; }
 
-        .admin-wrapper { display: flex; gap: 25px; flex-wrap: wrap; align-items: flex-start; width: 100%; }
-        .form-col { flex: 1 1 350px; position: sticky; top: 80px; width: 100%; }
+        .admin-wrapper { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; width: 100%; }
+        .form-col { flex: 1 1 340px; position: sticky; top: 74px; width: 100%; }
         .table-col { flex: 2 1 600px; min-width: 0; width: 100%; }
-        .search-input { width: 260px; }
+        .search-input { width: 240px; }
         .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .flat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+
+        .icon-btn {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line);
+          background: var(--surface); cursor: pointer; transition: background 0.15s, border-color 0.15s;
+        }
+        .icon-btn:hover { background: var(--bg); }
+        .icon-btn.danger:hover { background: var(--red-50); border-color: var(--red-600); }
+        .icon-btn.warn:hover { background: var(--warn-50); border-color: var(--warn); }
+        .icon-btn.info:hover { background: var(--info-50); border-color: var(--info); }
 
         /* Gaya Tabel Presisi Desktop */
         .users-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
-        .users-table th { padding: 15px; background: var(--bg); color: var(--ink-soft); font-weight: bold; border-bottom: 2px solid var(--line); }
-        .users-table td { padding: 15px; border-bottom: 1px solid var(--line); vertical-align: middle; transition: background 0.2s; word-wrap: break-word; }
+        .users-table th { padding: 10px 14px; background: var(--bg); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid var(--line); }
+        .users-table td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; transition: background 0.15s; word-wrap: break-word; }
         .users-table tbody tr:hover td { background-color: var(--bg); }
+        .users-table tbody tr:last-child td { border-bottom: none; }
 
         /* 📱 MEDIA QUERY UNTUK HP */
         @media (max-width: 768px) {
-          .admin-wrapper { flex-direction: column; gap: 20px; }
-          .form-col { position: static; width: 100% !important; flex: none; padding: 20px !important; }
-          .table-col { width: 100% !important; flex: none; padding: 20px !important; }
+          .admin-wrapper { flex-direction: column; gap: 16px; }
+          .form-col { position: static; width: 100% !important; flex: none; padding: 18px !important; }
+          .table-col { width: 100% !important; flex: none; padding: 16px !important; }
           .input-grid { grid-template-columns: 1fr !important; } /* Tumpuk input yang bersebelahan di HP */
           .search-input { width: 100%; max-width: 100% !important; margin-top: 10px; }
           .hide-mobile { display: none !important; }
@@ -365,19 +380,17 @@ export default function UserManagementPage() {
           .users-table, .users-table tbody { display: block; width: 100%; }
           .users-table thead { display: none; } /* Sembunyikan judul kolom */
           .users-table tr {
-            display: block; width: 100%; margin-bottom: 15px;
+            display: block; width: 100%; margin-bottom: 10px;
             background: var(--surface); border: 1px solid var(--line);
-            border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border-radius: 10px;
           }
           .users-table td {
-            display: block; width: 100%; padding: 15px !important;
-            border-bottom: 1px dashed var(--line) !important; text-align: left;
+            display: block; width: 100%; padding: 12px 14px !important;
+            border-bottom: none !important; text-align: left;
           }
-          .users-table td:last-child { border-bottom: none !important; }
 
-          /* Tombol di HP dibuat merentang penuh */
-          .action-container { display: flex; width: 100%; gap: 10px; justify-content: space-between; }
-          .action-container button { flex: 1; padding: 12px !important; font-size: 13px !important; }
+          /* Baris aksi di HP: ikon sejajar, gak perlu merentang penuh lagi */
+          .action-container { display: flex; width: 100%; gap: 8px; justify-content: flex-start; padding-top: 8px; margin-top: 4px; border-top: 1px dashed var(--line); }
         }
       `}} />
 
@@ -394,23 +407,23 @@ export default function UserManagementPage() {
       {/* 🔹 HERO SECTION */}
       <div className="admin-hero">
         <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(22px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>MANAJEMEN PENGGUNA</h1>
-          <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>
+          <h1 style={{ margin: "0 0 3px 0", fontSize: "clamp(18px, 4vw, 22px)", fontWeight: 700, color: "var(--ink)" }}>Manajemen Pengguna</h1>
+          <p style={{ margin: "0", fontSize: "13px", color: "var(--muted)" }}>
             {akuSuperAdmin ? "Kelola akses login SEMUA wilayah (Super Admin)" : `Kelola akses login staf wilayah ${daerahSaya || "-"}`}
           </p>
         </div>
       </div>
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 15px", position: "relative", zIndex: 10, width: "100%" }}>
+      <div style={{ maxWidth: "1200px", margin: "20px auto 0", padding: "0 15px", width: "100%" }}>
 
         <div className="admin-wrapper">
 
           {/* ============================================================== */}
           {/* KOLOM KIRI: FORM TAMBAH / EDIT USER */}
           {/* ============================================================== */}
-          <div className="form-col" style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
-            <h2 style={{ margin: "0 0 20px 0", color: isEditMode ? "var(--warn)" : "var(--ink)", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "2px solid var(--line)", paddingBottom: "10px" }}>
+          <div className="form-col flat-card" style={{ padding: "22px" }}>
+            <h2 style={{ margin: "0 0 18px 0", color: isEditMode ? "var(--warn)" : "var(--ink)", fontSize: "15px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--line)", paddingBottom: "12px" }}>
               <span>{isEditMode ? "✏️" : "👤"}</span> {isEditMode ? "Edit Data Pengguna" : "Input Pengguna Baru"}
             </h2>
 
@@ -468,7 +481,7 @@ export default function UserManagementPage() {
               </div>
 
               {akuSuperAdmin && (
-                <div style={{ background: "#f5f3ff", padding: "14px", borderRadius: "12px", border: "1px dashed var(--accent)" }}>
+                <div style={{ background: "var(--accent-50)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(91,91,214,0.25)" }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--accent)" }}>Wilayah / Daerah {!jadikanSuperAdmin && "*"}</label>
                   {!daerahLainnya ? (
                     <select
@@ -508,7 +521,7 @@ export default function UserManagementPage() {
                 <input type="text" name="whatsapp" value={formData.whatsapp} onChange={handleInputChange} placeholder="081234567890" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", fontSize: "14px", outline: "none" }} />
               </div>
 
-              <div style={{ background: "var(--bg)", padding: "15px", borderRadius: "12px", border: "1px dashed var(--line)", width: "100%" }}>
+              <div style={{ background: "var(--info-50)", padding: "15px", borderRadius: "10px", border: "1px solid rgba(37,99,235,0.2)", width: "100%" }}>
                 <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--info)", marginBottom: "10px" }}>Akses Login Karyawan</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   <input type="email" name="email" value={formData.email} onChange={handleInputChange} required disabled={isEditMode} placeholder="Email (contoh@sibm.com)" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", outline: "none", opacity: isEditMode ? 0.6 : 1, cursor: isEditMode ? "not-allowed" : "text" }} />
@@ -528,11 +541,11 @@ export default function UserManagementPage() {
               </div>
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button type="submit" disabled={isLoading || isUploadingFoto} style={{ flex: 1, padding: "15px", background: (isLoading || isUploadingFoto) ? "var(--muted)" : (isEditMode ? "var(--warn)" : "var(--info)"), color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: (isLoading || isUploadingFoto) ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 4px 6px ${isEditMode ? "rgba(217,119,6,0.3)" : "rgba(37,99,235,0.3)"}`, transition: "0.2s" }}>
+                <button type="submit" disabled={isLoading || isUploadingFoto} style={{ flex: 1, padding: "13px", background: (isLoading || isUploadingFoto) ? "var(--muted)" : (isEditMode ? "var(--warn)" : "var(--info)"), color: "white", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13.5px", cursor: (isLoading || isUploadingFoto) ? "not-allowed" : "pointer", transition: "0.15s" }}>
                   {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Daftarkan Akun")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false); }} style={{ padding: "15px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-50)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false); }} style={{ padding: "13px 16px", background: "var(--surface)", color: "var(--ink-soft)", border: "1px solid var(--line)", borderRadius: "8px", fontWeight: 600, fontSize: "13.5px", cursor: "pointer", transition: "0.15s" }}>
                     Batal
                   </button>
                 )}
@@ -543,11 +556,11 @@ export default function UserManagementPage() {
           {/* ============================================================== */}
           {/* KOLOM KANAN: TABEL DAFTAR PENGGUNA (NATIVE HTML TABLE) */}
           {/* ============================================================== */}
-          <div className="table-col" style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
+          <div className="table-col flat-card" style={{ padding: "22px" }}>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
-                <span>📋</span> Direktori Karyawan <span style={{ background: "var(--bg)", padding: "4px 10px", borderRadius: "8px", fontSize: "12px", color: "var(--ink-soft)" }}>{users.length} Terdaftar</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "15px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>📋</span> Direktori Karyawan <span style={{ background: "var(--bg)", padding: "3px 9px", borderRadius: "6px", fontSize: "11.5px", color: "var(--muted)", fontWeight: 600 }}>{users.length} Terdaftar</span>
               </h2>
 
               <div style={{ position: "relative" }} className="search-input">
@@ -562,7 +575,7 @@ export default function UserManagementPage() {
               </div>
             </div>
 
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)", width: "100%" }}>
+            <div style={{ overflowX: "auto", borderRadius: "10px", border: "1px solid var(--line)", width: "100%" }}>
 
               <table className="users-table">
                 <thead>
@@ -582,56 +595,47 @@ export default function UserManagementPage() {
 
                         {/* Kolom 1: Profil */}
                         <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
                             {user.foto_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={user.foto_url} alt={user.nama} style={{ width: "45px", height: "45px", borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `2px solid ${deptColor}` }} />
+                              <img src={user.foto_url} alt={user.nama} style={{ width: "38px", height: "38px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                             ) : (
-                              <div style={{ width: "45px", height: "45px", borderRadius: "50%", background: deptColor, color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: "900", fontSize: "15px", flexShrink: 0 }}>
+                              <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: deptColor, color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>
                                 {getInitials(user.nama)}
                               </div>
                             )}
                             <div style={{ overflow: "hidden" }}>
-                              <div style={{ fontWeight: "900", color: "var(--ink)", fontSize: "14px", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{user.nama}</div>
-                              <div style={{ color: "var(--muted)", fontSize: "12px", marginTop: "2px", wordBreak: "break-all" }}>{user.email}</div>
+                              <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: "13.5px", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{user.nama}</div>
+                              <div style={{ color: "var(--muted)", fontSize: "11.5px", marginTop: "1px", wordBreak: "break-all" }}>{user.email}</div>
                             </div>
                           </div>
                         </td>
 
                         {/* Kolom 2: Divisi */}
                         <td>
-                          <div style={{ marginBottom: "8px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                            <span style={{ background: deptBg, color: deptColor, padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "900", display: "inline-block" }}>{user.departemen}</span>
+                          <div style={{ marginBottom: "6px", display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                            <span style={{ background: deptBg, color: deptColor, padding: "3px 8px", borderRadius: "5px", fontSize: "10.5px", fontWeight: 600, display: "inline-block" }}>{user.departemen}</span>
                             {user.daerah === "PUSAT" ? (
-                              <span style={{ background: "#f5f3ff", color: "var(--accent)", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "900" }}>⭐ SUPER ADMIN</span>
+                              <span style={{ background: "var(--accent-50)", color: "var(--accent)", padding: "3px 8px", borderRadius: "5px", fontSize: "10.5px", fontWeight: 600 }}>⭐ Super Admin</span>
                             ) : user.daerah ? (
-                              <span style={{ background: "var(--info-50)", color: "var(--info)", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "900" }}>📍 {user.daerah}</span>
+                              <span style={{ background: "var(--info-50)", color: "var(--info)", padding: "3px 8px", borderRadius: "5px", fontSize: "10.5px", fontWeight: 600 }}>📍 {user.daerah}</span>
                             ) : null}
                           </div>
-                          <div style={{ fontSize: "12px", color: "var(--ink-soft)", fontWeight: "bold", marginBottom: "4px" }}>{user.role}</div>
-                          {user.whatsapp && <div style={{ fontSize: "12px", color: "var(--ok)", fontWeight: "bold" }}>📞 {user.whatsapp}</div>}
+                          <div style={{ fontSize: "11.5px", color: "var(--ink-soft)", fontWeight: 500, marginBottom: "3px" }}>{user.role}</div>
+                          {user.whatsapp && <div style={{ fontSize: "11.5px", color: "var(--ok)", fontWeight: 500 }}>📞 {user.whatsapp}</div>}
                         </td>
 
-                        {/* Kolom 3: Aksi */}
+                        {/* Kolom 3: Aksi -- ikon compact, bukan 3 tombol teks penuh */}
                         <td>
                           <div className="action-container">
-                            <button
-                              onClick={() => handleEdit(user)}
-                              style={{ background: "var(--surface)", color: "var(--warn)", border: "1px solid var(--warn)", padding: "8px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
-                            >
-                              Edit
+                            <button onClick={() => handleEdit(user)} title="Edit" className="icon-btn warn" style={{ color: "var(--warn)" }}>
+                              <IconPencil size={13} />
                             </button>
-                            <button
-                              onClick={() => handleResetPassword(user)}
-                              style={{ background: "var(--surface)", color: "var(--info)", border: "1px solid var(--info)", padding: "8px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
-                            >
-                              Reset Password
+                            <button onClick={() => handleResetPassword(user)} title="Reset Password" className="icon-btn info" style={{ color: "var(--info)" }}>
+                              <IconKey size={13} />
                             </button>
-                            <button
-                              onClick={() => handleDelete(user.id, user.nama)}
-                              style={{ background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-500)", padding: "8px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
-                            >
-                              Hapus
+                            <button onClick={() => handleDelete(user.id, user.nama)} title="Hapus" className="icon-btn danger" style={{ color: "var(--red-600)" }}>
+                              <IconTrash size={13} />
                             </button>
                           </div>
                         </td>
