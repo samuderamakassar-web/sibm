@@ -26,8 +26,9 @@ const DAFTAR_KOTA_INDONESIA = [
   "Depok", "Tangerang", "Bekasi", "Bogor", "Batam", "Pekanbaru", "Bandar Lampung",
   "Padang", "Malang", "Yogyakarta", "Solo (Surakarta)", "Denpasar", "Samarinda",
   "Balikpapan", "Banjarmasin", "Pontianak", "Manado", "Jayapura", "Mataram", "Kupang",
-  "Ambon", "Cirebon", "Tasikmalaya", "Serang", "Cilegon", "Jambi", "Bengkulu",
-  "Pangkal Pinang", "Palu", "Kendari", "Gorontalo", "Ternate", "Sorong",
+  "Ambon", "Cirebon", "Tasikmalaya", "Serang", "Cilegon", "Cikarang", "Jambi",
+  "Bengkulu", "Pangkal Pinang", "Palu", "Kendari", "Gorontalo", "Ternate", "Sorong",
+  "Bontang", "Bitung",
 ];
 
 interface UserData {
