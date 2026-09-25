@@ -30,7 +30,11 @@ const serviceAccount = JSON.parse(
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
-const EMAIL_SUPER_ADMIN = "samudera.makassar@gmail.com";
+// PENTING: ini email akun LOGIN users_master Reza (beda dari email pribadi
+// samudera.makassar@gmail.com yang dipakai sehari-hari di luar app) -- ketauan salah tebak
+// di percobaan pertama migrasi ini (semua akun kena "Makassar", gak ada yang jadi Super
+// Admin). Dicek ulang, benar reza.rahmat@samudera.id.
+const EMAIL_SUPER_ADMIN = "reza.rahmat@samudera.id";
 const DAERAH_DEFAULT = "Makassar";
 
 async function jalankan() {
@@ -44,12 +48,17 @@ async function jalankan() {
   let dilewati = 0;
   for (const d of snap.docs) {
     const data = d.data();
-    if (data.daerah) {
+    const emailCocokSuperAdmin = (data.email || "").toLowerCase() === EMAIL_SUPER_ADMIN;
+
+    // Akun super admin SELALU dikoreksi ke "PUSAT" walau sudah punya daerah lain (self-heal
+    // dari percobaan migrasi sebelumnya yang salah email) -- akun lain tetap idempotent normal
+    // (skip kalau sudah punya daerah, gak menimpa perubahan manual yang sudah dilakukan).
+    if (data.daerah && !(emailCocokSuperAdmin && data.daerah !== "PUSAT")) {
       console.log(`- ${data.nama} (${data.email}): sudah punya daerah="${data.daerah}", skip.`);
       dilewati++;
       continue;
     }
-    const daerah = (data.email || "").toLowerCase() === EMAIL_SUPER_ADMIN ? "PUSAT" : DAERAH_DEFAULT;
+    const daerah = emailCocokSuperAdmin ? "PUSAT" : DAERAH_DEFAULT;
     await d.ref.update({ daerah });
     console.log(`+ ${data.nama} (${data.email}): daerah diset ke "${daerah}".`);
     diupdate++;
