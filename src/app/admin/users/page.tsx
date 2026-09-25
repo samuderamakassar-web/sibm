@@ -17,6 +17,19 @@ const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
 );
 
+// Daftar kota besar Indonesia buat dropdown Wilayah/Daerah -- dibuat FIXED (bukan isian
+// bebas) supaya gak ada typo yang bikin scoping wilayah meleset (mis. "Makasar" vs
+// "Makassar" dianggap 2 wilayah beda karena pencocokan di firestore.rules itu EXACT MATCH).
+// Kota yang belum ada di daftar bisa dipilih lewat opsi "Lainnya" di bawah.
+const DAFTAR_KOTA_INDONESIA = [
+  "Jakarta", "Surabaya", "Bandung", "Medan", "Semarang", "Makassar", "Palembang",
+  "Depok", "Tangerang", "Bekasi", "Bogor", "Batam", "Pekanbaru", "Bandar Lampung",
+  "Padang", "Malang", "Yogyakarta", "Solo (Surakarta)", "Denpasar", "Samarinda",
+  "Balikpapan", "Banjarmasin", "Pontianak", "Manado", "Jayapura", "Mataram", "Kupang",
+  "Ambon", "Cirebon", "Tasikmalaya", "Serang", "Cilegon", "Jambi", "Bengkulu",
+  "Pangkal Pinang", "Palu", "Kendari", "Gorontalo", "Ternate", "Sorong",
+];
+
 interface UserData {
   id: string; // = Firebase Auth UID (lihat migrate-users-to-auth.mjs)
   nama: string;
@@ -75,6 +88,7 @@ export default function UserManagementPage() {
     daerah: "",
   });
   const [jadikanSuperAdmin, setJadikanSuperAdmin] = useState(false);
+  const [daerahLainnya, setDaerahLainnya] = useState(false);
 
   const akuSuperAdmin = cekSuperAdmin(session?.role || "", session?.daerah || "");
   const daerahSaya = session?.daerah || "";
@@ -182,7 +196,7 @@ export default function UserManagementPage() {
         showToast("Pengguna baru berhasil ditambahkan!", "success");
       }
 
-      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false);
+      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false);
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
@@ -232,6 +246,7 @@ export default function UserManagementPage() {
       daerah: user.daerah === "PUSAT" ? "" : (user.daerah || ""),
     });
     setJadikanSuperAdmin(user.daerah === "PUSAT");
+    setDaerahLainnya(!!user.daerah && user.daerah !== "PUSAT" && !DAFTAR_KOTA_INDONESIA.includes(user.daerah));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -454,11 +469,32 @@ export default function UserManagementPage() {
               {akuSuperAdmin && (
                 <div style={{ background: "#f5f3ff", padding: "14px", borderRadius: "12px", border: "1px dashed var(--accent)" }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--accent)" }}>Wilayah / Daerah {!jadikanSuperAdmin && "*"}</label>
-                  <input
-                    type="text" value={formData.daerah} onChange={(e) => setFormData({ ...formData, daerah: e.target.value })}
-                    disabled={jadikanSuperAdmin} placeholder="Cth: Makassar, Jakarta, Surabaya"
-                    style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: jadikanSuperAdmin ? "var(--line)" : "var(--bg)", fontSize: "14px", outline: "none", marginBottom: "10px", boxSizing: "border-box" }}
-                  />
+                  {!daerahLainnya ? (
+                    <select
+                      value={DAFTAR_KOTA_INDONESIA.includes(formData.daerah) ? formData.daerah : ""}
+                      onChange={(e) => {
+                        if (e.target.value === "__LAINNYA__") { setDaerahLainnya(true); setFormData({ ...formData, daerah: "" }); }
+                        else setFormData({ ...formData, daerah: e.target.value });
+                      }}
+                      disabled={jadikanSuperAdmin}
+                      style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: jadikanSuperAdmin ? "var(--line)" : "var(--surface)", fontSize: "14px", outline: "none", marginBottom: "10px", boxSizing: "border-box", cursor: jadikanSuperAdmin ? "not-allowed" : "pointer" }}
+                    >
+                      <option value="" disabled>Pilih kota...</option>
+                      {DAFTAR_KOTA_INDONESIA.map((kota) => <option key={kota} value={kota}>{kota}</option>)}
+                      <option value="__LAINNYA__">Lainnya (isi manual)...</option>
+                    </select>
+                  ) : (
+                    <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+                      <input
+                        type="text" value={formData.daerah} onChange={(e) => setFormData({ ...formData, daerah: e.target.value })}
+                        disabled={jadikanSuperAdmin} placeholder="Ketik nama kota/wilayah"
+                        style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: jadikanSuperAdmin ? "var(--line)" : "var(--bg)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+                      />
+                      <button type="button" onClick={() => { setDaerahLainnya(false); setFormData({ ...formData, daerah: "" }); }} style={{ padding: "0 14px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-soft)", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
+                        Pilih dari daftar
+                      </button>
+                    </div>
+                  )}
                   <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", fontWeight: "bold", color: "var(--ink-soft)", cursor: "pointer" }}>
                     <input type="checkbox" checked={jadikanSuperAdmin} onChange={(e) => setJadikanSuperAdmin(e.target.checked)} />
                     Jadikan Super Admin (akses & kelola SEMUA wilayah)
@@ -495,7 +531,7 @@ export default function UserManagementPage() {
                   {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Daftarkan Akun")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false); }} style={{ padding: "15px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-50)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false); }} style={{ padding: "15px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-50)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
                     Batal
                   </button>
                 )}
