@@ -7,7 +7,7 @@ import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 
 import { auth, db, getSecondaryAuth } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { useAuthGuard, isSuperAdmin as cekSuperAdmin } from "../../../hooks/useAuthGuard";
 
 type IconProps = { size?: number; color?: string };
 const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -25,6 +25,9 @@ interface UserData {
   role: string;
   whatsapp?: string;
   foto_url?: string;
+  /** Wilayah akun ini (mis. "Makassar"). 'PUSAT' = Super Admin. Lihat isSuperAdmin() di
+   *  hooks/useAuthGuard.ts & catatan skema di firestore.rules. */
+  daerah?: string;
 }
 
 async function uploadFotoToCloudinary(blob: Blob): Promise<string> {
@@ -68,8 +71,13 @@ export default function UserManagementPage() {
     role: "Staff",
     whatsapp: "",
     password: "",
-    foto_url: ""
+    foto_url: "",
+    daerah: "",
   });
+  const [jadikanSuperAdmin, setJadikanSuperAdmin] = useState(false);
+
+  const akuSuperAdmin = cekSuperAdmin(session?.role || "", session?.daerah || "");
+  const daerahSaya = session?.daerah || "";
 
   // 2. Tarik Data Users dari Firestore
   useEffect(() => {
@@ -136,15 +144,28 @@ export default function UserManagementPage() {
       return;
     }
 
+    if (akuSuperAdmin && !jadikanSuperAdmin && !formData.daerah.trim()) {
+      showToast("Isi Wilayah/Daerah akun ini dulu (atau centang Jadikan Super Admin).", "warning");
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // Admin Daerah HANYA boleh bikin/edit akun di wilayahnya sendiri (dipaksa di sini,
+      // DIPASTIKAN lagi di firestore.rules -- UI ini cuma buat gak nyoba percuma). Super Admin
+      // bebas isi wilayah apa pun, atau centang "Jadikan Super Admin" utk daerah = 'PUSAT'.
+      const daerahFinal = akuSuperAdmin
+        ? (jadikanSuperAdmin ? "PUSAT" : formData.daerah.trim())
+        : daerahSaya;
+
       const userDataToSave = {
         nama: formData.nama,
         email: formData.email.toLowerCase(),
         departemen: formData.departemen,
         role: formData.role,
         whatsapp: formData.whatsapp,
-        foto_url: formData.foto_url || ""
+        foto_url: formData.foto_url || "",
+        daerah: daerahFinal,
       };
 
       if (isEditMode && editId) {
@@ -161,7 +182,7 @@ export default function UserManagementPage() {
         showToast("Pengguna baru berhasil ditambahkan!", "success");
       }
 
-      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "" });
+      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false);
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
@@ -207,8 +228,10 @@ export default function UserManagementPage() {
       role: user.role,
       whatsapp: user.whatsapp || "",
       password: "",
-      foto_url: user.foto_url || ""
+      foto_url: user.foto_url || "",
+      daerah: user.daerah === "PUSAT" ? "" : (user.daerah || ""),
     });
+    setJadikanSuperAdmin(user.daerah === "PUSAT");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -234,12 +257,18 @@ export default function UserManagementPage() {
     }
   };
 
-  // Filter pencarian
-  const filteredUsers = users.filter(user =>
-    user.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.departemen.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter pencarian + scoping wilayah (Admin Daerah cuma LIHAT akun wilayahnya sendiri di
+  // tampilan ini -- users_master sendiri tetap "read: if true" di rules, sama seperti
+  // sebelumnya, jadi ini scoping tampilan, bukan penegakan keamanan; keamanan sungguhan ada
+  // di rules create/update/delete yang sudah membatasi Admin Daerah cuma bisa TULIS akun
+  // wilayahnya sendiri).
+  const filteredUsers = users
+    .filter((user) => akuSuperAdmin || (user.daerah || "") === daerahSaya)
+    .filter(user =>
+      user.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.departemen.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
   // Helper untuk membuat Inisial Avatar (fallback kalau belum ada foto)
   const getInitials = (name: string) => {
@@ -350,7 +379,9 @@ export default function UserManagementPage() {
       <div className="admin-hero">
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(22px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>MANAJEMEN PENGGUNA</h1>
-          <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>Kelola akses login staf operasional (Security, OB, Driver, dll)</p>
+          <p style={{ margin: "0", fontSize: "13px", opacity: 0.9 }}>
+            {akuSuperAdmin ? "Kelola akses login SEMUA wilayah (Super Admin)" : `Kelola akses login staf wilayah ${daerahSaya || "-"}`}
+          </p>
         </div>
       </div>
 
@@ -420,6 +451,21 @@ export default function UserManagementPage() {
                 </div>
               </div>
 
+              {akuSuperAdmin && (
+                <div style={{ background: "#f5f3ff", padding: "14px", borderRadius: "12px", border: "1px dashed var(--accent)" }}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--accent)" }}>Wilayah / Daerah {!jadikanSuperAdmin && "*"}</label>
+                  <input
+                    type="text" value={formData.daerah} onChange={(e) => setFormData({ ...formData, daerah: e.target.value })}
+                    disabled={jadikanSuperAdmin} placeholder="Cth: Makassar, Jakarta, Surabaya"
+                    style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: jadikanSuperAdmin ? "var(--line)" : "var(--bg)", fontSize: "14px", outline: "none", marginBottom: "10px", boxSizing: "border-box" }}
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", fontWeight: "bold", color: "var(--ink-soft)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={jadikanSuperAdmin} onChange={(e) => setJadikanSuperAdmin(e.target.checked)} />
+                    Jadikan Super Admin (akses & kelola SEMUA wilayah)
+                  </label>
+                </div>
+              )}
+
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Nomor WhatsApp</label>
                 <input type="text" name="whatsapp" value={formData.whatsapp} onChange={handleInputChange} placeholder="081234567890" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", fontSize: "14px", outline: "none" }} />
@@ -449,7 +495,7 @@ export default function UserManagementPage() {
                   {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Daftarkan Akun")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "" }); }} style={{ padding: "15px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-50)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "" }); setJadikanSuperAdmin(false); }} style={{ padding: "15px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-50)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
                     Batal
                   </button>
                 )}
@@ -517,8 +563,13 @@ export default function UserManagementPage() {
 
                         {/* Kolom 2: Divisi */}
                         <td>
-                          <div style={{ marginBottom: "8px" }}>
+                          <div style={{ marginBottom: "8px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
                             <span style={{ background: deptBg, color: deptColor, padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "900", display: "inline-block" }}>{user.departemen}</span>
+                            {user.daerah === "PUSAT" ? (
+                              <span style={{ background: "#f5f3ff", color: "var(--accent)", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "900" }}>⭐ SUPER ADMIN</span>
+                            ) : user.daerah ? (
+                              <span style={{ background: "var(--info-50)", color: "var(--info)", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "900" }}>📍 {user.daerah}</span>
+                            ) : null}
                           </div>
                           <div style={{ fontSize: "12px", color: "var(--ink-soft)", fontWeight: "bold", marginBottom: "4px" }}>{user.role}</div>
                           {user.whatsapp && <div style={{ fontSize: "12px", color: "var(--ok)", fontWeight: "bold" }}>📞 {user.whatsapp}</div>}

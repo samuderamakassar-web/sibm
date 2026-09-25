@@ -393,8 +393,15 @@ export default function AdminDashboardPage() {
         <div className="admin-hero-content">
           <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 36px)", fontWeight: "900", letterSpacing: "1px" }}>CONTROL PANEL</h1>
           <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Kendali Sistem Informasi Building Management</p>
-          <div className="admin-hero-badge">
-            <IconUserCircle size={16} /> Halo, {adminName}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+            <div className="admin-hero-badge">
+              <IconUserCircle size={16} /> Halo, {adminName}
+            </div>
+            {session.daerah && (
+              <div className="admin-hero-badge" style={{ background: "rgba(255,255,255,0.18)" }}>
+                {session.daerah === "PUSAT" ? "⭐ Super Admin (Semua Wilayah)" : `📍 Wilayah ${session.daerah}`}
+              </div>
+            )}
           </div>
         </div>
       </div>

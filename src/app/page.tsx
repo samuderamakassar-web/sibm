@@ -800,6 +800,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       localStorage.setItem("pic_nama", uData.nama);
       localStorage.setItem("pic_dept", uData.departemen);
       localStorage.setItem("pic_role", uData.role);
+      localStorage.setItem("pic_daerah", uData.daerah || "");
 
       const tujuan = pathDashboardUntukDept(uData.departemen);
       if (tujuan) router.push(tujuan);

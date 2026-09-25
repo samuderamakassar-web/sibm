@@ -60,6 +60,20 @@ service cloud.firestore {
       return hasProfile() ? myProfile().departemen : '';
     }
 
+    // Ekspansi multi-daerah (25 Sep 2026): tiap akun users_master sekarang punya field
+    // `daerah` (nama wilayah, mis. "Makassar", "Jakarta", dst). Nilai sentinel KHUSUS
+    // 'PUSAT' menandai Super Admin -- lolos semua batasan wilayah, sama seperti isAdmin()
+    // yang sudah lolos semua batasan role/dept. Admin biasa (role admin, daerah != 'PUSAT')
+    // disebut "Admin Daerah" -- cuma boleh kelola akun & (nanti, bertahap) data di
+    // daerahnya sendiri. Lihat analisis_project.md §56 untuk skema lengkap & rencana lanjutan.
+    function myDaerah() {
+      return hasProfile() ? myProfile().daerah : '';
+    }
+
+    function isSuperAdmin() {
+      return isAdmin() && myDaerah() == 'PUSAT';
+    }
+
     // --------------------------------------------------------------------
     // users_master -- read PUBLIC (dipakai portal utama tanpa login buat
     // foto profil staf & kontak Admin GA/QHSE -- data ini sendiri sudah
@@ -70,7 +84,14 @@ service cloud.firestore {
     // --------------------------------------------------------------------
     match /users_master/{uid} {
       allow read: if true;
-      allow write: if isAdmin();
+      // Super Admin (daerah 'PUSAT') kelola akun MANA PUN. Admin Daerah biasa cuma boleh
+      // buat/ubah/hapus akun yang daerah-nya SAMA PERSIS dengan daerah dia sendiri -- gak
+      // bisa bikin akun buat daerah lain, gak bisa "pindahkan" akun ke daerah lain, gak
+      // bisa hapus/edit akun daerah lain. Dipisah create/update/delete (bukan 1 `write`
+      // gabungan) karena request.resource gak ada saat delete & resource gak ada saat create.
+      allow create: if isSuperAdmin() || (isAdmin() && request.resource.data.daerah == myDaerah());
+      allow update: if isSuperAdmin() || (isAdmin() && resource.data.daerah == myDaerah() && request.resource.data.daerah == myDaerah());
+      allow delete: if isSuperAdmin() || (isAdmin() && resource.data.daerah == myDaerah());
     }
 
     // --------------------------------------------------------------------

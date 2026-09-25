@@ -29,17 +29,21 @@ export interface AuthSession {
   nama: string;
   role: string;
   dept: string;
+  /** Nama wilayah/daerah akun ini (mis. "Makassar", "Jakarta"). Sentinel khusus 'PUSAT'
+   *  menandai Super Admin -- lihat isSuperAdmin() & catatan skema di firestore.rules. */
+  daerah: string;
 }
 
 /** Baca sesi login dari localStorage TANPA melakukan redirect apapun.
  *  Dipakai untuk logika di DALAM halaman (misal: sembunyikan/tampilkan 1 panel
  *  berdasarkan role), bukan untuk menjaga akses seluruh halaman — untuk itu pakai useAuthGuard. */
 export function getStoredSession(): AuthSession {
-  if (typeof window === "undefined") return { nama: "", role: "", dept: "" };
+  if (typeof window === "undefined") return { nama: "", role: "", dept: "", daerah: "" };
   return {
     nama: localStorage.getItem("pic_nama") || "",
     role: localStorage.getItem("pic_role") || "Staff",
     dept: localStorage.getItem("pic_dept") || "",
+    daerah: localStorage.getItem("pic_daerah") || "",
   };
 }
 
@@ -47,6 +51,14 @@ export function getStoredSession(): AuthSession {
  *  Ini yang bikin akun Admin bisa buka halaman dept manapun (fix untuk bug plotting OB). */
 export function isAdministrator(role: string): boolean {
   return role.toLowerCase().includes("administrator") || role.toLowerCase().includes("admin");
+}
+
+/** Super Admin = Administrator DENGAN daerah 'PUSAT' -- lolos SEMUA batasan wilayah, beda
+ *  dari "Admin Daerah" (Administrator biasa dengan daerah spesifik) yang cuma boleh kelola
+ *  akun & (bertahap) data di wilayahnya sendiri. Samakan persis dengan isSuperAdmin() di
+ *  firestore.rules kalau logikanya berubah. */
+export function isSuperAdmin(role: string, daerah: string): boolean {
+  return isAdministrator(role) && daerah === "PUSAT";
 }
 
 /** Cek apakah `role` cocok salah satu dari daftar `patterns`, case-insensitive, substring match.
@@ -107,7 +119,7 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
     let readyTimer: ReturnType<typeof setTimeout> | undefined;
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      const { nama, role, dept } = getStoredSession();
+      const { nama, role, dept, daerah } = getStoredSession();
       const adminBypass = options.adminBypass !== false && isAdministrator(role);
 
       const roleOk = !options.roles || options.roles.length === 0 || roleMatches(role, options.roles) || adminBypass;
@@ -123,7 +135,7 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
       // setState langsung di body effect kena lint react-hooks/set-state-in-effect -> bungkus setTimeout(...,0)
       // (konvensi yang sudah dipakai di beberapa halaman lain di project ini)
       readyTimer = setTimeout(() => {
-        setSession({ nama, role, dept });
+        setSession({ nama, role, dept, daerah });
         setIsReady(true);
       }, 0);
     });
