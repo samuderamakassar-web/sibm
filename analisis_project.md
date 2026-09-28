@@ -1,31 +1,37 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 20 September 2026 (**§51**: Sistem Evaluasi Manual & Skor Per Departemen -- Admin GA bisa kasih poin +/- dengan alasan langsung dari halaman monitoring (Security/OB/Driver), `admin/monitor-poin` dirombak jadi 3 kartu terpisah per dept (Admin GA/QHSE/Magang DIHAPUS dari sistem skor) + selector periode Bulanan/6 Bulan/1 Tahun. **BELUM di-push/deploy.** §50 (fix root cause devDependencies + 3 menu admin baru + reorganisasi) SUDAH DI-DEPLOY sebelumnya. Masih ada 1 aksi WAJIB user lama soal EmailJS, lihat peringatan di bawah.)
-Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Spark (gratis)**.
+Update terakhir: 28 September 2026 (**§57**: pengecekan ulang dokumen + catat 4 commit pasca-§56 -- fix email Super Admin di `migrate-add-daerah.mjs`, dropdown Wilayah/Daerah (43 kota + opsi Lainnya), redesign flat `admin/users`. Semua SUDAH DI-DEPLOY, `dev`+`main`+`origin` sinkron di `8e4478d`.)
+Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Blaze (bayar-sesuai-pakai)** sejak §53E (sebelumnya Spark/gratis, kuota harian habis).
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (akhir sesi 20 September 2026 — §51 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (dicek ulang 28 September 2026 — §57 TERBARU)
 
-Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah.
+Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. **Daftar di bawah dicek ulang terhadap git history per 28 September** -- poin yang sudah selesai/tergantikan sudah dibuang (lihat §57C).
 
-### 🔴🔴 PALING URGENT: push+deploy §51 (Sistem Evaluasi & Skor) + konfirmasi fix §50A jalan
+### 🔴🔴 PALING URGENT (per 28 September 2026)
 
-0. **Sistem Evaluasi & Skor (§51) SUDAH di-push+deploy** — **coba evaluasi 1 laporan** dari `admin/monitor-security`/`monitor-ob`/`monitor-driver` buat konfirmasi transaksi poin (`runTransaction`) beneran jalan, belum pernah ditest langsung.
-1. **Konfirmasi fix §50A (root cause SEBENARNYA insiden cron)** — SUDAH di-push (`dec5fa0`, pure `package.json`, gak butuh deploy). `firebase-admin` sebelumnya salah ditaruh di `devDependencies` (bukan `dependencies`), bikin `npm ci` di GitHub Actions diam-diam skip install-nya. Pantau run berikutnya (Patroli Push Reminder tiap 30 menit paling cepat kelihatan) -- kalau MASIH gagal dengan error yang sama, kirim screenshot lagi.
-2. **Coba `admin/monitor-cron`** (§50) — pastikan fetch API publik GitHub beneran jalan dari browser (belum pernah ditest, resiko CORS/rate-limit).
-3. **PENTING: minta QHSE juga login & izinkan notifikasi browser sekali** (sama seperti Admin GA di §47) — QHSE belum pernah punya token FCM sama sekali sebelum §48C, tanpa ini notifikasi SBO baru gak akan sampai sebagai push ke mereka.
-4. **Admin GA login & izinkan notifikasi browser sekali** (dari §47, kalau belum dilakukan) — tanpa ini SEMUA notifikasi Admin GA gak akan sampai sebagai push.
-5. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49) — belum pernah ditest langsung, terutama video (batas 10MB).
-6. **Pertimbangkan upgrade Firebase ke Blaze plan** — Firestore Spark plan (gratis) sudah "approaching no-cost limits" per Firebase Console (55K reads/24 jam, limit 50K/hari) -- keputusan billing, bukan sesuatu yang bisa dieksekusi dari sini.
-7. **Manajemen Data Magang** (§51E) — ide yang tadinya digabung ke Evaluasi ternyata gak cocok (magang dikeluarkan dari skor), masih jadi ide terpisah kalau user mau lanjut.
-8. **Audit/perbaikan mobile `admin/monitor-ob`** (§51F) — ditemukan gak punya pola transformasi kartu di HP sama sekali (beda dari monitor-security/monitor-driver), cuma scroll horizontal. Belum diperbaiki, dicatat sebagai kandidat kalau user mau lanjut ke audit mobile lebih menyeluruh.
-9. **Test §45 di device asli (SUDAH di-deploy sebelumnya)** — (a) badge off-duty; (b) jendela Tukar Shift/Jaga; (c) fitur eskalasi (§45C) butuh skenario nyata.
-10. **Buat ulang pengumuman lama di `admin/broadcast`** (§43F).
-11. **WAJIB: aktifkan akses non-browser di EmailJS** (§41B).
-12. **Push notification pas app BENAR-BENAR tertutup** (§39B poin 6).
-13. **Banner "masih login sebagai..." di portal utama** (§40).
+1. **Pastikan migrasi daerah versi fix sudah dijalankan** (§56E + §57A) — migrasi PERTAMA sudah jalan tapi salah email (12 akun kena "Makassar", gak ada Super Admin). Script sudah difix + self-heal, tapi **belum tercatat apakah sudah dijalankan ulang**. Cek di `admin/users`: akun `reza.rahmat@samudera.id` harus berlabel Super Admin (`daerah = "PUSAT"`). Kalau belum, jalankan ulang `node scripts/migrate-add-daerah.mjs`, lalu **logout+login ulang** (`pic_daerah` cuma di-set saat login).
+2. **Konfirmasi `patroli-reminder.mjs` sukses** pasca-fix API namespace lama (§53E) — cek `admin/monitor-cron` atau tab Actions.
+3. **Hapus file yatim cron lama** (§55): `.github/workflows/checklist-reminder.yml`, `scripts/checklist-reminder.mjs`, `NotifikasiChecklistListener.tsx` — sudah dikonfirmasi gak dipakai via grep, tapi `git rm` sempat diblokir classifier, **nunggu izin eksplisit user**.
+4. **Test end-to-end fitur yang sudah deploy tapi belum pernah dicoba**: tombol evaluasi + preset poin + badge (§51/§52), form & reminder `admin/legalitas` + `admin/laptop` (§54, data production masih kosong), alur scan telat tukar shift → alasan → rekap → notif Admin GA (§55), eskalasi serah terima (§45C), dropdown Wilayah + tampilan baru `admin/users` (§57).
+5. **Minta QHSE & Admin GA login + izinkan notifikasi browser sekali** (§47/§48C) — tanpa token FCM, push ke mereka gak akan sampai.
+6. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49).
+7. **Fase 2 multi-daerah** (§56F) — scoping data operasional per daerah. SENGAJA ditunda sampai ada Admin Daerah kedua yang onboarding.
+8. **Kandidat perbaikan**: mobile `admin/monitor-ob` gak punya card-transform (§51F); Manajemen Data Magang (§51E); redesign flat ala `admin/users` ke halaman admin lain kalau user suka hasilnya (§57B).
+9. **Sisa lama**: buat ulang pengumuman lama di `admin/broadcast` (§43F); **WAJIB** aktifkan akses non-browser di EmailJS (§41B); push notification pas app benar-benar tertutup (§39B poin 6); banner "masih login sebagai..." di portal (§40).
+
+### Ringkasan sesi §52–§57 (terbaru dulu)
+
+- **§57** (28 Sep): pengecekan ulang dokumen + catat 4 commit pasca-§56 (fix email migrasi, dropdown kota, redesign `admin/users`).
+- **§56** (25 Sep): fondasi multi-daerah — field `daerah` di `users_master`, `'PUSAT'` = Super Admin, rules create/update/delete akun di-scope per wilayah. Fase 1 saja.
+- **§55** (25 Sep): wajib isi alasan kalau scan tukar shift telat >10 menit, notif Admin GA via cron, menu baru `admin/monitor-tukar-shift`.
+- **§54** (24 Sep): sisa hari masa sewa laptop + reminder 90 hari; menu baru `admin/legalitas` dengan riwayat versi + reminder berulang.
+- **§53** (24 Sep): root cause SEBENARNYA insiden cron = Node 20 vs `engines >=22` → semua workflow ke Node 22; kuota Spark habis → upgrade Blaze; fix API namespace lama di `patroli-reminder.mjs`.
+- **§52** (24 Sep): tombol evaluasi jadi badge setelah dievaluasi + preset poin 5/10/15/20/25.
+
+**Catatan**: blok "Sesi hari ini/sebelumnya" di bawah ini (§51 ke belakang) adalah arsip ringkasan lama, dibiarkan apa adanya. Status "belum di-deploy" di sana sudah BASI — semuanya sudah deploy.
 
 ### Sesi hari ini (§51) — Sistem Evaluasi Manual & Skor Per Departemen, lanjutan langsung §50
 
@@ -2500,3 +2506,20 @@ Sengaja BERTAHAP, bukan sekaligus semua collection: scoping data operasional (la
 
 ### 56G. Verifikasi
 `npm run build`: 0 error, 57 route (gak ada halaman baru). `npx eslint` ke semua file yang disentuh (`useAuthGuard.ts`, `page.tsx`, `admin/users/page.tsx`, `admin/page.tsx`): 0 error, 0 warning. `node --check migrate-add-daerah.mjs`: OK. Rules dicek compile via `firebase deploy` (2x -- 1x ketemu bug dot-notation, langsung difix & redeploy). **SUDAH DI-DEPLOY** (`firestore:rules` 2x + `hosting`). `dev`+`main` sinkron (`7526330`). **Belum ditest end-to-end** -- migrasi `migrate-add-daerah.mjs` belum dijalankan user, jadi fitur Super Admin/Admin Daerah masih dorman (semua akun efektif masih dianggap 1 wilayah kosong sampai migrasi jalan).
+
+## 57. Pengecekan Ulang Dokumen + 4 Commit Pasca-§56 yang Belum Tercatat (28 September 2026)
+
+User minta "cek project analisis". Hasil cek: dokumen berhenti di §56, padahal ada 4 commit fungsional sesudahnya (plus 3 commit artefak deploy `ebbbe94`/`dd5eba9`/`8e4478d` -- `public/sw.js` + `.firebase/hosting.*.cache`, tanda hosting sudah di-deploy). Header & §0 juga basi (masih "20 September/§51", plan masih tertulis Spark, daftar urgent berisi item yang sudah selesai). Semua isi §57 di bawah diverifikasi langsung dari `git show` & isi file, bukan dari ingatan.
+
+### 57A. `6aeb1b3` -- Fix Email Super Admin di `migrate-add-daerah.mjs`
+Percobaan PERTAMA migrasi §56E ternyata **sudah dijalankan**, tapi `EMAIL_SUPER_ADMIN` salah tebak (`samudera.makassar@gmail.com`, email pribadi harian) -- email login `users_master` Reza yang benar `reza.rahmat@samudera.id`. Akibatnya ke-12 akun kena `daerah = "Makassar"`, gak ada satu pun Super Admin. Fix: email dikoreksi + logika **self-heal** -- akun yang emailnya cocok `EMAIL_SUPER_ADMIN` SELALU dikoreksi ke `"PUSAT"` walau sudah punya daerah lain; akun lain tetap idempotent (skip kalau sudah punya `daerah`). **Belum tercatat apakah script versi fix ini sudah dijalankan ulang** -- lihat §0 poin 1.
+
+### 57B. `3d088ac` + `f9b4657` + `1675e07` -- `admin/users`: Dropdown Wilayah & Redesign Flat
+- Isian bebas Wilayah/Daerah diganti dropdown `DAFTAR_KOTA_INDONESIA` (43 kota, termasuk Cikarang/Bontang/Bitung yang ditambah belakangan dari referensi jaringan cabang) + opsi "Lainnya (isi manual)". Alasan: `firestore.rules` mencocokkan `daerah` secara EXACT STRING, jadi typo ("Makasar" vs "Makassar") bikin scoping meleset. Kota di luar daftar yang diisi via "Lainnya" tetap rawan typo -- mode edit otomatis buka input manual kalau nilai tersimpan gak ada di daftar.
+- Redesign tampilan gaya flat/minimalis ala Notion: border tipis ganti shadow tebal, badge pastel, hero gradient merah diganti header compact, 3 tombol aksi (Edit/Reset Password/Hapus) jadi 3 ikon kecil. **SENGAJA cuma halaman ini** (dikonfirmasi user) -- variabel warna didefinisikan lokal di file ini, gak mempengaruhi halaman admin lain.
+
+### 57C. Koreksi Status di §0
+Dibuang dari daftar urgent karena sudah selesai/tergantikan: konfirmasi fix §50A (tergantikan root cause §53), pertimbangan upgrade Blaze (sudah dilakukan §53E), "push+deploy §51" (sudah deploy sejak lama). Baris "Project:" di header dikoreksi ke plan Blaze.
+
+### 57D. Status
+Murni update dokumentasi, gak ada perubahan kode. `dev` = `main` = `origin/dev` = `origin/main` di `8e4478d` (sebelum commit dokumen ini).
