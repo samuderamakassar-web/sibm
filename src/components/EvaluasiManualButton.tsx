@@ -129,7 +129,7 @@ export default function EvaluasiManualButton({ nama, departemen, sumberJenis, su
     <>
       <button
         onClick={() => setShowModal(true)}
-        style={{ background: "#f5f3ff", color: "var(--accent, #7c3aed)", border: "1px solid rgba(124,58,237,0.25)", padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "5px", fontFamily: "inherit" }}
+        style={{ background: "var(--accent-50, #f5f3ff)", color: "var(--accent, #7c3aed)", border: "1px solid rgba(124,58,237,0.25)", padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "5px", fontFamily: "inherit" }}
       >
         <IconStar size={12} /> Evaluasi
       </button>

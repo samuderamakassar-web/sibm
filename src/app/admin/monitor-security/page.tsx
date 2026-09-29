@@ -1,21 +1,22 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { MINIMUM_SESI_PER_SHIFT } from "../../../lib/shift";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/EvaluasiManualButton";
+import AdminShell from "../../../components/admin/AdminShell";
+import AdminIcon, { type AdminIconName } from "../../../components/admin/AdminIcon";
+import Tile from "../../../components/admin/Tile";
 
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
+type TabId = "PATROLI" | "TAMU" | "PAKET" | "ROSTER";
+const TABS: { id: TabId; label: string; icon: AdminIconName }[] = [
+  { id: "PATROLI", label: "Log Patroli", icon: "shield" },
+  { id: "TAMU", label: "Buku Tamu", icon: "idCard" },
+  { id: "PAKET", label: "Log Paket", icon: "box" },
+  { id: "ROSTER", label: "Roster Danru", icon: "clipboardList" },
+];
 
 // --- INTERFACES ---
 interface TitikPatroli {
@@ -121,15 +122,13 @@ function labelPeriodeOption(docId: string): string {
 }
 
 export default function MonitorSecurityPage() {
-  const router = useRouter();
-
   const { session, isReady } = useAuthGuard({
     roles: ["Admin", "Koordinator"],
     redirectTo: "/",
     deniedMessage: "Akses Ditolak! Halaman ini khusus Administrator.",
   });
 
-  const [activeTab, setActiveTab] = useState<"PATROLI" | "TAMU" | "PAKET" | "ROSTER">("PATROLI");
+  const [activeTab, setActiveTab] = useState<TabId>("PATROLI");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [patrols, setPatrols] = useState<PatroliLog[]>([]);
@@ -278,51 +277,14 @@ export default function MonitorSecurityPage() {
   const adminName = session.nama || "Admin";
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-      `}} />
-
+    <AdminShell
+      title="Pantau Laporan Security"
+      subtitle="Log patroli, buku tamu, paket, dan roster regu jaga"
+      userName={adminName}
+    >
       {/* 💡 CSS RESPONSIVE & ANTI-OVERFLOW MAGIC */}
       <style dangerouslySetInnerHTML={{__html: `
         * { box-sizing: border-box; }
-        
-        .tab-buttons { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; -ms-overflow-style: none; }
-        .tab-buttons::-webkit-scrollbar { display: none; }
-        .tab-btn { flex-shrink: 0; padding: 12px 20px; border-radius: 12px; font-weight: bold; border: none; cursor: pointer; transition: all 0.2s; box-shadow: none; }
         
         /* Table Styles Desktop */
         .sec-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
@@ -389,24 +351,6 @@ export default function MonitorSecurityPage() {
         }
       `}} />
 
-      {/* 🔹 NAVBAR */}
-      <div className="site-header no-print">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> <span className="hide-mobile">Kembali ke Control Panel</span>
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> <span className="hide-mobile">Admin:</span> {adminName}
-        </div>
-      </div>
-
-      {/* 🔹 HERO */}
-      <div className="admin-hero no-print">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PANTAU KINERJA SECURITY</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Pengawasan lalu lintas aset, tamu, patroli, dan jadwal regu</p>
-        </div>
-      </div>
-
       {/* 🖨️ KOP CETAK — cuma muncul pas print. Roster pakai logo Samudera + judul "Roster Security Periode ...",
           Patroli pakai kop teks polos sama seperti admin/monitor-ob. */}
       <div className="print-only" style={{ marginBottom: "15px" }}>
@@ -428,54 +372,52 @@ export default function MonitorSecurityPage() {
       </div>
 
       {/* 🔹 KONTEN UTAMA */}
-      <div className="print-area" style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 15px", position: "relative", zIndex: 10, width: "100%" }}>
-        
+      <div className="print-area">
+
         {/* TABS */}
-        <div className="tab-buttons no-print" style={{ marginBottom: "20px" }}>
-          {[
-            { id: "PATROLI", label: "🚨 Log Patroli", color: "var(--red-600)" },
-            { id: "TAMU", label: "📋 Buku Tamu", color: "var(--info)" },
-            { id: "PAKET", label: "📦 Log Paket", color: "var(--warn)" },
-            { id: "ROSTER", label: "📅 Roster Danru", color: "var(--accent)" }
-          ].map(tab => (
-            <button 
-              key={tab.id} 
-              className="tab-btn"
-              onClick={() => { setActiveTab(tab.id as "PATROLI" | "TAMU" | "PAKET" | "ROSTER"); setSearchQuery(""); }}
-              style={{ background: activeTab === tab.id ? "var(--surface)" : "rgba(255,255,255,0.8)", color: activeTab === tab.id ? tab.color : "var(--muted)", borderBottom: activeTab === tab.id ? `3px solid ${tab.color}` : "3px solid transparent" }}
+        <div className="sa-tabs no-print" role="tablist" aria-label="Jenis laporan">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`sa-tab${activeTab === tab.id ? " is-active" : ""}`}
+              onClick={() => { setActiveTab(tab.id); setSearchQuery(""); }}
             >
+              <AdminIcon name={tab.icon} size={17} />
               {tab.label}
             </button>
           ))}
         </div>
 
-        <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", width: "100%" }}>
-          
+        <Tile>
+
           {activeTab !== "ROSTER" && (
             <div className="header-title-container no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700 }}>
                 {activeTab === "PATROLI" ? "Laporan Patroli Keliling" : activeTab === "TAMU" ? "Catatan Akses Keluar/Masuk" : "Penerimaan Paket & Dokumen"}
               </h2>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                 {activeTab === "PATROLI" && (
                   <>
-                    <select value={filterBulanPatroli} onChange={(e) => setFilterBulanPatroli(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select className="sa-field" aria-label="Filter bulan" value={filterBulanPatroli} onChange={(e) => setFilterBulanPatroli(e.target.value)}>
                       <option value="SEMUA">Semua Bulan</option>
                       {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
                     </select>
-                    <select value={filterTahunPatroli} onChange={(e) => setFilterTahunPatroli(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select className="sa-field" aria-label="Filter tahun" value={filterTahunPatroli} onChange={(e) => setFilterTahunPatroli(e.target.value)}>
                       <option value="SEMUA">Semua Tahun</option>
                       {tahunTersediaPatroli.map((th) => <option key={th} value={String(th)}>{th}</option>)}
                     </select>
-                    <button onClick={handlePrint} style={{ background: "var(--red-600)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                      🖨️ Export PDF
+                    <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
+                      <AdminIcon name="printer" size={16} /> Export PDF
                     </button>
                   </>
                 )}
-                <div className="search-input-wrapper" style={{ position: "relative", width: "260px" }}>
-                  <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
-                  <input type="text" placeholder="Pencarian spesifik..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid var(--line)", fontSize: "13px", width: "100%", background: "var(--bg)", outline: "none", boxSizing: "border-box" }} />
-                </div>
+                <label className="sa-search search-input-wrapper" style={{ width: "260px" }}>
+                  <AdminIcon name="search" size={15} strokeWidth={2} />
+                  <input type="search" aria-label="Cari" placeholder={activeTab === "PATROLI" ? "Cari nama petugas…" : activeTab === "TAMU" ? "Cari nama / instansi…" : "Cari penerima / kurir…"} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                </label>
               </div>
             </div>
           )}
@@ -544,7 +486,7 @@ export default function MonitorSecurityPage() {
                     <tr key={p.id}>
                       <td style={{ color: "var(--muted)" }}>{formatWaktu(p.waktu_laporan)}</td>
                       <td>
-                        <div style={{ fontWeight: "bold", color: "var(--red-600)" }}>👮 {p.petugas}</div>
+                        <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{p.petugas}</div>
                       </td>
                       <td>
                         <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{p.titik_patroli?.length || 0} Titik Terpantau</div>
@@ -562,8 +504,8 @@ export default function MonitorSecurityPage() {
                       </td>
                       <td style={{ textAlign: "center" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <button onClick={() => setDetailPatroli(p)} style={{ background: "var(--info-50)", color: "var(--info)", border: "1px solid var(--info)", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", width: "100%" }}>
-                            📸 Lihat Laporan
+                          <button type="button" className="sa-btn is-soft" onClick={() => setDetailPatroli(p)} style={{ width: "100%", height: "36px", fontSize: "12px" }}>
+                            <AdminIcon name="fileText" size={15} /> Lihat Laporan
                           </button>
                           {p.tanggal_shift && (
                             <EvaluasiManualButton nama={p.petugas} departemen="Security" sumberJenis="Patroli Security" sumberCollection="security_patrols" sumberId={p.id} tanggalLaporan={p.tanggal_shift} dievaluasiOleh={adminName} evaluasiSebelumnya={p.evaluasiManual} />
@@ -606,7 +548,7 @@ export default function MonitorSecurityPage() {
                         <tr key={`${row.tanggal_shift}|${row.shift}|${row.petugas}`}>
                           <td style={{ color: "var(--muted)" }}>{row.tanggal_shift}</td>
                           <td style={{ fontWeight: "bold" }}>{row.shift}</td>
-                          <td style={{ fontWeight: "bold", color: "var(--ink)" }}>👮 {row.petugas}</td>
+                          <td style={{ fontWeight: "bold", color: "var(--ink)" }}>{row.petugas}</td>
                           {["Sesi 1", "Sesi 2", "Sesi 3"].map((s) => (
                             <td key={s} style={{ textAlign: "center", color: row.sesiSet.has(s) ? "var(--ok)" : "var(--muted)", fontWeight: "bold" }}>
                               {row.sesiSet.has(s) ? "✓" : "—"}
@@ -645,15 +587,15 @@ export default function MonitorSecurityPage() {
                         <span style={{ fontSize: "10px", background: v.jenis === "Karyawan" ? "var(--bg)" : "var(--red-50)", color: v.jenis === "Karyawan" ? "var(--ink-soft)" : "var(--red-700)", padding: "2px 6px", borderRadius: "4px", display: "inline-block", marginTop: "4px" }}>{v.jenis}</span>
                       </td>
                       <td>
-                        <div style={{ color: "var(--ink-soft)" }}>🏢 {v.instansi_dept}</div>
-                        {v.jenis !== "Karyawan" && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>🤝 Host: {v.bertemu_dengan}</div>}
+                        <div style={{ color: "var(--ink-soft)" }}>{v.instansi_dept}</div>
+                        {v.jenis !== "Karyawan" && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>Host: {v.bertemu_dengan}</div>}
                       </td>
                       <td style={{ textAlign: "center" }}>
                         <div style={{ background: v.status.includes("Dalam") ? "var(--ok-50)" : "var(--line)", color: v.status.includes("Dalam") ? "var(--ok)" : "var(--ink-soft)", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", marginBottom: "6px", display: "inline-block" }}>{v.status}</div>
                         <div style={{ fontSize: "11px", color: "var(--ok)", fontWeight: "bold" }}>In: {formatWaktu(v.waktu_masuk)}</div>
                         <div style={{ fontSize: "11px", color: "var(--red-600)", fontWeight: "bold" }}>Out: {formatWaktu(v.waktu_keluar)}</div>
                       </td>
-                      <td style={{ color: "var(--muted)", fontSize: "12px", fontWeight: "bold" }}>👮 {v.pic_bertugas}</td>
+                      <td style={{ color: "var(--muted)", fontSize: "12px", fontWeight: "bold" }}>{v.pic_bertugas}</td>
                     </tr>
                   )) : <tr><td colSpan={4} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log akses masuk.</td></tr>}
                 </tbody>
@@ -701,22 +643,23 @@ export default function MonitorSecurityPage() {
           {activeTab === "ROSTER" && (
             <div>
               <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
-                <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", display: "flex", alignItems: "center", gap: "8px" }}>
-                  📅 Roster Danru Security
-                  <span style={{ background: "var(--info-50)", color: "var(--info)", padding: "3px 9px", borderRadius: "20px", fontSize: "11px", fontWeight: 700 }}>{rosterBulan || "Belum Diterbitkan"}</span>
+                <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  Roster Danru Security
+                  <span style={{ background: "var(--info-50)", color: "var(--info)", padding: "4px 10px", borderRadius: "20px", fontSize: "11.5px", fontWeight: 700 }}>{rosterBulan || "Belum Diterbitkan"}</span>
                 </h2>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                   <select
+                    className="sa-field"
+                    aria-label="Periode roster"
                     value={rosterPeriodeAwal}
                     onChange={(e) => setRosterPeriodeAwal(e.target.value)}
-                    style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "12.5px", background: "var(--bg)", outline: "none", cursor: "pointer" }}
                   >
                     {!rosterDocsTersedia.includes(rosterPeriodeAwal) && <option value={rosterPeriodeAwal}>{labelPeriodeOption(rosterPeriodeAwal)}</option>}
                     {rosterDocsTersedia.map((docId) => <option key={docId} value={docId}>{labelPeriodeOption(docId)}</option>)}
                   </select>
                   {Object.keys(rosterData).length > 0 && (
-                    <button onClick={handlePrint} style={{ background: "var(--accent)", color: "white", padding: "9px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                      🖨️ Print (A4 Landscape)
+                    <button type="button" className="sa-btn is-dark" onClick={handlePrint}>
+                      <AdminIcon name="printer" size={16} /> Print (A4 Landscape)
                     </button>
                   )}
                 </div>
@@ -737,14 +680,14 @@ export default function MonitorSecurityPage() {
                         return (
                           <tr key={tglKey} style={{ background: isHariIni ? "var(--red-50)" : "var(--surface)", borderBottom: "1px solid var(--line)" }}>
                             <td style={{ padding: "5px 12px", textAlign: "left", fontWeight: isHariIni ? "900" : "bold", color: isHariIni ? "var(--red-700)" : "var(--muted)", fontSize: "11.5px", whiteSpace: "nowrap" }}>
-                              {tglKey.split("-")[2]}{isHariIni && <span style={{ fontSize: "8px", background: "var(--red-600)", color: "white", padding: "1px 5px", borderRadius: "4px", marginLeft: "5px" }}>HARI INI</span>}
+                              {tglKey.split("-")[2]}{isHariIni && <span style={{ fontSize: "8px", background: "var(--brand)", color: "#fff", padding: "1px 5px", borderRadius: "4px", marginLeft: "5px" }}>HARI INI</span>}
                             </td>
                             {timSecurity.map(staf => {
                               const shift = hariData[staf] || "-";
                               const isOff = shift.toLowerCase().includes("off");
                               const isKosong = shift === "-";
                               const extend = cariExtend(tglKey, shift, staf);
-                              const chipBg = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-50)" : "#f5f3ff") : isKosong ? "transparent" : isOff ? "var(--red-50)" : shift.includes("2") ? "#f5f3ff" : "var(--info-50)";
+                              const chipBg = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-50)" : "var(--accent-50)") : isKosong ? "transparent" : isOff ? "var(--red-50)" : shift.includes("2") ? "var(--accent-50)" : "var(--info-50)";
                               const chipColor = extend ? (extend.status === "menunggu_keputusan" ? "var(--red-600)" : "var(--accent)") : isKosong ? "var(--muted)" : isOff ? "var(--red-600)" : shift.includes("2") ? "var(--accent)" : "var(--info)";
                               const label = extend
                                 ? extend.status === "menunggu_keputusan" ? "⚠️ TERLAMBAT" : `${shift} → ${extend.personil_extend} (EXTEND)`
@@ -765,21 +708,23 @@ export default function MonitorSecurityPage() {
             </div>
           )}
 
-        </div>
+        </Tile>
       </div>
 
       {/* 🔹 MODAL DETAIL PATROLI */}
       {detailPatroli && (
         <div className="no-print" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px", backdropFilter: "blur(5px)" }}>
-          <div style={{ background: "var(--surface)", padding: "0", borderRadius: "20px", width: "100%", maxWidth: "800px", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            
+          <div role="dialog" aria-modal="true" aria-label="Laporan titik patroli" style={{ background: "var(--tile)", padding: "0", borderRadius: "24px", width: "100%", maxWidth: "800px", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+
             {/* Header Modal */}
-            <div style={{ background: "var(--ink)", color: "white", padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ background: "var(--tile)", color: "var(--ink)", padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
               <div>
-                <h2 style={{ margin: "0 0 5px 0", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><span>📸</span> Laporan Titik Patroli</h2>
-                <div style={{ fontSize: "11px", color: "var(--muted)" }}>Oleh {detailPatroli.petugas} - {formatWaktu(detailPatroli.waktu_laporan)}</div>
+                <h2 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>Laporan Titik Patroli</h2>
+                <div style={{ fontSize: "12px", color: "var(--ink-soft)" }}>Oleh {detailPatroli.petugas} · {formatWaktu(detailPatroli.waktu_laporan)}</div>
               </div>
-              <button onClick={() => setDetailPatroli(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", width: "35px", height: "35px", borderRadius: "50%", cursor: "pointer", color: "white", fontSize: "16px" }}>✖</button>
+              <button type="button" className="sa-icon-btn" onClick={() => setDetailPatroli(null)} aria-label="Tutup" style={{ background: "var(--hover)" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
             </div>
             
             <div style={{ padding: "20px", overflowY: "auto", flex: 1, background: "var(--bg)" }}>
@@ -814,11 +759,11 @@ export default function MonitorSecurityPage() {
                   );
                 })}
                 {detailPatroli.area_terlewat && detailPatroli.area_terlewat.length > 0 && (
-                  <div style={{ marginTop: "20px", background: "var(--red-50)", border: "1px solid var(--red-500)", borderRadius: "12px", padding: "15px" }}>
+                  <div style={{ marginTop: "20px", background: "var(--red-50)", border: "1px solid var(--red-600)", borderRadius: "12px", padding: "15px" }}>
                     <h3 style={{ margin: "0 0 10px 0", color: "var(--red-700)", fontSize: "14px" }}>⚠️ {detailPatroli.area_terlewat.length} Area Tidak Difoto</h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                       {detailPatroli.area_terlewat.map((a, i) => (
-                        <div key={i} style={{ background: "var(--surface)", borderRadius: "8px", padding: "10px 12px", border: "1px solid var(--red-500)" }}>
+                        <div key={i} style={{ background: "var(--surface)", borderRadius: "8px", padding: "10px 12px", border: "1px solid var(--red-600)" }}>
                           <div style={{ fontSize: "11px", color: "var(--red-700)", fontWeight: "bold" }}>{a.id.split("::")[0]} — {a.nama}</div>
                           <div style={{ fontSize: "12px", color: "var(--ink-soft)", marginTop: "4px" }}><i>&quot;{a.alasan || "Tidak ada alasan dicantumkan"}&quot;</i></div>
                         </div>
@@ -833,6 +778,6 @@ export default function MonitorSecurityPage() {
         </div>
       )}
 
-    </div>
+    </AdminShell>
   );
 }

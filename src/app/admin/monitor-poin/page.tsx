@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -8,18 +7,9 @@ import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { tanggalISOWITASekarang } from "../../../lib/shift";
-
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
-const IconChevronDown = ({ size = 16, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-);
+import AdminShell from "../../../components/admin/AdminShell";
+import AdminIcon from "../../../components/admin/AdminIcon";
+import Tile from "../../../components/admin/Tile";
 
 interface RiwayatPotongan {
   tanggal: string;
@@ -67,7 +57,6 @@ function daftarBulanTersedia(): string[] {
 }
 
 export default function MonitorPoinPage() {
-  const router = useRouter();
   const showToast = useToast();
   const { session, isReady } = useAuthGuard({
     roles: ["Admin", "Koordinator"],
@@ -212,100 +201,56 @@ export default function MonitorPoinPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell
+      title="Rekap Poin Staf"
+      subtitle="Poin awal 100/bulan, berkurang otomatis kalau misi/tugas tidak diselesaikan sempurna"
+      userName={adminName}
+    >
       <style dangerouslySetInnerHTML={{ __html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-        .poin-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+        .poin-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 12px 8px; border: none; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: left; border-radius: 0; }
         .poin-row:last-child { border-bottom: none; }
-        .poin-row:hover { background: var(--bg); }
-        .poin-bar-track { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+        .poin-row:hover { background: var(--hover); }
+        .poin-bar-track { flex: 1; height: 8px; background: var(--hover); border-radius: 4px; overflow: hidden; }
         .poin-bar-fill { height: 100%; border-radius: 4px; }
+        @media (max-width: 560px) {
+          .poin-row { flex-wrap: wrap; }
+          .poin-nama { flex: 1 1 100% !important; }
+        }
       `}} />
-      <div className="site-header">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> {adminName}
-        </div>
-      </div>
 
-      <div className="admin-hero">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: 900, letterSpacing: "1px" }}>REKAP POIN STAF</h1>
-          <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>Poin awal 100/bulan, berkurang otomatis kalau misi/tugas tidak diselesaikan sempurna.</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "900px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
-        <div style={{ background: "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", padding: "18px 20px", marginBottom: "16px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div style={{ maxWidth: "900px" }}>
+        <Tile compact style={{ marginBottom: "16px", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "flex-end" }}>
           <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--muted)", marginBottom: "5px" }}>Periode</label>
-            <div style={{ display: "flex", gap: "6px" }}>
+            <span style={{ display: "block", fontSize: "11.5px", fontWeight: 700, color: "var(--muted)", marginBottom: "6px" }}>Periode</span>
+            <div className="sa-tabs" role="tablist" aria-label="Periode" style={{ marginBottom: 0, padding: "4px" }}>
               {([["bulanan", "Bulanan"], ["6bulan", "6 Bulan"], ["1tahun", "1 Tahun"]] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setPeriode(key)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid var(--line)", cursor: "pointer", fontSize: "12.5px", fontWeight: 700, background: periode === key ? "var(--info)" : "var(--bg)", color: periode === key ? "#fff" : "var(--ink-soft)" }}>
+                <button key={key} type="button" role="tab" aria-selected={periode === key} className={`sa-tab${periode === key ? " is-active" : ""}`} style={{ height: "34px" }} onClick={() => setPeriode(key)}>
                   {label}
                 </button>
               ))}
             </div>
           </div>
-          <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--muted)", marginBottom: "5px" }}>{periode === "bulanan" ? "Bulan" : "Sampai Bulan"}</label>
-            <select
-              value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)}
-              style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none" }}
-            >
+          <label>
+            <span style={{ display: "block", fontSize: "11.5px", fontWeight: 700, color: "var(--muted)", marginBottom: "6px" }}>{periode === "bulanan" ? "Bulan" : "Sampai Bulan"}</span>
+            <select className="sa-field" value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)}>
               {daftarBulanTersedia().map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>)}
             </select>
-          </div>
-          <button onClick={handleExportExcel} style={{ padding: "10px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", background: "var(--ok)", color: "white", display: "flex", alignItems: "center", gap: "6px" }}>
-            📊 Export ke Excel
+          </label>
+          <button type="button" className="sa-btn is-dark" onClick={handleExportExcel}>
+            <AdminIcon name="chart" size={16} /> Export ke Excel
           </button>
-        </div>
+        </Tile>
 
         {periode !== "bulanan" && (
-          <div style={{ background: "var(--info-50)", color: "var(--info)", padding: "12px 16px", borderRadius: "12px", fontSize: "12px", fontWeight: 600, marginBottom: "16px" }}>
+          <div style={{ background: "var(--info-50)", color: "var(--info)", padding: "12px 16px", borderRadius: "16px", fontSize: "12.5px", fontWeight: 600, marginBottom: "16px" }}>
             Rata-rata poin bulanan {periode === "6bulan" ? "6 bulan" : "1 tahun"} terakhir (sampai {formatBulanLabel(filterBulan)}). Bulan tanpa data dianggap 100 poin.
           </div>
         )}
 
         {loading ? (
-          <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)", background: "var(--surface)", borderRadius: "20px", border: "1px solid var(--line)" }}>Memuat...</div>
+          <Tile style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Memuat...</Tile>
         ) : rekap.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)", background: "var(--surface)", borderRadius: "20px", border: "1px solid var(--line)" }}>Belum ada data staf untuk dipantau.</div>
+          <Tile style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Belum ada data staf untuk dipantau.</Tile>
         ) : (
           // Dikelompokkan per departemen -- tiap dept punya "Juara 1" (peringkat 1) SENDIRI,
           // bukan dibandingkan lintas departemen (dikonfirmasi user).
@@ -315,9 +260,10 @@ export default function MonitorPoinPage() {
             const poinTertinggiDept = daftarDept[0].poin;
             const poinTerendahDept = daftarDept[daftarDept.length - 1].poin;
             return (
-              <div key={dept} style={{ background: "var(--surface)", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", overflow: "hidden", marginBottom: "16px" }}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)", fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>
-                  {dept} &middot; {daftarDept.length} staf dipantau
+              <Tile key={dept} style={{ marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "10px", paddingBottom: "8px" }}>
+                  <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--ink)" }}>{dept}</h2>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-soft)" }}>{daftarDept.length} staf dipantau</span>
                 </div>
                 {daftarDept.map((r) => {
                   const isTop = r.poin === poinTertinggiDept;
@@ -325,29 +271,36 @@ export default function MonitorPoinPage() {
                   const warnaBar = r.poin >= 80 ? "var(--ok)" : r.poin >= 50 ? "var(--warn)" : "var(--red-600)";
                   return (
                     <div key={r.nama}>
-                      <div className="poin-row" onClick={() => periode === "bulanan" && setExpandedNama(expandedNama === r.nama ? null : r.nama)} style={{ cursor: periode === "bulanan" ? "pointer" : "default" }}>
-                        <div style={{ flex: "0 0 150px", minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, color: "var(--ink)", fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {isTop && "🏆 "}{isBottom && "⚠️ "}{r.nama}
-                          </div>
+                      <button
+                        type="button"
+                        className="poin-row"
+                        disabled={periode !== "bulanan"}
+                        aria-expanded={periode === "bulanan" ? expandedNama === r.nama : undefined}
+                        onClick={() => periode === "bulanan" && setExpandedNama(expandedNama === r.nama ? null : r.nama)}
+                        style={{ cursor: periode === "bulanan" ? "pointer" : "default" }}
+                      >
+                        <div className="poin-nama" style={{ flex: "0 0 170px", minWidth: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+                          {isTop && <AdminIcon name="trophy" size={15} style={{ color: "var(--warn)" }} />}
+                          {isBottom && <span aria-label="Perlu perhatian" title="Perlu perhatian" style={{ width: "16px", height: "16px", flexShrink: 0, borderRadius: "50%", background: "var(--red-50)", color: "var(--red-600)", fontSize: "11px", fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>!</span>}
+                          <span style={{ fontWeight: 700, color: "var(--ink)", fontSize: "13.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.nama}</span>
                         </div>
                         <div className="poin-bar-track">
                           <div className="poin-bar-fill" style={{ width: `${r.poin}%`, background: warnaBar }} />
                         </div>
-                        <div style={{ fontWeight: 800, fontSize: "14px", color: warnaBar, width: "40px", textAlign: "right" }}>{r.poin}</div>
-                        {periode === "bulanan" && <IconChevronDown size={14} color="var(--muted)" />}
-                      </div>
+                        <div style={{ fontWeight: 800, fontSize: "15px", color: warnaBar, width: "40px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.poin}</div>
+                        {periode === "bulanan" && <AdminIcon name="chevronRight" size={14} style={{ color: "var(--muted)", transform: expandedNama === r.nama ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />}
+                      </button>
                       {periode === "bulanan" && expandedNama === r.nama && (
-                        <div style={{ padding: "10px 20px 16px 20px", background: "var(--bg)", fontSize: "12px" }}>
+                        <div style={{ padding: "10px 12px 14px", margin: "0 -8px", background: "var(--bg)", borderRadius: "14px", fontSize: "12.5px" }}>
                           {r.riwayat.length === 0 ? (
-                            <div style={{ color: "var(--muted)" }}>Tidak ada potongan bulan ini — pertahankan! 🎉</div>
+                            <div style={{ color: "var(--muted)" }}>Tidak ada potongan bulan ini — pertahankan!</div>
                           ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                               {/* potongan NEGATIF = evaluasi manual Admin GA yang MENAMBAH poin (bonus), lihat
                                   EvaluasiManualButton.tsx -- ditampilkan hijau "+X", beda dari potongan otomatis
                                   (selalu positif, dikurangi) yang tetap merah "-X" seperti sebelumnya. */}
                               {r.riwayat.map((h, i) => (
-                                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: "10px", padding: "6px 10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid var(--line)" }}>
+                                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: "10px", padding: "8px 12px", background: "var(--surface)", borderRadius: "10px" }}>
                                   <span style={{ color: "var(--ink-soft)" }}>{h.tanggal} &middot; {h.alasan}</span>
                                   <span style={{ fontWeight: 800, color: h.potongan < 0 ? "var(--ok)" : "var(--red-600)", flexShrink: 0 }}>{h.potongan < 0 ? `+${-h.potongan}` : `-${h.potongan}`}</span>
                                 </div>
@@ -359,11 +312,11 @@ export default function MonitorPoinPage() {
                     </div>
                   );
                 })}
-              </div>
+              </Tile>
             );
           })
         )}
       </div>
-    </div>
+    </AdminShell>
   );
 }

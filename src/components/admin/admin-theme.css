@@ -64,7 +64,7 @@
   --hover: #2e2924;
 
   --brand: #b3182f;
-  --red-700: #b3182f;
+  --red-700: #f2a7b3;
   --red-600: #e0566a;
   --red-50: #382229;
   --ok: #a8d69a;
@@ -97,7 +97,7 @@
     --hover: #2e2924;
 
     --brand: #b3182f;
-    --red-700: #b3182f;
+    --red-700: #f2a7b3;
     --red-600: #e0566a;
     --red-50: #382229;
     --ok: #a8d69a;
@@ -314,5 +314,146 @@
   }
   .sa-hide-mobile {
     display: none;
+  }
+}
+
+/* ---------- Kontrol form & tab segmen (dipakai halaman admin yang dimigrasi) ---------- */
+
+/* Warna teks eksplisit untuk input/select supaya tetap terbaca di mode gelap (banyak halaman
+   lama cuma mengatur background: var(--bg) tanpa color). */
+.sibm-admin input,
+.sibm-admin select,
+.sibm-admin textarea {
+  color: var(--ink);
+}
+
+.sa-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 16px;
+  border-radius: 22px;
+  background: var(--chip);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sa-tabs::-webkit-scrollbar {
+  display: none;
+}
+.sa-tab {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sa-tab:hover {
+  color: var(--ink);
+}
+.sa-tab.is-active {
+  background: var(--tile);
+  color: var(--ink);
+}
+
+.sa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sa-btn.is-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.sa-btn.is-dark {
+  background: var(--ink);
+  color: var(--ground);
+}
+.sa-btn.is-soft {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.sa-field {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.sa-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  box-sizing: border-box;
+}
+.sa-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* ---------- Cetak: kerangka tema tidak ikut tercetak ---------- */
+@media print {
+  /* Paksa token terang walau admin sedang di mode gelap -- kertas selalu putih. */
+  .sibm-admin,
+  .sibm-admin[data-theme="dark"] {
+    --ink: #231f1c !important;
+    --ink-soft: #5e5750 !important;
+    --muted: #776e66 !important;
+    --line: #e8e2da !important;
+    --bg: #f4f1ec !important;
+    --surface: #ffffff !important;
+    --tile: #ffffff !important;
+    background: #fff !important;
+    color: #000;
+    min-height: 0;
+  }
+  .sa-header,
+  .sa-page-head,
+  .sa-tabs {
+    display: none !important;
+  }
+  .sa-main {
+    max-width: none;
+    padding: 0;
+  }
+  .sa-tile {
+    padding: 0;
+    background: transparent;
   }
 }

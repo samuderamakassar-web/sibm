@@ -1,22 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-
-// Ikon SVG garis — konsisten dengan admin/monitor-driver & shell admin lainnya
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
-const IconRefreshCw = ({ size = 16, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></svg>
-);
+import AdminShell from "../../../components/admin/AdminShell";
+import AdminIcon from "../../../components/admin/AdminIcon";
+import Tile from "../../../components/admin/Tile";
 
 interface HandoverLog {
   id: string;
@@ -57,12 +47,11 @@ function formatWaktu(ts: Timestamp | null | undefined): string {
 const statusExtendLabel: Record<string, { label: string; bg: string; color: string }> = {
   menunggu_keputusan: { label: "MENUNGGU KEPUTUSAN", bg: "var(--red-50)", color: "var(--red-600)" },
   aktif: { label: "SEMENTARA (AKTIF)", bg: "var(--warn-50)", color: "var(--warn)" },
-  permanen: { label: "PERMANEN", bg: "#f5f3ff", color: "var(--accent)" },
+  permanen: { label: "PERMANEN", bg: "var(--accent-50)", color: "var(--accent)" },
   selesai: { label: "SELESAI", bg: "var(--ok-50)", color: "var(--ok)" },
 };
 
 export default function MonitorTukarShiftPage() {
-  const router = useRouter();
   const { session, isReady } = useAuthGuard({
     roles: ["Admin", "Koordinator"],
     redirectTo: "/",
@@ -127,23 +116,13 @@ export default function MonitorTukarShiftPage() {
   if (!isReady || !session) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
+    <AdminShell
+      title="Pantau Tukar Shift"
+      subtitle="Riwayat scan serah terima, extend jaga, dan rekap keterlambatan Security"
+      userName={session.nama || "Admin"}
+    >
       <style dangerouslySetInnerHTML={{ __html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .site-header { position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
-        .back-btn { display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px; }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2); }
-        .admin-hero { position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff; padding: 34px 20px 50px; text-align: center; background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%); box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5); }
-        .admin-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5; background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%); }
-        .admin-hero-content { position: relative; }
         .ts-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
         .ts-table th { padding: 15px; font-weight: bold; background: var(--bg); color: var(--ink-soft); border-bottom: 2px solid var(--line); }
         .ts-table td { padding: 15px; vertical-align: middle; border-bottom: 1px solid var(--line); word-wrap: break-word; }
@@ -154,61 +133,46 @@ export default function MonitorTukarShiftPage() {
           .search-input-wrapper input { width: 100% !important; max-width: 100% !important; }
           .ts-table, .ts-table tbody { display: block; width: 100%; }
           .ts-table thead { display: none; }
-          .ts-table tr { display: block; width: 100%; margin-bottom: 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden; }
+          .ts-table tr { display: block; width: 100%; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
           .ts-table td { display: block; width: 100%; padding: 12px 15px !important; border-bottom: 1px dashed var(--line) !important; text-align: left !important; }
           .ts-table td:last-child { border-bottom: none !important; }
           .ts-table td::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
         }
       `}} />
 
-      <div className="site-header">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> <span className="hide-mobile">Kembali ke Control Panel</span>
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> <span className="hide-mobile">Admin:</span> {session.nama}
-        </div>
+      <div className="sa-tabs" role="tablist" aria-label="Jenis riwayat">
+        {[
+          { id: "HANDOVER", label: `Serah Terima (${fHandover.length})` },
+          { id: "EXTEND", label: `Extend (${fExtend.length})` },
+          { id: "REKAP", label: `Rekap Keterlambatan (${rekapArr.length})` },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`sa-tab${activeTab === tab.id ? " is-active" : ""}`}
+            onClick={() => setActiveTab(tab.id as "HANDOVER" | "EXTEND" | "REKAP")}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <div className="admin-hero">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PANTAU TUKAR SHIFT</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Riwayat scan serah terima, extend jaga, dan rekap keterlambatan Security.</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 15px", position: "relative", zIndex: 10, width: "100%" }}>
-        <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", width: "100%" }}>
-
-          <div style={{ display: "flex", gap: "10px", marginBottom: "20px", overflowX: "auto", paddingBottom: "5px" }}>
-            {[
-              { id: "HANDOVER", label: `Riwayat Serah Terima (${fHandover.length})` },
-              { id: "EXTEND", label: `Riwayat Extend (${fExtend.length})` },
-              { id: "REKAP", label: `Rekap Keterlambatan (${rekapArr.length})` },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as "HANDOVER" | "EXTEND" | "REKAP")}
-                style={{ flexShrink: 0, padding: "10px 16px", borderRadius: "10px", fontWeight: 700, border: "1px solid var(--line)", cursor: "pointer", fontSize: "13px", fontFamily: "inherit", background: activeTab === tab.id ? "var(--accent)" : "var(--surface)", color: activeTab === tab.id ? "#fff" : "var(--ink-soft)", borderColor: activeTab === tab.id ? "var(--accent)" : "var(--line)" }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
+      <Tile>
           <div className="header-title-container" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-            <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+            <select className="sa-field" aria-label="Filter bulan" value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)}>
               <option value="SEMUA">Semua Bulan</option>
               {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
             </select>
-            <select value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+            <select className="sa-field" aria-label="Filter tahun" value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)}>
               <option value="SEMUA">Semua Tahun</option>
               {tahunTersedia.map((th) => <option key={th} value={th}>{th}</option>)}
             </select>
-            <div className="search-input-wrapper" style={{ position: "relative", width: "220px" }}>
-              <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
-              <input type="text" placeholder="Cari nama petugas..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid var(--line)", fontSize: "13px", width: "100%", background: "var(--bg)", outline: "none", boxSizing: "border-box" }} />
-            </div>
+            <label className="sa-search search-input-wrapper" style={{ width: "240px" }}>
+              <AdminIcon name="search" size={15} strokeWidth={2} />
+              <input type="search" aria-label="Cari nama petugas" placeholder="Cari nama petugas…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            </label>
           </div>
 
           {activeTab === "HANDOVER" && (
@@ -290,14 +254,14 @@ export default function MonitorTukarShiftPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {rekapArr.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "12px" }}>
-                  Tidak ada keterlambatan tercatat di periode ini. 🎉
+                  Tidak ada keterlambatan tercatat di periode ini.
                 </div>
               ) : rekapArr.map(([nama, data]) => (
                 <div key={nama} style={{ background: "var(--bg)", borderRadius: "14px", border: "1px solid var(--line)", padding: "16px 18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
                     <span style={{ fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>{nama}</span>
-                    <span style={{ background: "var(--red-50)", color: "var(--red-600)", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: 800 }}>
-                      <IconRefreshCw size={11} /> {data.total}x Telat
+                    <span style={{ background: "var(--red-50)", color: "var(--red-600)", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                      <AdminIcon name="refresh" size={12} strokeWidth={2} /> {data.total}x Telat
                     </span>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -312,8 +276,7 @@ export default function MonitorTukarShiftPage() {
               ))}
             </div>
           )}
-        </div>
-      </div>
-    </div>
+      </Tile>
+    </AdminShell>
   );
 }
