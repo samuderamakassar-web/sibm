@@ -19,15 +19,8 @@ import Badge from "../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../components/ui/Table";
 import VehicleIcon3D, { KATEGORI_KENDARAAN, WARNA_KENDARAAN } from "../../../components/VehicleIcon3D";
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
-
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
+import AdminShell from "../../../components/admin/AdminShell";
+import AdminIcon from "../../../components/admin/AdminIcon";
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "neutral";
 
@@ -908,46 +901,12 @@ export default function ManajemenKendaraanPage() {
   const adminName = session.nama || "Admin";
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell
+      title="Master Data Kendaraan"
+      subtitle="Kelola armada, riwayat perawatan, dan kepatuhan kendaraan operasional"
+      userName={adminName}
+    >
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-
-        .page-tab-nav { display: flex; gap: 6px; background: var(--surface); padding: 6px; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 10px 25px -10px rgba(0,0,0,0.1); }
-        .page-tab-btn { flex: 1; padding: 12px 18px; border-radius: 12px; border: none; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s; }
-
         .print-only { display: none; }
         @media print {
           @page { margin: 12mm; size: A4 portrait; }
@@ -956,37 +915,14 @@ export default function ManajemenKendaraanPage() {
           .print-only { display: block !important; }
         }
       `}} />
-      <div className="site-header no-print">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> {adminName}
-        </div>
-      </div>
 
-      <div className="admin-hero no-print">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>MASTER DATA KENDARAAN</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola armada, riwayat perawatan, dan kepatuhan kendaraan operasional</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
-        <div className="page-tab-nav no-print" style={{ marginBottom: "22px" }}>
-          <button
-            className="page-tab-btn"
-            onClick={() => setPageTab("DAFTAR")}
-            style={{ background: pageTab === "DAFTAR" ? "var(--red-600)" : "transparent", color: pageTab === "DAFTAR" ? "#fff" : "var(--muted)" }}
-          >
-            📋 Daftar Kendaraan
+      <div>
+        <div className="sa-tabs no-print" role="tablist" aria-label="Tampilan kendaraan" style={{ width: "fit-content", maxWidth: "100%" }}>
+          <button type="button" role="tab" aria-selected={pageTab === "DAFTAR"} className={`sa-tab${pageTab === "DAFTAR" ? " is-active" : ""}`} onClick={() => setPageTab("DAFTAR")}>
+            <AdminIcon name="truck" size={17} /> Daftar Kendaraan
           </button>
-          <button
-            className="page-tab-btn"
-            onClick={() => setPageTab("RIWAYAT")}
-            style={{ background: pageTab === "RIWAYAT" ? "var(--red-600)" : "transparent", color: pageTab === "RIWAYAT" ? "#fff" : "var(--muted)" }}
-          >
-            🗂️ Riwayat Kendaraan
+          <button type="button" role="tab" aria-selected={pageTab === "RIWAYAT"} className={`sa-tab${pageTab === "RIWAYAT" ? " is-active" : ""}`} onClick={() => setPageTab("RIWAYAT")}>
+            <AdminIcon name="clipboardList" size={17} /> Riwayat Kendaraan
           </button>
         </div>
 
@@ -1237,11 +1173,11 @@ export default function ManajemenKendaraanPage() {
                         <option value="Semua">Semua Tahun</option>
                         {tahunTersediaRiwayat.map(th => <option key={th} value={th}>{th}</option>)}
                       </select>
-                      <button onClick={handleExportExcel} style={{ padding: "8px 14px", background: "var(--ok)", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>
-                        ⬇️ Excel
+                      <button type="button" className="sa-btn is-dark" onClick={handleExportExcel} style={{ height: "36px", fontSize: "12px", padding: "0 14px" }}>
+                        Excel
                       </button>
-                      <button onClick={handleExportPDF} style={{ padding: "8px 14px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>
-                        🖨️ PDF
+                      <button type="button" className="sa-btn is-primary" onClick={handleExportPDF} style={{ height: "36px", fontSize: "12px", padding: "0 14px" }}>
+                        <AdminIcon name="printer" size={14} /> PDF
                       </button>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button onClick={() => openLogModal("ODOMETER")} style={{ padding: "8px 12px", background: "var(--info-50)", color: "var(--info)", border: "1px solid rgba(37,99,235,0.2)", borderRadius: "8px", fontWeight: "bold", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>
@@ -1379,7 +1315,7 @@ export default function ManajemenKendaraanPage() {
               name="unit_bisnis"
               value={formData.unit_bisnis}
               onChange={handleInputChange}
-              style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+              style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
             >
               <option value="">Pilih Unit Bisnis (Opsional)...</option>
               {DAFTAR_UNIT_BISNIS.map((u) => <option key={u} value={u}>{u}</option>)}
@@ -1399,7 +1335,7 @@ export default function ManajemenKendaraanPage() {
               <select
                 value={formData.status_kepemilikan}
                 onChange={(e) => setFormData({ ...formData, status_kepemilikan: e.target.value as "Aset" | "Sewa" })}
-                style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", cursor: "pointer", boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", cursor: "pointer", boxSizing: "border-box" }}
               >
                 <option value="Aset">Aset (Milik Sendiri)</option>
                 <option value="Sewa">Sewa</option>
@@ -1497,6 +1433,6 @@ export default function ManajemenKendaraanPage() {
           </>
         )}
       </Modal>
-    </div>
+    </AdminShell>
   );
 }
