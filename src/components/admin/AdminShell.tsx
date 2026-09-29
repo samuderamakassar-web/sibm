@@ -35,6 +35,11 @@ interface AdminShellProps {
   actions?: ReactNode;
   /** Kalau diisi, muncul tombol logout bulat di header. */
   onLogout?: () => void;
+  /** Teks kecil di samping logo SIBM (tampil kalau backHref null). Dashboard staf mengisi nama
+   *  departemennya, mis. "Security" atau "OB & CS". */
+  brandSub?: string;
+  /** Navigasi bawah khusus HP (dashboard staf lapangan). Isinya tombol-tombol .sa-nav-item. */
+  bottomNav?: ReactNode;
   children: ReactNode;
 }
 
@@ -52,6 +57,8 @@ export default function AdminShell({
   backLabel = "Control Panel",
   actions,
   onLogout,
+  brandSub = "Admin GA",
+  bottomNav,
   children,
 }: AdminShellProps) {
   const router = useRouter();
@@ -71,7 +78,7 @@ export default function AdminShell({
             <div className="sa-logo">
               <span className="sa-logo-mark">S</span>
               <span>
-                SIBM <span className="sa-logo-sub">Admin GA</span>
+                SIBM <span className="sa-logo-sub">{brandSub}</span>
               </span>
             </div>
           )}
@@ -93,14 +100,14 @@ export default function AdminShell({
             <span className="sa-account-name sa-hide-mobile">{userName}</span>
           </div>
           {onLogout && (
-            <button type="button" className="sa-icon-btn is-danger" onClick={onLogout} aria-label="Keluar sesi admin" title="Keluar sesi admin">
+            <button type="button" className="sa-icon-btn is-danger" onClick={onLogout} aria-label="Keluar" title="Keluar">
               <AdminIcon name="logOut" size={18} />
             </button>
           )}
         </div>
       </header>
 
-      <main className="sa-main">
+      <main className={`sa-main${bottomNav ? " has-bottom-nav" : ""}`}>
         {(title || actions) && (
           <div className="sa-page-head">
             <div>
@@ -112,6 +119,12 @@ export default function AdminShell({
         )}
         {children}
       </main>
+
+      {bottomNav && (
+        <nav className="sa-bottom-nav" aria-label="Navigasi utama">
+          {bottomNav}
+        </nav>
+      )}
     </div>
   );
 }
