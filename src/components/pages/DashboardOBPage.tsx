@@ -10,6 +10,7 @@ import NotifikasiBellButton from "@/components/NotifikasiBellButton";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useToast } from "@/components/ui/ToastProvider";
 import AbsensiCard from "@/components/AbsensiCard";
+import { daftarPeriodeLembur, periodeLemburAktif } from "../../lib/periodeLembur";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -126,7 +127,7 @@ export default function DashboardOBPage() {
   // 💡 STATE BARU: PERIODE & MULTI-ROW OVERTIME
   const [activeModal, setActiveModal] = useState<"none" | "lembur">("none");
   const [isLemburLoading, setIsLemburLoading] = useState(false);
-  const [periodeLembur, setPeriodeLembur] = useState("11 Juni - 10 Juli 2026");
+  const [periodeLembur, setPeriodeLembur] = useState(periodeLemburAktif);
   const [formLemburItems, setFormLemburItems] = useState<OvertimeItemRequest[]>([
     { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "", alasan: "" }
   ]);
@@ -600,9 +601,7 @@ export default function DashboardOBPage() {
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
                   <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "white", fontWeight: "bold", color: "#2d3748"}}>
-                    <option value="11 Juni - 10 Juli 2026">🗓️ 11 Juni - 10 Juli 2026 (Aktif)</option>
-                    <option value="11 Mei - 10 Juni 2026">🗓️ 11 Mei - 10 Juni 2026 (Lalu)</option>
-                    <option value="11 Juli - 10 Agustus 2026">🗓️ 11 Juli - 10 Agustus 2026 (Depan)</option>
+                    {daftarPeriodeLembur().map((p) => <option key={p.value} value={p.value}>{p.value} ({p.keterangan})</option>)}
                   </select>
                 </div>
               </div>
