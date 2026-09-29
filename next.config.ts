@@ -17,6 +17,27 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development", // PWA hanya aktif saat di-build/production
 });
 
+// PENGAMAN BUILD: variabel NEXT_PUBLIC_* ditanam ke kode SAAT BUILD. Kalau .env.local tidak ada
+// (mis. build dari laptop baru), hasil build tetap "sukses" tapi SEMUA upload foto (Cloudinary)
+// dan email (EmailJS) diam-diam rusak di production -- pernah kejadian 29 Sep 2026 (§58H).
+// Jadi build production sengaja dibuat GAGAL kalau salah satu variabel wajib ini kosong.
+const ENV_WAJIB = [
+  "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME",
+  "NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET",
+  "NEXT_PUBLIC_EMAILJS_SERVICE_ID",
+  "NEXT_PUBLIC_EMAILJS_TEMPLATE_ID",
+  "NEXT_PUBLIC_EMAILJS_PUBLIC_KEY",
+];
+if (process.env.NODE_ENV === "production") {
+  const kosong = ENV_WAJIB.filter((k) => !process.env[k]);
+  if (kosong.length > 0) {
+    throw new Error(
+      `Build dibatalkan: variabel lingkungan berikut kosong -> ${kosong.join(", ")}. ` +
+        "Buat/isi file .env.local di root project dulu (lihat analisis_project.md §58H)."
+    );
+  }
+}
+
 // Konfigurasi Bawaan Next.js Anda
 const nextConfig: NextConfig = {
   output: "export", // JANGAN DIHAPUS: Ini wajib untuk Firebase Hosting
