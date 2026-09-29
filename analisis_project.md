@@ -12,7 +12,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 
 ### 🔴🔴 PALING URGENT (per 29 September 2026)
 
-1. **Cek hub Admin GA baru di HP** (§58) — buka `/admin`, cek terang & gelap (tombol bulan/matahari), angka "Pantau laporan tim"/"Perlu tindakan" masuk akal (bukan "—" semua), pencarian menu, tombol absensi. Kalau oke → lanjut migrasi halaman admin berikutnya (§58E). Migrasi daerah (§56E/§57A) SUDAH dikonfirmasi user beres 28 Sep.
+1. **Cek halaman admin baru di HP (terang & gelap)** (§58C-§58I, 25 halaman) + **pastikan upload foto staf sudah normal lagi** (§58H) — buka `/admin`, cek terang & gelap (tombol bulan/matahari), angka "Pantau laporan tim"/"Perlu tindakan" masuk akal (bukan "—" semua), pencarian menu, tombol absensi. Kalau oke → lanjut migrasi halaman admin berikutnya (§58E). Migrasi daerah (§56E/§57A) SUDAH dikonfirmasi user beres 28 Sep.
 2. **Konfirmasi `patroli-reminder.mjs` sukses** pasca-fix API namespace lama (§53E) — cek `admin/monitor-cron` atau tab Actions.
 3. **Hapus file yatim cron lama** (§55): `.github/workflows/checklist-reminder.yml`, `scripts/checklist-reminder.mjs`, `NotifikasiChecklistListener.tsx` — sudah dikonfirmasi gak dipakai via grep, tapi `git rm` sempat diblokir classifier, **nunggu izin eksplisit user**.
 4. **Test end-to-end fitur yang sudah deploy tapi belum pernah dicoba**: tombol evaluasi + preset poin + badge (§51/§52), form & reminder `admin/legalitas` + `admin/laptop` (§54, data production masih kosong), alur scan telat tukar shift → alasan → rekap → notif Admin GA (§55), eskalasi serah terima (§45C), dropdown Wilayah + tampilan baru `admin/users` (§57).
@@ -2588,3 +2588,13 @@ Tambahan tema (`admin-theme.css`): kelas bersama `.sa-tabs/.sa-tab`, `.sa-btn` (
 **Fix**: `.env.local` dilengkapi dari dashboard (Cloudinary cloud `gsco39kb`, preset unsigned `sibm_storage`; EmailJS `service_0e8e85u` / `template_oriy1nw` / public key) -- HANYA nilai publik, API secret Cloudinary & private key EmailJS sengaja TIDAK dimasukkan (NEXT_PUBLIC_* terkirim ke browser). Build ulang (terverifikasi 11 titik upload ber-URL `v1_1/gsco39kb` di bundle) & redeploy. **Pencegahan**: `next.config.ts` (commit `46a07f6`) menggagalkan `next build` production kalau salah satu dari 5 variabel wajib kosong -- sudah diuji gagal dengan pesan jelas.
 
 **Pelajaran**: sebelum build/deploy dari mesin baru, cek `.env.local` dulu. Laporan patroli/siram yang gagal diunggah selama rentang ini TIDAK tercatat (toast memberi tahu staf "belum tercatat") -- kalau ada kewajiban yang jadi bolong, pertimbangkan evaluasi manual untuk rentang 29 Sep.
+
+### 58I. Migrasi 11 Halaman Admin Terakhir -- SEMUA 25 Halaman Admin Sudah Bento (29 September 2026)
+Commit `6554a3b`, **SUDAH DI-DEPLOY** (build terverifikasi memuat env Cloudinary, §58H). Halaman: `helpdesk`, `atk`, `overtime`, `broadcast`, `survei-kepuasan`, `qr-manager`, `handbook-magang`, `monitor-cron`, `monitor-absensi` (pola seragam -> ditransformasi skrip: root `<div>` -> `AdminShell`, CSS `:root/.site-header/.back-btn/.admin-badge/.admin-hero*` & JSX header+hero dihapus, wrapper `margin: -30px` dibersihkan, ikon/`useRouter` yang tak terpakai dihapus -- file-file ini CRLF, skrip kedua menangani itu) + `sop` & `report` (terpandu).
+
+- **Token isi solid baru**: `--info-solid`, `--accent-solid`, `--muted-solid` (melengkapi `--ok-solid`/`--warn-solid`). Aturan: latar yang memuat teks putih WAJIB pakai `*-solid`/`--brand`, bukan `--ok/--info/--accent/--muted` (yang di mode gelap jadi warna TEKS terang).
+- **`report`**: filter periode + Cetak PDF pindah ke slot `actions`; isi laporan dibungkus `.sa-paper` (kelas baru di tema: token terang dipaksa, dokumen cetak selalu putih walau mode gelap).
+- **`qr-manager` TEMUAN KEAMANAN**: sebelumnya TIDAK punya `useAuthGuard` sama sekali (siapa pun yang tahu URL bisa membuka) -- sekarang Admin GA seperti halaman admin lain.
+- `sop`/`atk`: abu-abu gaya lama (`#cbd5e0`, `#f8fafc`, `#4a5568`, ...) diganti token.
+
+**Status migrasi**: 25/25 halaman `admin/*` selesai. Berikutnya (§58E poin 4-5): sisi staf (Security → OB/CS → Driver → QHSE; token perlu di-share keluar dari `components/admin` dulu) lalu **portal utama** paling akhir.
