@@ -1,16 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import AdminShell from "../../../components/admin/AdminShell";
 
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 
 // ==============================================================
 // 1. DATA MASTER OB & CS (DARI KODE ANDA)
@@ -37,7 +30,14 @@ const DATA_SECURITY = [
 ];
 
 export default function AdminQRManagerPage() {
-  const router = useRouter();
+  // Sebelumnya halaman ini TIDAK punya pengecekan akses sama sekali (siapa pun yang tahu URL-nya
+  // bisa membuka) -- disamakan dengan halaman admin lain saat migrasi AdminShell (§58I).
+  const { session, isReady } = useAuthGuard({
+    roles: ["Admin"],
+    depts: ["Admin GA"],
+    redirectTo: "/",
+    deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
+  });
   
   const [activeTab, setActiveTab] = useState<"OB" | "SECURITY">("SECURITY");
   const [filterLantai, setFilterLantai] = useState<string>("Semua");
@@ -48,47 +48,15 @@ export default function AdminQRManagerPage() {
 
   const currentData = activeTab === "OB" ? DATA_OB : DATA_SECURITY;
 
+  if (!isReady || !session) return null;
+
   return (
-    <div style={{ padding: "0", fontFamily: "'Inter', sans-serif", minHeight: "100vh", background: "var(--bg)" }}>
+    <AdminShell title="QR Code Generator" subtitle="Cetak label QR penanda lokasi fisik untuk ditempel di dinding area / pos patroli" userName={session?.nama || "Admin"}>
       
       {/* ========================================================= */}
       {/* CSS KHUSUS PRINT (Mengatur ukuran label agar pas dipotong) */}
       {/* ========================================================= */}
-      <style jsx global>{`
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
+      <style jsx global>{`
         @media print {
           @page { margin: 10mm; size: A4 portrait; }
           .no-print { display: none !important; }
@@ -112,24 +80,7 @@ export default function AdminQRManagerPage() {
       `}</style>
 
       {/* 🔹 HEADER TOP BAR */}
-      <div className="site-header no-print">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> Admin GA
-        </div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="admin-hero no-print">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>QR CODE GENERATOR</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Cetak label QR Code penanda lokasi fisik untuk ditempel di dinding area / pos patroli.</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 20px 30px", position: "relative", zIndex: 10 }}>
+      <div>
 
         {/* 🔹 KONTROL PANEL (AKAN SEMBUNYI SAAT DIPRINT) */}
         <div className="no-print" style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid var(--line)", marginBottom: "30px" }}>
@@ -137,7 +88,7 @@ export default function AdminQRManagerPage() {
           <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-start", flexWrap: "wrap", gap: "20px" }}>
             <button
               onClick={handlePrint}
-              style={{ padding: "12px 25px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(220,38,38,0.3)" }}
+              style={{ padding: "12px 25px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(220,38,38,0.3)" }}
             >
               🖨️ Cetak {activeTab === "SECURITY" ? "Patroli Security" : "Area OB/CS"}
             </button>
@@ -235,7 +186,7 @@ export default function AdminQRManagerPage() {
                   <h3 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "18px", lineHeight: "1.3" }}>
                     {namaDisplay}
                   </h3>
-                  <div style={{ fontSize: "12px", color: "white", background: "var(--ink-soft)", padding: "4px 12px", borderRadius: "20px", fontWeight: "bold", marginTop: "auto" }}>
+                  <div style={{ fontSize: "12px", color: "#fff", background: "var(--muted-solid)", padding: "4px 12px", borderRadius: "20px", fontWeight: "bold", marginTop: "auto" }}>
                     Lantai: {lantaiObj.lantai}
                   </div>
                 </div>
@@ -245,6 +196,6 @@ export default function AdminQRManagerPage() {
 
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }

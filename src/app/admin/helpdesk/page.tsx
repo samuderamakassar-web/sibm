@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -14,15 +13,8 @@ import Card from "../../../components/ui/Card";
 import Modal from "../../../components/ui/Modal";
 import Badge from "../../../components/ui/Badge";
 import Select from "../../../components/ui/Select";
+import AdminShell from "../../../components/admin/AdminShell";
 
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 
 interface KontakKaryawan {
   nama: string;
@@ -52,7 +44,6 @@ const STATUS_TONE: Record<string, "warning" | "info" | "success"> = {
 };
 
 export default function AdminHelpdeskPage() {
-  const router = useRouter();
   const showToast = useToast();
   const { session, isReady: isAuthReady } = useAuthGuard({
     depts: ["Admin GA", "Management"],
@@ -255,42 +246,8 @@ export default function AdminHelpdeskPage() {
   const adminName = session.nama || "Admin GA";
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
+    <AdminShell title="Helpdesk & Tiket Kerusakan" subtitle="Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung" userName={adminName}>
+      <style dangerouslySetInnerHTML={{__html: `
 
         .helpdesk-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
         .helpdesk-table th { padding: 12px 15px; font-weight: bold; }
@@ -314,23 +271,7 @@ export default function AdminHelpdeskPage() {
           .helpdesk-table td::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
         }
       `}} />
-      <div className="site-header">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> Tim GA: {adminName}
-        </div>
-      </div>
-
-      <div className="admin-hero">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>HELPDESK COMMAND CENTER</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1300px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div>
         <Card style={{ marginBottom: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px" }}>
@@ -368,7 +309,7 @@ export default function AdminHelpdeskPage() {
               </select>
               <button
                 onClick={handleExportExcel}
-                style={{ padding: "10px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", background: "var(--ok)", color: "white", display: "flex", alignItems: "center", gap: "6px" }}
+                style={{ padding: "10px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", background: "var(--ok-solid)", color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}
               >
                 📊 Export ke Excel
               </button>
@@ -516,6 +457,6 @@ export default function AdminHelpdeskPage() {
           </>
         )}
       </Modal>
-    </div>
+    </AdminShell>
   );
 }

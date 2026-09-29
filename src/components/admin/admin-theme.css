@@ -41,6 +41,9 @@
      (untuk teks), jadi tombol butuh token terpisah supaya teks putihnya tetap terbaca. */
   --ok-solid: #3f6b3a;
   --warn-solid: #8a5a1f;
+  --info-solid: #2f5382;
+  --accent-solid: #6b3a7a;
+  --muted-solid: #857b73;
 
   /* Jembatan ke komponen src/components/ui/* (Card, Input, Select, Textarea, Table, Button):
      komponen itu membaca var(--ui-*, <warna lama>), jadi di luar admin tetap persis seperti dulu,
@@ -93,6 +96,9 @@
   --teal-50: #1c2f2c;
   --ok-solid: #3b7534;
   --warn-solid: #92600f;
+  --info-solid: #3a64a0;
+  --accent-solid: #7d4a8e;
+  --muted-solid: #5f5750;
 
   color-scheme: dark;
 }
@@ -126,6 +132,9 @@
     --teal-50: #1c2f2c;
     --ok-solid: #3b7534;
     --warn-solid: #92600f;
+    --info-solid: #3a64a0;
+    --accent-solid: #7d4a8e;
+    --muted-solid: #5f5750;
 
     color-scheme: dark;
   }
@@ -469,5 +478,46 @@
   .sa-tile {
     padding: 0;
     background: transparent;
+  }
+}
+
+/* ---------- Kertas: dokumen yang dirancang untuk dicetak (mis. Laporan Eksekutif) ---------- */
+/* Selalu tampil terang walau admin di mode gelap -- isinya memang "kertas". */
+.sa-paper {
+  --ink: #231f1c;
+  --ink-soft: #5e5750;
+  --muted: #776e66;
+  --line: #e8e2da;
+  --bg: #f4f1ec;
+  --surface: #ffffff;
+  --tile: #ffffff;
+  --hover: #f7f3ee;
+  --red-700: #86101f;
+  --red-600: #a3122a;
+  --red-50: #f4e4e6;
+  --ok: #3f6b3a;
+  --ok-50: #e9f0e4;
+  --info: #2f5382;
+  --info-50: #e4ebf5;
+  --warn: #8a5a1f;
+  --warn-50: #f3e9dc;
+  --accent: #6b3a7a;
+  --accent-50: #efe6f1;
+  color-scheme: light;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 28px;
+  padding: 28px;
+}
+@media (max-width: 768px) {
+  .sa-paper {
+    border-radius: 24px;
+    padding: 18px;
+  }
+}
+@media print {
+  .sa-paper {
+    border-radius: 0;
+    padding: 0;
   }
 }

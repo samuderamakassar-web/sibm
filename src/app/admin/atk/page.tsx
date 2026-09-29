@@ -8,15 +8,8 @@ import { kirimEmail } from "../../../lib/notify";
 import { buildAtkSiapEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
+import AdminShell from "../../../components/admin/AdminShell";
 
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 
 interface KontakKaryawan {
   nama: string;
@@ -297,60 +290,10 @@ export default function AdminAtkPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
+    <AdminShell title="Gudang ATK" subtitle="Pemenuhan permintaan alat tulis kantor dan master data logistik SIBM" userName={adminName || "Admin"}>
+      <style dangerouslySetInnerHTML={{__html: `
       `}} />
-      <div className="site-header">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> {adminName}
-        </div>
-      </div>
-
-      <div className="admin-hero">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>GUDANG ATK GA</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Manajemen pemenuhan alat tulis kantor dan master data logistik SIBM.</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1100px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div>
 
         {/* NAVIGASI TAB MODERN */}
         <div style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "5px" }}>
@@ -359,7 +302,7 @@ export default function AdminAtkPage() {
             style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "REQUEST" ? "var(--surface)" : "rgba(255,255,255,0.8)", color: activeTab === "REQUEST" ? "var(--accent)" : "var(--muted)", boxShadow: activeTab === "REQUEST" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "REQUEST" ? "3px solid var(--accent)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
           >
             📋 Pesanan Masuk
-            <span style={{ background: activeTab === "REQUEST" ? "#f5f3ff" : "var(--line)", color: activeTab === "REQUEST" ? "var(--accent)" : "var(--ink-soft)", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>
+            <span style={{ background: activeTab === "REQUEST" ? "var(--accent-50)" : "var(--line)", color: activeTab === "REQUEST" ? "var(--accent)" : "var(--ink-soft)", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>
               {atkRequests.filter(r => r.status !== "Selesai / Diambil").length}
             </span>
           </button>
@@ -388,14 +331,14 @@ export default function AdminAtkPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ padding: "12px 16px", borderRadius: "12px", border: "1px solid var(--line)", width: "100%", maxWidth: "300px", fontSize: "14px", background: "var(--bg)", outline: "none" }}
               />
-              <button onClick={handleExportExcel} style={{ background: "var(--ok)", color: "white", padding: "12px 18px", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(22,163,74,0.2)" }}>
+              <button onClick={handleExportExcel} style={{ background: "var(--ok-solid)", color: "#fff", padding: "12px 18px", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(22,163,74,0.2)" }}>
                 <span>📊</span> Export Excel
               </button>
             </div>
 
             <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                <thead style={{ background: "#f5f3ff", color: "var(--accent)" }}>
+                <thead style={{ background: "var(--accent-50)", color: "var(--accent)" }}>
                   <tr>
                     <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)", whiteSpace: "nowrap" }}>No. Resi</th>
                     <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)" }}>Pemohon</th>
@@ -409,7 +352,7 @@ export default function AdminAtkPage() {
                     const isSelesai = req.status === "Selesai / Diambil";
                     const isProses = req.status === "Sedang Disiapkan";
                     return (
-                      <tr key={req.id} style={{ borderBottom: "1px solid var(--line)", background: isSelesai ? "#f8fafc" : "var(--surface)" }}>
+                      <tr key={req.id} style={{ borderBottom: "1px solid var(--line)", background: isSelesai ? "var(--bg)" : "var(--surface)" }}>
                         <td style={{ padding: "15px", fontWeight: "900", color: "var(--accent)", letterSpacing: "0.5px" }}>{req.resi}</td>
                         <td style={{ padding: "15px" }}>
                           <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{req.nama_pemohon}</div>
@@ -435,7 +378,7 @@ export default function AdminAtkPage() {
                               <button
                                 onClick={() => handleUpdateStatus(req.id, req.status)}
                                 disabled={sedangUpdateId === req.id}
-                                style={{ padding: "6px 12px", background: sedangUpdateId === req.id ? "var(--muted)" : (isProses ? "var(--ok)" : "var(--info)"), color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: sedangUpdateId === req.id ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+                                style={{ padding: "6px 12px", background: sedangUpdateId === req.id ? "var(--muted-solid)" : (isProses ? "var(--ok-solid)" : "var(--info-solid)"), color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: sedangUpdateId === req.id ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
                               >
                                 {sedangUpdateId === req.id ? "Mengirim notifikasi..." : (isProses ? "Tandai Selesai ✓" : "Mulai Siapkan ➔")}
                               </button>
@@ -496,12 +439,12 @@ export default function AdminAtkPage() {
                     <div style={{ marginTop: "10px", position: "relative", display: "inline-block" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={newItemFoto} alt="Preview" style={{ width: "100px", height: "100px", objectFit: "cover", borderRadius: "8px" }} />
-                      <button type="button" onClick={() => setNewItemFoto("")} style={{ position: "absolute", top: "-8px", right: "-8px", background: "var(--red-600)", color: "white", border: "none", width: "22px", height: "22px", borderRadius: "50%", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>✖</button>
+                      <button type="button" onClick={() => setNewItemFoto("")} style={{ position: "absolute", top: "-8px", right: "-8px", background: "var(--brand)", color: "#fff", border: "none", width: "22px", height: "22px", borderRadius: "50%", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>✖</button>
                     </div>
                   )}
                 </div>
 
-                <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "14px", background: isLoading ? "var(--muted)" : "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "5px", boxShadow: isLoading ? "none" : "0 4px 6px rgba(37,99,235,0.3)" }}>
+                <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "14px", background: isLoading ? "var(--muted-solid)" : "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "5px", boxShadow: isLoading ? "none" : "0 4px 6px rgba(37,99,235,0.3)" }}>
                   {isLoading ? "Menambahkan..." : "Simpan Barang"}
                 </button>
               </form>
@@ -513,7 +456,7 @@ export default function AdminAtkPage() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "15px" }}>
                 {masterAtkList.length > 0 ? masterAtkList.map((item) => (
-                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px", background: "#f8fafc", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px", background: "var(--bg)", borderRadius: "12px", border: "1px solid var(--line)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       {item.foto_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -543,6 +486,6 @@ export default function AdminAtkPage() {
         )}
 
       </div>
-    </div>
+    </AdminShell>
   );
 }
