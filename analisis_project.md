@@ -2561,3 +2561,12 @@ Sesi ini jalan di mesin Windows baru (user `reza.rahmat`) yang awalnya TANPA Nod
 5. **Portal utama `src/app/page.tsx` paling akhir** (~2.000 baris, dilihat semua karyawan) -- arah desain sudah disetujui (baris "Portal utama — Bento Hangat" di canvas).
 
 Pola per halaman: audit → tunjukkan rencana → kerjakan → eslint/tsc/build → deploy → user cek di HP.
+
+### 58F. Migrasi Grup Pantau Laporan Tim (29 September 2026, lanjutan)
+5 halaman dibungkus `AdminShell` (commit `a8f376a`, **SUDAH DI-DEPLOY** hosting): `monitor-security` (4 tab jadi `sa-tabs`, modal detail patroli header terang, tombol Export/Print pakai `sa-btn`), `monitor-driver`, `monitor-tukar-shift`, `monitor-dadakan` (baris tanggal ditumpuk di HP), `monitor-poin` (baris staf jadi `<button aria-expanded>`, emoji 🏆/⚠️ jadi ikon). Logika data/filter/evaluasi/versi cetak TIDAK diubah.
+
+Tambahan tema (`admin-theme.css`): kelas bersama `.sa-tabs/.sa-tab`, `.sa-btn` (`is-primary`/`is-dark`/`is-soft`), `.sa-field`, `.sa-search`; semua input/select di `.sibm-admin` diberi `color: var(--ink)`; `@media print` memaksa token terang + menyembunyikan header/judul/tab tema; `--red-700` mode gelap jadi `#f2a7b3` (di halaman lama variabel ini dipakai sebagai WARNA TEKS). `EvaluasiManualButton`: latar tombol `var(--accent-50, #f5f3ff)` (modal evaluasinya masih putih hardcode -- terbaca di kedua mode, dibiarkan).
+
+**Pola "gotcha" saat migrasi halaman berikutnya** (cek tiap halaman): teks putih di atas `var(--accent)`/`var(--ink)`/`var(--ok)` (di mode gelap token itu jadi terang → pakai `.sa-btn is-dark/is-primary` atau `--*-solid`), hex hardcode `#f5f3ff`/`white`/`#fff` sebagai latar, `var(--red-500)` (tidak ada di tema), header modal `background: var(--ink)`.
+
+Sisa grup ini: **`monitor-ob`** (836 baris, 3 tab + PDF + tab Plot) -- dikerjakan terpisah sekalian card-transform tabel di HP (§51F).
