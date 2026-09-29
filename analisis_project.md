@@ -1,29 +1,30 @@
 # SIBM — Project Analisis & Progress
 
-Update terakhir: 28 September 2026 (**§57**: pengecekan ulang dokumen + catat 4 commit pasca-§56 -- fix email Super Admin di `migrate-add-daerah.mjs`, dropdown Wilayah/Daerah (43 kota + opsi Lainnya), redesign flat `admin/users`. Semua SUDAH DI-DEPLOY, `dev`+`main`+`origin` sinkron di `8e4478d`.)
+Update terakhir: 29 September 2026 (**§58**: mulai audit UI satu per satu dengan gaya **Bento Hangat** + mode gelap -- fondasi tema admin bersama di `src/components/admin/` + hub `admin/page.tsx` dirombak (angka live, pencarian menu). SUDAH DI-DEPLOY (hosting). Pindah ke mesin baru: Node 22, firebase-tools, identitas git `Reza Rahmat`.)
 Project: SIBM (Sistem Informasi Building Management) — Next.js + Firebase (Firestore, Storage), hosting via Firebase Hosting, plan **Blaze (bayar-sesuai-pakai)** sejak §53E (sebelumnya Spark/gratis, kuota harian habis).
 Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API Routes gak jalan di production, jadi semua kerjaan terjadwal/backend pakai GitHub Actions + Firebase Admin SDK, bukan Cloud Functions.
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (dicek ulang 28 September 2026 — §57 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (29 September 2026 — §58 TERBARU)
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. **Daftar di bawah dicek ulang terhadap git history per 28 September** -- poin yang sudah selesai/tergantikan sudah dibuang (lihat §57C).
 
-### 🔴🔴 PALING URGENT (per 28 September 2026)
+### 🔴🔴 PALING URGENT (per 29 September 2026)
 
-1. **Pastikan migrasi daerah versi fix sudah dijalankan** (§56E + §57A) — migrasi PERTAMA sudah jalan tapi salah email (12 akun kena "Makassar", gak ada Super Admin). Script sudah difix + self-heal, tapi **belum tercatat apakah sudah dijalankan ulang**. Cek di `admin/users`: akun `reza.rahmat@samudera.id` harus berlabel Super Admin (`daerah = "PUSAT"`). Kalau belum, jalankan ulang `node scripts/migrate-add-daerah.mjs`, lalu **logout+login ulang** (`pic_daerah` cuma di-set saat login).
+1. **Cek hub Admin GA baru di HP** (§58) — buka `/admin`, cek terang & gelap (tombol bulan/matahari), angka "Pantau laporan tim"/"Perlu tindakan" masuk akal (bukan "—" semua), pencarian menu, tombol absensi. Kalau oke → lanjut migrasi halaman admin berikutnya (§58E). Migrasi daerah (§56E/§57A) SUDAH dikonfirmasi user beres 28 Sep.
 2. **Konfirmasi `patroli-reminder.mjs` sukses** pasca-fix API namespace lama (§53E) — cek `admin/monitor-cron` atau tab Actions.
 3. **Hapus file yatim cron lama** (§55): `.github/workflows/checklist-reminder.yml`, `scripts/checklist-reminder.mjs`, `NotifikasiChecklistListener.tsx` — sudah dikonfirmasi gak dipakai via grep, tapi `git rm` sempat diblokir classifier, **nunggu izin eksplisit user**.
 4. **Test end-to-end fitur yang sudah deploy tapi belum pernah dicoba**: tombol evaluasi + preset poin + badge (§51/§52), form & reminder `admin/legalitas` + `admin/laptop` (§54, data production masih kosong), alur scan telat tukar shift → alasan → rekap → notif Admin GA (§55), eskalasi serah terima (§45C), dropdown Wilayah + tampilan baru `admin/users` (§57).
 5. **Minta QHSE & Admin GA login + izinkan notifikasi browser sekali** (§47/§48C) — tanpa token FCM, push ke mereka gak akan sampai.
 6. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49).
 7. **Fase 2 multi-daerah** (§56F) — scoping data operasional per daerah. SENGAJA ditunda sampai ada Admin Daerah kedua yang onboarding.
-8. **Kandidat perbaikan**: mobile `admin/monitor-ob` gak punya card-transform (§51F); Manajemen Data Magang (§51E); redesign flat ala `admin/users` ke halaman admin lain kalau user suka hasilnya (§57B).
+8. **Kandidat perbaikan**: mobile `admin/monitor-ob` gak punya card-transform (§51F, sekalian dikerjakan saat migrasi Bento halaman itu); Manajemen Data Magang (§51E). Gaya flat Notion `admin/users` (§57B) DIGANTIKAN Bento Hangat (§58).
 9. **Sisa lama**: buat ulang pengumuman lama di `admin/broadcast` (§43F); **WAJIB** aktifkan akses non-browser di EmailJS (§41B); push notification pas app benar-benar tertutup (§39B poin 6); banner "masih login sebagai..." di portal (§40).
 
-### Ringkasan sesi §52–§57 (terbaru dulu)
+### Ringkasan sesi §52–§58 (terbaru dulu)
 
+- **§58** (29 Sep): gaya UI baru **Bento Hangat** + mode gelap dipilih user; fondasi `src/components/admin/` + hub `admin/page.tsx` dirombak & di-deploy. Preview semua gaya (admin & portal): https://claude.ai/artifact/PCg25U33aoiRY8VuzzDZpA
 - **§57** (28 Sep): pengecekan ulang dokumen + catat 4 commit pasca-§56 (fix email migrasi, dropdown kota, redesign `admin/users`).
 - **§56** (25 Sep): fondasi multi-daerah — field `daerah` di `users_master`, `'PUSAT'` = Super Admin, rules create/update/delete akun di-scope per wilayah. Fase 1 saja.
 - **§55** (25 Sep): wajib isi alasan kalau scan tukar shift telat >10 menit, notif Admin GA via cron, menu baru `admin/monitor-tukar-shift`.
@@ -2523,3 +2524,40 @@ Dibuang dari daftar urgent karena sudah selesai/tergantikan: konfirmasi fix §50
 
 ### 57D. Status
 Murni update dokumentasi, gak ada perubahan kode. `dev` = `main` = `origin/dev` = `origin/main` di `8e4478d` (sebelum commit dokumen ini).
+
+## 58. Audit UI Tahap 1: Gaya "Bento Hangat" + Mode Gelap -- Fondasi Tema Admin & Hub Admin GA (28-29 September 2026)
+
+User minta audit UI satu per satu, tapi "tinggal 1x tarik" (gak nyalin kode berulang). Temuan awal: 24 halaman `admin/*` masing-masing mendefinisikan ulang `:root` warna, header, hero gradient merah, dan puluhan komponen `IconXxx` sendiri; gak ada `admin/layout.tsx`; cuma `admin/users` yang pakai gaya flat (§57B).
+
+### 58A. Pemilihan Gaya (preview di canvas Design)
+Dibuat 3 arah gaya berdasarkan isi asli hub Admin GA (A Workspace/sidebar, B Bento Hangat, C Console Gelap), desktop + HP: https://claude.ai/artifact/PCg25U33aoiRY8VuzzDZpA. User pilih **B · Bento Hangat** (latar krem, tile bulat 28px, Plus Jakarta Sans, merah SIBM sebagai aksen) **plus mode gelap** (coklat tua hangat, bukan hitam kebiruan). Canvas yang sama juga berisi preview **portal utama** versi Bento (terang/gelap) dan versi Workspace -- user memutuskan portal juga pakai **Bento Hangat**. Angka/nama di preview sengaja "—"/[placeholder], gak dikarang.
+
+### 58B. Fondasi `src/components/admin/` (BARU)
+- `admin-theme.css`: token warna di-scope ke `.sibm-admin` (bukan `:root`), **nama variabel sengaja sama** dengan `:root` lama tiap halaman (`--ink`, `--ink-soft`, `--muted`, `--line`, `--bg`, `--surface`, `--red-600`, `--ok(-50)`, `--info(-50)`, `--warn(-50)`, `--accent(-50)`) + token baru (`--ground`, `--tile`, `--chip`, `--hover`, `--brand`, `--teal(-50)`, `--ok-solid`, `--warn-solid`). Migrasi halaman lama = bungkus `<AdminShell>` + hapus blok `:root`/header/hero lokalnya. Blok token gelap ditulis 2x (pilihan manual `[data-theme="dark"]` + `@media (prefers-color-scheme: dark)`), sengaja.
+- `useAdminTheme.ts`: `useSyncExternalStore` (bukan setState di effect). Default ikut setelan OS lewat media query CSS (static export → gak ada kedip); pilihan manual disimpan per perangkat di localStorage `sibm_admin_theme`.
+- `AdminIcon.tsx`: set ikon bersama (`<AdminIcon name="truck" />`), path diambil dari set yang sudah dipakai `admin/page.tsx`.
+- `AdminShell.tsx`: header sticky (tombol kembali / logo, toggle tema, `NotifikasiBellButton` varian gelap, chip akun, logout opsional) + judul halaman + slot `actions`.
+- `Tile.tsx`: kotak bento (`plain`/`brand`, `compact`).
+- `src/app/layout.tsx`: tambah `Plus_Jakarta_Sans` (`--font-jakarta`, `preload: false` supaya halaman staf/portal gak ikut unduh).
+- Dicek ke `node_modules/next/dist/docs` (Next 16.3.5): CSS global boleh di-import dari komponen, tapi stylesheet gak dilepas saat pindah route -- aman karena semua selector ber-prefix `.sibm-admin`/`.sa-`. Style per-halaman pakai CSS Module (`admin-hub.module.css`).
+
+### 58C. Hub `admin/page.tsx` Dirombak
+Layout bento: kotak sapaan merah ("Selamat pagi, {nama}. Gedung aman hari ini?") + `AbsensiCard` di dalamnya; kotak **Pantau laporan tim** (5 angka: checklist OB `tanggal==hariIni`, patroli & armada `waktu_* >= awal hari WITA`, siram `tanggal==hariIni`, tukar shift `terlambat==true` disaring bulan berjalan di browser); **Perlu tindakan** (overtime `status=="Menunggu Approval GA"`, helpdesk `status!="Selesai"`, ATK `status=="Menunggu Disiapkan"`, legalitas `tanggal_berakhir_aktif <= +60 hari`, laptop `tanggal_berakhir <= +90 hari` minus `dikembalikan`); 5 grup menu (23 menu lama utuh; grup Pantau gak diulang karena sudah jadi kotak angka); kotak pencarian menu. Bottom nav HP lama dihapus (logout pindah ke header).
+
+**Keputusan biaya**: angka pakai `getCountFromServer` **sekali per buka halaman** + tombol refresh, BUKAN `onSnapshot` -- agregat count ditagih 1 baca per ≤1000 dokumen cocok, listener real-time tertagih terus tiap perubahan. Semua filter 1 field (atau disaring di browser untuk data kecil) → **tanpa index komposit baru**; ke-10 collection sudah ada di daftar terbuka `firestore.rules`. `Promise.allSettled`: satu hitungan gagal → tampil "—", yang lain tetap jalan.
+
+`AbsensiCard.tsx`: tombol pakai `var(--ok-solid, var(--ok, ...))`/`var(--warn-solid, ...)` -- di mode gelap `--ok` jadi hijau terang (untuk teks) sehingga teks putih di atasnya gak terbaca; dashboard staf gak mendefinisikan `--*-solid` jadi otomatis tetap warna lama.
+
+### 58D. Mesin Baru & Verifikasi
+Sesi ini jalan di mesin Windows baru (user `reza.rahmat`) yang awalnya TANPA Node/npm/`node_modules`: user install Node **v22.23.2** (winget), `npm ci` (814 paket; sempat ECONNRESET sekali, sukses di retry), `firebase-tools` 15.32.0 global + `firebase login` oleh user. Identitas git global diset `Reza Rahmat <samudera.makassar@gmail.com>` -- commit baru JANGAN atas nama `cctv.samudera` (bukan untuk project ini); commit §57 sempat ter-push atas nama itu lalu di-amend + `--force-with-lease` oleh user (`c3c91e0`).
+
+`npx eslint` (file yang disentuh): 0 error. `npx tsc --noEmit`: 0 error. `npm run build`: sukses. Commit `54d49cc` di `dev`+`main`. **SUDAH DI-DEPLOY** (`hosting` saja, gak ada perubahan rules/index) ke https://sibm-app.web.app. **Belum dicek visual oleh user** (Claude gak punya browser di environment ini).
+
+### 58E. Urutan Migrasi Berikutnya
+1. Grup Pantau Laporan Tim: `monitor-security`, `monitor-ob` (sekalian card-transform HP §51F), `monitor-driver`, `monitor-tukar-shift`, `monitor-poin`, `monitor-dadakan`.
+2. Master data: `laptop`, `legalitas`, `karyawan`, `uji-emisi`, `apar`, `users` (ganti gaya flat §57B), `kendaraan` (1.500 baris, terakhir di grup ini).
+3. Layanan & sisanya: `helpdesk`, `atk`, `overtime`, `broadcast`, `survei-kepuasan`, `sop`, `report`, `qr-manager`, `handbook-magang`, `monitor-cron`, `monitor-absensi`.
+4. Sisi staf (Security → OB/CS → Driver → QHSE) -- gaya Bento juga, tapi token perlu dipindah/di-share keluar dari `components/admin` dulu.
+5. **Portal utama `src/app/page.tsx` paling akhir** (~2.000 baris, dilihat semua karyawan) -- arah desain sudah disetujui (baris "Portal utama — Bento Hangat" di canvas).
+
+Pola per halaman: audit → tunjukkan rencana → kerjakan → eslint/tsc/build → deploy → user cek di HP.
