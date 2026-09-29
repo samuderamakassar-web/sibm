@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
@@ -8,17 +7,12 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
+import AdminShell from "../../../components/admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan admin/apar/page.tsx & shell admin
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconCar = ({ size = 20, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14" /><path d="M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /><path d="M23 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /><path d="M3 17v-4l2-5a2 2 0 0 1 2-1.4h10A2 2 0 0 1 19 8l2 5v4" /><path d="M3 13h18" /></svg>
 );
@@ -79,7 +73,6 @@ const FORM_KOSONG: UjiEmisi = {
 };
 
 export default function UjiEmisiPage() {
-  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({
@@ -251,79 +244,44 @@ export default function UjiEmisiPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", background: "var(--bg)" }}>
+    <AdminShell
+      title="Hasil Inspeksi Kendaraan"
+      subtitle="Rekap hasil uji emisi & jadwal servis armada kendaraan"
+      userName={adminName}
+      backHref={isQHSE ? "/dashboard/qhse" : "/admin"}
+      backLabel={isQHSE ? "Dashboard QHSE" : "Control Panel"}
+    >
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn { display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px; }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2); }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-
-        .panel { background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); border: 1px solid var(--line); }
+        .panel { background: var(--tile); padding: 24px; border-radius: 28px; }
         .field-label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
-        .field-input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; font-family: inherit; box-sizing: border-box; }
+        .field-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; font-family: inherit; box-sizing: border-box; }
 
-        .emisi-table th { background: #fff59d; color: #52460a; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px; }
+        .emisi-table th { background: var(--warn-50); color: var(--warn); font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; font-size: 11.5px; }
 
         @media (max-width: 700px) {
           .emisi-form-grid { grid-template-columns: 1fr !important; }
+          .emisi-form-grid > div { grid-column: auto !important; }
+          .panel { padding: 18px; border-radius: 24px; }
         }
       `}} />
 
-      <div className="site-header">
-        <button className="back-btn" onClick={() => router.push(session?.dept === "QHSE" ? "/dashboard/qhse" : "/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge"><IconUserCircle size={14} /> {adminName}</div>
-      </div>
+      <div>
 
-      <div className="admin-hero">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>HASIL INSPEKSI KENDARAAN</h1>
-          <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>Rekap hasil uji emisi & jadwal servis armada kendaraan.</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1400px", margin: "-30px auto 0", padding: "0 20px 30px", position: "relative", zIndex: 10 }}>
-
-        <div className="panel" style={{ marginBottom: "20px", padding: "18px 20px" }}>
+        <div className="panel" style={{ marginBottom: "16px", padding: "16px 20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink-soft)" }}>Filter Tanggal Pengujian:</span>
-              <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} className="field-input" style={{ width: "auto", fontWeight: "bold" }}>
+              <select className="sa-field" aria-label="Filter bulan" value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)}>
                 <option value="Semua">Semua Bulan</option>
                 {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
               </select>
-              <select value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} className="field-input" style={{ width: "auto", fontWeight: "bold" }}>
+              <select className="sa-field" aria-label="Filter tahun" value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)}>
                 <option value="Semua">Semua Tahun</option>
                 {tahunTersedia.map(th => <option key={th} value={th}>{th}</option>)}
               </select>
             </div>
-            <button onClick={handleExportExcel} style={{ padding: "12px 20px", background: "var(--ok)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(22,163,74,0.25)" }}>
+            <button type="button" className="sa-btn is-dark" onClick={handleExportExcel}>
               <IconDownload size={15} /> Export ke Excel (.CSV)
             </button>
           </div>
@@ -391,7 +349,7 @@ export default function UjiEmisiPage() {
                         <td style={{ padding: "10px 14px", color: "var(--ink-soft)" }}>{emisi?.keterangan || "-"}</td>
                         {!isQHSE && (
                           <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                            <button onClick={() => bukaEdit(unit)} style={{ width: "30px", height: "30px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--info)", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><IconEdit size={13} /></button>
+                            <button type="button" aria-label={`Edit ${unit.plat_nomor}`} onClick={() => bukaEdit(unit)} style={{ width: "36px", height: "36px", borderRadius: "12px", border: "none", background: "var(--info-50)", color: "var(--info)", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><IconEdit size={13} /></button>
                           </td>
                         )}
                       </tr>
@@ -440,11 +398,11 @@ export default function UjiEmisiPage() {
             <input type="text" value={form.keterangan} onChange={(e) => setForm({ ...form, keterangan: e.target.value })} className="field-input" placeholder="Cth: Melewati Batas KM" />
           </div>
           <div style={{ gridColumn: "span 2", marginTop: "8px", display: "flex", gap: "10px" }}>
-            <button type="submit" disabled={isSaving || isDeleting} style={{ flex: 1, padding: "13px", background: isSaving ? "#a0aec0" : "var(--red-600)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+            <button type="submit" disabled={isSaving || isDeleting} style={{ flex: 1, padding: "13px", background: "var(--brand)", opacity: isSaving ? 0.6 : 1, color: "#fff", border: "none", borderRadius: "14px", fontWeight: "bold", fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
               <IconCheckCircle size={14} /> {isSaving ? "Menyimpan..." : "Simpan Hasil Uji Emisi"}
             </button>
             {ujiEmisiMap[editTarget?.id || ""] && (
-              <button type="button" onClick={handleHapus} disabled={isSaving || isDeleting} style={{ padding: "13px 16px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-500)", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isDeleting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+              <button type="button" onClick={handleHapus} disabled={isSaving || isDeleting} style={{ padding: "13px 16px", background: "var(--surface)", color: "var(--red-600)", border: "1px solid var(--red-600)", borderRadius: "14px", fontWeight: "bold", fontSize: "14px", cursor: isDeleting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
                 <IconTrash size={14} /> {isDeleting ? "..." : "Hapus"}
               </button>
             )}
@@ -452,6 +410,6 @@ export default function UjiEmisiPage() {
         </form>
       </Modal>
 
-    </div>
+    </AdminShell>
   );
 }

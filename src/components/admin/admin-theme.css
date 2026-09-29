@@ -42,6 +42,20 @@
   --ok-solid: #3f6b3a;
   --warn-solid: #8a5a1f;
 
+  /* Jembatan ke komponen src/components/ui/* (Card, Input, Select, Textarea, Table, Button):
+     komponen itu membaca var(--ui-*, <warna lama>), jadi di luar admin tetap persis seperti dulu,
+     di dalam .sibm-admin ikut tema terang/gelap. Dirujuk lewat var() supaya otomatis ikut
+     nilai token yang berubah di blok gelap di bawah. */
+  --ui-surface: var(--surface);
+  --ui-line: var(--line);
+  --ui-hover: var(--hover);
+  --ui-field-bg: var(--bg);
+  --ui-field-border: var(--line);
+  --ui-label: var(--ink-soft);
+  --ui-text: var(--ink);
+  --ui-muted: var(--muted);
+  --ui-shadow: none;
+
   color-scheme: light;
   background: var(--ground);
   color: var(--ink);

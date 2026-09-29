@@ -34,7 +34,8 @@ export default function Modal({ open, onClose, children, maxWidth = "550px" }: M
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "white",
+          background: "var(--surface, white)",
+          color: "var(--ink, inherit)",
           width: "100%",
           maxWidth,
           borderRadius: "24px",
@@ -50,18 +51,20 @@ export default function Modal({ open, onClose, children, maxWidth = "550px" }: M
         }}
       >
         <button
+          type="button"
+          aria-label="Tutup"
           onClick={onClose}
           style={{
             position: "absolute",
             top: "20px",
             right: "20px",
-            background: "#edf2f7",
+            background: "var(--hover, #edf2f7)",
             border: "none",
             width: "36px",
             height: "36px",
             borderRadius: "50%",
             cursor: "pointer",
-            color: "#4a5568",
+            color: "var(--ink-soft, #4a5568)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

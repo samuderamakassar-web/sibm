@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
@@ -9,17 +8,12 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
 import AparInspectionBanner from "../../../components/AparInspectionBanner";
+import AdminShell from "../../../components/admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan shell admin (src/app/admin/page.tsx)
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v2" /><path d="M8 5h6l1 2H7z" /><path d="M9 7v3" /><path d="M15 7l4-2" /><path d="M9 10h4a3 3 0 0 1 3 3v8H8v-8a3 3 0 0 1 1-2z" /><path d="M8 15h8" /></svg>
 );
@@ -89,7 +83,6 @@ const bulanTahunSekarang = () => {
 };
 
 export default function AdminAparPage() {
-  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({
@@ -215,45 +208,24 @@ export default function AdminAparPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", background: "var(--bg)" }}>
+    <AdminShell
+      title="Master Data APAR"
+      subtitle="Kelola unit APAR per lantai & cetak QR untuk inspeksi bulanan Security"
+      userName={adminName}
+      backHref={session?.dept === "QHSE" ? "/dashboard/qhse" : "/admin"}
+      backLabel={session?.dept === "QHSE" ? "Dashboard QHSE" : "Control Panel"}
+    >
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn { display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px; }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2); }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-
-        .panel { background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); border: 1px solid var(--line); }
+        .panel { background: var(--tile); padding: 24px; border-radius: 28px; }
         .field-label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
-        .field-input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; font-family: inherit; box-sizing: border-box; }
-        .action-btn { padding: 12px 20px; background: var(--red-600); color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit; box-shadow: 0 4px 6px rgba(220,38,38,0.25); }
+        .field-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; background: var(--bg); outline: none; font-family: inherit; box-sizing: border-box; }
+        .action-btn { height: 42px; padding: 0 18px; background: var(--brand); color: #fff; border: none; border-radius: 14px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit; }
 
-        .qr-card { background: var(--surface); padding: 18px; border-radius: 16px; border: 2px solid rgba(220,38,38,0.2); box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
-        .status-pill { font-size: 10px; font-weight: bold; padding: 3px 9px; border-radius: 20px; }
+        .qr-card { background: var(--surface); padding: 18px; border-radius: 24px; border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
+        .qr-card img.qr-img { background: #fff; border-radius: 8px; }
+        .status-pill { font-size: 10.5px; font-weight: bold; padding: 4px 10px; border-radius: 20px; }
+        .lantai-chip { font-size: 11px; color: var(--ink); background: var(--chip); padding: 3px 10px; border-radius: 20px; font-weight: bold; }
 
         @media print {
           @page { margin: 10mm; size: A4 portrait; }
@@ -264,59 +236,43 @@ export default function AdminAparPage() {
         }
         @media (max-width: 700px) {
           .apar-form-grid { grid-template-columns: 1fr !important; }
+          .apar-form-grid > div { grid-column: auto !important; }
+          .panel { padding: 18px; border-radius: 24px; }
         }
       `}} />
 
-      <div className="site-header no-print">
-        <button className="back-btn" onClick={() => router.push(session?.dept === "QHSE" ? "/dashboard/qhse" : "/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge"><IconUserCircle size={14} /> {adminName}</div>
+      <div className="no-print">
+        <AparInspectionBanner />
       </div>
 
-      <AparInspectionBanner />
-
-      <div className="admin-hero no-print">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>MASTER DATA APAR</h1>
-          <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>Kelola unit APAR per lantai & cetak QR untuk inspeksi bulanan Security.</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1200px", margin: "-30px auto 0", padding: "0 20px 30px", position: "relative", zIndex: 10 }}>
+      <div>
 
         {/* 🔹 TAB NAVIGASI */}
-        <div className="no-print" style={{ display: "flex", gap: "4px", marginBottom: "20px", background: "rgba(255,255,255,0.5)", padding: "5px", borderRadius: "14px", border: "1px solid var(--line)", width: "fit-content" }}>
-          <button
-            onClick={() => setActiveTab("MASTER")}
-            style={{ padding: "10px 18px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 800, fontSize: "13px", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px", background: activeTab === "MASTER" ? "var(--surface)" : "transparent", color: activeTab === "MASTER" ? "var(--red-600)" : "var(--ink-soft)", boxShadow: activeTab === "MASTER" ? "0 2px 8px rgba(0,0,0,0.08)" : "none" }}
-          >
+        <div className="sa-tabs no-print" role="tablist" aria-label="Tampilan APAR" style={{ width: "fit-content", maxWidth: "100%" }}>
+          <button type="button" role="tab" aria-selected={activeTab === "MASTER"} className={`sa-tab${activeTab === "MASTER" ? " is-active" : ""}`} onClick={() => setActiveTab("MASTER")}>
             <IconFireExtinguisher size={15} /> Master Data
           </button>
-          <button
-            onClick={() => setActiveTab("RIWAYAT")}
-            style={{ padding: "10px 18px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 800, fontSize: "13px", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "8px", background: activeTab === "RIWAYAT" ? "var(--surface)" : "transparent", color: activeTab === "RIWAYAT" ? "var(--red-600)" : "var(--ink-soft)", boxShadow: activeTab === "RIWAYAT" ? "0 2px 8px rgba(0,0,0,0.08)" : "none" }}
-          >
+          <button type="button" role="tab" aria-selected={activeTab === "RIWAYAT"} className={`sa-tab${activeTab === "RIWAYAT" ? " is-active" : ""}`} onClick={() => setActiveTab("RIWAYAT")}>
             <IconCalendar size={15} /> Hasil Inspeksi
           </button>
         </div>
 
         {activeTab === "MASTER" && (
         <>
-        <div className="panel no-print" style={{ marginBottom: "25px" }}>
+        <div className="panel no-print" style={{ marginBottom: "16px", padding: "16px 20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink-soft)" }}>Filter Lantai:</span>
-              <select value={filterLantai} onChange={(e) => setFilterLantai(e.target.value)} className="field-input" style={{ width: "auto", fontWeight: "bold" }}>
+              <select className="sa-field" aria-label="Filter lantai" value={filterLantai} onChange={(e) => setFilterLantai(e.target.value)}>
                 <option value="Semua">Semua Lantai</option>
                 {DAFTAR_LANTAI.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={handlePrint} className="action-btn" style={{ background: "var(--accent)", boxShadow: "0 4px 6px rgba(124,58,237,0.25)" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button type="button" onClick={handlePrint} className="sa-btn is-dark" style={{ height: "42px" }}>
                 <IconPrinter size={15} /> Cetak QR
               </button>
-              <button onClick={bukaTambah} className="action-btn">
+              <button type="button" onClick={bukaTambah} className="action-btn">
                 <IconPlus size={16} /> Tambah Unit APAR
               </button>
             </div>
@@ -324,7 +280,7 @@ export default function AdminAparPage() {
         </div>
 
         {unitTerfilter.length === 0 ? (
-          <div className="no-print" style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px", background: "var(--surface)", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+          <div className="no-print" style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "24px", background: "var(--tile)", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
             <IconInbox size={30} color="var(--muted)" />
             Belum ada unit APAR terdaftar{filterLantai !== "Semua" ? ` di ${filterLantai}` : ""}.
           </div>
@@ -338,8 +294,8 @@ export default function AdminAparPage() {
               return (
                 <div key={unit.id} className="qr-card">
                   <div className="no-print" style={{ position: "absolute", top: "10px", right: "10px", display: "flex", gap: "6px" }}>
-                    <button onClick={() => bukaEdit(unit)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--info)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconEdit size={13} /></button>
-                    <button onClick={() => handleHapus(unit)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--red-600)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconTrash size={13} /></button>
+                    <button type="button" aria-label={`Edit ${unit.kode}`} onClick={() => bukaEdit(unit)} style={{ width: "34px", height: "34px", borderRadius: "12px", border: "none", background: "var(--info-50)", color: "var(--info)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconEdit size={13} /></button>
+                    <button type="button" aria-label={`Hapus ${unit.kode}`} onClick={() => handleHapus(unit)} style={{ width: "34px", height: "34px", borderRadius: "12px", border: "none", background: "var(--red-50)", color: "var(--red-600)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconTrash size={13} /></button>
                   </div>
 
                   <div style={{ marginBottom: "10px", marginTop: "5px" }}>
@@ -350,12 +306,12 @@ export default function AdminAparPage() {
 
                   <div style={{ padding: "8px", border: "2px dashed var(--line)", borderRadius: "12px", marginBottom: "12px" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={qrImageUrl} alt={`QR ${unit.kode}`} style={{ width: "140px", height: "140px", display: "block" }} />
+                    <img className="qr-img" src={qrImageUrl} alt={`QR ${unit.kode}`} style={{ width: "140px", height: "140px", display: "block" }} />
                   </div>
 
                   <h3 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "17px" }}>{unit.kode}</h3>
                   <p style={{ margin: "0 0 8px 0", color: "var(--muted)", fontSize: "12px" }}>{unit.lokasi}</p>
-                  <div style={{ fontSize: "11px", color: "white", background: "var(--ink-soft)", padding: "3px 10px", borderRadius: "20px", fontWeight: "bold", marginBottom: "10px" }}>
+                  <div className="lantai-chip" style={{ marginBottom: "10px" }}>
                     {unit.lantai}
                   </div>
 
@@ -378,7 +334,7 @@ export default function AdminAparPage() {
             </h2>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink-soft)" }}>Filter Tahun:</span>
-              <select value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} className="field-input" style={{ width: "auto", fontWeight: "bold" }}>
+              <select className="sa-field" aria-label="Filter tahun" value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)}>
                 {tahunTersedia.map(th => <option key={th} value={th}>{th}</option>)}
               </select>
             </div>
@@ -406,7 +362,7 @@ export default function AdminAparPage() {
                       <td style={{ padding: "12px 15px", position: "sticky", left: 0, background: "var(--surface)" }}>
                         <div style={{ fontWeight: 800, color: "var(--ink)" }}>{unit.kode}</div>
                         <div style={{ color: "var(--muted)", fontSize: "12px", marginTop: "2px" }}>{unit.lokasi}</div>
-                        <div style={{ display: "inline-block", marginTop: "5px", fontSize: "10px", color: "white", background: "var(--ink-soft)", padding: "2px 9px", borderRadius: "20px", fontWeight: "bold" }}>{unit.lantai}</div>
+                        <div className="lantai-chip" style={{ display: "inline-block", marginTop: "5px", fontSize: "10.5px" }}>{unit.lantai}</div>
                       </td>
                       {bulanStatus.map((rec, idx) => {
                         const waktu = rec?.waktu_inspeksi?.toDate() || null;
@@ -422,7 +378,7 @@ export default function AdminAparPage() {
                                 </div>
                               </div>
                             ) : (
-                              <IconXCircle size={16} color="var(--red-500)" />
+                              <IconXCircle size={16} color="var(--red-600)" />
                             )}
                           </td>
                         );
@@ -462,13 +418,13 @@ export default function AdminAparPage() {
             <input type="text" value={form.lokasi} onChange={(e) => setForm({ ...form, lokasi: e.target.value })} className="field-input" placeholder="Cth: Dekat Lobby Utama" required />
           </div>
           <div style={{ gridColumn: "span 2", marginTop: "8px" }}>
-            <button type="submit" disabled={isSaving} style={{ width: "100%", padding: "13px", background: isSaving ? "#a0aec0" : "var(--red-600)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+            <button type="submit" disabled={isSaving} style={{ width: "100%", padding: "13px", background: "var(--brand)", opacity: isSaving ? 0.6 : 1, color: "#fff", border: "none", borderRadius: "14px", fontWeight: "bold", fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
               <IconCheckCircle size={14} /> {isSaving ? "Menyimpan..." : editTarget ? "Simpan Perubahan" : "Tambah Unit"}
             </button>
           </div>
         </form>
       </Modal>
 
-    </div>
+    </AdminShell>
   );
 }

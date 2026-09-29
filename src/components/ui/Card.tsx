@@ -10,10 +10,10 @@ export default function Card({ children, style, padded = true }: CardProps) {
   return (
     <div
       style={{
-        background: "white",
+        background: "var(--ui-surface, white)",
         borderRadius: "20px",
-        border: "1px solid #e2e8f0",
-        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)",
+        border: "1px solid var(--ui-line, #e2e8f0)",
+        boxShadow: "var(--ui-shadow, 0 10px 25px -5px rgba(0,0,0,0.1))",
         padding: padded ? "25px" : undefined,
         boxSizing: "border-box",
         ...style,

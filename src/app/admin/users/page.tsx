@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, deleteDoc, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
@@ -8,14 +7,9 @@ import { auth, db, getSecondaryAuth } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { useAuthGuard, isSuperAdmin as cekSuperAdmin } from "../../../hooks/useAuthGuard";
+import AdminShell from "../../../components/admin/AdminShell";
 
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconPencil = ({ size = 14, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
 );
@@ -69,7 +63,6 @@ async function uploadFotoToCloudinary(blob: Blob): Promise<string> {
 }
 
 export default function UserManagementPage() {
-  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -306,70 +299,44 @@ export default function UserManagementPage() {
   const adminName = session.nama || "Admin";
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px", overflowX: "hidden" }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #1f2328; --ink-soft: #4b5563; --muted: #8b8f97; --line: #e4e4e7;
-          --bg: #f8f8f7; --surface: #ffffff;
-          --red-600: #cf222e; --red-50: #fdeeee;
-          --ok: #1a7f37; --ok-50: #ecf7ee; --info: #2563eb; --info-50: #eef4ff;
-          --warn: #9a6700; --warn-50: #fdf6e3; --accent: #5b5bd6; --accent-50: #f0f0fc;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 12px 24px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 600; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--ink); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--bg); color: var(--ink-soft);
-          padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--line);
-        }
-        .admin-hero {
-          background: var(--surface); border-bottom: 1px solid var(--line);
-          padding: 22px 24px;
-        }
-        .admin-hero-content { max-width: 1200px; margin: 0 auto; }
-      `}} />
-
+    <AdminShell
+      title="Manajemen Pengguna"
+      subtitle={akuSuperAdmin ? "Kelola akses login SEMUA wilayah (Super Admin)" : `Kelola akses login staf wilayah ${daerahSaya || "-"}`}
+      userName={adminName}
+    >
       {/* 💡 CSS RESPONSIVE & ANTI-OVERFLOW MAGIC */}
       <style dangerouslySetInnerHTML={{__html: `
         /* Reset Box Sizing Global untuk anti-overflow */
         * { box-sizing: border-box; }
 
-        .admin-wrapper { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; width: 100%; }
-        .form-col { flex: 1 1 340px; position: sticky; top: 74px; width: 100%; }
+        .admin-wrapper { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; width: 100%; }
+        .form-col { flex: 1 1 340px; position: sticky; top: 84px; width: 100%; }
         .table-col { flex: 2 1 600px; min-width: 0; width: 100%; }
         .search-input { width: 240px; }
         .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-        .flat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+        /* Nama kelas lama dipertahankan (dipakai di banyak tempat di bawah), gayanya ikut tile bento. */
+        .flat-card { background: var(--tile); border: none; border-radius: 28px; }
 
         .icon-btn {
           display: inline-flex; align-items: center; justify-content: center;
-          width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line);
-          background: var(--surface); cursor: pointer; transition: background 0.15s, border-color 0.15s;
+          width: 36px; height: 36px; border-radius: 12px; border: none;
+          background: var(--hover); cursor: pointer; transition: background 0.15s, color 0.15s;
         }
-        .icon-btn:hover { background: var(--bg); }
-        .icon-btn.danger:hover { background: var(--red-50); border-color: var(--red-600); }
-        .icon-btn.warn:hover { background: var(--warn-50); border-color: var(--warn); }
-        .icon-btn.info:hover { background: var(--info-50); border-color: var(--info); }
+        .icon-btn.danger:hover { background: var(--red-50); }
+        .icon-btn.warn:hover { background: var(--warn-50); }
+        .icon-btn.info:hover { background: var(--info-50); }
 
         /* Gaya Tabel Presisi Desktop */
         .users-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
-        .users-table th { padding: 10px 14px; background: var(--bg); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid var(--line); }
+        .users-table th { padding: 10px 14px; background: var(--bg); color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid var(--line); }
         .users-table td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; transition: background 0.15s; word-wrap: break-word; }
-        .users-table tbody tr:hover td { background-color: var(--bg); }
+        .users-table tbody tr:hover td { background-color: var(--hover); }
         .users-table tbody tr:last-child td { border-bottom: none; }
 
         /* 📱 MEDIA QUERY UNTUK HP */
         @media (max-width: 768px) {
-          .admin-wrapper { flex-direction: column; gap: 16px; }
+          .admin-wrapper { flex-direction: column; gap: 12px; }
           .form-col { position: static; width: 100% !important; flex: none; padding: 18px !important; }
           .table-col { width: 100% !important; flex: none; padding: 16px !important; }
           .input-grid { grid-template-columns: 1fr !important; } /* Tumpuk input yang bersebelahan di HP */
@@ -382,7 +349,7 @@ export default function UserManagementPage() {
           .users-table tr {
             display: block; width: 100%; margin-bottom: 10px;
             background: var(--surface); border: 1px solid var(--line);
-            border-radius: 10px;
+            border-radius: 16px;
           }
           .users-table td {
             display: block; width: 100%; padding: 12px 14px !important;
@@ -394,28 +361,8 @@ export default function UserManagementPage() {
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="site-header">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> {adminName}
-        </div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="admin-hero">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 3px 0", fontSize: "clamp(18px, 4vw, 22px)", fontWeight: 700, color: "var(--ink)" }}>Manajemen Pengguna</h1>
-          <p style={{ margin: "0", fontSize: "13px", color: "var(--muted)" }}>
-            {akuSuperAdmin ? "Kelola akses login SEMUA wilayah (Super Admin)" : `Kelola akses login staf wilayah ${daerahSaya || "-"}`}
-          </p>
-        </div>
-      </div>
-
       {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1200px", margin: "20px auto 0", padding: "0 15px", width: "100%" }}>
+      <div>
 
         <div className="admin-wrapper">
 
@@ -541,7 +488,7 @@ export default function UserManagementPage() {
               </div>
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button type="submit" disabled={isLoading || isUploadingFoto} style={{ flex: 1, padding: "13px", background: (isLoading || isUploadingFoto) ? "var(--muted)" : (isEditMode ? "var(--warn)" : "var(--info)"), color: "white", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13.5px", cursor: (isLoading || isUploadingFoto) ? "not-allowed" : "pointer", transition: "0.15s" }}>
+                <button type="submit" disabled={isLoading || isUploadingFoto} style={{ flex: 1, padding: "13px", background: isEditMode ? "var(--warn-solid)" : "var(--brand)", opacity: (isLoading || isUploadingFoto) ? 0.6 : 1, color: "#fff", border: "none", borderRadius: "14px", fontWeight: 600, fontSize: "13.5px", cursor: (isLoading || isUploadingFoto) ? "not-allowed" : "pointer", transition: "0.15s" }}>
                   {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Daftarkan Akun")}
                 </button>
                 {isEditMode && (
@@ -600,7 +547,7 @@ export default function UserManagementPage() {
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={user.foto_url} alt={user.nama} style={{ width: "38px", height: "38px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                             ) : (
-                              <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: deptColor, color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>
+                              <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: deptBg, color: deptColor, display: "flex", justifyContent: "center", alignItems: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>
                                 {getInitials(user.nama)}
                               </div>
                             )}
@@ -659,6 +606,6 @@ export default function UserManagementPage() {
 
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }
