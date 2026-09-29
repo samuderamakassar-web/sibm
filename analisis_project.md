@@ -2570,3 +2570,12 @@ Tambahan tema (`admin-theme.css`): kelas bersama `.sa-tabs/.sa-tab`, `.sa-btn` (
 **Pola "gotcha" saat migrasi halaman berikutnya** (cek tiap halaman): teks putih di atas `var(--accent)`/`var(--ink)`/`var(--ok)` (di mode gelap token itu jadi terang → pakai `.sa-btn is-dark/is-primary` atau `--*-solid`), hex hardcode `#f5f3ff`/`white`/`#fff` sebagai latar, `var(--red-500)` (tidak ada di tema), header modal `background: var(--ink)`.
 
 **`monitor-ob` SELESAI** (commit `427f5b2`, SUDAH DI-DEPLOY): 4 tab jadi `sa-tabs` + badge jumlah; tabel Log Pembersihan & 3 tabel Stok (`.ob-table`) jadi kartu per baris di layar ≤768px (**§51F beres**), tabel Plot tetap tabel + kolom tanggal `position: sticky`; chip YA/TIDAK, badge Rusak, "Beli X pcs", chip kondisi inspeksi dipindah ke `--brand`/`--ok-solid`/warna tint. **Grup Pantau Laporan Tim (6 halaman) SELESAI semua.** Berikutnya grup master data (§58E poin 2).
+
+### 58G. Migrasi Grup Master Data (29 September 2026, lanjutan)
+7 halaman SELESAI & **SUDAH DI-DEPLOY** (commit `34cdbe5` + `389a9ac`): `laptop`, `legalitas` (kartu statistik jadi tile berwarna, tombol "Tambah" pindah ke slot `actions` AdminShell, form modal diberi `htmlFor`/`id`), `karyawan` (Card → Tile), `uji-emisi` & `apar` (tombol kembali tetap ke `/dashboard/qhse` untuk user QHSE via prop `backHref`/`backLabel`; header tabel emisi kuning hardcode → `--warn-50`; chip lantai APAR putih-di-atas-`--ink-soft` → `--chip`; versi cetak QR tetap), `users` (gaya flat §57B diganti bento; avatar & submit tidak lagi teks putih di atas token), `kendaraan` (tab Daftar/Riwayat → `sa-tabs`, isi tetap pakai ui/Card dll).
+
+**Komponen bersama dibuat sadar-tema TANPA mengubah halaman non-admin:**
+- `ui/Modal`: latar `var(--surface, white)`, teks `var(--ink, inherit)`, tombol tutup `var(--hover/--ink-soft, <lama>)` + `aria-label="Tutup"`. Sebelumnya latar `white` hardcode → form di modal tak terbaca di mode gelap (dipakai 7 halaman admin).
+- `ui/Card, Input, Select, Textarea, Table, Button (secondary/ghost)`: warna jadi `var(--ui-*, <warna lama>)`. Variabel `--ui-*` HANYA didefinisikan di `.sibm-admin` (admin-theme.css, dirujuk ke token tema via `var()` supaya ikut blok gelap), jadi portal & dashboard staf identik seperti sebelumnya.
+
+**Grup Pantau (6) + Master Data (7) + hub = 14 halaman admin sudah Bento.** Sisa (§58E poin 3): `helpdesk`, `atk`, `overtime`, `broadcast`, `survei-kepuasan`, `sop`, `report`, `qr-manager`, `handbook-magang`, `monitor-cron`, `monitor-absensi`.
