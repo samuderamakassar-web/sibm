@@ -176,13 +176,7 @@
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: var(--ink);
-  color: var(--ground);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 16px;
+  background: #fff;
   flex-shrink: 0;
 }
 .sa-logo-sub {
