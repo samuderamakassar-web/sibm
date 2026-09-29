@@ -9,17 +9,12 @@ import { useConfirm } from "../ui/ConfirmProvider";
 import Modal from "../ui/Modal";
 import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../../lib/unitBisnis";
 import { normalizePlat } from "../../lib/platUtils";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconEdit = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
 );
@@ -105,7 +100,7 @@ const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Jul
 
 const jenisBadgeColor = (j: JenisPengunjung) => {
   if (j === "Karyawan") return { bg: "var(--info-50)", color: "var(--info)" };
-  if (j === "Magang") return { bg: "#f5f3ff", color: "var(--accent)" };
+  if (j === "Magang") return { bg: "var(--accent-50)", color: "var(--accent)" };
   return { bg: "var(--red-50)", color: "var(--red-600)" };
 };
 
@@ -587,41 +582,10 @@ export default function BukuTamuSecurity() {
   );
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Buku Tamu Digital" subtitle="Registrasi dan pemantauan pergerakan akses area SIBM" userName={picName || "Staf"} backHref={"/dashboard/security"} backLabel={"Dashboard Security"}>
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
-        .pic-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
-
-        .page-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 36px 20px 60px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .page-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .page-hero-content { position: relative; }
 
         .tab-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
         .tab-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; flex: 1; scrollbar-width: none; }
@@ -631,20 +595,20 @@ export default function BukuTamuSecurity() {
         .tab-pill .count { padding: 2px 8px; border-radius: 20px; font-size: 11px; background: var(--line); color: var(--ink-soft); }
         .tab-pill.active .count.aktif { background: var(--ok-50); color: var(--ok); }
         .tab-pill.active .count.riwayat { background: var(--warn-50); color: var(--warn); }
-        .export-btn { background: var(--ok); color: white; padding: 11px 18px; border: none; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px rgba(22,163,74,0.2); transition: 0.2s; font-family: inherit; flex-shrink: 0; }
+        .export-btn { background: var(--ok-solid); color: white; padding: 11px 18px; border: none; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px rgba(22,163,74,0.2); transition: 0.2s; font-family: inherit; flex-shrink: 0; }
         .export-btn:hover { transform: translateY(-2px); }
 
         .panel { background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border: 1px solid var(--line); }
 
         .type-toggle { display: flex; gap: 10px; margin-bottom: 26px; background: var(--bg); padding: 8px; border-radius: 16px; border: 1px solid var(--line); }
         .type-btn { flex: 1; padding: 12px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; background: transparent; color: var(--muted); font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
-        .type-btn.tamu.active { background: var(--red-600); color: white; box-shadow: 0 4px 6px rgba(220,38,38,0.3); }
-        .type-btn.karyawan.active { background: var(--info); color: white; box-shadow: 0 4px 6px rgba(37,99,235,0.3); }
+        .type-btn.tamu.active { background: var(--brand); color: white; box-shadow: 0 4px 6px rgba(220,38,38,0.3); }
+        .type-btn.karyawan.active { background: var(--info-solid); color: white; box-shadow: 0 4px 6px rgba(37,99,235,0.3); }
 
         .kategori-toggle { display: flex; gap: 8px; }
         .kategori-btn { flex: 1; padding: 12px 8px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; border: 1px solid var(--line); background: var(--bg); color: var(--muted); }
         .kategori-btn.tamu.active { border: 2px solid var(--red-600); background: var(--red-50); color: var(--red-600); }
-        .kategori-btn.magang.active { border: 2px solid var(--accent); background: #f5f3ff; color: var(--accent); }
+        .kategori-btn.magang.active { border: 2px solid var(--accent); background: var(--accent-50); color: var(--accent); }
 
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; position: relative; }
         .form-field { display: flex; flex-direction: column; }
@@ -690,24 +654,7 @@ export default function BukuTamuSecurity() {
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="top-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button className="back-btn" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /></button>
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Buku Tamu Digital</span>
-        </div>
-        <div className="pic-badge"><IconUserCircle size={14} /> {picName}</div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="page-hero">
-        <div className="page-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>BUKU TAMU DIGITAL</h1>
-          <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Registrasi dan pemantauan pergerakan akses area SIBM</p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div>
 
         {/* 🔹 NAVIGASI TAB + EXPORT EXCEL */}
         <div className="tab-row">
@@ -781,7 +728,7 @@ export default function BukuTamuSecurity() {
                   </div>
                 ) : kategoriEksternal === "Magang" ? (
                   <div style={{ position: "relative" }}>
-                    <input type="text" value={searchMagang} onChange={(e) => { setSearchMagang(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} required placeholder="Ketik nama anak magang..." style={{ border: "2px solid var(--accent)", background: "#f5f3ff", color: "var(--accent)", fontWeight: "bold" }} />
+                    <input type="text" value={searchMagang} onChange={(e) => { setSearchMagang(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} required placeholder="Ketik nama anak magang..." style={{ border: "2px solid var(--accent)", background: "var(--accent-50)", color: "var(--accent)", fontWeight: "bold" }} />
 
                     {showDropdown && searchMagang && filteredMagang.length > 0 && (
                       <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "12px", marginTop: "8px", zIndex: 50, maxHeight: "250px", overflowY: "auto", boxShadow: "0 10px 25px rgba(0,0,0,0.15)" }}>
@@ -839,7 +786,7 @@ export default function BukuTamuSecurity() {
                       <div style={{ position: "relative", display: "inline-block" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={fotoBukti} alt="Bukti Kedatangan" style={{ height: "150px", borderRadius: "12px", border: "3px solid var(--accent)", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }} />
-                        <button type="button" onClick={hapusFoto} style={{ position: "absolute", top: "-15px", right: "-15px", background: "var(--red-600)", color: "white", border: "3px solid white", borderRadius: "50%", width: "40px", height: "40px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={16} color="white" /></button>
+                        <button type="button" onClick={hapusFoto} style={{ position: "absolute", top: "-15px", right: "-15px", background: "var(--brand)", color: "#fff", border: "3px solid white", borderRadius: "50%", width: "40px", height: "40px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={16} color="white" /></button>
                       </div>
                     ) : (
                       <button type="button" onClick={bukaKamera} className="foto-open-btn">
@@ -877,7 +824,7 @@ export default function BukuTamuSecurity() {
                       <div style={{ position: "relative", display: "inline-block" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={fotoBukti} alt="Bukti Kedatangan" style={{ height: "150px", borderRadius: "12px", border: "3px solid var(--red-600)", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }} />
-                        <button type="button" onClick={hapusFoto} style={{ position: "absolute", top: "-15px", right: "-15px", background: "var(--red-600)", color: "white", border: "3px solid white", borderRadius: "50%", width: "40px", height: "40px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={16} color="white" /></button>
+                        <button type="button" onClick={hapusFoto} style={{ position: "absolute", top: "-15px", right: "-15px", background: "var(--brand)", color: "#fff", border: "3px solid white", borderRadius: "50%", width: "40px", height: "40px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={16} color="white" /></button>
                       </div>
                     ) : (
                       <button type="button" onClick={bukaKamera} className="foto-open-btn">
@@ -889,7 +836,7 @@ export default function BukuTamuSecurity() {
               )}
 
               <div className="form-field span-2" style={{ marginTop: "16px" }}>
-                <button type="submit" disabled={isLoading} className="submit-btn" style={{ background: isLoading ? "#a0aec0" : (jenisPengunjung === "Tamu Eksternal" ? "var(--red-600)" : "var(--info)"), cursor: isLoading ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 10px 15px -3px ${jenisPengunjung === "Tamu Eksternal" ? "rgba(220,38,38,0.4)" : "rgba(37,99,235,0.4)"}` }}>
+                <button type="submit" disabled={isLoading} className="submit-btn" style={{ background: isLoading ? "#a0aec0" : (jenisPengunjung === "Tamu Eksternal" ? "var(--brand)" : "var(--info-solid)"), cursor: isLoading ? "not-allowed" : "pointer", boxShadow: isLoading ? "none" : `0 10px 15px -3px ${jenisPengunjung === "Tamu Eksternal" ? "rgba(220,38,38,0.4)" : "rgba(37,99,235,0.4)"}` }}>
                   {isLoading ? "Menyimpan Data..." : `Check-In ${jenisPengunjung === "Tamu Eksternal" ? kategoriEksternal : jenisPengunjung}`}
                 </button>
               </div>
@@ -957,7 +904,7 @@ export default function BukuTamuSecurity() {
                       <td style={{ textAlign: "center" }}>
                         <button
                           onClick={() => handleCheckOut(visitor.id, visitor.nama)}
-                          style={{ padding: "8px 14px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "11px", boxShadow: "0 2px 4px rgba(220,38,38,0.2)", transition: "0.2s", whiteSpace: "nowrap" }}
+                          style={{ padding: "8px 14px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "11px", boxShadow: "0 2px 4px rgba(220,38,38,0.2)", transition: "0.2s", whiteSpace: "nowrap" }}
                         >
                           Check-Out ➔
                         </button>
@@ -1094,9 +1041,9 @@ export default function BukuTamuSecurity() {
       {/* 🔹 OVERLAY KAMERA */}
       {isCameraOpen && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 100, display: "flex", flexDirection: "column", backdropFilter: "blur(10px)" }}>
-          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+          <div style={{ padding: "20px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
             <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "10px" }}><IconCamera size={18} /> Arahkan Wajah / KTP</span>
-            <button onClick={matikanKamera} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}><IconX size={18} color="white" /></button>
+            <button onClick={matikanKamera} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}><IconX size={18} color="white" /></button>
           </div>
 
           <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
@@ -1107,7 +1054,7 @@ export default function BukuTamuSecurity() {
           </div>
 
           <div style={{ padding: "40px", display: "flex", justifyContent: "center", background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-            <button onClick={ambilFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: "white", border: "6px solid rgba(255,255,255,0.3)", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.5)", transition: "transform 0.1s" }} onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.9)"} onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}></button>
+            <button onClick={ambilFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: "var(--surface)", border: "6px solid rgba(255,255,255,0.3)", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.5)", transition: "transform 0.1s" }} onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.9)"} onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}></button>
           </div>
         </div>
       )}
@@ -1120,12 +1067,12 @@ export default function BukuTamuSecurity() {
           </div>
           <h3 style={{ margin: "0 0 8px 0", fontSize: "17px", fontWeight: 800, color: "var(--ink)" }}>Nama Karyawan Tidak Sesuai</h3>
           <p style={{ margin: "0 0 22px 0", fontSize: "13px", color: "var(--muted)" }}>Nama yang Anda ketik tidak ditemukan di Master Data Karyawan. Silakan ketik ulang dan pilih nama dari daftar saran yang muncul.</p>
-          <button onClick={() => setShowInvalidKaryawanModal(false)} style={{ width: "100%", padding: "12px", borderRadius: "12px", border: "none", background: "var(--info)", color: "white", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
+          <button onClick={() => setShowInvalidKaryawanModal(false)} style={{ width: "100%", padding: "12px", borderRadius: "12px", border: "none", background: "var(--info-solid)", color: "#fff", fontWeight: 700, fontSize: "13px", fontFamily: "inherit", cursor: "pointer" }}>
             Mengerti
           </button>
         </div>
       </Modal>
 
-    </div>
+    </AdminShell>
   );
 }

@@ -14,17 +14,12 @@ import Select from "../../../../components/ui/Select";
 import Textarea from "../../../../components/ui/Textarea";
 import Badge from "../../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../../components/ui/Table";
+import AdminShell from "../../../../components/admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconInboxDown = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /><path d="M12 4v6M9.5 8 12 10.5 14.5 8" /></svg>
 );
@@ -364,41 +359,10 @@ export default function PaketPage() {
   };
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Manajemen Paket Masuk" subtitle="Pencatatan resi kurir, surat, dan paket karyawan SIBM" userName={picName || "Staf"} backHref={"/dashboard/security"} backLabel={"Dashboard Security"} actions={<span className="sa-clock" aria-live="off"><IconClock size={14} /> {waktuSekarang || "Memuat waktu..."}</span>}>
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
-        .pic-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
-
-        .page-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 36px 20px 55px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .page-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .page-hero-content { position: relative; }
         .page-hero-badge {
           display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
           backdrop-filter: blur(5px); padding: 6px 16px; border-radius: 50px; font-size: 12px; font-weight: 700;
@@ -430,27 +394,7 @@ export default function PaketPage() {
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="top-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button className="back-btn" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /></button>
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Manajemen Paket</span>
-        </div>
-        <div className="pic-badge"><IconUserCircle size={14} /> {picName}</div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="page-hero">
-        <div className="page-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>MANAJEMEN PAKET MASUK</h1>
-          <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Pencatatan resi kurir, surat, dan paket karyawan SIBM</p>
-          <div className="page-hero-badge">
-            <IconClock size={14} /> {waktuSekarang || "Memuat waktu..."}
-          </div>
-        </div>
-      </div>
-
-      <div className="paket-layout" style={{ maxWidth: "1200px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div className="paket-layout">
         <Card style={{ flex: "1 1 350px" }}>
           <h3 className="panel-title">
             <span className="panel-title-icon"><IconInboxDown size={18} /></span> Input Penerimaan
@@ -508,7 +452,7 @@ export default function PaketPage() {
                 <div style={{ position: "relative", display: "inline-block" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={previewUrl} alt="Preview" style={{ height: "150px", borderRadius: "10px", border: "1px solid var(--line)", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />
-                  <button type="button" onClick={() => setPreviewUrl("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "50%", width: "26px", height: "26px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={12} color="white" /></button>
+                  <button type="button" onClick={() => setPreviewUrl("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: "50%", width: "26px", height: "26px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={12} color="white" /></button>
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
@@ -614,9 +558,9 @@ export default function PaketPage() {
 
       {isCameraActive && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 100, display: "flex", flexDirection: "column", backdropFilter: "blur(10px)" }}>
-          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+          <div style={{ padding: "20px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
             <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "10px" }}><IconCamera size={18} /> {cameraMode === "serahkan" ? "Foto Bukti Serah Terima" : "Foto Fisik Paket"}</span>
-            <button onClick={stopCamera} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}><IconX size={18} color="white" /></button>
+            <button onClick={stopCamera} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}><IconX size={18} color="white" /></button>
           </div>
 
           <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
@@ -626,7 +570,7 @@ export default function PaketPage() {
           </div>
 
           <div style={{ padding: "40px", display: "flex", justifyContent: "center", background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-            <button onClick={capturePhoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: "white", border: "6px solid rgba(255,255,255,0.3)", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}></button>
+            <button onClick={capturePhoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: "var(--surface)", border: "6px solid rgba(255,255,255,0.3)", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}></button>
           </div>
         </div>
       )}
@@ -634,11 +578,11 @@ export default function PaketPage() {
       {/* 🔹 MODAL SERAH TERIMA — wajib foto bukti sebelum status berubah jadi "Sudah Diambil" */}
       {serahkanTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px" }}>
-          <div style={{ background: "white", width: "100%", maxWidth: "420px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", boxSizing: "border-box" }}>
-            <button onClick={() => setSerahkanTarget(null)} style={{ position: "absolute", top: "15px", right: "15px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} /></button>
+          <div style={{ background: "var(--surface)", width: "100%", maxWidth: "420px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", boxSizing: "border-box" }}>
+            <button onClick={() => setSerahkanTarget(null)} style={{ position: "absolute", top: "15px", right: "15px", background: "var(--hover)", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "var(--ink-soft)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} /></button>
 
-            <h2 style={{ margin: "0 0 4px 0", color: "#1a202c", fontSize: "18px", fontWeight: 800, paddingRight: "30px" }}>Serah Terima Paket</h2>
-            <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "13px" }}>
+            <h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "18px", fontWeight: 800, paddingRight: "30px" }}>Serah Terima Paket</h2>
+            <p style={{ margin: "0 0 20px 0", color: "var(--ink-soft)", fontSize: "13px" }}>
               Konfirmasi <b>{serahkanTarget.jenis_barang}</b> ({serahkanTarget.kurir}) diserahkan kepada <b style={{ color: "var(--info)" }}>{serahkanTarget.penerima}</b>.
             </p>
 
@@ -649,7 +593,7 @@ export default function PaketPage() {
                 <div style={{ position: "relative", display: "inline-block" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={fotoSerahTerima} alt="Preview" style={{ height: "150px", borderRadius: "10px", border: "1px solid var(--line)", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />
-                  <button type="button" onClick={() => setFotoSerahTerima("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "50%", width: "26px", height: "26px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={12} color="white" /></button>
+                  <button type="button" onClick={() => setFotoSerahTerima("")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: "50%", width: "26px", height: "26px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}><IconX size={12} color="white" /></button>
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
@@ -674,13 +618,13 @@ export default function PaketPage() {
       {/* 🔹 MODAL DETAIL PAKET — riwayat lengkap: kapan tiba, diinput siapa, diambil siapa, foto before/after */}
       {detailTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px" }}>
-          <div style={{ background: "white", width: "100%", maxWidth: "480px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
-            <button onClick={() => setDetailTarget(null)} style={{ position: "absolute", top: "15px", right: "15px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}><IconX size={16} /></button>
+          <div style={{ background: "var(--surface)", width: "100%", maxWidth: "480px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
+            <button onClick={() => setDetailTarget(null)} style={{ position: "absolute", top: "15px", right: "15px", background: "var(--hover)", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "var(--ink-soft)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}><IconX size={16} /></button>
 
-            <h2 style={{ margin: "0 0 4px 0", color: "#1a202c", fontSize: "18px", fontWeight: 800, paddingRight: "30px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <h2 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "18px", fontWeight: 800, paddingRight: "30px", display: "flex", alignItems: "center", gap: "8px" }}>
               <IconPackage size={18} color="var(--red-600)" /> {detailTarget.jenis_barang}
             </h2>
-            <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "13px" }}>
+            <p style={{ margin: "0 0 20px 0", color: "var(--ink-soft)", fontSize: "13px" }}>
               Kurir/Ekspedisi: <b>{detailTarget.kurir}</b>{detailTarget.keterangan ? ` · ${detailTarget.keterangan}` : ""}
             </p>
 
@@ -731,6 +675,6 @@ export default function PaketPage() {
           </div>
         </div>
       )}
-    </div>
+    </AdminShell>
   );
 }

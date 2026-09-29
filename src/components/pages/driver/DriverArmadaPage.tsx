@@ -8,14 +8,12 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
 import { normalizePlat } from "../../../lib/platUtils";
+import AdminShell from "../../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security/parkir (tampilan dibuat sama persis)
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
 );
@@ -339,41 +337,10 @@ export default function DriverArmadaPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Armada Saya" subtitle="Catat pergerakan kendaraan — cukup 1 tombol, status Anda otomatis tersinkron" userName={activeDriver || "Staf"} backHref={"/dashboard/driver"} backLabel={"Menu Driver"} actions={<span className="sa-clock" aria-live="off"><IconClock size={14} /> {waktuSekarang || "Memuat waktu..."}</span>}>
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
-        .pic-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
-
-        .page-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 36px 20px 55px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .page-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .page-hero-content { position: relative; }
         .page-hero-badge {
           display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
           backdrop-filter: blur(5px); padding: 6px 16px; border-radius: 50px; font-size: 12px; font-weight: 700;
@@ -427,27 +394,7 @@ export default function DriverArmadaPage() {
       `}} />
 
       {/* NAVBAR */}
-      <div className="top-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button className="back-btn" onClick={() => router.push("/dashboard/driver")}><IconArrowLeft size={16} /></button>
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Log & Daftar Kendaraan</span>
-        </div>
-        <div className="pic-badge"><IconUserCircle size={14} /> {activeDriver}</div>
-      </div>
-
-      {/* HERO SECTION */}
-      <div className="page-hero">
-        <div className="page-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>🚙 ARMADA SAYA</h1>
-          <p style={{ margin: "0 0 15px 0", fontSize: "13px", opacity: 0.9 }}>Catat pergerakan kendaraan — cukup 1 tombol, status Anda otomatis tersinkron</p>
-          <div className="page-hero-badge">
-            <IconClock size={14} /> {waktuSekarang || "Memuat waktu..."}
-          </div>
-        </div>
-      </div>
-
-      {/* WRAPPER UTAMA */}
-      <div style={{ maxWidth: "1100px", margin: "-20px auto 0", padding: "0 20px", position: "relative", zIndex: 10, display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div>
 
         {/* 🔔 KENDARAAN SEDANG KELUAR — kartu notif per kendaraan yang masih "Keluar Beroperasi",
             tombol "Tiba Kantor Kembali" langsung menutup pergerakan (sama seperti klik Parkir/Standby) */}
@@ -665,7 +612,7 @@ export default function DriverArmadaPage() {
                 <label className="field-label">SPEEDOMETER (KM)</label>
                 <input type="number" placeholder="KM saat ini (Opsional)" value={kilometer} onChange={(e) => setKilometer(e.target.value)} className="field-input" />
               </div>
-              <button type="submit" disabled={isLoadingAksi} style={{ width: "100%", padding: "14px", background: "var(--info)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+              <button type="submit" disabled={isLoadingAksi} style={{ width: "100%", padding: "14px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
                 <IconSave size={15} /> {isLoadingAksi ? "Menyimpan..." : "Konfirmasi & Kirim"}
               </button>
             </form>
@@ -673,6 +620,6 @@ export default function DriverArmadaPage() {
         </div>
       )}
 
-    </div>
+    </AdminShell>
   );
 }

@@ -1,20 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../ui/ToastProvider";
 import { handleFotoUpload } from "../../../lib/uploadFoto";
+import AdminShell from "../../admin/AdminShell";
 
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 
 interface KendaraanMaster {
   id: string;
@@ -29,15 +22,15 @@ const JENIS_TANPA_FOTO = "Ganti Oli";
 const JENIS_SERVIS_BERKALA = "Servis Berkala";
 
 const sharedInputStyle = {
-  width: "100%", padding: "16px", borderRadius: "14px", border: "1px solid #cbd5e0",
-  fontSize: "15px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const,
-  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)", transition: "all 0.2s", color: "#2d3748"
+  width: "100%", padding: "16px", borderRadius: "14px", border: "1px solid var(--line)",
+  fontSize: "15px", background: "var(--bg)", outline: "none", boxSizing: "border-box" as const,
+  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)", transition: "all 0.2s", color: "var(--ink)"
 };
 
 // Kartu upload foto generik dipakai berulang (1 per jenis servis & 3 slot khusus Servis Berkala)
 function KartuUploadFoto({ label, url, isUploading, onUpload }: { label: string; url: string; isUploading: boolean; onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", border: url ? "1px solid #cbd5e0" : "1px dashed #fc8181", borderRadius: "10px", padding: "10px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "var(--bg)", border: url ? "1px solid var(--line)" : "1px dashed #fc8181", borderRadius: "10px", padding: "10px" }}>
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={label} style={{ width: "42px", height: "42px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
@@ -45,8 +38,8 @@ function KartuUploadFoto({ label, url, isUploading, onUpload }: { label: string;
         <span style={{ fontSize: "18px" }}>📸</span>
       )}
       <div style={{ flex: 1 }}>
-        <label style={{ display: "block", fontWeight: "700", marginBottom: "4px", fontSize: "11px", color: "#4a5568" }}>{label} *</label>
-        <label style={{ display: "inline-block", padding: "6px 12px", background: "white", border: "1px solid #cbd5e0", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", color: "#4a5568", cursor: "pointer" }}>
+        <label style={{ display: "block", fontWeight: "700", marginBottom: "4px", fontSize: "11px", color: "var(--ink-soft)" }}>{label} *</label>
+        <label style={{ display: "inline-block", padding: "6px 12px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", cursor: "pointer" }}>
           {isUploading ? "⏳ Mengunggah..." : (url ? "Ganti Foto" : "Wajib Upload Foto")}
           <input type="file" accept="image/*" capture="environment" onChange={onUpload} disabled={isUploading} style={{ display: "none" }} />
         </label>
@@ -56,7 +49,6 @@ function KartuUploadFoto({ label, url, isUploading, onUpload }: { label: string;
 }
 
 export default function DriverServisPage() {
-  const router = useRouter();
   const showToast = useToast();
 
   const { session, isReady } = useAuthGuard({
@@ -213,66 +205,29 @@ export default function DriverServisPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Servis, Emisi & Odometer" subtitle="Laporan ini langsung masuk Riwayat Kendaraan Admin" userName={activeDriver || "Staf"} backHref={"/dashboard/driver"} backLabel={"Menu Driver"}>
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
-        .pic-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
-        .page-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 30px 20px 45px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
       `}} />
 
-      <div className="top-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button className="back-btn" onClick={() => router.push("/dashboard/driver")}><IconArrowLeft size={16} /></button>
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Servis & Odometer</span>
-        </div>
-        <div className="pic-badge"><IconUserCircle size={14} /> {activeDriver}</div>
-      </div>
-
-      <div className="page-hero">
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(18px, 5vw, 24px)", fontWeight: "900" }}>🛠️ SERVIS, EMISI &amp; ODOMETER</h1>
-        <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Laporan ini langsung masuk Riwayat Kendaraan Admin</p>
-      </div>
-
-      <div style={{ maxWidth: "500px", margin: "-25px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
-        <div style={{ background: "white", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+      <div>
+        <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
 
           {kendaraanMaster.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e0" }}>
+            <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px", background: "var(--bg)", borderRadius: "12px", border: "1px dashed var(--line)" }}>
               Belum ada data kendaraan. Hubungi Admin untuk menambahkan kendaraan di Master Data.
             </div>
           ) : (
             <form onSubmit={handleSubmitServis} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div>
-                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>PILIH KENDARAAN *</label>
-                <select value={kendaraanId} onChange={(e) => setKendaraanId(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold", border: "2px solid #cbd5e0"}}>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>PILIH KENDARAAN *</label>
+                <select value={kendaraanId} onChange={(e) => setKendaraanId(e.target.value)} style={{...sharedInputStyle, fontWeight:"bold", border: "2px solid var(--line)"}}>
                   {kendaraanMaster.map(mobil => <option key={mobil.id} value={mobil.id}>{mobil.kendaraan}</option>)}
                 </select>
               </div>
 
               <div>
-                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>ODOMETER SAAT INI (KM) *</label>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>ODOMETER SAAT INI (KM) *</label>
                 <input
                   type="number" required placeholder="Contoh: 45200" value={odometerInput}
                   onChange={(e) => setOdometerInput(e.target.value)}
@@ -281,14 +236,14 @@ export default function DriverServisPage() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>JENIS SERVIS * (bisa pilih lebih dari 1)</label>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>JENIS SERVIS * (bisa pilih lebih dari 1)</label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {JENIS_OPSI.map(j => {
                     const dipilih = servisJenisTerpilih.includes(j);
                     return (
                       <button
                         key={j} type="button" onClick={() => toggleJenis(j)}
-                        style={{ padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: dipilih ? "2px solid #3182ce" : "1px solid #e2e8f0", background: dipilih ? "#ebf8ff" : "#f8fafc", color: dipilih ? "#2b6cb0" : "#718096" }}
+                        style={{ padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: dipilih ? "2px solid #3182ce" : "1px solid var(--line)", background: dipilih ? "var(--info-50)" : "var(--bg)", color: dipilih ? "var(--info)" : "var(--ink-soft)" }}
                       >
                         {dipilih ? "✓ " : ""}{j}
                       </button>
@@ -296,7 +251,7 @@ export default function DriverServisPage() {
                   })}
                 </div>
                 {servisJenisTerpilih.includes(JENIS_TANPA_FOTO) && (
-                  <div style={{ fontSize: "10px", color: "#718096", marginTop: "6px" }}>Info: Ganti Oli tidak perlu foto terpisah — sudah termasuk bagian Servis Berkala.</div>
+                  <div style={{ fontSize: "10px", color: "var(--ink-soft)", marginTop: "6px" }}>Info: Ganti Oli tidak perlu foto terpisah — sudah termasuk bagian Servis Berkala.</div>
                 )}
               </div>
 
@@ -315,7 +270,7 @@ export default function DriverServisPage() {
               )}
 
               {isServisBerkalaDipilih && (
-                <div style={{ border: "1px solid #edf2f7", borderRadius: "14px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ border: "1px solid var(--line)", borderRadius: "14px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
                   <div style={{ fontSize: "11px", fontWeight: "900", color: "#b7791f" }}>📋 SERVIS BERKALA — WAJIB 3 FOTO</div>
                   <KartuUploadFoto label="Foto Kendaraan" url={fotoBerkala.kendaraan} isUploading={uploadingBerkala.kendaraan} onUpload={(e) => handleFotoBerkalaUpload("kendaraan", e)} />
                   <KartuUploadFoto label="Foto KM (Odometer)" url={fotoBerkala.km} isUploading={uploadingBerkala.km} onUpload={(e) => handleFotoBerkalaUpload("km", e)} />
@@ -324,22 +279,22 @@ export default function DriverServisPage() {
               )}
 
               <div>
-                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>DESKRIPSI</label>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>DESKRIPSI</label>
                 <textarea placeholder="Contoh: Ganti oli mesin + filter di bengkel resmi" value={servisDeskripsi} onChange={(e) => setServisDeskripsi(e.target.value)} style={{ ...sharedInputStyle, height: "60px", resize: "none", fontSize: "13px" }} />
               </div>
 
               <div>
-                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "#4a5568" }}>BIAYA (OPSIONAL)</label>
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>BIAYA (OPSIONAL)</label>
                 <input type="text" placeholder="Contoh: 350000" value={servisBiaya} onChange={(e) => setServisBiaya(e.target.value)} style={sharedInputStyle} />
               </div>
 
-              <button type="submit" disabled={isSavingServis || adaUploadBerjalan} style={{ width: "100%", padding: "16px", background: isSavingServis ? "#a0aec0" : "#dd6b20", color: "white", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingServis ? "not-allowed" : "pointer", boxShadow: isSavingServis ? "none" : "0 4px 15px rgba(221, 107, 32, 0.3)" }}>
+              <button type="submit" disabled={isSavingServis || adaUploadBerjalan} style={{ width: "100%", padding: "16px", background: isSavingServis ? "#a0aec0" : "#dd6b20", color: "#fff", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingServis ? "not-allowed" : "pointer", boxShadow: isSavingServis ? "none" : "0 4px 15px rgba(221, 107, 32, 0.3)" }}>
                 {isSavingServis ? "Menyimpan..." : "✅ Kirim Laporan Servis"}
               </button>
             </form>
           )}
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }

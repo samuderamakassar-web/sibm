@@ -7,6 +7,7 @@ import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { hitungShiftSesi, waktuWITASekarang, sesiMinimumTerpenuhi, BATAS_SESI, MINIMUM_SESI_PER_SHIFT, ShiftSesiInfo } from "../../lib/shift";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -461,46 +462,20 @@ export default function PatroliSecurityPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Patroli Area" subtitle="Pemantauan keliling titik rawan Gedung SIBM" userName={picName || "Staf"} backHref={"/dashboard/security"} backLabel={"Dashboard Security"}>
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .back-link { background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-weight: bold; font-size: 14px; font-family: inherit; }
         .tab-switch { background: var(--bg); padding: 4px; border-radius: 10px; display: flex; gap: 4px; }
         .tab-btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
         .tab-btn.active { background: var(--surface); color: var(--red-600); box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
-
-        .page-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 36px 20px 70px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .page-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .page-hero-content { position: relative; }
 
         .panel { background: var(--surface); padding: 22px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border: 1px solid var(--line); }
         .floor-card { background: var(--surface); border-radius: 16px; overflow: hidden; }
         .floor-head { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .point-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--surface); border-radius: 10px; }
-        .scan-btn { background: var(--red-600); color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+        .scan-btn { background: var(--brand); color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; font-family: inherit; }
         .missed-input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(217,119,6,0.4); font-size: 13px; font-family: inherit; outline: none; }
 
         @media (max-width: 640px) {
@@ -510,31 +485,17 @@ export default function PatroliSecurityPage() {
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="top-bar">
-        <button className="back-link" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /> Kembali</button>
-
-        {/* FITUR TAB BARU (FORM VS HISTORY) */}
-        <div className="tab-switch">
-          <button onClick={() => setActiveTab("FORM")} className={`tab-btn ${activeTab === "FORM" ? "active" : ""}`}>
-            <IconSiren size={14} /> Lapor
-          </button>
-          <button onClick={() => setActiveTab("HISTORY")} className={`tab-btn ${activeTab === "HISTORY" ? "active" : ""}`}>
-            <IconHistory size={14} /> Riwayat
-          </button>
+      <div>
+        <div className="no-print staff-toolbar">
+          <div className="tab-switch">
+            <button onClick={() => setActiveTab("FORM")} className={`tab-btn ${activeTab === "FORM" ? "active" : ""}`}>
+              <IconSiren size={14} /> Lapor
+            </button>
+            <button onClick={() => setActiveTab("HISTORY")} className={`tab-btn ${activeTab === "HISTORY" ? "active" : ""}`}>
+              <IconHistory size={14} /> Riwayat
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="page-hero">
-        <div className="page-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PATROLI AREA</h1>
-          <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Pemantauan keliling titik rawan Gedung SIBM</p>
-        </div>
-      </div>
-
-      {/* 🔹 MAIN CONTENT */}
-      <div style={{ maxWidth: "800px", margin: "-45px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
 
         {/* ========================================================= */}
         {/* TAB 1: FORM PENGISIAN PATROLI                             */}
@@ -547,7 +508,7 @@ export default function PatroliSecurityPage() {
               Menu Lapor Patroli cuma bisa diisi selama jam shift Anda sedang berjalan sesuai jadwal Danru.
               {shiftSesiInfo ? ` Sekarang ${shiftSesiInfo.shift} · ${shiftSesiInfo.sesi} untuk petugas yang terjadwal.` : ""} Anda tetap bisa melihat seluruh riwayat laporan Anda.
             </p>
-            <button onClick={() => setActiveTab("HISTORY")} style={{ padding: "12px 22px", background: "var(--info)", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "inherit" }}>
+            <button onClick={() => setActiveTab("HISTORY")} style={{ padding: "12px 22px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "inherit" }}>
               <IconHistory size={14} /> Lihat Riwayat Lengkap
             </button>
           </div>
@@ -669,7 +630,7 @@ export default function PatroliSecurityPage() {
                   if (scannedItems.length === 0) return showToast("Belum ada titik yang dipatroli!", "warning");
                   setShowReview(true);
                   window.scrollTo({ top: 0, behavior: "smooth" });
-                }} style={{ width: "100%", padding: "18px", background: scannedItems.length === 0 ? "#a0aec0" : "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: scannedItems.length === 0 ? "not-allowed" : "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
+                }} style={{ width: "100%", padding: "18px", background: scannedItems.length === 0 ? "#a0aec0" : "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: scannedItems.length === 0 ? "not-allowed" : "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}>
                   <IconClipboardCheck size={16} /> Review Hasil Patroli ➔
                 </button>
               </div>
@@ -703,7 +664,7 @@ export default function PatroliSecurityPage() {
                   <button
                     onClick={handleSubmitFinal}
                     disabled={isLoading || belumLengkapAlasan}
-                    style={{ flex: 2, padding: "15px", background: (isLoading || belumLengkapAlasan) ? "#a0aec0" : "var(--red-600)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: (isLoading || belumLengkapAlasan) ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(220,38,38,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}
+                    style={{ flex: 2, padding: "15px", background: (isLoading || belumLengkapAlasan) ? "#a0aec0" : "var(--brand)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", cursor: (isLoading || belumLengkapAlasan) ? "not-allowed" : "pointer", boxShadow: "0 4px 6px rgba(220,38,38,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit" }}
                   >
                     {isLoading ? "Mengunggah..." : belumLengkapAlasan ? <><IconAlertTriangle size={14} /> Isi Alasan Dulu</> : <><IconRocket size={15} /> Kunci & Kirim Laporan</>}
                   </button>
@@ -794,7 +755,7 @@ export default function PatroliSecurityPage() {
               <button
                 onClick={() => setSudahCekRiwayat(true)}
                 disabled={riwayatSaya.length === 0}
-                style={{ width: "100%", padding: "14px", background: riwayatSaya.length === 0 ? "var(--muted)" : "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: riwayatSaya.length === 0 ? "not-allowed" : "pointer" }}
+                style={{ width: "100%", padding: "14px", background: riwayatSaya.length === 0 ? "var(--muted-solid)" : "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: riwayatSaya.length === 0 ? "not-allowed" : "pointer" }}
               >
                 🔍 Cek
               </button>
@@ -840,7 +801,7 @@ export default function PatroliSecurityPage() {
                         <div style={{ position: "relative" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={t.foto} alt="Titik" style={{ width: "100%", height: "200px", objectFit: "cover" }} />
-                          <div style={{ position: "absolute", bottom: "8px", right: "8px", background: "rgba(0,0,0,0.7)", color: "white", padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "bold" }}>{t.waktu_patroli}</div>
+                          <div style={{ position: "absolute", bottom: "8px", right: "8px", background: "rgba(0,0,0,0.7)", color: "#fff", padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "bold" }}>{t.waktu_patroli}</div>
                         </div>
                         <div style={{ padding: "10px" }}>
                           <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: "bold" }}>{t.id.split("::")[0]}</div>
@@ -865,21 +826,21 @@ export default function PatroliSecurityPage() {
       {/* ======================================= */}
       {scanTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", flexDirection: "column", backdropFilter: "blur(5px)" }}>
-          <div style={{ padding: "20px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+          <div style={{ padding: "20px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
             <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconMapPin size={16} /> Lokasi: {scanTarget.split("::")[1]}</span>
-            <button onClick={() => setScanTarget(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} color="white" /></button>
+            <button onClick={() => setScanTarget(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} color="white" /></button>
           </div>
           <div style={{ padding: "20px", background: "#1a202c", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", overflowY: "auto", justifyContent: "center" }}>
-            <div style={{ background: "white", padding: "15px", borderRadius: "16px", marginBottom: "20px", width: "100%", maxWidth: "400px" }}>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px", fontSize: "14px", color: "#4a5568" }}>Pilih Kondisi Titik:</label>
-              <select value={kondisiTitik} onChange={(e) => setKondisiTitik(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "2px solid #e2e8f0", fontWeight: "bold", color: kondisiTitik === "Aman Terkendali" ? "#38a169" : "#e53e3e", fontSize: "15px", outline: "none" }}>
+            <div style={{ background: "var(--surface)", padding: "15px", borderRadius: "16px", marginBottom: "20px", width: "100%", maxWidth: "400px" }}>
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px", fontSize: "14px", color: "var(--ink-soft)" }}>Pilih Kondisi Titik:</label>
+              <select value={kondisiTitik} onChange={(e) => setKondisiTitik(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "2px solid var(--line)", fontWeight: "bold", color: kondisiTitik === "Aman Terkendali" ? "#38a169" : "#e53e3e", fontSize: "15px", outline: "none" }}>
                 <option value="Aman Terkendali">✅ Aman Terkendali</option>
                 <option value="Ada Temuan / Mencurigakan">⚠️ Ada Temuan / Mencurigakan</option>
                 <option value="Pintu/Jendela Terbuka">🚪 Pintu/Jendela Terbuka</option>
                 <option value="Kebocoran Air">💧 Kebocoran Air</option>
               </select>
             </div>
-            <button onClick={() => { const targetNama = scanTarget.split("::")[1]; const targetId = scanTarget; setScanTarget(null); bukaKamera(targetId, targetNama); }} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "var(--info, #2563eb)", color: "white", border: "none", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit", fontWeight: "bold", fontSize: "15px" }}>
+            <button onClick={() => { const targetNama = scanTarget.split("::")[1]; const targetId = scanTarget; setScanTarget(null); bukaKamera(targetId, targetNama); }} style={{ width: "100%", maxWidth: "400px", padding: "15px", background: "var(--info, #2563eb)", color: "#fff", border: "none", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "inherit", fontWeight: "bold", fontSize: "15px" }}>
               <IconCamera size={16} /> Buka Kamera
             </button>
           </div>
@@ -892,11 +853,11 @@ export default function PatroliSecurityPage() {
       {photoTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000", zIndex: 1100, display: "flex", flexDirection: "column" }}>
           <div style={{ position: "absolute", top: 20, left: 20, right: 20, zIndex: 10, display: "flex", justifyContent: "space-between" }}>
-            <div style={{ background: "rgba(0,0,0,0.6)", color: "white", padding: "8px 15px", borderRadius: "20px", backdropFilter: "blur(5px)", fontSize: "12px" }}>
+            <div style={{ background: "rgba(0,0,0,0.6)", color: "#fff", padding: "8px 15px", borderRadius: "20px", backdropFilter: "blur(5px)", fontSize: "12px" }}>
               <div style={{ fontWeight: "bold", fontSize: "14px", color: "#fef08a", display: "flex", alignItems: "center", gap: "6px" }}><IconMapPin size={13} color="#fef08a" /> {photoTarget.nama}</div>
               <div>{currentTime}</div>
             </div>
-            <button onClick={matikanKamera} style={{ background: "rgba(255,0,0,0.8)", border: "none", color: "white", width: "40px", height: "40px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><IconX size={16} color="white" /></button>
+            <button onClick={matikanKamera} style={{ background: "rgba(255,0,0,0.8)", border: "none", color: "#fff", width: "40px", height: "40px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><IconX size={16} color="white" /></button>
           </div>
           <div style={{ flex: 1, position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
             <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }}></video>
@@ -904,11 +865,11 @@ export default function PatroliSecurityPage() {
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "120px", background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)", pointerEvents: "none" }}></div>
           </div>
           <div style={{ padding: "30px", display: "flex", justifyContent: "center", background: "#000" }}>
-            <button onClick={ambilFotoWatermark} disabled={isUploadingFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: isUploadingFoto ? "#a0aec0" : "white", border: "6px solid #e2e8f0", cursor: isUploadingFoto ? "not-allowed" : "pointer", boxShadow: "0 0 15px rgba(255,255,255,0.4)" }}></button>
+            <button onClick={ambilFotoWatermark} disabled={isUploadingFoto} style={{ width: "80px", height: "80px", borderRadius: "50%", background: isUploadingFoto ? "#a0aec0" : "white", border: "6px solid var(--line)", cursor: isUploadingFoto ? "not-allowed" : "pointer", boxShadow: "0 0 15px rgba(255,255,255,0.4)" }}></button>
           </div>
         </div>
       )}
 
-    </div>
+    </AdminShell>
   );
 }

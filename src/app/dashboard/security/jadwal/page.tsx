@@ -1,22 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useAuthGuard } from "../../../../hooks/useAuthGuard";
 import { useToast } from "../../../../components/ui/ToastProvider";
+import AdminShell from "../../../../components/admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
-const IconCrown = ({ size = 14, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 8 3 3 6-7 6 7 3-3-2 11H5z" /></svg>
-);
 const IconCalendar = ({ size = 14, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M8 3v4" /><path d="M16 3v4" /></svg>
 );
@@ -110,7 +104,6 @@ const warnaShift = (s: string) => {
 const labelShift = (s: string) => (s === "Shift 1" ? "S1" : s === "Shift 2" ? "S2" : s === "Izin" ? "Izin" : s === "Off" ? "X" : "—");
 
 export default function PengaturanJadwalSecurity() {
-  const router = useRouter();
   const showToast = useToast();
 
   // Akses & sesi login sekarang dari hook terpusat (menggantikan blok localStorage manual)
@@ -364,41 +357,10 @@ export default function PengaturanJadwalSecurity() {
   if (!isAuthReady || !isKalenderReady) return null;
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Penyusunan Roster" subtitle="Jadwal otomatis pola 2-2-2, lanjut otomatis antar periode — khusus Danru" userName={picName || "Staf"} backHref={"/dashboard/security"} backLabel={"Dashboard Security"}>
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
-        .danru-badge { display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid rgba(37,99,235,0.2); }
-
-        .page-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 36px 20px 60px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .page-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .page-hero-content { position: relative; }
 
         .panel { background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border: 1px solid var(--line); }
         .config-box { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; background: var(--bg); padding: 15px; border-radius: 12px; border: 1px solid var(--line); }
@@ -419,24 +381,7 @@ export default function PengaturanJadwalSecurity() {
       `}} />
 
       {/* NAVBAR */}
-      <div className="top-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button className="back-btn" onClick={() => router.push("/dashboard/security")}><IconArrowLeft size={16} /></button>
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "15px" }}>Penyusunan Roster</span>
-        </div>
-        <div className="danru-badge"><IconCrown size={14} /> Danru Desk</div>
-      </div>
-
-      {/* HERO SECTION */}
-      <div className="page-hero">
-        <div className="page-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(20px, 5vw, 28px)", fontWeight: "900", letterSpacing: "1px" }}>PENYUSUNAN ROSTER</h1>
-          <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Pembuatan Jadwal Cerdas (Otomatis Pola 2-2-2, Auto-Lanjut Antar Periode)</p>
-        </div>
-      </div>
-
-      {/* MAIN CONTENT */}
-      <div style={{ maxWidth: "1000px", margin: "-30px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div>
 
         <div className="panel">
 
@@ -467,7 +412,7 @@ export default function PengaturanJadwalSecurity() {
             </div>
             <button
               type="button" onClick={handleProsesPeriodeBerikutnya} disabled={sedangProsesPeriode}
-              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "13px", cursor: sedangProsesPeriode ? "default" : "pointer", background: sedangProsesPeriode ? "#a0aec0" : "var(--ok)", color: "white", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontFamily: "inherit" }}
+              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "13px", cursor: sedangProsesPeriode ? "default" : "pointer", background: sedangProsesPeriode ? "#a0aec0" : "var(--ok-solid)", color: "#fff", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontFamily: "inherit" }}
             >
               <IconArrowRight size={14} /> {sedangProsesPeriode ? "Memproses..." : "Proses Periode Berikutnya (lanjut otomatis + isi pola)"}
             </button>
@@ -554,6 +499,6 @@ export default function PengaturanJadwalSecurity() {
 
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }
