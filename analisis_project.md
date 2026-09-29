@@ -19,7 +19,7 @@ Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ula
 5. **Minta QHSE & Admin GA login + izinkan notifikasi browser sekali** (§47/§48C) — tanpa token FCM, push ke mereka gak akan sampai.
 6. **Coba upload 1 PDF & 1 video via `admin/handbook-magang`** (§49).
 7. **Fase 2 multi-daerah** (§56F) — scoping data operasional per daerah. SENGAJA ditunda sampai ada Admin Daerah kedua yang onboarding.
-8. **Kandidat perbaikan**: mobile `admin/monitor-ob` gak punya card-transform (§51F, sekalian dikerjakan saat migrasi Bento halaman itu); Manajemen Data Magang (§51E). Gaya flat Notion `admin/users` (§57B) DIGANTIKAN Bento Hangat (§58).
+8. **Kandidat perbaikan**: ~~mobile `admin/monitor-ob` card-transform (§51F)~~ beres di §58F; Manajemen Data Magang (§51E). Gaya flat Notion `admin/users` (§57B) DIGANTIKAN Bento Hangat (§58).
 9. **Sisa lama**: buat ulang pengumuman lama di `admin/broadcast` (§43F); **WAJIB** aktifkan akses non-browser di EmailJS (§41B); push notification pas app benar-benar tertutup (§39B poin 6); banner "masih login sebagai..." di portal (§40).
 
 ### Ringkasan sesi §52–§58 (terbaru dulu)
@@ -2569,4 +2569,4 @@ Tambahan tema (`admin-theme.css`): kelas bersama `.sa-tabs/.sa-tab`, `.sa-btn` (
 
 **Pola "gotcha" saat migrasi halaman berikutnya** (cek tiap halaman): teks putih di atas `var(--accent)`/`var(--ink)`/`var(--ok)` (di mode gelap token itu jadi terang → pakai `.sa-btn is-dark/is-primary` atau `--*-solid`), hex hardcode `#f5f3ff`/`white`/`#fff` sebagai latar, `var(--red-500)` (tidak ada di tema), header modal `background: var(--ink)`.
 
-Sisa grup ini: **`monitor-ob`** (836 baris, 3 tab + PDF + tab Plot) -- dikerjakan terpisah sekalian card-transform tabel di HP (§51F).
+**`monitor-ob` SELESAI** (commit `427f5b2`, SUDAH DI-DEPLOY): 4 tab jadi `sa-tabs` + badge jumlah; tabel Log Pembersihan & 3 tabel Stok (`.ob-table`) jadi kartu per baris di layar ≤768px (**§51F beres**), tabel Plot tetap tabel + kolom tanggal `position: sticky`; chip YA/TIDAK, badge Rusak, "Beli X pcs", chip kondisi inspeksi dipindah ke `--brand`/`--ok-solid`/warna tint. **Grup Pantau Laporan Tim (6 halaman) SELESAI semua.** Berikutnya grup master data (§58E poin 2).
