@@ -2598,3 +2598,12 @@ Commit `6554a3b`, **SUDAH DI-DEPLOY** (build terverifikasi memuat env Cloudinary
 - `sop`/`atk`: abu-abu gaya lama (`#cbd5e0`, `#f8fafc`, `#4a5568`, ...) diganti token.
 
 **Status migrasi**: 25/25 halaman `admin/*` selesai. Berikutnya (§58E poin 4-5): sisi staf (Security → OB/CS → Driver → QHSE; token perlu di-share keluar dari `components/admin` dulu) lalu **portal utama** paling akhir.
+
+### 58J. Sisi Staf Dimulai + Bug Periode Lembur (29 September 2026)
+**Bug data diperbaiki (commit `4b1e6d2`, SUDAH DI-DEPLOY)**: modal klaim lembur tim di dashboard Security, OB & CS, dan Driver menawarkan periode yang di-HARDCODE ("11 Juni - 10 Juli 2026 (Aktif)" + Mei/Juli). Sejak ±11 Agustus opsi "Aktif" sudah basi → klaim lembur tercatat dengan `periode` salah di `ga_overtime_requests`. Helper baru `src/lib/periodeLembur.ts` (`daftarPeriodeLembur()`/`periodeLemburAktif()`) menghitung siklus 11→10 lalu/aktif/depan dari tanggal WITA; format label sama dengan data lama. Diuji batas tgl 10/11 & pergantian tahun. **Data lama yang sudah terlanjur salah periode TIDAK dikoreksi otomatis** -- cek manual di `admin/overtime` (filter periode) kalau perlu untuk rekap payroll Agustus-September.
+
+**Fondasi staf**: `AdminShell` diperluas -- prop `brandSub` (label di samping logo) & `bottomNav` (nav bawah HP mengambang, `.sa-bottom-nav` + `.sa-nav-item` di admin-theme.css, `main` otomatis diberi ruang bawah). Staf memakai kelas tema yang SAMA (`.sibm-admin`), termasuk mode gelap & preferensi tema per perangkat.
+
+**Percontohan: dashboard Security** (commit `daf63a9`, SUDAH DI-DEPLOY): hero merah → kartu sapaan `Tile` brand, kartu jadwal/menu/roster → tile bento, bottom nav → prop `bottomNav`. Logika shift, tukar jaga, roster, cetak, eskalasi TIDAK diubah. Modal klaim lembur masih gaya lama (putih, terbaca di kedua mode) -- dirapikan saat halaman staf lain dimigrasi.
+
+Sisa sisi staf (±26 halaman): sub-halaman Security (patroli, buku tamu, paket, parkir, jadwal, tukar shift, inspeksi APAR, siram, SOP), OB & CS, Driver, QHSE, notifikasi, survei. Tunggu masukan user atas percontohan dulu sebelum menyebar.
