@@ -2579,3 +2579,12 @@ Tambahan tema (`admin-theme.css`): kelas bersama `.sa-tabs/.sa-tab`, `.sa-btn` (
 - `ui/Card, Input, Select, Textarea, Table, Button (secondary/ghost)`: warna jadi `var(--ui-*, <warna lama>)`. Variabel `--ui-*` HANYA didefinisikan di `.sibm-admin` (admin-theme.css, dirujuk ke token tema via `var()` supaya ikut blok gelap), jadi portal & dashboard staf identik seperti sebelumnya.
 
 **Grup Pantau (6) + Master Data (7) + hub = 14 halaman admin sudah Bento.** Sisa (§58E poin 3): `helpdesk`, `atk`, `overtime`, `broadcast`, `survei-kepuasan`, `sop`, `report`, `qr-manager`, `handbook-magang`, `monitor-cron`, `monitor-absensi`.
+
+### 58H. INSIDEN: Semua Upload Foto & Email Rusak Setelah Deploy dari Laptop Baru (29 September 2026)
+**Gejala** (screenshot user): toast "Gagal upload foto untuk Mushallah. Titik ini belum tercatat" di Patroli Security & "Gagal mengunggah foto" di Siram Tanaman.
+
+**Root cause**: laptop baru (§58D) tidak punya `.env.local` (gitignored). Variabel `NEXT_PUBLIC_*` ditanam ke kode SAAT `next build`, jadi SEMUA build dari mesin ini (mulai deploy §58C `54d49cc` s.d. `941f7d2`) mengirim upload ke `api.cloudinary.com/v1_1/undefined/...` dan EmailJS tanpa kunci. Dampak: SEMUA upload foto (patroli, siram, checklist OB, inspeksi/servis driver, foto admin, dokumen) + email notifikasi client-side gagal sejak deploy pertama 29 Sep sampai perbaikan ini. Data teks, login, push FCM, dan cron GitHub Actions TIDAK terdampak.
+
+**Fix**: `.env.local` dilengkapi dari dashboard (Cloudinary cloud `gsco39kb`, preset unsigned `sibm_storage`; EmailJS `service_0e8e85u` / `template_oriy1nw` / public key) -- HANYA nilai publik, API secret Cloudinary & private key EmailJS sengaja TIDAK dimasukkan (NEXT_PUBLIC_* terkirim ke browser). Build ulang (terverifikasi 11 titik upload ber-URL `v1_1/gsco39kb` di bundle) & redeploy. **Pencegahan**: `next.config.ts` (commit `46a07f6`) menggagalkan `next build` production kalau salah satu dari 5 variabel wajib kosong -- sudah diuji gagal dengan pesan jelas.
+
+**Pelajaran**: sebelum build/deploy dari mesin baru, cek `.env.local` dulu. Laporan patroli/siram yang gagal diunggah selama rentang ini TIDAK tercatat (toast memberi tahu staf "belum tercatat") -- kalau ada kewajiban yang jadi bolong, pertimbangkan evaluasi manual untuk rentang 29 Sep.
