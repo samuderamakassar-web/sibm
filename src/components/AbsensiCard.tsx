@@ -115,19 +115,19 @@ export default function AbsensiCard({ picName, departemen }: AbsensiCardProps) {
       {!sudahCheckin ? (
         <button
           onClick={handleCheckIn} disabled={isSaving}
-          style={{ padding: "10px 18px", background: "var(--ok, #16a34a)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "13px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
+          style={{ padding: "10px 18px", background: "var(--ok-solid, var(--ok, #16a34a))", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "13px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
         >
           {isSaving ? "Menyimpan..." : "✅ Absen Masuk"}
         </button>
       ) : !sudahCheckout ? (
         <button
           onClick={handleCheckOut} disabled={isSaving}
-          style={{ padding: "10px 18px", background: "var(--warn, #d97706)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "13px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
+          style={{ padding: "10px 18px", background: "var(--warn-solid, var(--warn, #d97706))", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "13px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
         >
           {isSaving ? "Menyimpan..." : "🚪 Absen Pulang"}
         </button>
       ) : (
-        <span style={{ padding: "8px 14px", background: "var(--ok, #16a34a)", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "12px" }}>Selesai ✓</span>
+        <span style={{ padding: "8px 14px", background: "var(--ok-solid, var(--ok, #16a34a))", color: "#fff", borderRadius: "12px", fontWeight: 700, fontSize: "12px" }}>Selesai ✓</span>
       )}
     </div>
   );

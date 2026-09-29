@@ -1,92 +1,212 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  collection,
+  getCountFromServer,
+  getDocs,
+  query,
+  Timestamp,
+  where,
+  type Query,
+} from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { tanggalISOWITASekarang } from "../../lib/shift";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
-import NotifikasiBellButton from "../../components/NotifikasiBellButton";
 import { useFcmSetup } from "../../hooks/useFcmSetup";
+import AdminShell from "../../components/admin/AdminShell";
+import AdminIcon, { type AdminIconName } from "../../components/admin/AdminIcon";
+import Tile from "../../components/admin/Tile";
+import styles from "./admin-hub.module.css";
 
-// Ikon SVG garis — set sama dengan portal utama (src/app/page.tsx) & shell subhalaman admin
-type IconProps = { size?: number; color?: string };
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
-const IconHome = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V21h13V9.5" /><path d="M9.5 21v-6h5v6" /></svg>
-);
-const IconIdCard = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="8.5" cy="11" r="2" /><path d="M6 16c.5-1.7 1.6-2.5 2.5-2.5s2 .8 2.5 2.5" /><path d="M14 10h5" /><path d="M14 13.5h5" /></svg>
-);
-const IconClipboard = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 11h6" /><path d="M9 15h6" /><path d="M9 19h3" /></svg>
-);
-const IconClock = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
-);
-const IconWrench = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.6 5l-6 6 2.6 2.6 6-6a4 4 0 0 0 5.6-5.6l-3 3-2.6-2.6 3-3z" /></svg>
-);
-const IconTruck = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13" /><rect x="3" y="13" width="18" height="5" rx="1.5" /><circle cx="7.5" cy="18.5" r="1.5" /><circle cx="16.5" cy="18.5" r="1.5" /></svg>
-);
-const IconShield = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z" /></svg>
-);
-const IconGraduationCap = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg>
-);
-const IconCar = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11" /><rect x="3" y="11" width="18" height="6" rx="1.5" /><circle cx="7.5" cy="17" r="1.5" /><circle cx="16.5" cy="17" r="1.5" /></svg>
-);
-const IconActivity = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2 8 4-16 2 8h6" /></svg>
-);
-const IconChevronRight = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-);
-const IconBuilding = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1" /><path d="M9 21v-4h6v4" /><path d="M8 7h1" /><path d="M8 11h1" /><path d="M8 15h1" /><path d="M15 7h1" /><path d="M15 11h1" /></svg>
-);
-const IconMegaphone = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1z" /><path d="M15 8a4 4 0 0 1 0 8" /><path d="M18 5a7.5 7.5 0 0 1 0 14" /></svg>
-);
-const IconBroom = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 3 11 11" /><path d="M11 11 4 18" /><path d="M4 18l-1.5 3.5L6 20" /><path d="M6.5 15.5 8 17" /><path d="M9 12.5 10.5 14" /></svg>
-);
-const IconPrinter = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="1.5" /><path d="M6 17v4h12v-4" /></svg>
-);
-const IconFileText = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M9.5 13h5" /><path d="M9.5 16.5h5" /></svg>
-);
-const IconLogOut = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
-);
-const IconFireExtinguisher = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 3v2" /><path d="M8 5h6l1 2H7z" /><path d="M9 7v3" /><path d="M15 7l4-2" /><path d="M9 10h4a3 3 0 0 1 3 3v8H8v-8a3 3 0 0 1 1-2z" /><path d="M8 15h8" /></svg>
-);
-const IconBook = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
-);
-const IconDroplet = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2s7 7.5 7 12a7 7 0 0 1-14 0c0-4.5 7-12 7-12z" /></svg>
-);
-const IconTrophy = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4" /><path d="M7 4h10v6a5 5 0 0 1-10 0V4z" /><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4" /><path d="M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4" /></svg>
-);
-const IconClipboardList = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 12h6M9 16h4" /></svg>
-);
-const IconLaptop = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5" /><path d="M2 19h20" /><path d="M9 19l1-2h4l1 2" /></svg>
-);
-const IconStamp = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3h8l2 6H6l2-6z" /><path d="M10 9v4a2 2 0 0 0 4 0V9" /><path d="M4 21l1.5-5h13L20 21" /><path d="M4 21h16" /></svg>
-);
-const IconRefreshCw = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></svg>
-);
+type Tone = "info" | "warn" | "ok" | "red" | "accent" | "teal";
+
+interface MenuItem {
+  title: string;
+  desc: string;
+  path: string;
+  icon: AdminIconName;
+}
+
+interface MenuGroup {
+  name: string;
+  tone: Tone;
+  items: MenuItem[];
+}
+
+// "Pantau Laporan Tim" tidak masuk MENU_GROUPS -- grup ini tampil sebagai kotak angka live
+// di bagian atas (PANTAU), jadi tidak diulang di daftar menu.
+const MENU_GROUPS: MenuGroup[] = [
+  {
+    name: "Manajemen Dasar",
+    tone: "info",
+    items: [
+      { title: "Manajemen Pengguna", desc: "Akun login staf operasional", path: "/admin/users", icon: "idCard" },
+      { title: "Master Data Karyawan", desc: "Direktori 70+ karyawan SIBM", path: "/admin/karyawan", icon: "building" },
+      { title: "Master Data Kendaraan", desc: "Foto, PIC, odometer, riwayat servis", path: "/admin/kendaraan", icon: "truck" },
+      { title: "Hasil Uji Emisi", desc: "Rekap uji emisi per kendaraan", path: "/admin/uji-emisi", icon: "car" },
+      { title: "Master Data Laptop", desc: "Masa sewa laptop tiap user", path: "/admin/laptop", icon: "laptop" },
+      { title: "Legalitas & Perizinan", desc: "Dokumen legal + riwayat versi", path: "/admin/legalitas", icon: "stamp" },
+    ],
+  },
+  {
+    name: "Layanan GA",
+    tone: "warn",
+    items: [
+      { title: "Pengumuman Gedung", desc: "Carousel info di portal utama", path: "/admin/broadcast", icon: "megaphone" },
+      { title: "Gudang ATK", desc: "Permintaan alat tulis kantor", path: "/admin/atk", icon: "clipboard" },
+      { title: "Persetujuan Overtime", desc: "Lembur AC & listrik", path: "/admin/overtime", icon: "clock" },
+      { title: "Helpdesk & Tiket Kerusakan", desc: "Keluhan & perbaikan gedung", path: "/admin/helpdesk", icon: "wrench" },
+    ],
+  },
+  {
+    name: "Skor & Pengembangan",
+    tone: "accent",
+    items: [
+      { title: "Rekap Poin Staf", desc: "Skor bulanan per departemen", path: "/admin/monitor-poin", icon: "trophy" },
+      { title: "Update Dokumen SOP", desc: "SOP/IK untuk tiap menu staf", path: "/admin/sop", icon: "book" },
+      { title: "Handbook Magang", desc: "Materi belajar PDF/video", path: "/admin/handbook-magang", icon: "graduationCap" },
+      { title: "Survei Kepuasan Gedung", desc: "Kuesioner pelayanan 2x/tahun", path: "/admin/survei-kepuasan", icon: "clipboardList" },
+    ],
+  },
+  {
+    name: "Alat & Master",
+    tone: "ok",
+    items: [
+      { title: "Master Data APAR", desc: "APAR per lantai & QR inspeksi", path: "/admin/apar", icon: "fireExtinguisher" },
+      { title: "QR Code Generator", desc: "Label titik patroli & kebersihan", path: "/admin/qr-manager", icon: "printer" },
+    ],
+  },
+  {
+    name: "Laporan & Sistem",
+    tone: "teal",
+    items: [
+      { title: "Laporan Eksekutif", desc: "Rekap bulanan PDF/print", path: "/admin/report", icon: "fileText" },
+      { title: "Kesehatan Notifikasi", desc: "Status cron reminder", path: "/admin/monitor-cron", icon: "activity" },
+    ],
+  },
+];
+
+type KunciHitungan =
+  | "ob"
+  | "security"
+  | "driver"
+  | "siram"
+  | "tukarShift"
+  | "overtime"
+  | "helpdesk"
+  | "atk"
+  | "legalitas"
+  | "laptop";
+
+interface PantauItem {
+  key: KunciHitungan;
+  title: string;
+  sub: string;
+  path: string;
+  icon: AdminIconName;
+  tone: Tone;
+}
+
+const PANTAU: PantauItem[] = [
+  { key: "ob", title: "OB & CS", sub: "checklist hari ini", path: "/admin/monitor-ob", icon: "broom", tone: "ok" },
+  { key: "security", title: "Security", sub: "laporan patroli hari ini", path: "/admin/monitor-security", icon: "shield", tone: "info" },
+  { key: "driver", title: "Driver", sub: "catatan armada hari ini", path: "/admin/monitor-driver", icon: "truck", tone: "warn" },
+  { key: "siram", title: "Siram Tanaman", sub: "dari 2 jendela hari ini", path: "/admin/monitor-dadakan", icon: "droplet", tone: "teal" },
+  { key: "tukarShift", title: "Tukar Shift", sub: "scan telat bulan ini", path: "/admin/monitor-tukar-shift", icon: "swap", tone: "red" },
+];
+
+interface TindakanItem {
+  key: KunciHitungan;
+  title: string;
+  sub: string;
+  path: string;
+  icon: AdminIconName;
+  tone: Tone;
+}
+
+const TINDAKAN: TindakanItem[] = [
+  { key: "overtime", title: "Persetujuan overtime", sub: "Request lembur tim menunggu", path: "/admin/overtime", icon: "clock", tone: "red" },
+  { key: "helpdesk", title: "Tiket helpdesk terbuka", sub: "Belum berstatus selesai", path: "/admin/helpdesk", icon: "wrench", tone: "warn" },
+  { key: "atk", title: "Permintaan ATK", sub: "Menunggu disiapkan", path: "/admin/atk", icon: "clipboard", tone: "info" },
+  { key: "legalitas", title: "Legalitas perlu diperpanjang", sub: "Berakhir ≤ 60 hari / lewat", path: "/admin/legalitas", icon: "stamp", tone: "warn" },
+  { key: "laptop", title: "Sewa laptop mau habis", sub: "Berakhir ≤ 90 hari / lewat", path: "/admin/laptop", icon: "laptop", tone: "accent" },
+];
+
+const TONE_VAR: Record<Tone, { bg: string; fg: string }> = {
+  info: { bg: "var(--info-50)", fg: "var(--info)" },
+  warn: { bg: "var(--warn-50)", fg: "var(--warn)" },
+  ok: { bg: "var(--ok-50)", fg: "var(--ok)" },
+  red: { bg: "var(--red-50)", fg: "var(--red-600)" },
+  accent: { bg: "var(--accent-50)", fg: "var(--accent)" },
+  teal: { bg: "var(--teal-50)", fg: "var(--teal)" },
+};
+
+type Hitungan = Partial<Record<KunciHitungan, number | null>>;
+
+function isoTambahHari(iso: string, hari: number): string {
+  const d = new Date(`${iso}T00:00:00+08:00`);
+  d.setDate(d.getDate() + hari);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(d);
+}
+
+async function hitung(q: Query): Promise<number> {
+  const snap = await getCountFromServer(q);
+  return snap.data().count;
+}
+
+// Angka beranda dihitung SEKALI tiap halaman dibuka (+ tombol refresh), BUKAN onSnapshot:
+// hitungan agregat Firestore jauh lebih murah (1 baca per 1000 dokumen yang cocok) daripada
+// listener real-time yang ikut tertagih tiap ada perubahan data. Semua filter sengaja cuma
+// 1 field (atau disaring di browser untuk data kecil) supaya tidak butuh index komposit baru.
+// Tiap hitungan berdiri sendiri: kalau satu gagal, yang lain tetap tampil (gagal = "—").
+async function muatHitungan(): Promise<Hitungan> {
+  const hariIni = tanggalISOWITASekarang();
+  const awalHari = Timestamp.fromDate(new Date(`${hariIni}T00:00:00+08:00`));
+  const awalBulan = new Date(`${hariIni.slice(0, 7)}-01T00:00:00+08:00`).getTime();
+
+  const tugas: Record<KunciHitungan, () => Promise<number>> = {
+    ob: () => hitung(query(collection(db, "ob_checklists"), where("tanggal", "==", hariIni))),
+    security: () => hitung(query(collection(db, "security_patrols"), where("waktu_laporan", ">=", awalHari))),
+    driver: () => hitung(query(collection(db, "operational_vehicle_logs"), where("waktu_catat", ">=", awalHari))),
+    siram: () => hitung(query(collection(db, "notifikasi_dadakan_siram"), where("tanggal", "==", hariIni))),
+    tukarShift: async () => {
+      const snap = await getDocs(query(collection(db, "security_shift_handover"), where("terlambat", "==", true)));
+      return snap.docs.filter((d) => {
+        const w = d.data().waktu_generate as Timestamp | null | undefined;
+        return !!w && w.toMillis() >= awalBulan;
+      }).length;
+    },
+    overtime: () => hitung(query(collection(db, "ga_overtime_requests"), where("status", "==", "Menunggu Approval GA"))),
+    helpdesk: () => hitung(query(collection(db, "helpdesk_tickets"), where("status", "!=", "Selesai"))),
+    atk: () => hitung(query(collection(db, "ga_atk_requests"), where("status", "==", "Menunggu Disiapkan"))),
+    legalitas: () => hitung(query(collection(db, "master_legalitas"), where("tanggal_berakhir_aktif", "<=", isoTambahHari(hariIni, 60)))),
+    laptop: async () => {
+      const snap = await getDocs(query(collection(db, "master_laptop"), where("tanggal_berakhir", "<=", isoTambahHari(hariIni, 90))));
+      return snap.docs.filter((d) => !d.data().dikembalikan).length;
+    },
+  };
+
+  const kunci = Object.keys(tugas) as KunciHitungan[];
+  const hasil = await Promise.allSettled(kunci.map((k) => tugas[k]()));
+  const out: Hitungan = {};
+  hasil.forEach((r, i) => {
+    out[kunci[i]] = r.status === "fulfilled" ? r.value : null;
+    if (r.status === "rejected") console.warn(`Hitungan beranda "${kunci[i]}" gagal:`, r.reason);
+  });
+  return out;
+}
+
+function sapaan(): string {
+  const jam = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "numeric", hour12: false }).format(new Date()));
+  if (jam < 11) return "Selamat pagi";
+  if (jam < 15) return "Selamat siang";
+  if (jam < 18) return "Selamat sore";
+  return "Selamat malam";
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -103,369 +223,185 @@ export default function AdminDashboardPage() {
   // push, bukan cuma masuk kotak masuk in-app.
   useFcmSetup(session?.nama || "", !!session?.nama, "Admin GA");
 
-  const handleLogout = () => logoutWithConfirm(confirm, router);
+  const [hitungan, setHitungan] = useState<Hitungan>({});
+  const [memuat, setMemuat] = useState(true);
+  const [diperbarui, setDiperbarui] = useState<Date | null>(null);
+  const [cari, setCari] = useState("");
 
-  // Dikelompokkan per fungsi (Manajemen Dasar → Layanan GA → Pantau Laporan Tim → Alat/Master
-  // Data → Skor & Pengembangan → Laporan & Sistem) -- sebelumnya cuma daftar rata tanpa urutan
-  // jelas, dirapikan 20 Sep 2026 sekalian nambah 3 menu baru yang tadinya belum ada tempatnya
-  // (Pantau Laporan Driver, Hasil Uji Emisi belum ke-link dari sini, Kesehatan Notifikasi).
-  const menuAdmin = [
-    // --- Manajemen Dasar ---
-    {
-      title: "Manajemen Pengguna",
-      desc: "Tambah, edit, hapus akun login untuk staf operasional.",
-      path: "/admin/users",
-      token: "info",
-      icon: IconIdCard,
-    },
-    {
-      title: "Master Data Karyawan",
-      desc: "Upload CSV dan kelola direktori 70+ karyawan SIBM.",
-      path: "/admin/karyawan",
-      token: "warn",
-      icon: IconBuilding,
-    },
-    {
-      title: "Master Data Kendaraan",
-      desc: "Kelola foto, PIC, odometer, dan riwayat servis armada.",
-      path: "/admin/kendaraan",
-      token: "ok",
-      icon: IconTruck,
-    },
-    {
-      title: "Hasil Uji Emisi Kendaraan",
-      desc: "Rekap hasil uji emisi & jadwal servis armada per kendaraan.",
-      path: "/admin/uji-emisi",
-      token: "ok",
-      icon: IconCar,
-    },
-    {
-      title: "Master Data Laptop",
-      desc: "Data masa sewa laptop tiap user — pantau kapan harus diperpanjang.",
-      path: "/admin/laptop",
-      token: "info",
-      icon: IconLaptop,
-    },
-    {
-      title: "Legalitas & Perizinan",
-      desc: "Dokumen legalitas, perizinan, dan perjanjian — riwayat versi tersimpan tiap diperpanjang.",
-      path: "/admin/legalitas",
-      token: "accent",
-      icon: IconStamp,
-    },
-    // --- Layanan GA ---
-    {
-      title: "Pengumuman Gedung",
-      desc: "Update teks berjalan (Info GA) di halaman utama Portal SIBM.",
-      path: "/admin/broadcast",
-      token: "red",
-      icon: IconMegaphone,
-    },
-    {
-      title: "Gudang ATK",
-      desc: "Proses permintaan alat tulis kantor dan update status resi.",
-      path: "/admin/atk",
-      token: "accent",
-      icon: IconClipboard,
-    },
-    {
-      title: "Persetujuan Overtime",
-      desc: "Setujui/Tolak request lembur AC & Listrik dari tenant.",
-      path: "/admin/overtime",
-      token: "info",
-      icon: IconClock,
-    },
-    {
-      title: "Helpdesk & Tiket Kerusakan",
-      desc: "Terima keluhan karyawan dan atur status perbaikan gedung.",
-      path: "/admin/helpdesk",
-      token: "warn",
-      icon: IconWrench,
-    },
-    // --- Pantau Laporan Tim (dikelompokkan bareng, sebelumnya kepisah-pisah) ---
-    {
-      title: "Pantau Laporan OB & CS",
-      desc: "Monitoring data checklist harian dan stok gudang.",
-      path: "/admin/monitor-ob",
-      token: "ok",
-      icon: IconBroom,
-    },
-    {
-      title: "Pantau Laporan Security",
-      desc: "Monitoring log patroli, tamu, dan mobilitas kendaraan.",
-      path: "/admin/monitor-security",
-      token: "red",
-      icon: IconShield,
-    },
-    {
-      title: "Pantau Laporan Driver",
-      desc: "Riwayat pergerakan armada & status kendaraan terkini per driver.",
-      path: "/admin/monitor-driver",
-      token: "info",
-      icon: IconTruck,
-    },
-    {
-      title: "Pantau Notifikasi Dadakan",
-      desc: "Cek bukti foto siram tanaman Security (jendela Pagi/Malam) per hari.",
-      path: "/admin/monitor-dadakan",
-      token: "ok",
-      icon: IconDroplet,
-    },
-    {
-      title: "Pantau Tukar Shift",
-      desc: "Riwayat scan serah terima, extend jaga, dan rekap keterlambatan Security tiap bulan.",
-      path: "/admin/monitor-tukar-shift",
-      token: "red",
-      icon: IconRefreshCw,
-    },
-    // --- Alat & Master Data ---
-    {
-      title: "Master Data APAR",
-      desc: "Kelola data APAR per lantai & cetak QR inspeksi bulanan.",
-      path: "/admin/apar",
-      token: "red",
-      icon: IconFireExtinguisher,
-    },
-    {
-      title: "QR Code Generator",
-      desc: "Cetak label QR Code untuk titik patroli & kebersihan.",
-      path: "/admin/qr-manager",
-      token: "accent",
-      icon: IconPrinter,
-    },
-    // --- Skor & Pengembangan Staf ---
-    {
-      title: "Rekap Poin Staf",
-      desc: "Poin bulanan tiap staf (mulai 100, berkurang kalau tugas tidak sempurna) — siapa paling rajin & perlu perhatian.",
-      path: "/admin/monitor-poin",
-      token: "accent",
-      icon: IconTrophy,
-    },
-    {
-      title: "Update Dokumen SOP",
-      desc: "Upload SOP/IK & tujukan ke menu Security, Driver, atau OB & CS.",
-      path: "/admin/sop",
-      token: "accent",
-      icon: IconBook,
-    },
-    {
-      title: "Handbook Magang",
-      desc: "Upload materi belajar (PDF/Video) untuk anak magang Security — langsung tampil begitu mereka login.",
-      path: "/admin/handbook-magang",
-      token: "accent",
-      icon: IconGraduationCap,
-    },
-    {
-      title: "Survei Kepuasan Gedung",
-      desc: "Rekap kuesioner pelayanan gedung periodik (2x/tahun) — skor per kategori, saran, dan favorit staf.",
-      path: "/admin/survei-kepuasan",
-      token: "info",
-      icon: IconClipboardList,
-    },
-    // --- Laporan & Sistem ---
-    {
-      title: "Laporan Eksekutif",
-      desc: "Cetak rekapitulasi data operasional & logistik bulanan (PDF/Print).",
-      path: "/admin/report",
-      token: "info",
-      icon: IconFileText,
-    },
-    {
-      title: "Kesehatan Notifikasi",
-      desc: "Status run terakhir tiap cron reminder (push/email) — cek sendiri kalau ada yang gagal.",
-      path: "/admin/monitor-cron",
-      token: "warn",
-      icon: IconActivity,
-    },
-  ];
+  const muatUlang = useCallback(async () => {
+    setMemuat(true);
+    const h = await muatHitungan();
+    setHitungan(h);
+    setDiperbarui(new Date());
+    setMemuat(false);
+  }, []);
 
-  const tokenColors: Record<string, { bg: string; color: string }> = {
-    info: { bg: "var(--info-50)", color: "var(--info)" },
-    warn: { bg: "var(--warn-50)", color: "var(--warn)" },
-    ok: { bg: "var(--ok-50)", color: "var(--ok)" },
-    red: { bg: "var(--red-50)", color: "var(--red-600)" },
-    accent: { bg: "#f5f3ff", color: "var(--accent)" },
-  };
+  useEffect(() => {
+    if (!isReady || !session) return;
+    let batal = false;
+    muatHitungan().then((h) => {
+      if (batal) return;
+      setHitungan(h);
+      setDiperbarui(new Date());
+      setMemuat(false);
+    });
+    return () => {
+      batal = true;
+    };
+  }, [isReady, session]);
+
+  const hasilCari = useMemo(() => {
+    const kata = cari.trim().toLowerCase();
+    if (!kata) return null;
+    const semua: MenuItem[] = [
+      ...PANTAU.map((p) => ({ title: `Pantau ${p.title}`, desc: p.sub, path: p.path, icon: p.icon })),
+      ...MENU_GROUPS.flatMap((g) => g.items),
+    ];
+    return semua.filter((m) => `${m.title} ${m.desc}`.toLowerCase().includes(kata));
+  }, [cari]);
 
   if (!isReady || !session) return null;
   const adminName = session.nama || "Admin";
+  const namaDepan = adminName.split(/\s+/)[0];
+  const wilayah = session.daerah === "PUSAT" ? "Super Admin · Semua wilayah" : session.daerah ? `Wilayah ${session.daerah}` : "Admin GA";
+
+  const angka = (k: KunciHitungan) => {
+    if (memuat && hitungan[k] === undefined) return "…";
+    const v = hitungan[k];
+    return v === null || v === undefined ? "—" : String(v);
+  };
 
   return (
-    <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <AdminShell userName={adminName} backHref={null} onLogout={() => logoutWithConfirm(confirm, router)}>
+      <label className={styles.search}>
+        <AdminIcon name="search" size={17} strokeWidth={2} />
+        <input
+          type="search"
+          value={cari}
+          onChange={(e) => setCari(e.target.value)}
+          placeholder="Mau buka apa hari ini?"
+          aria-label="Cari menu admin"
+        />
+      </label>
 
-      {/* 💡 CSS RESPONSIVE & MOBILE BOTTOM NAV */}
-      <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .main-container { padding-bottom: 50px; }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .site-header-brand { display: flex; align-items: center; gap: 10px; }
-        .logout-icon-btn {
-          display: flex; align-items: center; justify-content: center; width: 38px; height: 38px;
-          background: var(--red-50); color: var(--red-600); border: 1px solid rgba(220,38,38,0.2);
-          border-radius: 50%; cursor: pointer; transition: 0.2s; flex-shrink: 0;
-        }
-        .logout-icon-btn:hover { background: var(--red-600); color: white; transform: scale(1.06); }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 50px 20px 90px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-        .admin-hero-badge {
-          display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
-          backdrop-filter: blur(5px); padding: 8px 22px; border-radius: 50px; font-size: 14px; font-weight: 700;
-          border: 1px solid rgba(255,255,255,0.3);
-        }
-        .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; }
-        .admin-card {
-          background: var(--surface); padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
-          cursor: pointer; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 15px;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;
-        }
-        .admin-card:hover { transform: translateY(-8px); border-color: var(--hover-color); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
-        .admin-card-icon { width: 60px; height: 60px; border-radius: 16px; display: flex; justify-content: center; align-items: center; position: relative; z-index: 2; }
-        .admin-card-title { margin: 0 0 8px 0; color: var(--ink); font-size: 20px; font-weight: bold; }
-        .admin-card-desc { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
-        .admin-card-arrow { margin-top: auto; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 5px; position: relative; z-index: 2; }
-        .app-bottom-nav { display: none; }
-
-        /* 📱 MEDIA QUERY UNTUK HP */
-        @media (max-width: 768px) {
-          .main-container { padding-bottom: 108px !important; }
-          .admin-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-          .admin-card { flex-direction: row !important; align-items: center !important; padding: 15px 20px !important; gap: 15px !important; border-radius: 16px !important; }
-          .admin-card:hover { transform: translateY(-2px); }
-          .admin-card:active { transform: scale(0.98); }
-          .admin-card-icon { width: 48px !important; height: 48px !important; border-radius: 12px !important; flex-shrink: 0; }
-          .admin-card-title { font-size: 15px !important; margin-bottom: 2px !important; }
-          .admin-card-desc { font-size: 11px !important; line-height: 1.4 !important; }
-          .admin-card-arrow { display: none !important; }
-          .admin-bg-decor { display: none !important; }
-
-          /* BOTTOM NAV APP-STYLE — pola sama seperti halaman utama (src/app/page.tsx) */
-          .app-bottom-nav {
-            display: flex; position: fixed; left: 14px; right: 14px; bottom: 14px; height: 66px;
-            background: rgba(255,255,255,0.97); backdrop-filter: blur(14px); border: 1px solid var(--line);
-            border-radius: 24px; box-shadow: 0 14px 32px -10px rgba(24,24,27,0.2); z-index: 90;
-            align-items: center; justify-content: space-around; padding: 0 6px;
-          }
-          .nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; color: #a1a1aa; cursor: pointer; background: none; border: none; font-family: inherit; }
-          .nav-item.active { color: var(--red-600); }
-          .nav-item span { font-size: 9.5px; font-weight: 700; }
-          .hide-on-mobile { display: none !important; }
-        }
-      `}} />
-
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="hide-on-mobile site-header">
-        <div className="site-header-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-samudera.png" alt="Logo" style={{ height: "30px" }} />
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "18px", borderLeft: "2px solid var(--line)", paddingLeft: "10px" }}>Admin Desk</span>
-        </div>
-        <button className="logout-icon-btn" onClick={handleLogout} title="Keluar Sesi Admin" aria-label="Keluar Sesi Admin">
-          <IconLogOut size={17} />
-        </button>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="admin-hero">
-        <div style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
-          <NotifikasiBellButton picName={adminName} variant="terang" />
-        </div>
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 36px)", fontWeight: "900", letterSpacing: "1px" }}>CONTROL PANEL</h1>
-          <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Kendali Sistem Informasi Building Management</p>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-            <div className="admin-hero-badge">
-              <IconUserCircle size={16} /> Halo, {adminName}
+      {hasilCari ? (
+        <Tile>
+          <h2 className={styles.tileTitle}>Hasil pencarian</h2>
+          {hasilCari.length === 0 ? (
+            <p className={styles.empty}>Tidak ada menu yang cocok dengan &ldquo;{cari}&rdquo;.</p>
+          ) : (
+            <div className={styles.menuList}>
+              {hasilCari.map((m) => (
+                <button key={m.path + m.title} type="button" className={styles.menuRow} onClick={() => router.push(m.path)}>
+                  <span className={styles.menuIcon} style={{ background: "var(--chip)", color: "var(--ink)" }}>
+                    <AdminIcon name={m.icon} size={18} />
+                  </span>
+                  <span className={styles.menuText}>
+                    <span className={styles.menuTitle}>{m.title}</span>
+                    <span className={styles.menuDesc}>{m.desc}</span>
+                  </span>
+                  <AdminIcon name="chevronRight" size={16} style={{ color: "var(--muted)" }} />
+                </button>
+              ))}
             </div>
-            {session.daerah && (
-              <div className="admin-hero-badge" style={{ background: "rgba(255,255,255,0.18)" }}>
-                {session.daerah === "PUSAT" ? "⭐ Super Admin (Semua Wilayah)" : `📍 Wilayah ${session.daerah}`}
+          )}
+        </Tile>
+      ) : (
+        <div className={styles.grid}>
+          <Tile variant="brand" className={styles.hero}>
+            <div>
+              <span className={styles.heroLabel}>{wilayah}</span>
+              <h1 className={styles.heroTitle}>
+                {sapaan()}, {namaDepan}.
+                <br />
+                Gedung aman hari ini?
+              </h1>
+            </div>
+            <div className={styles.heroAbsensi}>
+              <AbsensiCard picName={adminName} departemen={session.dept || "Admin GA"} />
+            </div>
+          </Tile>
+
+          <Tile className={styles.pantau}>
+            <div className={styles.tileHead}>
+              <h2 className={styles.tileTitle}>Pantau laporan tim</h2>
+              <button type="button" className={styles.refresh} onClick={muatUlang} disabled={memuat} aria-label="Muat ulang angka">
+                <AdminIcon name="refresh" size={15} strokeWidth={2} />
+                <span>{memuat ? "Memuat…" : diperbarui ? `Diperbarui ${diperbarui.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}` : "Muat ulang"}</span>
+              </button>
+            </div>
+            <div className={styles.pantauGrid}>
+              {PANTAU.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={styles.pantauCard}
+                  style={{ background: TONE_VAR[p.tone].bg }}
+                  onClick={() => router.push(p.path)}
+                >
+                  <span className={styles.pantauIcon} style={{ color: TONE_VAR[p.tone].fg }}>
+                    <AdminIcon name={p.icon} size={20} strokeWidth={1.9} />
+                  </span>
+                  <span className={styles.pantauText}>
+                    <span className={styles.pantauNum}>{angka(p.key)}</span>
+                    <span className={styles.pantauTitle}>{p.title}</span>
+                    <span className={styles.pantauSub}>{p.sub}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Tile>
+
+          <Tile className={styles.span4}>
+            <h2 className={styles.tileTitle}>Perlu tindakan</h2>
+            <div className={styles.menuList}>
+              {TINDAKAN.map((t) => {
+                const v = hitungan[t.key];
+                const ada = typeof v === "number" && v > 0;
+                return (
+                  <button key={t.key} type="button" className={styles.menuRow} onClick={() => router.push(t.path)}>
+                    <span className={styles.menuIcon} style={{ background: TONE_VAR[t.tone].bg, color: TONE_VAR[t.tone].fg }}>
+                      <AdminIcon name={t.icon} size={18} />
+                    </span>
+                    <span className={styles.menuText}>
+                      <span className={styles.menuTitle}>{t.title}</span>
+                      <span className={styles.menuDesc}>{t.sub}</span>
+                    </span>
+                    <span
+                      className={styles.badge}
+                      style={ada ? { background: TONE_VAR[t.tone].bg, color: TONE_VAR[t.tone].fg } : undefined}
+                    >
+                      {angka(t.key)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Tile>
+
+          {MENU_GROUPS.map((g) => (
+            <Tile key={g.name} className={styles.span4}>
+              <div className={styles.tileHead}>
+                <h2 className={styles.tileTitle}>{g.name}</h2>
+                <span className={styles.count}>{g.items.length} menu</span>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
-
-        <AbsensiCard picName={adminName} departemen={session.dept || "Admin GA"} />
-
-        {/* GRID MENU ADMIN */}
-        <div className="admin-grid">
-          {menuAdmin.map((menu, index) => {
-            const tc = tokenColors[menu.token];
-            const MenuIcon = menu.icon;
-            return (
-              <div
-                key={index}
-                className="admin-card"
-                onClick={() => router.push(menu.path)}
-                style={{ "--hover-color": tc.color } as React.CSSProperties}
-              >
-                {/* Dekorasi Sudut (Hidden on Mobile) */}
-                <div className="admin-bg-decor" style={{ position: "absolute", top: "-15px", right: "-15px", width: "80px", height: "80px", background: tc.bg, borderRadius: "50%", opacity: 0.5 }}></div>
-
-                <div className="admin-card-icon" style={{ background: tc.bg, color: tc.color }}>
-                  <MenuIcon size={26} />
-                </div>
-
-                <div style={{ position: "relative", zIndex: 2 }}>
-                  <h2 className="admin-card-title">{menu.title}</h2>
-                  <p className="admin-card-desc">{menu.desc}</p>
-                </div>
-
-                <div className="admin-card-arrow" style={{ color: tc.color }}>
-                  Kelola <IconChevronRight size={14} />
-                </div>
+              <div className={styles.menuList}>
+                {g.items.map((m) => (
+                  <button key={m.path} type="button" className={styles.menuRow} onClick={() => router.push(m.path)}>
+                    <span className={styles.menuIcon} style={{ background: TONE_VAR[g.tone].bg, color: TONE_VAR[g.tone].fg }}>
+                      <AdminIcon name={m.icon} size={18} />
+                    </span>
+                    <span className={styles.menuText}>
+                      <span className={styles.menuTitle}>{m.title}</span>
+                      <span className={styles.menuDesc}>{m.desc}</span>
+                    </span>
+                  </button>
+                ))}
               </div>
-            );
-          })}
+            </Tile>
+          ))}
         </div>
-
-      </div>
-
-      {/* 📱 BOTTOM NAVIGATION EKSKLUSIF ADMIN (HANYA MUNCUL DI HP) — pola sama seperti halaman utama */}
-      <div className="app-bottom-nav">
-        {/* Mengembalikan ke posisi atas (Dashboard Admin) bukan Portal Utama */}
-        <button className="nav-item active" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
-          <IconHome size={21} />
-          <span>Beranda</span>
-        </button>
-        <button className="nav-item" onClick={() => router.push("/admin/monitor-ob")}>
-          <IconBroom size={21} />
-          <span>OB & CS</span>
-        </button>
-        <button className="nav-item" onClick={() => router.push("/admin/monitor-security")}>
-          <IconShield size={21} />
-          <span>Security</span>
-        </button>
-        <button className="nav-item" onClick={handleLogout}>
-          <IconLogOut size={21} />
-          <span>Keluar</span>
-        </button>
-      </div>
-
-    </div>
+      )}
+    </AdminShell>
   );
 }
