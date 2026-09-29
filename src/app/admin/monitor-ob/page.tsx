@@ -6,21 +6,9 @@ import { collection, onSnapshot, query, orderBy, limit, Timestamp } from "fireba
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/EvaluasiManualButton";
-
-// Ikon SVG garis — konsisten dengan shell admin/page.tsx & portal utama
-type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
-);
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
-const IconPrinter = ({ size = 15, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="1.5" /><path d="M6 17v4h12v-4" /></svg>
-);
-const IconSearch = ({ size = 15, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-);
+import AdminShell from "../../../components/admin/AdminShell";
+import AdminIcon from "../../../components/admin/AdminIcon";
+import Tile from "../../../components/admin/Tile";
 
 // ==========================================
 // INTERFACES — disamakan sama bentuk data ASLI yang ditulis oleh ChecklistOBPage,
@@ -298,44 +286,34 @@ export default function MonitorOBPage() {
   const adminName = session.nama || "Admin";
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell
+      title="Pantau Laporan OB & CS"
+      subtitle="Log kebersihan, stok gudang, inspeksi fasilitas, dan plot tugas harian"
+      userName={adminName}
+    >
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .back-btn {
-          display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer;
-          color: var(--ink-soft); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 4px;
-        }
-        .back-btn:hover { color: var(--red-600); }
-        .admin-badge {
-          display: flex; align-items: center; gap: 6px; background: var(--info-50); color: var(--info);
-          padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(37,99,235,0.2);
-        }
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 26px 26px; color: #fff;
-          padding: 34px 20px 50px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-        .tab-count { background: var(--red-600); color: white; padding: 2px 7px; border-radius: 10px; font-size: 10px; }
+        .tab-count { background: var(--brand); color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 10.5px; font-weight: 700; }
         .print-only { display: none; }
+        .ob-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+        .ob-table th { padding: 13px 15px; background: var(--bg); color: var(--ink-soft); border-bottom: 2px solid var(--line); font-weight: 700; }
+        .ob-table td { padding: 12px 15px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+        .plot-table th:first-child, .plot-table td:first-child { position: sticky; left: 0; z-index: 2; }
+        .plot-table th:first-child { background: var(--bg); }
+
+        /* HP: tabel jadi kartu per baris (sebelumnya cuma scroll horizontal, lihat §51F).
+           Tabel Plot sengaja TIDAK ditransform -- 8 kolom lantai lebih jelas tetap tabel + kolom tanggal lengket. */
+        @media (max-width: 768px) {
+          .ob-table, .ob-table tbody { display: block; width: 100%; }
+          .ob-table thead { display: none; }
+          .ob-table tr { display: block; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
+          .ob-table tr.ob-detail-row { margin-top: -12px; border-top: none; border-radius: 0 0 16px 16px; }
+          .ob-table td { display: block; padding: 10px 15px !important; border-bottom: 1px dashed var(--line); text-align: left !important; }
+          .ob-table td:last-child { border-bottom: none; }
+          .ob-table td[data-label]::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
+          .ob-table td.ob-empty { text-align: center !important; }
+          .ob-filter { width: 100%; }
+          .ob-filter .sa-search { width: 100% !important; }
+        }
 
         @media print {
           @page { size: A4 portrait; margin: 15mm; }
@@ -350,24 +328,6 @@ export default function MonitorOBPage() {
           th { background-color: #f1f5f9 !important; font-weight: bold !important; color: #2d3748 !important; }
         }
       `}} />
-
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="site-header no-print">
-        <button className="back-btn" onClick={() => router.push("/admin")}>
-          <IconArrowLeft size={16} /> Kembali ke Control Panel
-        </button>
-        <div className="admin-badge">
-          <IconUserCircle size={14} /> Admin: {adminName}
-        </div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="admin-hero no-print">
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>PANTAU KINERJA OB & CS</h1>
-          <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Monitoring log kebersihan, stok gudang, inspeksi fasilitas, dan plotting tugas</p>
-        </div>
-      </div>
 
       {/* 🖨️ KOP CETAK — cuma muncul pas print */}
       <div className="print-only" style={{ marginBottom: "15px", borderBottom: "2px solid #2d3748", paddingBottom: "10px" }}>
@@ -385,72 +345,79 @@ export default function MonitorOBPage() {
       </div>
 
       {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }} className="print-area">
+      <div className="print-area">
 
         {/* NAVIGASI TAB */}
-        <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "25px", overflowX: "auto", paddingBottom: "10px" }}>
-          <button onClick={() => { setActiveTab("CHECKLIST"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "CHECKLIST" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "CHECKLIST" ? "var(--ok)" : "var(--muted)", boxShadow: activeTab === "CHECKLIST" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "CHECKLIST" ? "3px solid var(--ok)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
-            📋 Log Pembersihan
-          </button>
-          <button onClick={() => { setActiveTab("STOCK"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "STOCK" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "STOCK" ? "var(--warn)" : "var(--muted)", boxShadow: activeTab === "STOCK" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "STOCK" ? "3px solid var(--warn)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
-            📦 Stok & Pengadaan {daftarUrgent.length > 0 && <span className="tab-count">{daftarUrgent.length}</span>}
-          </button>
-          <button onClick={() => { setActiveTab("INSPEKSI"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "INSPEKSI" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "INSPEKSI" ? "var(--accent)" : "var(--muted)", boxShadow: activeTab === "INSPEKSI" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "INSPEKSI" ? "3px solid var(--accent)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
-            <IconSearch size={14} /> Inspeksi Fasilitas {rusakBaruBaruIni > 0 && <span className="tab-count">{rusakBaruBaruIni}</span>}
-          </button>
-          <button onClick={() => { setActiveTab("PLOT"); setSearchQuery(""); }} style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", background: activeTab === "PLOT" ? "var(--surface)" : "rgba(255,255,255,0.7)", color: activeTab === "PLOT" ? "var(--info)" : "var(--muted)", boxShadow: activeTab === "PLOT" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "PLOT" ? "3px solid var(--info)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}>
-            📅 Plot Tugas Harian
-          </button>
+        <div className="sa-tabs no-print" role="tablist" aria-label="Jenis laporan OB & CS">
+          {([
+            { id: "CHECKLIST", label: "Log Pembersihan", icon: "broom", count: 0 },
+            { id: "STOCK", label: "Stok & Pengadaan", icon: "box", count: daftarUrgent.length },
+            { id: "INSPEKSI", label: "Inspeksi Fasilitas", icon: "search", count: rusakBaruBaruIni },
+            { id: "PLOT", label: "Plot Tugas Harian", icon: "clipboardList", count: 0 },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`sa-tab${activeTab === tab.id ? " is-active" : ""}`}
+              onClick={() => { setActiveTab(tab.id); setSearchQuery(""); }}
+            >
+              <AdminIcon name={tab.icon} size={17} />
+              {tab.label}
+              {tab.count > 0 && <span className="tab-count">{tab.count}</span>}
+            </button>
+          ))}
         </div>
 
         {/* CONTAINER KONTEN */}
-        <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
+        <Tile>
 
           {/* SEARCH BAR + FILTER BULAN (Checklist) + Export PDF */}
           {activeTab !== "PLOT" && (
             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
-              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>
-                {activeTab === "CHECKLIST" ? "📋 Laporan Pembersihan" : activeTab === "STOCK" ? "📦 Inventory & Pengadaan Gudang OB" : "🔍 Inspeksi Fasilitas Mingguan"}
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700 }}>
+                {activeTab === "CHECKLIST" ? "Laporan Pembersihan" : activeTab === "STOCK" ? "Inventory & Pengadaan Gudang OB" : "Inspeksi Fasilitas Mingguan"}
               </h2>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              <div className="ob-filter" style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                 {activeTab === "CHECKLIST" && (
                   <>
-                    <select value={filterBulanChecklist} onChange={(e) => setFilterBulanChecklist(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select className="sa-field" aria-label="Filter bulan" value={filterBulanChecklist} onChange={(e) => setFilterBulanChecklist(e.target.value)}>
                       <option value="SEMUA">Semua Bulan</option>
                       {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
                     </select>
-                    <select value={filterTahunChecklist} onChange={(e) => setFilterTahunChecklist(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select className="sa-field" aria-label="Filter tahun" value={filterTahunChecklist} onChange={(e) => setFilterTahunChecklist(e.target.value)}>
                       <option value="SEMUA">Semua Tahun</option>
                       {tahunTersediaChecklist.map((th) => <option key={th} value={String(th)}>{th}</option>)}
                     </select>
-                    <button onClick={handlePrint} style={{ background: "var(--info)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <IconPrinter /> Export PDF
+                    <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
+                      <AdminIcon name="printer" size={16} /> Export PDF
                     </button>
                   </>
                 )}
                 {activeTab === "INSPEKSI" && (
                   <>
-                    <select value={filterBulanInspeksi} onChange={(e) => setFilterBulanInspeksi(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select className="sa-field" aria-label="Filter bulan" value={filterBulanInspeksi} onChange={(e) => setFilterBulanInspeksi(e.target.value)}>
                       <option value="SEMUA">Semua Bulan</option>
                       {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
                     </select>
-                    <select value={filterTahunInspeksi} onChange={(e) => setFilterTahunInspeksi(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                    <select className="sa-field" aria-label="Filter tahun" value={filterTahunInspeksi} onChange={(e) => setFilterTahunInspeksi(e.target.value)}>
                       <option value="SEMUA">Semua Tahun</option>
                       {tahunTersediaInspeksi.map((th) => <option key={th} value={String(th)}>{th}</option>)}
                     </select>
-                    <button onClick={handlePrint} style={{ background: "var(--accent)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <IconPrinter /> Export PDF
+                    <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
+                      <AdminIcon name="printer" size={16} /> Export PDF
                     </button>
                   </>
                 )}
-                <div style={{ position: "relative" }}>
-                  <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
+                <label className="sa-search" style={{ width: "240px" }}>
+                  <AdminIcon name="search" size={15} strokeWidth={2} />
                   <input
-                    type="text" placeholder="Ketik untuk mencari..."
+                    type="search" aria-label="Cari"
+                    placeholder={activeTab === "STOCK" ? "Cari nama barang…" : "Cari petugas / area…"}
                     value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ padding: "10px 15px 10px 35px", borderRadius: "50px", border: "1px solid var(--line)", fontSize: "13px", width: "220px", background: "var(--bg)", outline: "none" }}
                   />
-                </div>
+                </label>
               </div>
             </div>
           )}
@@ -458,16 +425,16 @@ export default function MonitorOBPage() {
           {/* HEADER TAB PLOT: pilihan bulan + Buat Plot Baru + Export PDF */}
           {activeTab === "PLOT" && (
             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
-              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>📅 Plot Tugas Harian</h2>
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700 }}>Plot Tugas Harian</h2>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                <select value={bulanPlotAktif} onChange={(e) => setBulanFilterPlot(e.target.value)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}>
+                <select className="sa-field" aria-label="Bulan plot" value={bulanPlotAktif} onChange={(e) => setBulanFilterPlot(e.target.value)}>
                   {bulanTersediaPlot.length > 0 ? bulanTersediaPlot.map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>) : <option value={bulanPlotAktif}>{formatBulanLabel(bulanPlotAktif)}</option>}
                 </select>
-                <button onClick={() => router.push("/dashboard/ob/plotting")} style={{ background: "var(--ok)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                <button type="button" className="sa-btn is-dark" onClick={() => router.push("/dashboard/ob/plotting")}>
                   + Buat Plot Baru
                 </button>
-                <button onClick={handlePrint} style={{ background: "var(--info)", color: "white", padding: "10px 15px", borderRadius: "10px", fontSize: "12px", fontWeight: "bold", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <IconPrinter /> Export PDF
+                <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
+                  <AdminIcon name="printer" size={16} /> Export PDF
                 </button>
               </div>
             </div>
@@ -524,16 +491,16 @@ export default function MonitorOBPage() {
                 })}
               </div>
 
-              <div className="no-print" style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+              <div className="no-print" style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
+                <table className="ob-table">
                   <thead>
-                    <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Waktu Laporan</th>
-                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Petugas OB</th>
-                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Area</th>
-                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Status Kebersihan</th>
-                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Detail</th>
-                      <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Evaluasi</th>
+                    <tr>
+                      <th>Waktu Laporan</th>
+                      <th>Petugas OB</th>
+                      <th>Area</th>
+                      <th style={{ textAlign: "center" }}>Status Kebersihan</th>
+                      <th style={{ textAlign: "center" }}>Detail</th>
+                      <th style={{ textAlign: "center" }}>Evaluasi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -545,28 +512,32 @@ export default function MonitorOBPage() {
                       const tanggalItem = item.tanggal || item.waktu_selesai?.toDate().toISOString().substring(0, 10) || "";
                       return (
                         <Fragment key={item.id}>
-                          <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                            <td style={{ padding: "12px 15px", color: "var(--muted)" }}>{formatWaktu(item.waktu_selesai)}</td>
-                            <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--info)" }}>{item.pic_bertugas}</td>
-                            <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}>{item.area}</td>
-                            <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                          <tr>
+                            <td data-label="Waktu Laporan" style={{ color: "var(--muted)" }}>{formatWaktu(item.waktu_selesai)}</td>
+                            <td data-label="Petugas OB" style={{ fontWeight: "bold", color: "var(--ink)" }}>{item.pic_bertugas}</td>
+                            <td data-label="Area" style={{ color: "var(--ink-soft)" }}>{item.area}</td>
+                            <td data-label="Status Kebersihan" style={{ textAlign: "center" }}>
                               <span style={{
-                                background: isBersih ? "var(--ok-50)" : isKosong ? "var(--bg)" : "var(--red-50)",
+                                background: isBersih ? "var(--ok-50)" : isKosong ? "var(--hover)" : "var(--red-50)",
                                 color: isBersih ? "var(--ok)" : isKosong ? "var(--muted)" : "var(--red-700)",
-                                padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold"
+                                padding: "6px 12px", borderRadius: "10px", fontSize: "11.5px", fontWeight: "bold", display: "inline-block"
                               }}>
                                 {statusRingkas}
                               </span>
                             </td>
-                            <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                            <td data-label="Detail" style={{ textAlign: "center" }}>
                               <button
+                                type="button"
+                                className={`sa-btn ${isOpen ? "is-dark" : "is-soft"}`}
+                                aria-expanded={isOpen}
                                 onClick={() => setExpandedId(isOpen ? null : item.id)}
-                                style={{ background: isOpen ? "var(--ok)" : "var(--bg)", color: isOpen ? "white" : "var(--ink-soft)", border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+                                style={{ height: "34px", fontSize: "12px", padding: "0 12px" }}
                               >
-                                {isOpen ? "Tutup ▲" : "Lihat Detail ▼"}
+                                {isOpen ? "Tutup" : "Lihat Detail"}
+                                <AdminIcon name="chevronRight" size={13} strokeWidth={2.2} style={{ transform: isOpen ? "rotate(-90deg)" : "rotate(90deg)" }} />
                               </button>
                             </td>
-                            <td style={{ padding: "12px 15px", textAlign: "center" }}>
+                            <td data-label="Evaluasi" style={{ textAlign: "center" }}>
                               {tanggalItem && (
                                 <EvaluasiManualButton nama={item.pic_bertugas} departemen="OB & CS" sumberJenis="Checklist OB" sumberCollection="ob_checklists" sumberId={item.id} tanggalLaporan={tanggalItem} dievaluasiOleh={adminName} evaluasiSebelumnya={item.evaluasiManual} />
                               )}
@@ -574,17 +545,17 @@ export default function MonitorOBPage() {
                           </tr>
 
                           {isOpen && (
-                            <tr>
+                            <tr className="ob-detail-row">
                               <td colSpan={6} style={{ padding: "0", background: "var(--bg)" }}>
-                                <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "15px" }}>
+                                <div style={{ padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
                                   {(item.detail_segmen || []).map((segment, sIdx) => (
-                                    <div key={sIdx} style={{ background: "var(--surface)", padding: "15px", borderRadius: "12px", border: "1px solid var(--line)" }}>
+                                    <div key={sIdx} style={{ background: "var(--surface)", padding: "15px", borderRadius: "16px" }}>
                                       <div style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "12.5px", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{segment.nama_segment}</div>
                                       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                         {segment.jawaban.map((j, jIdx) => (
-                                          <div key={jIdx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: "8px", background: j.jawaban === "Ya" ? "var(--ok-50)" : "var(--red-50)" }}>
-                                            <span style={{ fontSize: "12px", color: "var(--ink)" }}>{j.teks}</span>
-                                            <span style={{ fontSize: "10px", fontWeight: "900", padding: "3px 8px", borderRadius: "6px", background: j.jawaban === "Ya" ? "var(--ok)" : "var(--red-600)", color: "white" }}>{j.jawaban.toUpperCase()}</span>
+                                          <div key={jIdx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "10px", background: j.jawaban === "Ya" ? "var(--ok-50)" : "var(--red-50)" }}>
+                                            <span style={{ fontSize: "12.5px", color: "var(--ink)" }}>{j.teks}</span>
+                                            <span style={{ flexShrink: 0, fontSize: "10.5px", fontWeight: 900, padding: "3px 8px", borderRadius: "6px", background: j.jawaban === "Ya" ? "var(--ok-solid, var(--ok))" : "var(--brand, var(--red-600))", color: "#fff" }}>{j.jawaban.toUpperCase()}</span>
                                           </div>
                                         ))}
                                       </div>
@@ -593,14 +564,14 @@ export default function MonitorOBPage() {
 
                                   {(item.foto_bukti || []).length > 0 && (
                                     <div>
-                                      <div style={{ fontWeight: "bold", color: "var(--ink-soft)", fontSize: "11px", marginBottom: "8px", textTransform: "uppercase" }}>Foto Bukti</div>
+                                      <div style={{ fontWeight: "bold", color: "var(--ink-soft)", fontSize: "11px", marginBottom: "8px", textTransform: "uppercase" }}>Foto Bukti (Sebelum / Sesudah)</div>
                                       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                                         {item.foto_bukti.map((f, fIdx) => (
                                           <div key={fIdx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", maxWidth: "400px" }}>
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={f.before} alt="Sebelum" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--red-50)", cursor: "pointer" }} onClick={() => window.open(f.before, "_blank")} />
+                                            <img src={f.before} alt="Sebelum" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "12px", cursor: "pointer" }} onClick={() => window.open(f.before, "_blank")} />
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={f.after} alt="Sesudah" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--ok-50)", cursor: "pointer" }} onClick={() => window.open(f.after, "_blank")} />
+                                            <img src={f.after} alt="Sesudah" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "12px", cursor: "pointer" }} onClick={() => window.open(f.after, "_blank")} />
                                           </div>
                                         ))}
                                       </div>
@@ -617,7 +588,7 @@ export default function MonitorOBPage() {
                         </Fragment>
                       );
                     }) : (
-                      <tr><td colSpan={6} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{(filterBulanChecklist !== "SEMUA" || filterTahunChecklist !== "SEMUA") ? " di periode ini" : ""}.</td></tr>
+                      <tr><td colSpan={6} className="ob-empty" style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada log laporan kebersihan{(filterBulanChecklist !== "SEMUA" || filterTahunChecklist !== "SEMUA") ? " di periode ini" : ""}.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -631,84 +602,84 @@ export default function MonitorOBPage() {
 
               {/* PENGADAAN URGENT */}
               <div>
-                <h3 style={{ margin: "0 0 4px 0", color: "var(--red-700)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>🚨 Pengadaan Urgent</h3>
-                <p style={{ margin: "0 0 12px 0", color: "var(--muted)", fontSize: "12px" }}>Sudah di titik/bawah batas minimum — perlu dibeli sekarang.</p>
+                <h3 style={{ margin: "0 0 4px 0", color: "var(--red-600)", fontSize: "15px", fontWeight: 700 }}>Pengadaan Urgent</h3>
+                <p style={{ margin: "0 0 12px 0", color: "var(--muted)", fontSize: "12.5px" }}>Sudah di titik/bawah batas minimum — perlu dibeli sekarang.</p>
                 {daftarUrgent.length > 0 ? (
-                  <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                      <thead><tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                        <th style={{ padding: "12px 15px" }}>Nama Barang</th><th style={{ padding: "12px 15px" }}>Sisa</th><th style={{ padding: "12px 15px" }}>Batas Min.</th><th style={{ padding: "12px 15px" }}>Pemakaian/Bulan</th><th style={{ padding: "12px 15px" }}>Disarankan Beli</th>
+                  <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
+                    <table className="ob-table">
+                      <thead><tr>
+                        <th>Nama Barang</th><th>Sisa</th><th>Batas Min.</th><th>Pemakaian/Bulan</th><th>Disarankan Beli</th>
                       </tr></thead>
                       <tbody>
                         {daftarUrgent.map((a) => (
-                          <tr key={a.item.id} style={{ borderTop: "1px solid var(--line)" }}>
-                            <td style={{ padding: "10px 15px", fontWeight: "bold" }}>{a.item.nama_barang}</td>
-                            <td style={{ padding: "10px 15px", color: "var(--red-600)", fontWeight: "bold" }}>{a.item.qty}</td>
-                            <td style={{ padding: "10px 15px", color: "var(--muted)" }}>{a.item.batas_minimum}</td>
-                            <td style={{ padding: "10px 15px" }}>{a.adaDataPemakaian ? `${Math.round(a.rataRataPerBulan)} / bulan` : "Belum ada data"}</td>
-                            <td style={{ padding: "10px 15px" }}><span style={{ background: "var(--red-600)", color: "white", padding: "4px 9px", borderRadius: "20px", fontSize: "11px", fontWeight: 800 }}>Beli {a.jumlahDisarankan} pcs</span></td>
+                          <tr key={a.item.id}>
+                            <td data-label="Nama Barang" style={{ fontWeight: "bold" }}>{a.item.nama_barang}</td>
+                            <td data-label="Sisa" style={{ color: "var(--red-600)", fontWeight: "bold" }}>{a.item.qty}</td>
+                            <td data-label="Batas Min." style={{ color: "var(--muted)" }}>{a.item.batas_minimum}</td>
+                            <td data-label="Pemakaian/Bulan">{a.adaDataPemakaian ? `${Math.round(a.rataRataPerBulan)} / bulan` : "Belum ada data"}</td>
+                            <td data-label="Disarankan Beli"><span style={{ background: "var(--brand)", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "11.5px", fontWeight: 800, display: "inline-block" }}>Beli {a.jumlahDisarankan} pcs</span></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                ) : <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: "12px", border: "1px dashed var(--line)", borderRadius: "10px" }}>Aman — tidak ada barang urgent.</div>}
+                ) : <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: "12.5px", border: "1px dashed var(--line)", borderRadius: "14px" }}>Aman — tidak ada barang urgent.</div>}
               </div>
 
               {/* RENCANA BELANJA BULAN DEPAN */}
               <div>
-                <h3 style={{ margin: "0 0 4px 0", color: "var(--warn)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>🛒 Rencana Belanja Bulan Depan</h3>
-                <p style={{ margin: "0 0 12px 0", color: "var(--muted)", fontSize: "12px" }}>Masih aman, tapi diproyeksikan turun ke batas minimum akhir bulan ini.</p>
+                <h3 style={{ margin: "0 0 4px 0", color: "var(--warn)", fontSize: "15px", fontWeight: 700 }}>Rencana Belanja Bulan Depan</h3>
+                <p style={{ margin: "0 0 12px 0", color: "var(--muted)", fontSize: "12.5px" }}>Masih aman, tapi diproyeksikan turun ke batas minimum akhir bulan ini.</p>
                 {daftarBulanDepan.length > 0 ? (
-                  <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                      <thead><tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                        <th style={{ padding: "12px 15px" }}>Nama Barang</th><th style={{ padding: "12px 15px" }}>Sisa</th><th style={{ padding: "12px 15px" }}>Pemakaian/Bulan</th><th style={{ padding: "12px 15px" }}>Proyeksi Akhir Bulan</th><th style={{ padding: "12px 15px" }}>Disarankan Beli</th>
+                  <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
+                    <table className="ob-table">
+                      <thead><tr>
+                        <th>Nama Barang</th><th>Sisa</th><th>Pemakaian/Bulan</th><th>Proyeksi Akhir Bulan</th><th>Disarankan Beli</th>
                       </tr></thead>
                       <tbody>
                         {daftarBulanDepan.map((a) => (
-                          <tr key={a.item.id} style={{ borderTop: "1px solid var(--line)" }}>
-                            <td style={{ padding: "10px 15px", fontWeight: "bold" }}>{a.item.nama_barang}</td>
-                            <td style={{ padding: "10px 15px" }}>{a.item.qty}</td>
-                            <td style={{ padding: "10px 15px" }}>{Math.round(a.rataRataPerBulan)} / bulan</td>
-                            <td style={{ padding: "10px 15px", color: "var(--warn)", fontWeight: "bold" }}>{a.proyeksiSisaAkhirBulan !== null && a.proyeksiSisaAkhirBulan > 0 ? `≈ ${a.proyeksiSisaAkhirBulan}` : "Bakal habis sebelum akhir bulan"}</td>
-                            <td style={{ padding: "10px 15px" }}><span style={{ background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.3)", padding: "4px 9px", borderRadius: "20px", fontSize: "11px", fontWeight: 800 }}>Beli {a.jumlahDisarankan} pcs</span></td>
+                          <tr key={a.item.id}>
+                            <td data-label="Nama Barang" style={{ fontWeight: "bold" }}>{a.item.nama_barang}</td>
+                            <td data-label="Sisa">{a.item.qty}</td>
+                            <td data-label="Pemakaian/Bulan">{Math.round(a.rataRataPerBulan)} / bulan</td>
+                            <td data-label="Proyeksi Akhir Bulan" style={{ color: "var(--warn)", fontWeight: "bold" }}>{a.proyeksiSisaAkhirBulan !== null && a.proyeksiSisaAkhirBulan > 0 ? `≈ ${a.proyeksiSisaAkhirBulan}` : "Bakal habis sebelum akhir bulan"}</td>
+                            <td data-label="Disarankan Beli"><span style={{ background: "var(--warn-50)", color: "var(--warn)", padding: "4px 10px", borderRadius: "20px", fontSize: "11.5px", fontWeight: 800, display: "inline-block" }}>Beli {a.jumlahDisarankan} pcs</span></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                ) : <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: "12px", border: "1px dashed var(--line)", borderRadius: "10px" }}>Belum ada barang yang diproyeksikan turun bulan ini.</div>}
+                ) : <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: "12.5px", border: "1px dashed var(--line)", borderRadius: "14px" }}>Belum ada barang yang diproyeksikan turun bulan ini.</div>}
               </div>
 
               {/* KONDISI STOK GUDANG (mentah) */}
               <div>
-                <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "14px" }}>📋 Kondisi Stok Gudang (Semua Item)</h3>
-                <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "15px", fontWeight: 700 }}>Kondisi Stok Gudang (Semua Item)</h3>
+                <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
+                  <table className="ob-table">
                     <thead>
-                      <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
-                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Nama Barang</th>
-                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Sisa Stok (Qty)</th>
-                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)", textAlign: "center" }}>Batas Minimum</th>
-                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Diupdate Oleh</th>
-                        <th style={{ padding: "15px", borderBottom: "2px solid var(--line)" }}>Terakhir Diupdate</th>
+                      <tr>
+                        <th>Nama Barang</th>
+                        <th style={{ textAlign: "center" }}>Sisa Stok (Qty)</th>
+                        <th style={{ textAlign: "center" }}>Batas Minimum</th>
+                        <th>Diupdate Oleh</th>
+                        <th>Terakhir Diupdate</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredStocks.length > 0 ? filteredStocks.map((item) => {
                         const isLowStock = item.qty <= item.batas_minimum;
                         return (
-                          <tr key={item.id} style={{ borderBottom: "1px solid var(--line)", background: isLowStock ? "var(--red-50)" : "var(--surface)" }}>
-                            <td style={{ padding: "12px 15px", fontWeight: "bold", color: "var(--ink)" }}>{item.nama_barang}</td>
-                            <td style={{ padding: "12px 15px", textAlign: "center", fontWeight: "900", color: isLowStock ? "var(--red-600)" : "var(--ok)", fontSize: "14px" }}>{item.qty}</td>
-                            <td style={{ padding: "12px 15px", textAlign: "center", color: "var(--muted)", fontWeight: "bold" }}>{item.batas_minimum}</td>
-                            <td style={{ padding: "12px 15px", color: "var(--ink-soft)" }}><span style={{ background: "var(--bg)", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span></td>
-                            <td style={{ padding: "12px 15px", color: "var(--muted)", fontSize: "11px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
+                          <tr key={item.id} style={{ background: isLowStock ? "var(--red-50)" : undefined }}>
+                            <td data-label="Nama Barang" style={{ fontWeight: "bold", color: "var(--ink)" }}>{item.nama_barang}</td>
+                            <td data-label="Sisa Stok (Qty)" style={{ textAlign: "center", fontWeight: 900, color: isLowStock ? "var(--red-600)" : "var(--ok)", fontSize: "14px" }}>{item.qty}</td>
+                            <td data-label="Batas Minimum" style={{ textAlign: "center", color: "var(--muted)", fontWeight: "bold" }}>{item.batas_minimum}</td>
+                            <td data-label="Diupdate Oleh" style={{ color: "var(--ink-soft)" }}><span style={{ background: "var(--hover)", padding: "4px 8px", borderRadius: "8px", fontSize: "11.5px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span></td>
+                            <td data-label="Terakhir Diupdate" style={{ color: "var(--muted)", fontSize: "12px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
                           </tr>
                         );
                       }) : (
-                        <tr><td colSpan={5} style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada data barang di inventori.</td></tr>
+                        <tr><td colSpan={5} className="ob-empty" style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada data barang di inventori.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -753,14 +724,14 @@ export default function MonitorOBPage() {
                 {filteredInspeksi.length > 0 ? filteredInspeksi.map((log) => {
                   const rusak = log.hasil.filter((h) => h.kondisi === "Rusak");
                   return (
-                    <div key={log.id} style={{ border: "1px solid var(--line)", borderRadius: "16px", padding: "18px", background: rusak.length > 0 ? "var(--red-50)" : "var(--surface)" }}>
+                    <div key={log.id} style={{ border: "1px solid var(--line)", borderRadius: "20px", padding: "18px", background: rusak.length > 0 ? "var(--red-50)" : "var(--surface)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
                         <div>
                           <h3 style={{ margin: "0 0 3px 0", color: "var(--ink)", fontSize: "15px" }}>{log.area}</h3>
                           <span style={{ fontSize: "11px", color: "var(--muted)" }}>{log.pic_bertugas} &middot; Minggu {log.minggu_mulai} &middot; {formatWaktu(log.waktu_selesai)}</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--red-600)" : "var(--ok-50)", color: rusak.length > 0 ? "white" : "var(--ok)" }}>
+                          <span style={{ padding: "5px 11px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, background: rusak.length > 0 ? "var(--brand)" : "var(--ok-50)", color: rusak.length > 0 ? "#fff" : "var(--ok)" }}>
                             {rusak.length > 0 ? `${rusak.length} Rusak` : "Semua Baik"}
                           </span>
                           <EvaluasiManualButton nama={log.pic_bertugas} departemen="OB & CS" sumberJenis="Inspeksi Fasilitas" sumberCollection="inspeksi_fasilitas" sumberId={log.id} tanggalLaporan={log.minggu_mulai} dievaluasiOleh={adminName} evaluasiSebelumnya={log.evaluasiManual} />
@@ -768,7 +739,7 @@ export default function MonitorOBPage() {
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                         {log.hasil.map((h, i) => (
-                          <span key={i} title={h.catatan || undefined} style={{ fontSize: "11px", fontWeight: 700, padding: "5px 10px", borderRadius: "8px", color: "white", background: h.kondisi === "Rusak" ? "var(--red-600)" : h.kondisi === "Tidak Ada" ? "var(--muted)" : "var(--ok)" }}>
+                          <span key={i} title={h.catatan || undefined} style={{ fontSize: "11.5px", fontWeight: 700, padding: "5px 10px", borderRadius: "10px", color: h.kondisi === "Rusak" ? "var(--red-600)" : h.kondisi === "Tidak Ada" ? "var(--ink-soft)" : "var(--ok)", background: h.kondisi === "Rusak" ? "var(--surface)" : h.kondisi === "Tidak Ada" ? "var(--hover)" : "var(--ok-50)" }}>
                             {h.nama}: {h.kondisi}
                           </span>
                         ))}
@@ -776,7 +747,7 @@ export default function MonitorOBPage() {
                       {rusak.length > 0 && (
                         <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
                           {rusak.map((h, i) => (
-                            <div key={i} style={{ fontSize: "12px", color: "var(--red-700)", background: "var(--surface)", padding: "8px 12px", borderRadius: "8px", border: "1px solid rgba(220,38,38,0.2)" }}>
+                            <div key={i} style={{ fontSize: "12.5px", color: "var(--red-700)", background: "var(--surface)", padding: "8px 12px", borderRadius: "12px" }}>
                               <strong>{h.nama}:</strong> {h.catatan}
                             </div>
                           ))}
@@ -795,8 +766,8 @@ export default function MonitorOBPage() {
           {activeTab === "PLOT" && (
             <div>
               {dailyPlots.length > 0 ? (
-                <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "12.5px" }}>
+                <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
+                  <table className="plot-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "12.5px" }}>
                     <thead>
                       <tr style={{ background: "var(--bg)", color: "var(--ink-soft)" }}>
                         <th style={{ padding: "12px 15px", borderBottom: "2px solid var(--line)", whiteSpace: "nowrap" }}>Tanggal</th>
@@ -810,7 +781,7 @@ export default function MonitorOBPage() {
                         const namaHari = NAMA_HARI_SINGKAT[new Date(`${tgl}T00:00:00`).getDay()];
                         return (
                           <tr key={tgl} style={{ borderBottom: "1px solid var(--line)", background: weekend ? "var(--bg)" : "var(--surface)" }}>
-                            <td style={{ padding: "10px 15px", fontWeight: "bold", color: weekend ? "var(--muted)" : "var(--ink)", whiteSpace: "nowrap" }}>
+                            <td style={{ padding: "10px 15px", fontWeight: "bold", color: weekend ? "var(--muted)" : "var(--ink)", whiteSpace: "nowrap", background: weekend ? "var(--bg)" : "var(--surface)" }}>
                               {Number(tgl.slice(8, 10))} {namaHari}{weekend ? " · Libur" : ""}
                             </td>
                             {kolomLantai.map((l) => {
@@ -829,8 +800,8 @@ export default function MonitorOBPage() {
             </div>
           )}
 
-        </div>
+        </Tile>
       </div>
-    </div>
+    </AdminShell>
   );
 }
