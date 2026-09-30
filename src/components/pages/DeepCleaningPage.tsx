@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -13,6 +12,7 @@ import Badge from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import AdminShell from "../admin/AdminShell";
 
 interface DeepCleaningTask {
   id: string;
@@ -46,7 +46,6 @@ function getTaskStatusInfo(tanggalTugas: string, status: string) {
 }
 
 export default function DeepCleaningPage() {
-  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -141,27 +140,14 @@ export default function DeepCleaningPage() {
   const picName = session.nama || "";
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 30px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/dashboard/ob")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px", borderLeft: "2px solid #e2e8f0", paddingLeft: "10px" }}>Kembali</span>
-        </div>
-        <div style={{ background: "#faf5ff", color: "#6b46c1", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #e9d8fd" }}>👑 Koordinator: {picName}</div>
-      </div>
-
-      <div style={{ background: "linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px", boxShadow: "0 10px 20px rgba(124, 58, 237, 0.2)" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>DEEP CLEANING MANAGER</h1>
-        <p style={{ margin: "0", fontSize: "14px", opacity: 0.9 }}>Jadwalkan dan pantau target kebersihan ekstra di luar rutinitas harian</p>
-      </div>
-
-      <div style={{ maxWidth: "1100px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+    <AdminShell title="Deep Cleaning Manager" subtitle="Jadwalkan dan pantau target kebersihan ekstra di luar rutinitas harian" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
+      <div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "25px", alignItems: "flex-start" }}>
           <Card style={{ flex: "1 1 350px", position: "sticky", top: "80px" }}>
             <h2 style={{ margin: "0 0 5px 0", color: "#553c9a", fontSize: "18px", display: "flex", alignItems: "center", gap: "8px" }}>
               <span>📅</span> Buat Jadwal Baru
             </h2>
-            <p style={{ margin: "0 0 20px 0", color: "#718096", fontSize: "13px" }}>Terbitkan instruksi pembersihan khusus.</p>
+            <p style={{ margin: "0 0 20px 0", color: "var(--ink-soft)", fontSize: "13px" }}>Terbitkan instruksi pembersihan khusus.</p>
 
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               <Input label="Pilih Tanggal Pelaksanaan" type="date" name="tanggal" value={formData.tanggal} onChange={handleInputChange} required />
@@ -184,14 +170,14 @@ export default function DeepCleaningPage() {
                 style={{ minHeight: "90px" }}
               />
 
-              <Button type="submit" loading={isLoading} loadingText="Menyimpan ke Sistem..." variant="secondary" style={{ marginTop: "10px", background: "#6b46c1", color: "white", border: "none", boxShadow: "0 4px 10px rgba(107,70,193,0.3)" }}>
+              <Button type="submit" loading={isLoading} loadingText="Menyimpan ke Sistem..." variant="secondary" style={{ marginTop: "10px", background: "#6b46c1", color: "#fff", border: "none", boxShadow: "0 4px 10px rgba(107,70,193,0.3)" }}>
                 🚀 Terbitkan Instruksi
               </Button>
             </form>
           </Card>
 
           <Card style={{ flex: "2 1 500px" }}>
-            <h2 style={{ margin: "0 0 20px 0", color: "#2d3748", fontSize: "18px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px" }}>📋 Rekapitulasi Tugas Deep Cleaning</h2>
+            <h2 style={{ margin: "0 0 20px 0", color: "var(--ink)", fontSize: "18px", borderBottom: "2px solid var(--line)", paddingBottom: "15px" }}>📋 Rekapitulasi Tugas Deep Cleaning</h2>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               {tasks.length > 0 ? (
@@ -200,7 +186,7 @@ export default function DeepCleaningPage() {
                   return (
                     <div
                       key={task.id}
-                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderLeft: `6px solid ${info.borderColor}`, gap: "15px", flexWrap: "wrap" }}
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px", borderRadius: "12px", background: "var(--bg)", border: "1px solid var(--line)", borderLeft: `6px solid ${info.borderColor}`, gap: "15px", flexWrap: "wrap" }}
                     >
                       <div style={{ flex: "1", minWidth: "250px" }}>
                         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
@@ -208,8 +194,8 @@ export default function DeepCleaningPage() {
                           <Badge tone="info">📍 {task.area}</Badge>
                           <Badge tone={info.tone}>{info.icon} {info.badgeText}</Badge>
                         </div>
-                        <div style={{ fontWeight: "600", fontSize: "15px", color: "#2d3748", lineHeight: "1.5" }}>{task.tugas}</div>
-                        <div style={{ fontSize: "11px", color: "#718096", marginTop: "6px" }}>
+                        <div style={{ fontWeight: "600", fontSize: "15px", color: "var(--ink)", lineHeight: "1.5" }}>{task.tugas}</div>
+                        <div style={{ fontSize: "11px", color: "var(--ink-soft)", marginTop: "6px" }}>
                           Diinstruksikan oleh: <strong>{task.dibuat_oleh}</strong>
                         </div>
                       </div>
@@ -237,9 +223,9 @@ export default function DeepCleaningPage() {
                   );
                 })
               ) : (
-                <div style={{ padding: "50px 20px", textAlign: "center", color: "#a0aec0", border: "2px dashed #e2e8f0", borderRadius: "16px", background: "#f8fafc" }}>
+                <div style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)", border: "2px dashed var(--line)", borderRadius: "16px", background: "var(--bg)" }}>
                   <div style={{ fontSize: "40px", marginBottom: "10px" }}>🧹</div>
-                  <div style={{ fontSize: "16px", fontWeight: "bold", color: "#718096" }}>Area Bebas Debu!</div>
+                  <div style={{ fontSize: "16px", fontWeight: "bold", color: "var(--ink-soft)" }}>Area Bebas Debu!</div>
                   <div style={{ fontSize: "13px", marginTop: "5px" }}>Belum ada instruksi Deep Cleaning yang diterbitkan.</div>
                 </div>
               )}
@@ -247,6 +233,6 @@ export default function DeepCleaningPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }

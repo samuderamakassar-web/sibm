@@ -7,14 +7,12 @@ import { db } from "@/lib/firebase";
 import { kirimEmail } from "@/lib/notify";
 import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
 import { useToast } from "@/components/ui/ToastProvider";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconSearch = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
 );
@@ -349,14 +347,7 @@ export default function InspeksiFasilitasPage() {
   };
 
   const rootTokenCSS = `
-    :root {
-      --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-      --bg: #f7f6f5; --surface: #ffffff;
-      --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-      --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-      --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-    }
-  `;
+    `;
 
   if (isPageLoading) {
     return (
@@ -369,37 +360,25 @@ export default function InspeksiFasilitasPage() {
   }
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Inspeksi Fasilitas Mingguan" subtitle="Cek kondisi fasilitas tiap area — temuan rusak otomatis masuk helpdesk" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
 
       <style dangerouslySetInnerHTML={{__html: `
         ${rootTokenCSS}
         * { box-sizing: border-box; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 20;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
         .tab-switch { background: var(--bg); padding: 4px; border-radius: 10px; display: flex; gap: 4px; }
         .tab-btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
         .tab-btn.active { background: var(--surface); color: var(--info); box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
         .icon-chip { display: inline-flex; align-items: center; justify-content: center; border-radius: 16px; flex-shrink: 0; }
         .fasilitas-row { background: var(--surface); padding: 16px; border-radius: 16px; box-shadow: 0 6px 12px -4px rgba(0,0,0,0.05); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
         .kondisi-btn { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-weight: bold; font-size: 12.5px; cursor: pointer; font-family: inherit; transition: 0.15s; }
-        .kondisi-btn.baik.active { border-color: var(--ok); background: var(--ok); color: white; }
-        .kondisi-btn.rusak.active { border-color: var(--red-600); background: var(--red-600); color: white; }
+        .kondisi-btn.baik.active { border-color: var(--ok-solid); background: var(--ok-solid); color: white; }
+        .kondisi-btn.rusak.active { border-color: var(--brand); background: var(--brand); color: white; }
         .kondisi-btn.tidakada.active { border-color: var(--muted); background: var(--muted); color: white; }
         .foto-dropzone { width: 90px; height: 90px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 10px; font-weight: bold; color: var(--muted); flex-shrink: 0; }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="top-bar">
-        <button className="back-btn" onClick={() => router.push("/dashboard/ob")}><IconArrowLeft size={16} /></button>
+      <div className="no-print staff-toolbar">
         <div className="tab-switch">
           <button onClick={() => setActiveTab("form")} className={`tab-btn ${activeTab === "form" ? "active" : ""}`}>
             <IconSearch size={14} /> Inspeksi
@@ -410,7 +389,7 @@ export default function InspeksiFasilitasPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: "640px", margin: "30px auto 0", padding: "0 20px" }}>
+      <div style={{ maxWidth: "640px", margin: "0 auto", padding: "0 20px" }}>
 
         {/* ========================================================================================= */}
         {/* TAB 1: FORM INSPEKSI */}
@@ -446,7 +425,7 @@ export default function InspeksiFasilitasPage() {
                         setHasilList(getFasilitasUntukArea().map((nama) => ({ nama, kondisi: "", catatan: "", foto: "" })));
                         setStep(2);
                       }}
-                      style={{ width: "100%", padding: "18px", background: "var(--info)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
+                      style={{ width: "100%", padding: "18px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
                     >
                       Mulai Inspeksi ➔
                     </button>
@@ -547,7 +526,7 @@ export default function InspeksiFasilitasPage() {
 
                 <button
                   onClick={handleSubmit} disabled={isLoading}
-                  style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "var(--info)", color: "white", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "20px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(37,99,235,0.4)" }}
+                  style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "var(--info-solid)", color: "#fff", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "20px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(37,99,235,0.4)" }}
                 >
                   {isLoading ? "Mengirim Inspeksi..." : "Kirim Hasil Inspeksi"}
                 </button>
@@ -578,7 +557,7 @@ export default function InspeksiFasilitasPage() {
                     {log.hasil.map((h, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", borderRadius: "10px", background: h.kondisi === "Rusak" ? "var(--red-50)" : h.kondisi === "Tidak Ada" ? "var(--bg)" : "var(--ok-50)" }}>
                         <span style={{ fontSize: "12.5px", color: "var(--ink)", fontWeight: 600 }}>{h.nama}</span>
-                        <span style={{ fontSize: "10px", fontWeight: 800, padding: "3px 8px", borderRadius: "6px", color: "white", background: h.kondisi === "Rusak" ? "var(--red-600)" : h.kondisi === "Tidak Ada" ? "var(--muted)" : "var(--ok)" }}>{h.kondisi.toUpperCase()}</span>
+                        <span style={{ fontSize: "10px", fontWeight: 800, padding: "3px 8px", borderRadius: "6px", color: "#fff", background: h.kondisi === "Rusak" ? "var(--brand)" : h.kondisi === "Tidak Ada" ? "var(--muted-solid)" : "var(--ok-solid)" }}>{h.kondisi.toUpperCase()}</span>
                       </div>
                     ))}
                   </div>
@@ -595,6 +574,6 @@ export default function InspeksiFasilitasPage() {
         )}
 
       </div>
-    </div>
+    </AdminShell>
   );
 }

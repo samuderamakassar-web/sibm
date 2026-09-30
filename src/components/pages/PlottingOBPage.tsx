@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
@@ -18,6 +17,7 @@ import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // KONSTANTA
@@ -106,7 +106,6 @@ function buatRotasiCleaning(cleaningStaff: string[]): Record<string, string> {
 }
 
 export default function PlottingOBPage() {
-  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -388,12 +387,12 @@ export default function PlottingOBPage() {
   };
 
   if (!isReady || !session) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#718096" }}>Memuat halaman...</div>;
+    return <div style={{ padding: "40px", textAlign: "center", color: "var(--ink-soft)" }}>Memuat halaman...</div>;
   }
   const adminName = session.nama || "Koordinator";
 
   return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Plotting Harian OB & CS" subtitle="Atur penugasan area kebersihan & pelayanan per hari, atau generate otomatis 1 bulan" userName={adminName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -401,8 +400,8 @@ export default function PlottingOBPage() {
         .plot-wrapper { display: flex; gap: 25px; flex-wrap: wrap; align-items: flex-start; width: 100%; }
         .plot-col { flex: 1 1 400px; width: 100%; }
         .cal-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .cal-table th, .cal-table td { padding: 8px 10px; border-bottom: 1px solid #edf2f7; text-align: left; white-space: nowrap; }
-        .cal-table th { background: #f1f5f9; color: #4a5568; position: sticky; top: 0; }
+        .cal-table th, .cal-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+        .cal-table th { background: #f1f5f9; color: var(--ink-soft); position: sticky; top: 0; }
         @media (max-width: 768px) {
           .plot-wrapper { flex-direction: column; }
         }
@@ -410,37 +409,20 @@ export default function PlottingOBPage() {
         }}
       />
 
-      {/* NAVBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", background: "white", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button onClick={() => router.push("/dashboard/ob")} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer" }}>⬅️</button>
-          <span style={{ fontWeight: "bold", color: "#2d3748", fontSize: "16px" }}>Kembali ke Dashboard OB</span>
-        </div>
-        <div style={{ background: "#e6fffa", color: "#2c7a7b", padding: "8px 15px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", border: "1px solid #b2f5ea" }}>
-          👑 Koordinator: {adminName}
-        </div>
-      </div>
-
-      {/* HERO */}
-      <div style={{ background: "linear-gradient(135deg, #234e52 0%, #2c7a7b 100%)", padding: "40px 20px 70px 20px", color: "white", textAlign: "center", borderRadius: "0 0 30px 30px" }}>
-        <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(22px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>PLOTTING HARIAN OB & CS</h1>
-        <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Atur penugasan area kebersihan & pelayanan per hari, atau generate otomatis 1 bulan</p>
-      </div>
-
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
+      <div>
         <div className="plot-wrapper">
 
           {/* KOLOM KIRI: SETTING + FORM HARIAN + GENERATE */}
           <div className="plot-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
             {/* Setting Pelayanan Tetap */}
-            <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#1a202c" }}>🍽️ OB Pelayanan Tetap</h3>
-              <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "#718096" }}>OB ini selalu ditugaskan ke &quot;{AREA_PELAYANAN}&quot; setiap hari, tidak ikut rotasi cleaning kecuali sedang izin.</p>
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "var(--ink)" }}>🍽️ OB Pelayanan Tetap</h3>
+              <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "var(--ink-soft)" }}>OB ini selalu ditugaskan ke &quot;{AREA_PELAYANAN}&quot; setiap hari, tidak ikut rotasi cleaning kecuali sedang izin.</p>
               <select
                 value={pelayananTetap}
                 onChange={(e) => simpanPelayananTetap(e.target.value)}
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px" }}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px" }}
               >
                 <option value="">-- Pilih OB --</option>
                 {staffList.map((s) => (
@@ -450,13 +432,13 @@ export default function PlottingOBPage() {
             </div>
 
             {/* Form Plotting Harian */}
-            <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#1a202c" }}>📅 Set Plotting per Tanggal</h3>
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "var(--ink)" }}>📅 Set Plotting per Tanggal</h3>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e0", fontSize: "14px", marginBottom: "15px" }}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", marginBottom: "15px" }}
               />
 
               {isWeekend(selectedDate) && (
@@ -466,7 +448,7 @@ export default function PlottingOBPage() {
               )}
 
               {isLoadingHari ? (
-                <div style={{ textAlign: "center", color: "#a0aec0", padding: "20px 0" }}>Memuat plotting...</div>
+                <div style={{ textAlign: "center", color: "var(--muted)", padding: "20px 0" }}>Memuat plotting...</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {SEMUA_AREA.map((area) => {
@@ -478,11 +460,11 @@ export default function PlottingOBPage() {
                       : staffList;
                     return (
                       <div key={area}>
-                        <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px" }}>{area}</label>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px" }}>{area}</label>
                         <select
                           value={plotHariIni[area] || ""}
                           onChange={(e) => handleUbahArea(area, e.target.value)}
-                          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px" }}
+                          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px" }}
                         >
                           <option value="">-- Kosong --</option>
                           {area === AREA_BERSAMA && <option value={NILAI_BERSAMA}>Semua / All (mode lama)</option>}
@@ -497,7 +479,7 @@ export default function PlottingOBPage() {
                   <button
                     onClick={simpanSatuHari}
                     disabled={isSavingHari}
-                    style={{ marginTop: "10px", padding: "14px", background: isSavingHari ? "#a0aec0" : "#3182ce", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isSavingHari ? "not-allowed" : "pointer" }}
+                    style={{ marginTop: "10px", padding: "14px", background: isSavingHari ? "#a0aec0" : "#3182ce", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isSavingHari ? "not-allowed" : "pointer" }}
                   >
                     {isSavingHari ? "Menyimpan..." : "💾 Simpan Tanggal Ini"}
                   </button>
@@ -506,11 +488,11 @@ export default function PlottingOBPage() {
             </div>
 
             {/* Tandai Izin */}
-            <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#1a202c" }}>🙋 Tandai Izin (Tanggal Terpilih)</h3>
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "var(--ink)" }}>🙋 Tandai Izin (Tanggal Terpilih)</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
                 {staffList.map((s) => (
-                  <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#2d3748" }}>
+                  <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--ink)" }}>
                     <input type="checkbox" checked={staffIzin.includes(s.nama)} onChange={() => toggleIzin(s.nama)} />
                     {s.nama} {s.nama === pelayananTetap ? "(Pelayanan Tetap)" : ""}
                   </label>
@@ -518,27 +500,27 @@ export default function PlottingOBPage() {
               </div>
               <button
                 onClick={hitungUlangDenganIzin}
-                style={{ width: "100%", padding: "12px", background: "white", color: "#d69e2e", border: "1px solid #fbd38d", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}
+                style={{ width: "100%", padding: "12px", background: "var(--surface)", color: "#d69e2e", border: "1px solid #fbd38d", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}
               >
                 🔄 Hitung Ulang Berdasarkan Izin
               </button>
-              <p style={{ margin: "10px 0 0 0", fontSize: "11px", color: "#a0aec0" }}>Setelah dihitung ulang, cek hasilnya di form di atas lalu klik &quot;Simpan Tanggal Ini&quot;.</p>
+              <p style={{ margin: "10px 0 0 0", fontSize: "11px", color: "var(--muted)" }}>Setelah dihitung ulang, cek hasilnya di form di atas lalu klik &quot;Simpan Tanggal Ini&quot;.</p>
             </div>
 
             {/* Generate Otomatis */}
-            <div style={{ background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#1a202c" }}>⚡ Generate Otomatis 1 Bulan</h3>
-              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#718096" }}>Mulai dari tanggal yang dipilih di atas, rotasi cleaning diacak ulang tiap blok waktu berikut untuk 30 hari ke depan.</p>
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "var(--ink)" }}>⚡ Generate Otomatis 1 Bulan</h3>
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--ink-soft)" }}>Mulai dari tanggal yang dipilih di atas, rotasi cleaning diacak ulang tiap blok waktu berikut untuk 30 hari ke depan.</p>
               <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
                 <button
                   onClick={() => setBlockSize("2")}
-                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "2" ? "2px solid #2c7a7b" : "1px solid #cbd5e0", background: blockSize === "2" ? "#e6fffa" : "white", color: "#2d3748", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
+                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "2" ? "2px solid #2c7a7b" : "1px solid var(--line)", background: blockSize === "2" ? "#e6fffa" : "white", color: "var(--ink)", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
                 >
                   Tiap 2 Hari
                 </button>
                 <button
                   onClick={() => setBlockSize("7")}
-                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "7" ? "2px solid #2c7a7b" : "1px solid #cbd5e0", background: blockSize === "7" ? "#e6fffa" : "white", color: "#2d3748", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
+                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "7" ? "2px solid #2c7a7b" : "1px solid var(--line)", background: blockSize === "7" ? "#e6fffa" : "white", color: "var(--ink)", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
                 >
                   Tiap 1 Minggu
                 </button>
@@ -546,7 +528,7 @@ export default function PlottingOBPage() {
               <button
                 onClick={generateSebulan}
                 disabled={isGenerating}
-                style={{ width: "100%", padding: "14px", background: isGenerating ? "#a0aec0" : "#234e52", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isGenerating ? "not-allowed" : "pointer" }}
+                style={{ width: "100%", padding: "14px", background: isGenerating ? "#a0aec0" : "#234e52", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: isGenerating ? "not-allowed" : "pointer" }}
               >
                 {isGenerating ? "🔄 Generating..." : "🚀 Generate 30 Hari ke Depan"}
               </button>
@@ -554,17 +536,17 @@ export default function PlottingOBPage() {
           </div>
 
           {/* KOLOM KANAN: KALENDER BULAN */}
-          <div className="plot-col" style={{ flex: "2 1 600px", background: "white", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
+          <div className="plot-col" style={{ flex: "2 1 600px", background: "var(--surface)", padding: "20px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-              <button onClick={() => gantiBulan(-1)} style={{ background: "#f1f5f9", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer" }}>◀</button>
-              <h3 style={{ margin: 0, fontSize: "15px", color: "#1a202c" }}>📆 {viewMonth}</h3>
-              <button onClick={() => gantiBulan(1)} style={{ background: "#f1f5f9", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer" }}>▶</button>
+              <button onClick={() => gantiBulan(-1)} style={{ background: "var(--hover)", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer" }}>◀</button>
+              <h3 style={{ margin: 0, fontSize: "15px", color: "var(--ink)" }}>📆 {viewMonth}</h3>
+              <button onClick={() => gantiBulan(1)} style={{ background: "var(--hover)", border: "none", borderRadius: "8px", padding: "8px 12px", cursor: "pointer" }}>▶</button>
             </div>
 
             {isLoadingMonth ? (
-              <div style={{ textAlign: "center", color: "#a0aec0", padding: "30px 0" }}>Memuat kalender...</div>
+              <div style={{ textAlign: "center", color: "var(--muted)", padding: "30px 0" }}>Memuat kalender...</div>
             ) : (
-              <div style={{ overflowX: "auto", maxHeight: "600px", overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: "12px" }}>
+              <div style={{ overflowX: "auto", maxHeight: "600px", overflowY: "auto", border: "1px solid var(--line)", borderRadius: "12px" }}>
                 <table className="cal-table">
                   <thead>
                     <tr>
@@ -601,6 +583,6 @@ export default function PlottingOBPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }

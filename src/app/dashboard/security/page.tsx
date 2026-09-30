@@ -489,7 +489,7 @@ export default function SecurityDashboard() {
     ? menuSecurity.filter(menu => menu.path === "/dashboard/security/buku-tamu" || menu.path === "/dashboard/security/paket")
     : menuSecurity;
 
-  const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
+  const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
 
   return (
     <AdminShell
@@ -804,15 +804,15 @@ export default function SecurityDashboard() {
       {/* ========================================== */}
       {activeModal === "lembur" && (
         <div className="no-print" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px" }}>
-          <div style={{ background: "white", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
+          <div style={{ background: "var(--surface)", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
 
-            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "15px", right: "15px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", zIndex: 10 }}>✖</button>
+            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "15px", right: "15px", background: "var(--hover)", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "var(--ink-soft)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", zIndex: 10 }}>✖</button>
 
-            <div style={{ marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "18px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ marginBottom: "20px", borderBottom: "2px solid var(--line)", paddingBottom: "15px", paddingRight: "30px" }}>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "18px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Klaim Overtime Security
               </h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "12px", lineHeight: "1.4" }}>Input tanggal kerja lembur (back-up shift / tugas ekstra) dalam satu siklus payroll.</p>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "12px", lineHeight: "1.4" }}>Input tanggal kerja lembur (back-up shift / tugas ekstra) dalam satu siklus payroll.</p>
             </div>
 
             <form onSubmit={handleSubmitLemburKolektif} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
@@ -820,12 +820,12 @@ export default function SecurityDashboard() {
               {/* Pilihan Periode Cut-Off Gaji */}
               <div className="input-grid-mobile">
                 <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Nama Petugas</label>
-                  <input type="text" readOnly value={picName} style={{...sharedInputStyle, background: "#e2e8f0"}} />
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Nama Petugas</label>
+                  <input type="text" readOnly value={picName} style={{...sharedInputStyle, background: "var(--hover)"}} />
                 </div>
                 <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
-                  <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "white", fontWeight: "bold", color: "#2d3748"}}>
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
+                  <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "var(--surface)", fontWeight: "bold", color: "var(--ink)"}}>
                     {daftarPeriodeLembur().map((p) => <option key={p.value} value={p.value}>{p.value} ({p.keterangan})</option>)}
                   </select>
                 </div>
@@ -835,47 +835,47 @@ export default function SecurityDashboard() {
 
               {/* Loop Form Dinamis */}
               {formLemburItems.map((item, index) => (
-                <div key={index} style={{ border: "1px solid #cbd5e0", padding: "20px 15px 15px", borderRadius: "16px", background: "#f8fafc", position: "relative" }}>
+                <div key={index} style={{ border: "1px solid var(--line)", padding: "20px 15px 15px", borderRadius: "16px", background: "var(--bg)", position: "relative" }}>
                   {index > 0 && (
-                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", zIndex: 5 }}>Hapus ✖</button>
+                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "var(--surface)", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", zIndex: 5 }}>Hapus ✖</button>
                   )}
 
                   <span style={{ position: "absolute", top: "10px", left: "15px", fontSize: "11px", fontWeight: "900", color: "#d69e2e", background: "#fffff0", padding: "2px 8px", borderRadius: "4px", border: "1px solid #fefcbf" }}>DATA KLAIM #{index + 1}</span>
 
                   <div className="input-grid-mobile" style={{ marginTop: "15px", marginBottom: "10px" }}>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
-                      <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
+                      <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Area Penjagaan *</label>
-                      <input type="text" required placeholder="Cth: Area Pos Security Utama" value={item.area_ruangan} onChange={(e) => handleLemburRowChange(index, "area_ruangan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Area Penjagaan *</label>
+                      <input type="text" required placeholder="Cth: Area Pos Security Utama" value={item.area_ruangan} onChange={(e) => handleLemburRowChange(index, "area_ruangan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                   </div>
 
                   <div className="input-grid-mobile" style={{ marginBottom: "10px" }}>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
-                      <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
+                      <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Selesai *</label>
-                      <input type="time" required value={item.jam_selesai} onChange={(e) => handleLemburRowChange(index, "jam_selesai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Jam Selesai *</label>
+                      <input type="time" required value={item.jam_selesai} onChange={(e) => handleLemburRowChange(index, "jam_selesai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Alasan Lembur *</label>
-                    <input type="text" required placeholder="Cth: Back-up shift personil yang sakit" value={item.alasan} onChange={(e) => handleLemburRowChange(index, "alasan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                    <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Alasan Lembur *</label>
+                    <input type="text" required placeholder="Cth: Back-up shift personil yang sakit" value={item.alasan} onChange={(e) => handleLemburRowChange(index, "alasan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                   </div>
                 </div>
               ))}
 
-              <button type="button" onClick={handleAddLemburRow} style={{ background: "white", color: "#d69e2e", border: "2px dashed #feccbf", padding: "12px", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+              <button type="button" onClick={handleAddLemburRow} style={{ background: "var(--surface)", color: "#d69e2e", border: "2px dashed #feccbf", padding: "12px", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
                 ➕ Tambah Tanggal Lembur Lain
               </button>
 
-              <button type="submit" disabled={isLemburLoading} style={{ width: "100%", padding: "16px", background: isLemburLoading ? "#a0aec0" : "#d69e2e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", marginTop: "10px", cursor: isLemburLoading ? "not-allowed" : "pointer", boxShadow: isLemburLoading ? "none" : "0 4px 6px rgba(214,158,46,0.3)" }}>
+              <button type="submit" disabled={isLemburLoading} style={{ width: "100%", padding: "16px", background: isLemburLoading ? "#a0aec0" : "#d69e2e", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", marginTop: "10px", cursor: isLemburLoading ? "not-allowed" : "pointer", boxShadow: isLemburLoading ? "none" : "0 4px 6px rgba(214,158,46,0.3)" }}>
                 {isLemburLoading ? "Sedang Mengirim..." : "Kirim Semua Klaim Overtime"}
               </button>
             </form>

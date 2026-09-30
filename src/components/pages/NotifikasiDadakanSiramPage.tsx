@@ -8,14 +8,12 @@ import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
 import { waktuWITASekarang } from "../../lib/shift";
 import { handleFotoUpload } from "../../lib/uploadFoto";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman Security lainnya
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconDroplet = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2s7 7.5 7 12a7 7 0 0 1-14 0c0-4.5 7-12 7-12z" /></svg>
 );
@@ -134,11 +132,7 @@ export default function NotifikasiDadakanSiramPage() {
   if (!isReady) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", paddingBottom: "40px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px" }}>
-        <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px" }}><IconArrowLeft /></button>
-        <h1 style={{ fontSize: "17px", fontWeight: 800, margin: 0, color: "var(--ink)" }}>Notifikasi Dadakan: Siram Tanaman</h1>
-      </div>
+    <AdminShell title="Siram Tanaman" subtitle="Upload foto bukti siram — jendela Pagi (06:00–07:00) & Malam (20:00–22:00) WITA" userName={picName || "Staf"} backHref="/" backLabel="Kembali" onBack={() => router.back()}>
       <div style={{ padding: "0 20px" }}>
         {!jendela ? (
           <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px" }}>
@@ -161,13 +155,13 @@ export default function NotifikasiDadakanSiramPage() {
             <IconDroplet size={36} />
             <div style={{ marginTop: "10px", fontWeight: 700, color: "var(--ink)" }}>Jendela {jendela} Aktif</div>
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginTop: "4px" }}>Siram tanaman & upload foto bukti sekarang.</div>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "16px", padding: "12px 22px", background: "var(--ok)", color: "#fff", borderRadius: "12px", fontWeight: 700, cursor: "pointer", opacity: isUploading ? 0.6 : 1 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "16px", padding: "12px 22px", background: "var(--ok-solid)", color: "#fff", borderRadius: "12px", fontWeight: 700, cursor: "pointer", opacity: isUploading ? 0.6 : 1 }}>
               <IconCamera color="#fff" /> {isUploading ? "Mengupload..." : "Upload Foto Bukti"}
               <input type="file" accept="image/*" capture="environment" onChange={handlePilihFoto} disabled={isUploading} style={{ display: "none" }} />
             </label>
           </div>
         )}
       </div>
-    </div>
+    </AdminShell>
   );
 }

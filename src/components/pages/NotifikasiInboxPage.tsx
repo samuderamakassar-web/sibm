@@ -15,11 +15,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import AdminShell from "../admin/AdminShell";
 
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconBell = ({ size = 32, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
 );
@@ -98,13 +96,7 @@ export default function NotifikasiInboxPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg, #f7f6f5)", paddingBottom: "40px" }}>
-      <style dangerouslySetInnerHTML={{ __html: `:root { --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4; --bg: #f7f6f5; --surface: #ffffff; --info: #2563eb; --info-50: #eff6ff; --accent: #7c3aed; }` }} />
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px", background: "var(--surface)", borderBottom: "1px solid var(--line)" }}>
-        <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px" }}><IconArrowLeft /></button>
-        <h1 style={{ fontSize: "17px", fontWeight: 800, margin: 0, color: "var(--ink)" }}>Notifikasi</h1>
-        {jumlahBelumDibaca > 0 && <span style={{ marginLeft: "auto", fontSize: "11px", fontWeight: 700, color: "var(--info)", background: "var(--info-50)", padding: "4px 10px", borderRadius: "20px" }}>{jumlahBelumDibaca} belum dibaca</span>}
-      </div>
+    <AdminShell title="Notifikasi" subtitle="Kotak masuk pengingat sistem & siaran pengumuman" userName={picName || "Staf"} backHref="/" backLabel="Kembali" onBack={() => router.back()} actions={jumlahBelumDibaca > 0 ? <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--info)", background: "var(--info-50)", padding: "4px 10px", borderRadius: "20px" }}>{jumlahBelumDibaca} belum dibaca</span> : undefined}>
 
       <div style={{ display: "flex", gap: "8px", padding: "14px 20px 0" }}>
         {([["semua", "Semua"], ["sistem", "Sistem"], ["siaran", "Siaran"]] as const).map(([key, label]) => (
@@ -153,6 +145,6 @@ export default function NotifikasiInboxPage() {
           </div>
         )}
       </div>
-    </div>
+    </AdminShell>
   );
 }

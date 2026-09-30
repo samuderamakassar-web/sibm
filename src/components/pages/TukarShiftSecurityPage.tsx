@@ -18,11 +18,9 @@ import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
 import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, menitSejakBatasShift, AMBANG_TELAT_SERAH_TERIMA_MENIT, TOLERANSI_JENDELA_TUKAR_JAGA_MENIT, ShiftLabel } from "../../lib/shift";
+import AdminShell from "../admin/AdminShell";
 
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconQrCode = ({ size = 36, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM19 14h2M14 19h2M19 19h2" /></svg>
 );
@@ -189,12 +187,7 @@ export default function TukarShiftSecurityPage() {
     : "";
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg, #f7f6f5)", paddingBottom: "40px" }}>
-      <style dangerouslySetInnerHTML={{ __html: `:root { --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4; --bg: #f7f6f5; --surface: #ffffff; --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff; --warn: #d97706; --warn-50: #fff7ed; }` }} />
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px" }}>
-        <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px" }}><IconArrowLeft /></button>
-        <h1 style={{ fontSize: "17px", fontWeight: 800, margin: 0, color: "var(--ink)" }}>Tukar Shift / Jaga</h1>
-      </div>
+    <AdminShell title="Tukar Shift / Jaga" subtitle="Serah terima jaga lewat scan QR antar petugas" userName={myName || "Staf"} backHref="/" backLabel="Kembali" onBack={() => router.back()}>
 
       <div style={{ padding: "0 20px", maxWidth: "460px", margin: "0 auto" }}>
         <div style={{ background: "var(--surface)", borderRadius: "16px", padding: "14px 18px", marginBottom: "16px", border: "1px solid var(--line)", textAlign: "center" }}>
@@ -212,7 +205,7 @@ export default function TukarShiftSecurityPage() {
                 </p>
                 <button
                   onClick={handleMulaiSerahTerima} disabled={isSaving}
-                  style={{ padding: "13px 22px", background: "var(--info)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
+                  style={{ padding: "13px 22px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
                 >
                   {isSaving ? "Membuat..." : "🔄 Selesai Jaga — Buat QR Serah Terima"}
                 </button>
@@ -239,7 +232,7 @@ export default function TukarShiftSecurityPage() {
               <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--info)", marginBottom: "12px" }}>📷 {handover.petugas_keluar} sudah selesai jaga</div>
               <p style={{ color: "var(--muted)", fontSize: "12.5px", marginBottom: "16px" }}>Scan QR dari layar HP {handover.petugas_keluar} untuk konfirmasi Anda menerima serah terima jaga.</p>
               {!isScanning ? (
-                <button onClick={() => setIsScanning(true)} style={{ padding: "13px 22px", background: "var(--info)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
+                <button onClick={() => setIsScanning(true)} style={{ padding: "13px 22px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
                   📷 Scan Sekarang
                 </button>
               ) : (
@@ -269,7 +262,7 @@ export default function TukarShiftSecurityPage() {
 
       {showAlasanTelat && handover && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "18px", maxWidth: "400px", width: "100%", padding: "24px 22px", boxShadow: "0 20px 40px rgba(0,0,0,0.25)" }}>
+          <div style={{ background: "var(--surface)", borderRadius: "18px", maxWidth: "400px", width: "100%", padding: "24px 22px", boxShadow: "0 20px 40px rgba(0,0,0,0.25)" }}>
             <div style={{ fontSize: "30px", textAlign: "center", marginBottom: "6px" }}>⏰</div>
             <h3 style={{ margin: "0 0 8px 0", fontSize: "16px", fontWeight: 800, color: "var(--ink)", textAlign: "center" }}>Serah Terima Terlambat</h3>
             <p style={{ margin: "0 0 16px 0", fontSize: "12.5px", color: "var(--muted)", textAlign: "center", lineHeight: 1.6 }}>
@@ -286,13 +279,13 @@ export default function TukarShiftSecurityPage() {
                 selesaikanHandover(handover, menitTerlambatPending, alasanTelat.trim());
               }}
               disabled={isSaving}
-              style={{ width: "100%", padding: "13px", background: "var(--info)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
+              style={{ width: "100%", padding: "13px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.6 : 1 }}
             >
               {isSaving ? "Menyimpan..." : "Kirim & Selesaikan Serah Terima"}
             </button>
           </div>
         </div>
       )}
-    </div>
+    </AdminShell>
   );
 }

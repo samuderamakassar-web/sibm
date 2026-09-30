@@ -4,16 +4,14 @@ import { useRouter } from "next/navigation";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../AbsensiCard";
-import NotifikasiBellButton from "../NotifikasiBellButton";
 import { useFcmSetup } from "../../hooks/useFcmSetup";
+import AdminShell from "../admin/AdminShell";
+import Tile from "../admin/Tile";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconLogOut = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
 );
@@ -67,51 +65,40 @@ export default function DashboardQHSEPage() {
   const picName = session.nama || "Staf QHSE";
 
   return (
-    <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <AdminShell
+      userName={picName || "Staf"}
+      backHref={null}
+      brandSub="QHSE"
+      onLogout={handleKeluar}
+      bottomNav={
+        <>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/")}>
+            <IconHome size={20} />
+            <span>Portal Utama</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/dashboard/qhse/sbo")}>
+            <IconClipboard size={20} />
+            <span>SBO</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/admin/apar")}>
+            <IconFireExtinguisher size={20} />
+            <span>APAR</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/admin/uji-emisi")}>
+            <IconCar size={20} />
+            <span>Kendaraan</span>
+          </button>
+          <button type="button" className="sa-nav-item is-danger" onClick={handleKeluar}>
+            <IconLogOut size={20} />
+            <span>Keluar</span>
+          </button>
+        </>
+      }
+    >
 
       {/* 💡 TOKEN DESAIN & CSS RESPONSIVE — satu ekosistem dengan portal (src/app/page.tsx) & dashboard/ob (components/pages/DashboardOBPage.tsx) */}
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .main-container { padding-bottom: 50px; }
-
-        .site-header {
-          position: sticky; top: 0; z-index: 50;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .site-header-brand { display: flex; align-items: center; gap: 10px; }
-        .logout-btn {
-          display: flex; align-items: center; gap: 6px; background: var(--red-50); color: var(--red-600);
-          border: 1px solid rgba(220,38,38,0.2); padding: 8px 15px; border-radius: 8px; font-size: 13px;
-          font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s;
-        }
-        .logout-btn:hover { background: var(--red-600); color: white; }
-
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 40px 20px 80px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-        .admin-hero-badge {
-          display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
-          backdrop-filter: blur(5px); padding: 8px 22px; border-radius: 50px; font-size: 14px; font-weight: 700;
-          border: 1px solid rgba(255,255,255,0.3);
-        }
 
         .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .admin-card {
@@ -125,13 +112,8 @@ export default function DashboardQHSEPage() {
         .admin-card-desc { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
         .admin-card-arrow { margin-top: auto; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 4px; }
 
-        .mobile-nav { display: none; }
-        .hide-on-mobile { display: flex; }
-
         /* 📱 MEDIA QUERY UNTUK HP */
         @media (max-width: 768px) {
-          .main-container { padding-bottom: 90px !important; }
-          .hide-on-mobile { display: none !important; }
 
           .admin-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
           .admin-card { flex-direction: row !important; align-items: center !important; padding: 15px 20px !important; gap: 15px !important; border-radius: 16px !important; }
@@ -143,50 +125,36 @@ export default function DashboardQHSEPage() {
           .admin-card-arrow { display: none !important; }
 
           /* DESAIN BOTTOM NAV KHUSUS STAF LAPANGAN */
-          .mobile-nav {
-            display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-top: 1px solid var(--line);
-            z-index: 90; padding: 12px 10px; justify-content: space-between; box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
-            overflow-x: auto; scroll-snap-type: x mandatory;
-          }
-          .mobile-nav::-webkit-scrollbar { display: none; }
-          .m-nav-item {
-            display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink-soft);
-            font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; background: none; border: none; font-family: inherit;
-            flex: 0 0 auto; min-width: 65px; scroll-snap-align: start; text-align: center;
-          }
-          .m-nav-item:active { transform: scale(0.9); }
+        }
+      
+        /* 🎨 Tema Bento Hangat (§58L) -- menimpa gaya kartu lama, token dari admin-theme.css */
+        .staff-hero { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        .staff-hero-label { font-size: 13px; font-weight: 600; opacity: 0.85; }
+        .staff-hero-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.12; letter-spacing: -0.02em; }
+        .staff-hero-chip { align-self: flex-start; margin-top: 6px; padding: 6px 14px; border-radius: 16px; background: rgba(0,0,0,0.22); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .section-title-icon { background: var(--red-50) !important; color: var(--red-600) !important; border-radius: 14px !important; }
+        .shift-card { background: var(--tile) !important; border: none !important; box-shadow: none !important; border-radius: 28px !important; }
+        .shift-badge { border: none !important; border-radius: 16px !important; }
+        .coord-card { border-radius: 28px !important; box-shadow: none !important; }
+        .admin-grid { gap: 12px !important; margin: 16px 0 !important; }
+        .admin-card { background: var(--tile) !important; border: none !important; box-shadow: none !important; border-radius: 24px !important; }
+        .admin-card:hover { transform: translateY(-2px) !important; box-shadow: none !important; }
+        .admin-card-icon { border-radius: 16px !important; }
+        .admin-card-title { color: var(--ink) !important; font-weight: 700 !important; }
+        .admin-card-desc { color: var(--ink-soft) !important; }
+        @media (max-width: 768px) {
+          .staff-hero-title { font-size: 24px; }
+          .admin-card { border-radius: 22px !important; }
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR (desktop) */}
-      <div className="hide-on-mobile site-header">
-        <div className="site-header-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-samudera.png" alt="Logo" style={{ height: "30px" }} />
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "16px", borderLeft: "2px solid var(--line)", paddingLeft: "10px" }}>QHSE Desk</span>
-        </div>
-        <button className="logout-btn" onClick={handleKeluar}>
-          <IconLogOut size={15} /> Keluar
-        </button>
-      </div>
+      {/* 🔹 KARTU SAPAAN (pengganti hero merah lama) */}
+      <Tile variant="brand" className="staff-hero">
+        <span className="staff-hero-label">QHSE Command Center</span>
+        <h1 className="staff-hero-title">Halo, {picName.split(/\s+/)[0]}.<br />Gedung aman & sehat hari ini?</h1>
+      </Tile>
 
-      {/* 🔹 HERO SECTION */}
-      <div className="admin-hero">
-        <div style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
-          <NotifikasiBellButton picName={picName} variant="terang" />
-        </div>
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>QHSE COMMAND CENTER</h1>
-          <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Sistem Pemantauan Keselamatan & Lingkungan Kerja Gedung</p>
-          <div className="admin-hero-badge">
-            <IconUserCircle size={16} /> PIC: {picName}
-          </div>
-        </div>
-      </div>
-
-      {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
+      <div>
 
         <AbsensiCard picName={picName} departemen="QHSE" />
 
@@ -218,29 +186,7 @@ export default function DashboardQHSEPage() {
       </div>
 
       {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) */}
-      <div className="mobile-nav">
-        <button className="m-nav-item" onClick={() => router.push("/")}>
-          <IconHome size={20} />
-          <span>Portal Utama</span>
-        </button>
-        <button className="m-nav-item" onClick={() => router.push("/dashboard/qhse/sbo")} style={{ color: "var(--ok)" }}>
-          <IconClipboard size={20} />
-          <span>SBO</span>
-        </button>
-        <button className="m-nav-item" onClick={() => router.push("/admin/apar")} style={{ color: "var(--red-600)" }}>
-          <IconFireExtinguisher size={20} />
-          <span>APAR</span>
-        </button>
-        <button className="m-nav-item" onClick={() => router.push("/admin/uji-emisi")} style={{ color: "var(--info)" }}>
-          <IconCar size={20} />
-          <span>Kendaraan</span>
-        </button>
-        <button className="m-nav-item" onClick={handleKeluar} style={{ color: "var(--red-600)" }}>
-          <IconLogOut size={20} />
-          <span>Keluar</span>
-        </button>
-      </div>
 
-    </div>
+    </AdminShell>
   );
 }

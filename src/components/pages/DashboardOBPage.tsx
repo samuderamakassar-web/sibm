@@ -6,19 +6,17 @@ import { collection, doc, onSnapshot, query, where, addDoc, serverTimestamp } fr
 import { db } from "@/lib/firebase";
 import { useFcmSetup } from "@/hooks/useFcmSetup";
 import { logoutWithConfirm, useAuthGuard } from "@/hooks/useAuthGuard";
-import NotifikasiBellButton from "@/components/NotifikasiBellButton";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useToast } from "@/components/ui/ToastProvider";
 import AbsensiCard from "@/components/AbsensiCard";
 import { daftarPeriodeLembur, periodeLemburAktif } from "../../lib/periodeLembur";
+import AdminShell from "../admin/AdminShell";
+import Tile from "../admin/Tile";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconUserCircle = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-);
 const IconClipboard = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 11h6" /><path d="M9 15h6" /><path d="M9 19h3" /></svg>
 );
@@ -260,56 +258,49 @@ export default function DashboardOBPage() {
     accent: { bg: "#f5f3ff", color: "var(--accent)" },
   };
 
-  const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
+  const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
 
   if (!isAuthReady || !session || !isReady) return null;
 
   return (
-    <div className="main-container" style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <AdminShell
+      userName={picName || "Staf"}
+      backHref={null}
+      brandSub="OB & CS"
+      onLogout={handleKeluar}
+      bottomNav={
+        <>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/")}>
+            <IconHome size={20} />
+            <span>Home</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/dashboard/ob/checklist")}>
+            <IconClipboard size={20} />
+            <span>Checklist</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/dashboard/ob/stok")}>
+            <IconDroplet size={20} />
+            <span>Stok</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => setActiveModal("lembur")}>
+            <IconClock size={20} />
+            <span>Lembur</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => router.push("/dashboard/ob/laporan")}>
+            <IconSearch size={20} />
+            <span>Inspeksi</span>
+          </button>
+          <button type="button" className="sa-nav-item is-danger" onClick={handleKeluar}>
+            <IconLogOut size={20} />
+            <span>Keluar</span>
+          </button>
+        </>
+      }
+    >
 
       {/* 💡 TOKEN DESAIN & CSS RESPONSIVE — satu ekosistem dengan portal (src/app/page.tsx) & admin (src/app/admin/page.tsx) */}
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .main-container { padding-bottom: 50px; }
-
-        .site-header {
-          position: sticky; top: 0; z-index: 50;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .site-header-brand { display: flex; align-items: center; gap: 10px; }
-        .logout-btn {
-          display: flex; align-items: center; gap: 6px; background: var(--red-50); color: var(--red-600);
-          border: 1px solid rgba(220,38,38,0.2); padding: 8px 15px; border-radius: 8px; font-size: 13px;
-          font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s;
-        }
-        .logout-btn:hover { background: var(--red-600); color: white; }
-
-        .admin-hero {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 40px 20px 80px; text-align: center;
-          background: linear-gradient(150deg, var(--red-700) 0%, var(--red-600) 55%, #c62828 100%);
-          box-shadow: 0 16px 30px -16px rgba(220,38,38,0.5);
-        }
-        .admin-hero::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .admin-hero-content { position: relative; }
-        .admin-hero-badge {
-          display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
-          backdrop-filter: blur(5px); padding: 8px 22px; border-radius: 50px; font-size: 14px; font-weight: 700;
-          border: 1px solid rgba(255,255,255,0.3);
-        }
 
         .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
         .section-title-icon { background: var(--red-50); color: var(--red-600); padding: 8px; border-radius: 12px; display: flex; }
@@ -322,7 +313,7 @@ export default function DashboardOBPage() {
         .shift-badge { padding: 10px 20px; border-radius: 12px; font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 8px; width: fit-content; border: 1px solid; }
 
         .stock-banner { background: var(--red-50); border: 1px solid rgba(220,38,38,0.25); border-radius: 20px; padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; box-shadow: 0 4px 6px -1px rgba(220,38,38,0.08); }
-        .stock-icon { background: var(--red-600); color: white; width: 45px; height: 45px; border-radius: 50%; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
+        .stock-icon { background: var(--brand); color: white; width: 45px; height: 45px; border-radius: 50%; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
         .stock-chip { background: var(--surface); color: var(--red-600); border: 1px solid rgba(220,38,38,0.3); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; }
 
         .coord-card { flex: 1; min-width: 250px; color: white; padding: 20px; border-radius: 20px; cursor: pointer; display: flex; align-items: center; gap: 20px; transition: transform 0.2s; }
@@ -346,13 +337,9 @@ export default function DashboardOBPage() {
         .dc-status { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; }
 
         .input-grid-mobile { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .mobile-nav { display: none; }
-        .hide-on-mobile { display: flex; }
 
         /* 📱 MEDIA QUERY UNTUK HP */
         @media (max-width: 768px) {
-          .main-container { padding-bottom: 90px !important; }
-          .hide-on-mobile { display: none !important; }
 
           .admin-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
           .admin-card { flex-direction: row !important; align-items: center !important; padding: 15px 20px !important; gap: 15px !important; border-radius: 16px !important; }
@@ -367,50 +354,36 @@ export default function DashboardOBPage() {
           .dc-row { flex-direction: column; align-items: flex-start !important; gap: 10px; }
 
           /* DESAIN BOTTOM NAV KHUSUS STAF LAPANGAN */
-          .mobile-nav {
-            display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-top: 1px solid var(--line);
-            z-index: 90; padding: 12px 10px; justify-content: space-between; box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.1);
-            overflow-x: auto; scroll-snap-type: x mandatory;
-          }
-          .mobile-nav::-webkit-scrollbar { display: none; }
-          .m-nav-item {
-            display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink-soft);
-            font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; background: none; border: none; font-family: inherit;
-            flex: 0 0 auto; min-width: 65px; scroll-snap-align: start; text-align: center;
-          }
-          .m-nav-item:active { transform: scale(0.9); }
+        }
+      
+        /* 🎨 Tema Bento Hangat (§58L) -- menimpa gaya kartu lama, token dari admin-theme.css */
+        .staff-hero { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        .staff-hero-label { font-size: 13px; font-weight: 600; opacity: 0.85; }
+        .staff-hero-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.12; letter-spacing: -0.02em; }
+        .staff-hero-chip { align-self: flex-start; margin-top: 6px; padding: 6px 14px; border-radius: 16px; background: rgba(0,0,0,0.22); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .section-title-icon { background: var(--red-50) !important; color: var(--red-600) !important; border-radius: 14px !important; }
+        .shift-card { background: var(--tile) !important; border: none !important; box-shadow: none !important; border-radius: 28px !important; }
+        .shift-badge { border: none !important; border-radius: 16px !important; }
+        .coord-card { border-radius: 28px !important; box-shadow: none !important; }
+        .admin-grid { gap: 12px !important; margin: 16px 0 !important; }
+        .admin-card { background: var(--tile) !important; border: none !important; box-shadow: none !important; border-radius: 24px !important; }
+        .admin-card:hover { transform: translateY(-2px) !important; box-shadow: none !important; }
+        .admin-card-icon { border-radius: 16px !important; }
+        .admin-card-title { color: var(--ink) !important; font-weight: 700 !important; }
+        .admin-card-desc { color: var(--ink-soft) !important; }
+        @media (max-width: 768px) {
+          .staff-hero-title { font-size: 24px; }
+          .admin-card { border-radius: 22px !important; }
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR (desktop) */}
-      <div className="hide-on-mobile site-header">
-        <div className="site-header-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg" alt="Logo" style={{ height: "30px" }} />
-          <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "16px", borderLeft: "2px solid var(--line)", paddingLeft: "10px" }}>OB & CS Desk</span>
-        </div>
-        <button className="logout-btn" onClick={handleKeluar}>
-          <IconLogOut size={15} /> Keluar
-        </button>
-      </div>
+      {/* 🔹 KARTU SAPAAN (pengganti hero merah lama) */}
+      <Tile variant="brand" className="staff-hero">
+        <span className="staff-hero-label">Cleaning Center · OB & CS</span>
+        <h1 className="staff-hero-title">Halo, {picName.split(/\s+/)[0]}.<br />Siap bersih-bersih hari ini?</h1>
+      </Tile>
 
-      {/* 🔹 HERO SECTION */}
-      <div className="admin-hero">
-        <div style={{ position: "absolute", top: "16px", right: "20px", zIndex: 2 }}>
-          <NotifikasiBellButton picName={picName} variant="terang" />
-        </div>
-        <div className="admin-hero-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>CLEANING CENTER</h1>
-          <p style={{ margin: "0 0 20px 0", fontSize: "14px", opacity: 0.9 }}>Pusat Manajemen Kebersihan & Fasilitas Gedung</p>
-          <div className="admin-hero-badge">
-            <IconUserCircle size={16} /> PIC: {picName}
-          </div>
-        </div>
-      </div>
-
-      {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1100px", margin: "-45px auto 0", padding: "0 15px", position: "relative", zIndex: 10 }}>
+      <div>
 
         {/* 📢 KARTU LOKASI SHIFT */}
         <div className="shift-card">
@@ -507,7 +480,7 @@ export default function DashboardOBPage() {
         {tugasDeepCleaning.length > 0 && (
           <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid var(--line)" }}>
             <div className="section-title" style={{ marginBottom: "20px" }}>
-              <div className="section-title-icon" style={{ background: "#f5f3ff", color: "var(--accent)" }}><IconCalendar size={20} /></div>
+              <div className="section-title-icon" style={{ background: "var(--accent-50)", color: "var(--accent)" }}><IconCalendar size={20} /></div>
               <div>
                 <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px" }}>Tugas Ekstra (Deep Cleaning)</h2>
                 <p style={{ margin: "0", color: "var(--muted)", fontSize: "13px" }}>Daftar tugas perawatan terjadwal dari Koordinator.</p>
@@ -526,7 +499,7 @@ export default function DashboardOBPage() {
                   }}>
                     <div>
                       <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "5px" }}>
-                        <span className="dc-badge" style={isToday ? { background: "var(--warn)", color: "white" } : { background: "var(--line)", color: "var(--ink-soft)" }}>
+                        <span className="dc-badge" style={isToday ? { background: "var(--warn-solid)", color: "#fff" } : { background: "var(--line)", color: "var(--muted-solid)" }}>
                           {isToday ? "🔥 HARI INI" : `📅 ${tugas.tanggal}`}
                         </span>
                       </div>
@@ -546,32 +519,6 @@ export default function DashboardOBPage() {
       </div>
 
       {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) */}
-      <div className="mobile-nav">
-        <button className="m-nav-item" onClick={() => router.push("/")}>
-          <IconHome size={20} />
-          <span>Portal Utama</span>
-        </button>
-        <button className="m-nav-item" onClick={() => router.push("/dashboard/ob/checklist")} style={{ color: "var(--ok)" }}>
-          <IconClipboard size={20} />
-          <span>Checklist</span>
-        </button>
-        <button className="m-nav-item" onClick={() => router.push("/dashboard/ob/stok")} style={{ color: "var(--warn)" }}>
-          <IconDroplet size={20} />
-          <span>Stok Barang</span>
-        </button>
-        <button className="m-nav-item" onClick={() => setActiveModal("lembur")} style={{ color: "var(--accent)" }}>
-          <IconClock size={20} />
-          <span>Lembur</span>
-        </button>
-        <button className="m-nav-item" onClick={() => router.push("/dashboard/ob/laporan")} style={{ color: "var(--info)" }}>
-          <IconSearch size={20} />
-          <span>Inspeksi</span>
-        </button>
-        <button className="m-nav-item" onClick={handleKeluar} style={{ color: "var(--red-600)" }}>
-          <IconLogOut size={20} />
-          <span>Keluar</span>
-        </button>
-      </div>
 
       {/* ========================================== */}
       {/* 💡 MODAL PENGAJUAN LEMBUR MULTI-ROW BERDASARKAN PERIODE */}
@@ -579,15 +526,15 @@ export default function DashboardOBPage() {
       {/* ========================================== */}
       {activeModal === "lembur" && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px" }}>
-          <div style={{ background: "white", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
+          <div style={{ background: "var(--surface)", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
 
-            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "15px", right: "15px", background: "#edf2f7", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "#4a5568", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", zIndex: 10 }}>✖</button>
+            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "15px", right: "15px", background: "var(--hover)", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "var(--ink-soft)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", zIndex: 10 }}>✖</button>
 
-            <div style={{ marginBottom: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "18px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ marginBottom: "20px", borderBottom: "2px solid var(--line)", paddingBottom: "15px", paddingRight: "30px" }}>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "18px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Klaim Overtime
               </h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "12px", lineHeight: "1.4" }}>Karyawan dapat memasukkan beberapa tanggal lembur sekaligus dalam satu siklus payroll.</p>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "12px", lineHeight: "1.4" }}>Karyawan dapat memasukkan beberapa tanggal lembur sekaligus dalam satu siklus payroll.</p>
             </div>
 
             <form onSubmit={handleSubmitLemburKolektif} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
@@ -595,12 +542,12 @@ export default function DashboardOBPage() {
               {/* Pilihan Periode Cut-Off Gaji */}
               <div className="input-grid-mobile">
                 <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Nama Pemohon</label>
-                  <input type="text" readOnly value={picName} style={{...sharedInputStyle, background: "#e2e8f0"}} />
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Nama Pemohon</label>
+                  <input type="text" readOnly value={picName} style={{...sharedInputStyle, background: "var(--hover)"}} />
                 </div>
                 <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
-                  <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "white", fontWeight: "bold", color: "#2d3748"}}>
+                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
+                  <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "var(--surface)", fontWeight: "bold", color: "var(--ink)"}}>
                     {daftarPeriodeLembur().map((p) => <option key={p.value} value={p.value}>{p.value} ({p.keterangan})</option>)}
                   </select>
                 </div>
@@ -610,47 +557,47 @@ export default function DashboardOBPage() {
 
               {/* Loop Form Dinamis */}
               {formLemburItems.map((item, index) => (
-                <div key={index} style={{ border: "1px solid #cbd5e0", padding: "20px 15px 15px", borderRadius: "16px", background: "#f8fafc", position: "relative" }}>
+                <div key={index} style={{ border: "1px solid var(--line)", padding: "20px 15px 15px", borderRadius: "16px", background: "var(--bg)", position: "relative" }}>
                   {index > 0 && (
-                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "white", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", zIndex: 5 }}>Hapus ✖</button>
+                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "var(--surface)", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", zIndex: 5 }}>Hapus ✖</button>
                   )}
 
                   <span style={{ position: "absolute", top: "10px", left: "15px", fontSize: "11px", fontWeight: "900", color: "#d69e2e", background: "#fffff0", padding: "2px 8px", borderRadius: "4px", border: "1px solid #fefcbf" }}>DATA KLAIM #{index + 1}</span>
 
                   <div className="input-grid-mobile" style={{ marginTop: "15px", marginBottom: "10px" }}>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
-                      <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
+                      <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Area / Lokasi Ruangan *</label>
-                      <input type="text" required placeholder="Cth: Lt. 2 R. Rapat" value={item.area_ruangan} onChange={(e) => handleLemburRowChange(index, "area_ruangan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Area / Lokasi Ruangan *</label>
+                      <input type="text" required placeholder="Cth: Lt. 2 R. Rapat" value={item.area_ruangan} onChange={(e) => handleLemburRowChange(index, "area_ruangan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                   </div>
 
                   <div className="input-grid-mobile" style={{ marginBottom: "10px" }}>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
-                      <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
+                      <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                     <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Jam Selesai *</label>
-                      <input type="time" required value={item.jam_selesai} onChange={(e) => handleLemburRowChange(index, "jam_selesai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Jam Selesai *</label>
+                      <input type="time" required value={item.jam_selesai} onChange={(e) => handleLemburRowChange(index, "jam_selesai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                     </div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: "11px", fontWeight: "bold", color: "#4a5568", marginBottom: "4px", display: "block" }}>Detail Tugas / Pekerjaan yang Diselesaikan *</label>
-                    <input type="text" required placeholder="Cth: Pembersihan karpet koridor utama pasca rapat besar" value={item.alasan} onChange={(e) => handleLemburRowChange(index, "alasan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "white"}} />
+                    <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Detail Tugas / Pekerjaan yang Diselesaikan *</label>
+                    <input type="text" required placeholder="Cth: Pembersihan karpet koridor utama pasca rapat besar" value={item.alasan} onChange={(e) => handleLemburRowChange(index, "alasan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
                   </div>
                 </div>
               ))}
 
-              <button type="button" onClick={handleAddLemburRow} style={{ background: "white", color: "#d69e2e", border: "2px dashed #feccbf", padding: "12px", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
+              <button type="button" onClick={handleAddLemburRow} style={{ background: "var(--surface)", color: "#d69e2e", border: "2px dashed #feccbf", padding: "12px", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
                 ➕ Tambah Tanggal Lembur Lain
               </button>
 
-              <button type="submit" disabled={isLemburLoading} style={{ width: "100%", padding: "16px", background: isLemburLoading ? "#a0aec0" : "#d69e2e", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", marginTop: "10px", cursor: isLemburLoading ? "not-allowed" : "pointer", boxShadow: isLemburLoading ? "none" : "0 4px 6px rgba(214,158,46,0.3)" }}>
+              <button type="submit" disabled={isLemburLoading} style={{ width: "100%", padding: "16px", background: isLemburLoading ? "#a0aec0" : "#d69e2e", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", marginTop: "10px", cursor: isLemburLoading ? "not-allowed" : "pointer", boxShadow: isLemburLoading ? "none" : "0 4px 6px rgba(214,158,46,0.3)" }}>
                 {isLemburLoading ? "Sedang Mengirim..." : "Kirim Semua Klaim Overtime"}
               </button>
             </form>
@@ -659,6 +606,6 @@ export default function DashboardOBPage() {
         </div>
       )}
 
-    </div>
+    </AdminShell>
   );
 }

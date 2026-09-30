@@ -455,7 +455,7 @@ export default function LogOperasionalPage() {
           border-radius: 12px; border: none; background: transparent; color: var(--muted); font-weight: 800;
           font-size: 13px; cursor: pointer; font-family: inherit; transition: 0.2s;
         }
-        .tab-btn.active { background: var(--red-600); color: #fff; box-shadow: 0 6px 14px -6px rgba(220,38,38,0.6); }
+        .tab-btn.active { background: var(--brand); color: #fff; box-shadow: 0 6px 14px -6px rgba(220,38,38,0.6); }
 
         .aksi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-width: 200px; }
         .aksi-btn {

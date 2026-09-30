@@ -372,7 +372,7 @@ export default function PengaturanJadwalSecurity() {
         .legend-box { background: var(--warn-50); border: 1px solid rgba(217,119,6,0.25); padding: 12px 15px; border-radius: 12px; margin-bottom: 15px; font-size: 12px; color: var(--warn); font-weight: bold; }
 
         .matrix-cell-btn { width: 100%; padding: 5px 2px; font-size: 10px; font-weight: bold; border-radius: 5px; border: none; cursor: pointer; color: white; font-family: inherit; }
-        .generate-btn { width: 100%; padding: 14px; background: var(--info); color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(37,99,235,0.3); display: flex; justify-content: center; align-items: center; gap: 8px; font-family: inherit; }
+        .generate-btn { width: 100%; padding: 14px; background: var(--info-solid); color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(37,99,235,0.3); display: flex; justify-content: center; align-items: center; gap: 8px; font-family: inherit; }
         .publish-btn { width: 100%; padding: 16px; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 30px; box-shadow: 0 4px 6px rgba(220,38,38,0.3); transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; }
 
         @media (max-width: 640px) {

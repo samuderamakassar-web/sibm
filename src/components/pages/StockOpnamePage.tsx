@@ -1,20 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain (DashboardOBPage/ChecklistOBPage)
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconPackage = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" /></svg>
 );
@@ -119,7 +116,6 @@ function hitungAnalisaPemakaian(item: StockItem, semuaLog: StockLog[]): AnalisaP
 }
 
 export default function StockOpnamePage() {
-  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -257,44 +253,10 @@ export default function StockOpnamePage() {
   const picName = session.nama || "";
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Inventori Gudang OB" subtitle="Pantau stok, analisa pemakaian, dan rencana belanja supaya stok selalu sehat" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
 
       <style dangerouslySetInnerHTML={{__html: `
-        :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-        }
         * { box-sizing: border-box; }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 24px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 20;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
-        .hero-stok {
-          position: relative; overflow: hidden; border-radius: 0 0 30px 30px; color: #fff;
-          padding: 40px 20px 70px; text-align: center;
-          background: linear-gradient(150deg, #9a3412 0%, var(--warn) 55%, #c2680f 100%);
-          box-shadow: 0 16px 30px -16px rgba(217,119,6,0.4);
-        }
-        .hero-stok::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-          background-image: linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-          background-size: 28px 28px; mask-image: linear-gradient(180deg, black, transparent 88%);
-        }
-        .hero-stok-content { position: relative; }
-        .hero-badge {
-          display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.15);
-          backdrop-filter: blur(5px); padding: 8px 20px; border-radius: 50px; font-size: 13px; font-weight: 700;
-          border: 1px solid rgba(255,255,255,0.3);
-        }
         .card { background: var(--surface); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border: 1px solid var(--line); }
         .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
         .section-title-icon { padding: 8px; border-radius: 12px; display: flex; }
@@ -314,24 +276,7 @@ export default function StockOpnamePage() {
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="top-bar">
-        <button className="back-btn" onClick={() => router.push("/dashboard/ob")}><IconArrowLeft size={16} /></button>
-        <div className="hero-badge" style={{ background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.25)" }}>
-          <IconPackage size={15} /> Petugas: {picName}
-        </div>
-      </div>
-
-      {/* 🔹 HERO SECTION */}
-      <div className="hero-stok">
-        <div className="hero-stok-content">
-          <h1 style={{ margin: "0 0 5px 0", fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "900", letterSpacing: "1px" }}>INVENTORI GUDANG OB</h1>
-          <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>Pantau stok, analisa pemakaian, dan rencana belanja — biar stok selalu sehat & gak pernah habis</p>
-        </div>
-      </div>
-
-      {/* 🔹 MAIN CONTENT WRAPPER */}
-      <div style={{ maxWidth: "1200px", margin: "-40px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
+      <div>
 
         <div className="stok-wrapper" style={{ display: "flex", flexWrap: "wrap", gap: "25px", alignItems: "flex-start" }}>
 
@@ -362,7 +307,7 @@ export default function StockOpnamePage() {
               </div>
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "var(--accent)" : "var(--warn)"), color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", transition: "0.2s" }}>
+                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "var(--accent-solid)" : "var(--warn-solid)"), color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", transition: "0.2s" }}>
                   {isLoading ? "Memproses..." : (isEditMode ? "Simpan Perubahan" : "+ Tambahkan")}
                 </button>
                 {isEditMode && (
@@ -408,7 +353,7 @@ export default function StockOpnamePage() {
                           <td style={{ color: "var(--muted)" }}>{a.item.batas_minimum}</td>
                           <td style={{ color: "var(--ink-soft)" }}>{a.adaDataPemakaian ? `${Math.round(a.rataRataPerBulan)} / bulan` : "Belum ada data"}</td>
                           <td>
-                            <span className="badge" style={{ background: "var(--red-600)", color: "white" }}>Beli {a.jumlahDisarankan} pcs</span>
+                            <span className="badge" style={{ background: "var(--brand)", color: "#fff" }}>Beli {a.jumlahDisarankan} pcs</span>
                           </td>
                         </tr>
                       ))}
@@ -603,6 +548,6 @@ export default function StockOpnamePage() {
           </div>
         </div>
       </div>
-    </div>
+    </AdminShell>
   );
 }

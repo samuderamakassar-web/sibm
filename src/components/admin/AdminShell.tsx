@@ -31,6 +31,9 @@ interface AdminShellProps {
   /** Tujuan tombol kembali. null = tampilkan logo SIBM (dipakai halaman hub admin). */
   backHref?: string | null;
   backLabel?: string;
+  /** Kalau diisi, tombol kembali menjalankan ini (mis. router.back()) alih-alih pindah ke backHref.
+   *  Dipakai halaman yang bisa dibuka dari banyak tempat (notifikasi, tukar shift, siram). */
+  onBack?: () => void;
   /** Tombol tambahan di sisi kanan judul halaman (mis. "Tambah Data", "Export"). */
   actions?: ReactNode;
   /** Kalau diisi, muncul tombol logout bulat di header. */
@@ -55,6 +58,7 @@ export default function AdminShell({
   userName,
   backHref = "/admin",
   backLabel = "Control Panel",
+  onBack,
   actions,
   onLogout,
   brandSub = "Admin GA",
@@ -70,7 +74,7 @@ export default function AdminShell({
       <header className="sa-header">
         <div className="sa-header-left">
           {backHref ? (
-            <button type="button" className="sa-back-btn" onClick={() => router.push(backHref)} aria-label={`Kembali ke ${backLabel}`}>
+            <button type="button" className="sa-back-btn" onClick={() => (onBack ? onBack() : router.push(backHref))} aria-label={`Kembali ke ${backLabel}`}>
               <AdminIcon name="arrowLeft" size={18} strokeWidth={2} />
               <span className="sa-hide-mobile">{backLabel}</span>
             </button>

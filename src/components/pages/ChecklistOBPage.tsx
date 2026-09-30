@@ -6,14 +6,12 @@ import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, orderBy
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/lib/shift";
+import AdminShell from "../admin/AdminShell";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/ob (components/pages/DashboardOBPage.tsx)
 // ==========================================
 type IconProps = { size?: number; color?: string };
-const IconArrowLeft = ({ size = 18, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
-);
 const IconClipboard = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 11h6" /><path d="M9 15h6" /><path d="M9 19h3" /></svg>
 );
@@ -771,14 +769,7 @@ export default function ChecklistOBPage() {
   }
 
   const rootTokenCSS = `
-    :root {
-      --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-      --bg: #f7f6f5; --surface: #ffffff;
-      --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-      --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-      --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-    }
-  `;
+    `;
 
   if (isPageLoading) {
     return (
@@ -791,22 +782,12 @@ export default function ChecklistOBPage() {
   }
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", paddingBottom: "50px" }}>
+    <AdminShell title="Checklist Kebersihan" subtitle="Lapor pekerjaan kebersihan harian per area & sesi" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
 
       <style dangerouslySetInnerHTML={{__html: `
         ${rootTokenCSS}
         * { box-sizing: border-box; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .top-bar {
-          display: flex; justify-content: space-between; align-items: center; padding: 14px 20px;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-          position: sticky; top: 0; z-index: 20;
-        }
-        .back-btn {
-          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px;
-          display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-soft); transition: 0.2s;
-        }
-        .back-btn:hover { background: var(--line); }
         .tab-switch { background: var(--bg); padding: 4px; border-radius: 10px; display: flex; gap: 4px; }
         .tab-btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
         .tab-btn.active { background: var(--surface); color: var(--ok); box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
@@ -814,8 +795,8 @@ export default function ChecklistOBPage() {
         .segment-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px 4px; color: var(--ink); font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
         .question-row { background: var(--surface); padding: 16px; border-radius: 16px; box-shadow: 0 6px 12px -4px rgba(0,0,0,0.05); border: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
         .answer-btn { display: flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-weight: bold; font-size: 13px; cursor: pointer; font-family: inherit; transition: 0.15s; }
-        .answer-btn.ya.active { border-color: var(--ok); background: var(--ok); color: white; }
-        .answer-btn.tidak.active { border-color: var(--red-600); background: var(--red-600); color: white; }
+        .answer-btn.ya.active { border-color: var(--ok-solid); background: var(--ok-solid); color: white; }
+        .answer-btn.tidak.active { border-color: var(--brand); background: var(--brand); color: white; }
         .foto-dropzone { width: 100%; aspect-ratio: 3/4; background: var(--surface); border: none; border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 12px; font-weight: bold; transition: 0.2s; }
         .input-grid-mobile { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         @media (max-width: 640px) {
@@ -825,11 +806,7 @@ export default function ChecklistOBPage() {
         }
       `}} />
 
-      {/* 🔹 TOP BAR NAVBAR */}
-      <div className="top-bar">
-        <button className="back-btn" onClick={() => router.push("/dashboard/ob")}><IconArrowLeft size={16} /></button>
-
-        {/* TAB SWITCHER */}
+      <div className="no-print staff-toolbar">
         <div className="tab-switch">
           <button onClick={() => setActiveTab("form")} className={`tab-btn ${activeTab === "form" ? "active" : ""}`}>
             <IconClipboard size={14} /> Lapor Kerja
@@ -840,7 +817,7 @@ export default function ChecklistOBPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: "600px", margin: "30px auto 0", padding: "0 20px" }}>
+      <div style={{ maxWidth: "600px", margin: "0 auto", padding: "0 20px" }}>
 
         {/* ========================================================================================= */}
         {/* TAB 1: FORMULIR CHECKLIST PER SEGMENT & FOTO BUKTI */}
@@ -864,7 +841,7 @@ export default function ChecklistOBPage() {
 
                     <button
                       onClick={() => { if (!selectedArea) setSelectedArea(defaultArea); setStep(2); }}
-                      style={{ width: "100%", padding: "18px", background: "var(--ok)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(22,163,74,0.3)", transition: "transform 0.2s" }}
+                      style={{ width: "100%", padding: "18px", background: "var(--ok-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(22,163,74,0.3)", transition: "transform 0.2s" }}
                       onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-3px)"}
                       onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}
                     >
@@ -942,7 +919,7 @@ export default function ChecklistOBPage() {
                 {getSegmenUntukArea(selectedArea, picName).map((segment) => (
                   <div key={segment.id} style={{ marginBottom: "20px" }}>
                     <h3 className="segment-title">
-                      <span className="icon-chip" style={{ width: "22px", height: "22px", background: "var(--ok)", color: "white", borderRadius: "6px" }}><IconClipboard size={12} /></span>
+                      <span className="icon-chip" style={{ width: "22px", height: "22px", background: "var(--ok-solid)", color: "#fff", borderRadius: "6px" }}><IconClipboard size={12} /></span>
                       {segment.nama}
                     </h3>
 
@@ -1022,7 +999,7 @@ export default function ChecklistOBPage() {
                 {/* FOTO BUKTI (BEFORE/AFTER) - BISA LEBIH DARI 1 PASANG */}
                 <div id="foto-bukti-section" style={{ marginTop: "30px", scrollMarginTop: "80px" }}>
                   <h3 className="segment-title" style={{ marginBottom: "4px" }}>
-                    <span className="icon-chip" style={{ width: "22px", height: "22px", background: "var(--ok)", color: "white", borderRadius: "6px" }}><IconCamera size={12} /></span>
+                    <span className="icon-chip" style={{ width: "22px", height: "22px", background: "var(--ok-solid)", color: "#fff", borderRadius: "6px" }}><IconCamera size={12} /></span>
                     Foto Bukti
                   </h3>
                   <p style={{ margin: "0 0 15px 4px", color: "var(--muted)", fontSize: "12px" }}>Minimal {MINIMAL_PASANGAN_FOTO} pasang before/after. Bisa tambah lebih banyak sesuai kebutuhan.</p>
@@ -1047,7 +1024,7 @@ export default function ChecklistOBPage() {
                             <div style={{ position: "relative" }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={foto.before} alt="Before" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "12px", border: "2px solid rgba(220,38,38,0.25)" }} />
-                              <button onClick={() => hapusFotoSatuan(index, "before")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--red-600)", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
+                              <button onClick={() => hapusFotoSatuan(index, "before")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                             </div>
                           ) : (
                             <label className="foto-dropzone" style={{ color: "var(--red-600)" }}>
@@ -1069,7 +1046,7 @@ export default function ChecklistOBPage() {
                             <div style={{ position: "relative" }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={foto.after} alt="After" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: "12px", border: "2px solid rgba(22,163,74,0.25)" }} />
-                              <button onClick={() => hapusFotoSatuan(index, "after")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--ok)", color: "white", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
+                              <button onClick={() => hapusFotoSatuan(index, "after")} style={{ position: "absolute", top: "-10px", right: "-10px", background: "var(--ok-solid)", color: "#fff", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", fontSize: "14px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>✖</button>
                             </div>
                           ) : (
                             <label className="foto-dropzone" style={{ color: "var(--ok)" }}>
@@ -1098,7 +1075,7 @@ export default function ChecklistOBPage() {
 
                 <button
                   onClick={handleKirimLaporan} disabled={isLoading}
-                  style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "var(--ok)", color: "white", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "30px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(22,163,74,0.4)", transition: "all 0.3s" }}
+                  style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "var(--ok-solid)", color: "#fff", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "30px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(22,163,74,0.4)", transition: "all 0.3s" }}
                 >
                   {isLoading ? "🔄 MENGUNGGAH LAPORAN..." : "🚀 KUKUHKAN & KIRIM LAPORAN"}
                 </button>
@@ -1149,7 +1126,7 @@ export default function ChecklistOBPage() {
               <button
                 onClick={() => setSudahCekRiwayat(true)}
                 disabled={riwayatKerja.length === 0}
-                style={{ width: "100%", padding: "14px", background: riwayatKerja.length === 0 ? "var(--muted)" : "var(--ok)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: riwayatKerja.length === 0 ? "not-allowed" : "pointer" }}
+                style={{ width: "100%", padding: "14px", background: riwayatKerja.length === 0 ? "var(--muted-solid)" : "var(--ok-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: riwayatKerja.length === 0 ? "not-allowed" : "pointer" }}
               >
                 🔍 Cek
               </button>
@@ -1197,7 +1174,7 @@ export default function ChecklistOBPage() {
                           <div key={itemIdx}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: "10px", background: isYa ? "var(--ok-50)" : "var(--red-50)", border: "1px solid var(--line)" }}>
                               <span style={{ fontSize: "12px", color: "var(--ink)" }}>{item.teks}</span>
-                              <span style={{ fontSize: "10px", fontWeight: "900", padding: "3px 8px", borderRadius: "6px", background: isYa ? "var(--ok)" : "var(--red-600)", color: "white", whiteSpace: "nowrap", marginLeft: "8px", display: "flex", alignItems: "center", gap: "3px" }}>
+                              <span style={{ fontSize: "10px", fontWeight: "900", padding: "3px 8px", borderRadius: "6px", background: isYa ? "var(--ok-solid)" : "var(--brand)", color: "#fff", whiteSpace: "nowrap", marginLeft: "8px", display: "flex", alignItems: "center", gap: "3px" }}>
                                 {isYa ? <><IconCheck size={9} color="white" /> YA</> : <><IconX size={9} color="white" /> TIDAK</>}
                               </span>
                             </div>
@@ -1260,7 +1237,7 @@ export default function ChecklistOBPage() {
             <p style={{ margin: "0 0 22px 0", color: "var(--muted)", fontSize: "13px", lineHeight: "1.5" }}>
               Minimal <strong>{MINIMAL_PASANGAN_FOTO} pasang foto</strong> before/after diperlukan sebagai bukti pembersihan. Anda baru melampirkan {fotoList.filter(f => f.before && f.after).length} pasang lengkap — mohon tambahkan lagi sebelum mengirim laporan.
             </p>
-            <button onClick={handleTambahFotoDariModal} style={{ width: "100%", padding: "13px", background: "var(--ok)", color: "white", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginBottom: "8px" }}>
+            <button onClick={handleTambahFotoDariModal} style={{ width: "100%", padding: "13px", background: "var(--ok-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginBottom: "8px" }}>
               + Tambah Foto Sekarang
             </button>
             <button onClick={() => setShowFotoModal(false)} style={{ width: "100%", padding: "13px", background: "transparent", color: "var(--muted)", border: "none", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}>
@@ -1270,6 +1247,6 @@ export default function ChecklistOBPage() {
         </div>
       )}
 
-    </div>
+    </AdminShell>
   );
 }
