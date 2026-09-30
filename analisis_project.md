@@ -2620,3 +2620,8 @@ Commit `894a2f1` + `bff498b`, SUDAH DI-DEPLOY. Semua halaman staf memakai `Admin
 - Warna hardcode gaya lama diganti token lewat skrip (JSX & CSS; latar berteks putih → `--brand`/`--*-solid`). Overlay kamera foto patroli/APAR SENGAJA tetap gelap. Logika data, upload foto, scan QR TIDAK diubah.
 
 **Sisa**: portal utama `src/app/page.tsx` (+ `SurveiKepuasanPage` & `buku-tamu`/`qr-apar` publik) -- arah desain sudah disetujui di canvas (§58A).
+
+### 58M. Portal Utama ke Bento Hangat -- SELURUH APLIKASI SELESAI DIMIGRASI (30 September 2026)
+Commit `4c55359`, SUDAH DI-DEPLOY. `AdminShell` kini juga untuk halaman publik: `userName` opsional (lonceng & chip akun disembunyikan kalau kosong) + slot `headerExtra` (tombol "Staf Internal"). Portal: header/bottom nav lama → `AdminShell` (bottom nav HP: Home/Kerusakan/**SBO** `.sa-nav-fab` merah di tengah/ATK/Staf); konten jadi grid 12 kolom (`.portal-grid`, kelas `.portal-*` + `order`): ringkasan (5) + pengumuman (7), menu cepat (6 kolom di ≥1000px), tren (5) / kalender (4) / status (3), tim (4) / armada+overtime (8); HP bertumpuk (pengumuman di atas). Kalender: `WARNA_LEVEL_KALENDER` ikut token, teks putih mulai level 2. Modal portal (login, ATK, overtime, lacak tamu/paket, SBO, helpdesk) warnanya ditokenisasi. Logika data TIDAK diubah.
+
+**Berikutnya (permintaan user)**: audit ISI tiap bagian satu per satu (fungsi, data, teks), bukan tampilan.
