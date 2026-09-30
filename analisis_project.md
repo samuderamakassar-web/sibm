@@ -2607,3 +2607,16 @@ Commit `6554a3b`, **SUDAH DI-DEPLOY** (build terverifikasi memuat env Cloudinary
 **Percontohan: dashboard Security** (commit `daf63a9`, SUDAH DI-DEPLOY): hero merah → kartu sapaan `Tile` brand, kartu jadwal/menu/roster → tile bento, bottom nav → prop `bottomNav`. Logika shift, tukar jaga, roster, cetak, eskalasi TIDAK diubah. Modal klaim lembur masih gaya lama (putih, terbaca di kedua mode) -- dirapikan saat halaman staf lain dimigrasi.
 
 Sisa sisi staf (±26 halaman): sub-halaman Security (patroli, buku tamu, paket, parkir, jadwal, tukar shift, inspeksi APAR, siram, SOP), OB & CS, Driver, QHSE, notifikasi, survei. Tunggu masukan user atas percontohan dulu sebelum menyebar.
+
+### 58K. Logo & Ikon Aplikasi Samudera (30 September 2026)
+Commit `ee505d3`, SUDAH DI-DEPLOY. Ikon install sebelumnya RUSAK: `manifest.json` menunjuk `icon-512.png` & `icon-maskable-512.png` yang TIDAK ADA, `icon-192.png` berukuran 3713x2231. `scripts/generate-icons.mjs` (sharp) membuat ulang dari `public/LOGOGRAM SAMUDERA_BACKGROUND MERAH.jpg`: 192/512 kotak putih sudut bulat (transparan), maskable 512 (zona aman), apple-touch 180 kotak penuh, favicon 48, `logo-mark.png` 128 untuk header `AdminShell` (menggantikan kotak "S"). Favicon & apple icon didaftarkan eksplisit di `layout.tsx` metadata (begitu `metadata.icons` diisi, `app/icon.png` TIDAK ikut dipasang); favicon bawaan Next dihapus; `themeColor` #a3122a. Jalankan ulang `node scripts/generate-icons.mjs` kalau logo berubah. HP yang sudah install perlu hapus & install ulang untuk ikon baru.
+
+### 58L. Sisi Staf Selesai Dimigrasi ke Bento Hangat (30 September 2026)
+Commit `894a2f1` + `bff498b`, SUDAH DI-DEPLOY. Semua halaman staf memakai `AdminShell` (kelas tema sama `.sibm-admin`, mode gelap ikut):
+- Dashboard **Security** (§58J), **OB & CS**, **QHSE**, **Driver**: kartu sapaan `Tile` brand + `bottomNav` mengambang; Driver menampilkan jam berjalan di kartu sapaan.
+- Sub-halaman Security: Patroli (tab Lapor/Riwayat → `.staff-toolbar` di atas konten), Buku Tamu, Inspeksi APAR, Paket & Log Gerbang (jam berjalan → chip `.sa-clock` di slot `actions`), Roster (Danru), Tukar Shift, Siram, SOP (dipakai Security/OB/Driver, kembali ke `backPath`).
+- OB: Checklist, Inspeksi Fasilitas, Stok Gudang, Plotting, Deep Cleaning. QHSE: SBO (tombol keluar → `onLogout`). Driver: Armada (jam berjalan), Inspeksi, Riwayat, Servis. Kotak masuk **Notifikasi** (badge belum dibaca → `actions`).
+- `AdminShell` baru: `brandSub`, `bottomNav`, `onBack` (halaman yang dibuka dari banyak dashboard kembali lewat `router.back()`).
+- Warna hardcode gaya lama diganti token lewat skrip (JSX & CSS; latar berteks putih → `--brand`/`--*-solid`). Overlay kamera foto patroli/APAR SENGAJA tetap gelap. Logika data, upload foto, scan QR TIDAK diubah.
+
+**Sisa**: portal utama `src/app/page.tsx` (+ `SurveiKepuasanPage` & `buku-tamu`/`qr-apar` publik) -- arah desain sudah disetujui di canvas (§58A).
