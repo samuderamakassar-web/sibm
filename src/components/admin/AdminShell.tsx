@@ -26,8 +26,11 @@ interface AdminShellProps {
   /** Judul besar halaman. Kosongkan kalau halaman menggambar judulnya sendiri (mis. hub). */
   title?: string;
   subtitle?: ReactNode;
-  /** Nama admin yang login -- dipakai untuk chip akun & lonceng notifikasi. */
-  userName: string;
+  /** Nama yang login -- dipakai untuk chip akun & lonceng notifikasi. Kosong (halaman publik
+   *  seperti portal utama) = lonceng & chip akun tidak ditampilkan. */
+  userName?: string;
+  /** Elemen tambahan di header kanan, sebelum tombol tema (mis. tombol "Masuk Staf" di portal). */
+  headerExtra?: ReactNode;
   /** Tujuan tombol kembali. null = tampilkan logo SIBM (dipakai halaman hub admin). */
   backHref?: string | null;
   backLabel?: string;
@@ -55,7 +58,8 @@ function inisial(nama: string): string {
 export default function AdminShell({
   title,
   subtitle,
-  userName,
+  userName = "",
+  headerExtra,
   backHref = "/admin",
   backLabel = "Control Panel",
   onBack,
@@ -90,6 +94,7 @@ export default function AdminShell({
         </div>
 
         <div className="sa-header-right">
+          {headerExtra}
           <button
             type="button"
             className="sa-icon-btn"
@@ -99,11 +104,15 @@ export default function AdminShell({
           >
             <AdminIcon name={keGelap ? "moon" : "sun"} size={19} />
           </button>
-          <NotifikasiBellButton picName={userName} variant="gelap" />
-          <div className="sa-account" title={userName}>
-            <span className="sa-avatar">{inisial(userName)}</span>
-            <span className="sa-account-name sa-hide-mobile">{userName}</span>
-          </div>
+          {userName && (
+            <>
+              <NotifikasiBellButton picName={userName} variant="gelap" />
+              <div className="sa-account" title={userName}>
+                <span className="sa-avatar">{inisial(userName)}</span>
+                <span className="sa-account-name sa-hide-mobile">{userName}</span>
+              </div>
+            </>
+          )}
           {onLogout && (
             <button type="button" className="sa-icon-btn is-danger" onClick={onLogout} aria-label="Keluar" title="Keluar">
               <AdminIcon name="logOut" size={18} />

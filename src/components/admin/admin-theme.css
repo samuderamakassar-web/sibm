@@ -584,3 +584,20 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* Tombol aksi darurat di tengah navigasi bawah (portal: Lapor Bahaya/SBO). */
+.sa-nav-fab {
+  justify-self: center;
+  width: 56px;
+  height: 56px;
+  margin-top: -26px;
+  border: none;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 5px var(--ground), 0 10px 20px -8px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}

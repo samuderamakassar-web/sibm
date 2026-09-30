@@ -17,6 +17,7 @@ import Badge from "../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../components/ui/Table";
 import VehicleIcon3D from "../components/VehicleIcon3D";
 import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../lib/unitBisnis";
+import AdminShell from "../components/admin/AdminShell";
 
 // ==========================================
 // INTERFACES
@@ -1037,39 +1038,54 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     return { daftarHari, leadingBlanks };
   }, [todayISO, visitorLogsTrend, logKendaraanMentah, ticketsTrend, packageLogsTrend]);
 
-  const WARNA_LEVEL_KALENDER = ["#f7f6f5", "#fee2e2", "#fca5a5", "#f87171", "#dc2626"];
+  // Level 0-4 aktivitas; level >= 2 memakai teks putih (lihat kalender-cell). Level 0-1 ikut token tema.
+  const WARNA_LEVEL_KALENDER = ["var(--hover)", "var(--red-50)", "#e07a86", "#c93a4c", "#a3122a"];
 
   return (
-    <div className="main-container" style={{ backgroundColor: "#f7f6f5", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <AdminShell
+      backHref={null}
+      brandSub={formatTgl}
+      headerExtra={
+        <span className="sa-hide-mobile">
+          <button type="button" className="sa-btn is-dark" onClick={() => setActiveModal("login")}>
+            <IconUserCircle size={15} /> Staf Internal
+          </button>
+        </span>
+      }
+      bottomNav={
+        <>
+          <button type="button" className="sa-nav-item is-active" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            <IconHome size={21} />
+            <span>Home</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
+            <IconWrench size={21} />
+            <span>Kerusakan</span>
+          </button>
+          <button type="button" className="sa-nav-fab" onClick={() => setActiveModal("sbo")} aria-label="Lapor Bahaya (SBO)">
+            <IconAlertTriangle size={22} color="#fff" />
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
+            <IconClipboard size={21} />
+            <span>ATK</span>
+          </button>
+          <button type="button" className="sa-nav-item" onClick={() => setActiveModal("login")}>
+            <IconUserCircle size={21} />
+            <span>Staf</span>
+          </button>
+        </>
+      }
+    >
 
       {/* 💡 DESIGN TOKENS + CSS — dashboard app-style: header ramping, ringkasan merah, menu cepat,
           tren aktivitas & kalender aktivitas, tim bertugas, bottom nav ala aplikasi native */}
       <style dangerouslySetInnerHTML={{__html: `
         :root {
-          --ink: #18181b; --ink-soft: #3f3f46; --muted: #71717a; --line: #e7e5e4;
-          --bg: #f7f6f5; --surface: #ffffff;
-          --red-700: #9f1d1d; --red-600: #dc2626; --red-500: #ef4444; --red-50: #fef2f2;
-          --ok: #16a34a; --ok-50: #f0fdf4; --info: #2563eb; --info-50: #eff6ff;
-          --warn: #d97706; --warn-50: #fff7ed; --accent: #7c3aed;
-          --shadow-card: 0 1px 2px rgba(24,24,27,0.04), 0 10px 24px -14px rgba(24,24,27,0.16);
-          --shadow-card-hover: 0 1px 2px rgba(24,24,27,0.05), 0 18px 34px -14px rgba(220,38,38,0.28);
+          --shadow-card: none;
+          --shadow-card-hover: none;
         }
 
         /* 🧭 HEADER */
-        .site-header {
-          position: sticky; top: 0; z-index: 30;
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 24px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-          border-bottom: 1px solid var(--line);
-        }
-        .brand-mark { display: flex; align-items: center; gap: 10px; }
-        .brand-logo-fallback {
-          width: 36px; height: 36px; border-radius: 10px; background: var(--red-600);
-          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-          box-shadow: 0 4px 10px -3px rgba(220,38,38,0.5); color: #fff; font-weight: 900; font-size: 16px;
-        }
-        .brand-name { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: 0.2px; line-height: 1.15; }
-        .brand-sub { font-size: 10.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.2px; }
         /* 🔴 RINGKASAN HARI INI — pengganti hero slideshow lama, tetap merah + motif blueprint-grid */
         .ringkasan-strip {
           position: relative; overflow: hidden; border-radius: 22px; color: #fff; padding: 22px;
@@ -1136,7 +1152,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         @media (min-width: 480px) { .kalender-cell { font-size: 14px; } }
 
         /* 📱 BOTTOM NAV APP-STYLE */
-        .app-bottom-nav { display: none; }
         .mobile-only { display: none; }
         /* display:flex (bukan block) — wrapper ini adalah 1 grid item di .menu-cepat-grid yang
            sudah otomatis di-stretch penuh setinggi baris (default align-items:stretch grid), tapi
@@ -1146,93 +1161,107 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
            keluar baris — height:100% pada grid item langsung ternyata gak konsisten sama auto-row-sizing). */
         .desktop-only-hide { display: flex; }
         @media (max-width: 768px) {
-          .main-container { padding-bottom: 108px !important; }
           .mobile-only { display: flex; }
           .desktop-only-hide { display: none; }
-          .app-bottom-nav {
-            display: flex; position: fixed; left: 14px; right: 14px; bottom: 14px; height: 66px;
-            background: rgba(255,255,255,0.97); backdrop-filter: blur(14px); border: 1px solid var(--line);
-            border-radius: 24px; box-shadow: 0 14px 32px -10px rgba(24,24,27,0.2); z-index: 90;
-            align-items: center; justify-content: space-around; padding: 0 6px;
-          }
-          .nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; color: #a1a1aa; cursor: pointer; background: none; border: none; font-family: inherit; }
-          .nav-item.active { color: var(--red-600); }
-          .nav-item span { font-size: 9.5px; font-weight: 700; }
-          .nav-fab { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(150deg, var(--red-600), var(--red-700)); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px -6px rgba(220,38,38,0.6); border: 4px solid var(--bg); transform: translateY(-16px); cursor: pointer; }
+        }
+      
+        /* 🎨 PORTAL BENTO HANGAT (§58M) -- grid 12 kolom, token dari components/admin/admin-theme.css */
+        .portal-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+        .portal-grid > * { min-width: 0; }
+        .portal-sesi { grid-column: 1 / -1; order: 0; }
+        .portal-ringkasan { grid-column: span 5; order: 1; }
+        .portal-pengumuman { grid-column: span 7; order: 2; border-radius: 28px; overflow: hidden; display: flex; flex-direction: column; }
+        .portal-pengumuman > div:first-child { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px 26px !important; text-align: left !important; }
+        .portal-grid.tanpa-pengumuman .portal-ringkasan { grid-column: 1 / -1; }
+        .portal-menu { grid-column: 1 / -1; order: 3; }
+        .portal-tren { grid-column: span 5; order: 4; }
+        .portal-kalender { grid-column: span 4; order: 5; }
+        .portal-status { grid-column: span 3; order: 6; }
+        .portal-tim { grid-column: span 4; order: 7; background: var(--tile); border-radius: 28px; padding: 22px; }
+        .portal-detail { grid-column: span 8; order: 8; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        .portal-tren > div, .portal-kalender > div, .portal-status > div, .portal-detail > div {
+          background: var(--tile) !important; border: none !important; border-radius: 28px !important; box-shadow: none !important; height: 100%; margin: 0 !important;
+        }
+        .ringkasan-strip { background: var(--brand) !important; border-radius: 28px !important; box-shadow: none !important; height: 100%; box-sizing: border-box; }
+        .ringkasan-strip::before { display: none !important; }
+        .ringkasan-chip { background: rgba(0,0,0,0.2) !important; border: none !important; border-radius: 16px !important; }
+        .qa-card { background: var(--tile) !important; border: none !important; border-radius: 22px !important; box-shadow: none !important; }
+        .qa-card:hover { transform: translateY(-2px); }
+        .team-row { background: var(--bg) !important; border: none !important; border-radius: 16px !important; }
+        .list-row { background: var(--bg) !important; border-radius: 14px !important; }
+        .status-op-row { border-bottom-color: var(--line) !important; }
+        @media (min-width: 1000px) {
+          .menu-cepat-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+          .qa-card { flex-direction: column !important; align-items: flex-start !important; }
+        }
+        @media (max-width: 1080px) {
+          .portal-ringkasan, .portal-pengumuman { grid-column: 1 / -1; }
+          .portal-tren { grid-column: span 7; }
+          .portal-kalender { grid-column: span 5; }
+          .portal-status, .portal-tim, .portal-detail { grid-column: 1 / -1; }
+        }
+        @media (max-width: 720px) {
+          .portal-grid { gap: 12px; }
+          .portal-grid > * { grid-column: 1 / -1 !important; }
+          .portal-pengumuman { order: 1; }
+          .portal-ringkasan { order: 2; }
+          .portal-detail { grid-template-columns: 1fr; }
+          .portal-tim { padding: 18px; }
         }
       `}} />
 
-      <div className="site-header">
-        <div className="brand-mark">
-          <div className="brand-logo-fallback">S</div>
-          <div>
-            <div className="brand-name">SIBM</div>
-            <div className="brand-sub">{formatTgl}</div>
-          </div>
-        </div>
-        <div className="desktop-only-hide" style={{ alignItems: "center", gap: "10px" }}>
-          <Button
-            variant="ghost"
-            fullWidth={false}
-            onClick={() => setActiveModal("login")}
-            style={{ padding: "8px 14px", color: "var(--ink-soft)", fontSize: "12px", fontWeight: 700, border: "1px solid var(--line)", borderRadius: "20px", display: "flex", alignItems: "center", gap: "6px" }}
-          >
-            <IconUserCircle size={15} /> Staf Internal
-          </Button>
-        </div>
-      </div>
 
-      {/* 👋 SESI STAF MASIH AKTIF -- lihat catatan lengkap di deklarasi state sesiStafAktif */}
-      {sesiStafAktif && !bannerSesiDitutup && (
-        <div style={{ background: "var(--info-50, #eff6ff)", borderBottom: "1px solid rgba(37,99,235,0.2)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", flexWrap: "wrap", fontSize: "12.5px" }}>
-          <span style={{ color: "var(--info, #2563eb)", fontWeight: 700 }}>👋 Anda masih login sebagai {sesiStafAktif.nama} ({sesiStafAktif.dept})</span>
-          <button
-            onClick={() => router.push(sesiStafAktif.path)}
-            style={{ padding: "5px 14px", background: "var(--info, #2563eb)", color: "#fff", border: "none", borderRadius: "20px", fontWeight: 700, fontSize: "11.5px", cursor: "pointer" }}
-          >
-            Lanjut ke Dashboard
-          </button>
-          <button
-            onClick={() => setBannerSesiDitutup(true)}
-            style={{ padding: "5px 10px", background: "none", border: "none", color: "var(--muted, #71717a)", fontWeight: 700, fontSize: "11.5px", cursor: "pointer" }}
-          >
-            Tutup
-          </button>
-        </div>
-      )}
-
-      {/* 📢 CAROUSEL PENGUMUMAN GEDUNG -- bisa lebih dari 1 kartu, tayang bergiliran tiap 6 detik,
-          admin kontrol tayang/berhenti per pengumuman lewat admin/broadcast (bukan kontrol di sini). */}
-      {daftarPengumuman.length > 0 && (
-        <div style={{ position: "relative", overflow: "hidden" }}>
-          <div
-            onClick={() => daftarPengumuman.length > 1 && setSlideAktif((slideAman + 1) % daftarPengumuman.length)}
-            style={{
-              padding: "16px 24px", textAlign: "center", color: "#fff", cursor: daftarPengumuman.length > 1 ? "pointer" : "default",
-              background: GRADIENT_TEMA_PENGUMUMAN[daftarPengumuman[slideAman]?.warnaTema] || GRADIENT_TEMA_PENGUMUMAN.merah,
-              transition: "background 0.4s ease",
-            }}
-          >
-            <div style={{ fontSize: "10px", fontWeight: 800, letterSpacing: "1px", textTransform: "uppercase", opacity: 0.85 }}>📢 {daftarPengumuman[slideAman]?.judul}</div>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginTop: "3px", lineHeight: 1.5 }}>{daftarPengumuman[slideAman]?.teks}</div>
+      <div className={`portal-grid${daftarPengumuman.length > 0 ? "" : " tanpa-pengumuman"}`}>
+        {/* 👋 SESI STAF MASIH AKTIF -- lihat catatan lengkap di deklarasi state sesiStafAktif */}
+        {sesiStafAktif && !bannerSesiDitutup && (
+          <div className="portal-sesi" style={{ background: "var(--info-50, #eff6ff)", borderRadius: "20px", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", flexWrap: "wrap", fontSize: "12.5px" }}>
+            <span style={{ color: "var(--info, #2563eb)", fontWeight: 700 }}>👋 Anda masih login sebagai {sesiStafAktif.nama} ({sesiStafAktif.dept})</span>
+            <button
+              onClick={() => router.push(sesiStafAktif.path)}
+              style={{ padding: "5px 14px", background: "var(--info, #2563eb)", color: "#fff", border: "none", borderRadius: "20px", fontWeight: 700, fontSize: "11.5px", cursor: "pointer" }}
+            >
+              Lanjut ke Dashboard
+            </button>
+            <button
+              onClick={() => setBannerSesiDitutup(true)}
+              style={{ padding: "5px 10px", background: "none", border: "none", color: "var(--muted, #71717a)", fontWeight: 700, fontSize: "11.5px", cursor: "pointer" }}
+            >
+              Tutup
+            </button>
           </div>
-          {daftarPengumuman.length > 1 && (
-            <div style={{ display: "flex", justifyContent: "center", gap: "6px", padding: "8px 0", background: "rgba(0,0,0,0.06)" }}>
-              {daftarPengumuman.map((p, idx) => (
-                <button
-                  key={p.id} onClick={() => setSlideAktif(idx)} aria-label={`Pengumuman ${idx + 1}`}
-                  style={{ width: idx === slideAman ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", cursor: "pointer", background: idx === slideAman ? "var(--red-600)" : "var(--line)", transition: "width 0.3s ease" }}
-                />
-              ))}
+        )}
+
+        {/* 📢 CAROUSEL PENGUMUMAN GEDUNG -- bisa lebih dari 1 kartu, tayang bergiliran tiap 6 detik,
+            admin kontrol tayang/berhenti per pengumuman lewat admin/broadcast (bukan kontrol di sini). */}
+        {daftarPengumuman.length > 0 && (
+          <div className="portal-pengumuman">
+            <div
+              onClick={() => daftarPengumuman.length > 1 && setSlideAktif((slideAman + 1) % daftarPengumuman.length)}
+              style={{
+                padding: "16px 24px", textAlign: "center", color: "#fff", cursor: daftarPengumuman.length > 1 ? "pointer" : "default",
+                background: GRADIENT_TEMA_PENGUMUMAN[daftarPengumuman[slideAman]?.warnaTema] || GRADIENT_TEMA_PENGUMUMAN.merah,
+                transition: "background 0.4s ease",
+              }}
+            >
+              <div style={{ fontSize: "10px", fontWeight: 800, letterSpacing: "1px", textTransform: "uppercase", opacity: 0.85 }}>📢 {daftarPengumuman[slideAman]?.judul}</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, marginTop: "3px", lineHeight: 1.5 }}>{daftarPengumuman[slideAman]?.teks}</div>
             </div>
-          )}
-        </div>
-      )}
+            {daftarPengumuman.length > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", gap: "6px", padding: "8px 0", background: "rgba(0,0,0,0.06)" }}>
+                {daftarPengumuman.map((p, idx) => (
+                  <button
+                    key={p.id} onClick={() => setSlideAktif(idx)} aria-label={`Pengumuman ${idx + 1}`}
+                    style={{ width: idx === slideAman ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", cursor: "pointer", background: idx === slideAman ? "var(--red-600)" : "var(--line)", transition: "width 0.3s ease" }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>
 
         {/* 🔴 RINGKASAN HARI INI */}
-        <div className="ringkasan-strip">
+        <div className="ringkasan-strip portal-ringkasan">
           <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "16px" }}>
             <div>
               <div style={{ fontSize: "10.5px", fontWeight: 800, letterSpacing: "1.4px", textTransform: "uppercase", color: "rgba(255,255,255,0.72)" }}>Ringkasan Hari Ini</div>
@@ -1256,7 +1285,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
 
         {/* 🧱 MENU CEPAT — satu grid dipakai HP & desktop, gantikan desktop-grid + mobile-nav lama yang isinya duplikat */}
-        <div style={{ marginTop: "24px" }} id="menu-cepat-section">
+        <div className="portal-menu" id="menu-cepat-section">
           <div style={{ fontSize: "15px", fontWeight: 800, marginBottom: "12px", color: "var(--ink)" }}>Menu Cepat</div>
           <div className="menu-cepat-grid">
             <div className="qa-card" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
@@ -1306,8 +1335,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
 
         {/* 📊 TREN AKTIVITAS GEDUNG */}
-        <div id="tren-aktivitas-section">
-        <Card style={{ borderRadius: "20px", marginTop: "22px" }}>
+        <div id="tren-aktivitas-section" className="portal-tren">
+        <Card style={{ borderRadius: "20px" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "16px" }}>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>Tren Aktivitas Gedung</h3>
             <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>7 hari terakhir</span>
@@ -1337,13 +1366,14 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
 
         {/* 🗓️ KALENDER AKTIVITAS */}
-        <Card style={{ borderRadius: "20px", marginTop: "18px" }}>
+        <div className="portal-kalender">
+        <Card style={{ borderRadius: "20px" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "14px" }}>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>Kalender Aktivitas</h3>
             <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>{new Date(thnW, blnW - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px", marginBottom: "6px" }}>
-            {["S", "S", "R", "K", "J", "S", "M"].map((h, idx) => <span key={idx} style={{ fontSize: "9px", color: "#a1a1aa", fontWeight: 700, textAlign: "center" }}>{h}</span>)}
+            {["S", "S", "R", "K", "J", "S", "M"].map((h, idx) => <span key={idx} style={{ fontSize: "9px", color: "var(--muted)", fontWeight: 700, textAlign: "center" }}>{h}</span>)}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
             {Array.from({ length: kalenderAktivitas.leadingBlanks }).map((_, idx) => <div key={`blank-${idx}`} />)}
@@ -1355,8 +1385,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 style={{
                   background: WARNA_LEVEL_KALENDER[h.level],
                   border: h.adaData ? "none" : "1px dashed var(--line)",
-                  boxShadow: h.hariIni ? "0 0 0 2px #fff, 0 0 0 3.5px var(--ink)" : "none",
-                  color: h.level >= 3 ? "#fff" : h.hariIni ? "var(--red-600)" : "var(--ink-soft)",
+                  boxShadow: h.hariIni ? "0 0 0 2px var(--tile), 0 0 0 3.5px var(--ink)" : "none",
+                  color: h.level >= 2 ? "#fff" : h.hariIni ? "var(--red-600)" : "var(--ink-soft)",
                   fontWeight: h.hariIni ? 800 : 700,
                 }}
               >
@@ -1365,16 +1395,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             ))}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", marginTop: "14px" }}>
-            <span style={{ fontSize: "9px", color: "#a1a1aa", fontWeight: 600 }}>Rendah</span>
+            <span style={{ fontSize: "9px", color: "var(--muted)", fontWeight: 600 }}>Rendah</span>
             <div style={{ display: "flex", gap: "2px" }}>
               {WARNA_LEVEL_KALENDER.slice(1).map((c, idx) => <div key={idx} style={{ width: "12px", height: "12px", borderRadius: "3px", background: c }} />)}
             </div>
-            <span style={{ fontSize: "9px", color: "#a1a1aa", fontWeight: 600 }}>Tinggi</span>
+            <span style={{ fontSize: "9px", color: "var(--muted)", fontWeight: 600 }}>Tinggi</span>
           </div>
         </Card>
+        </div>
 
         {/* 👥 TIM BERTUGAS HARI INI */}
-        <div style={{ marginTop: "22px" }}>
+        <div className="portal-tim">
           <div className="section-title">
             <div className="section-title-icon"><IconShield size={18} /></div>
             <div>
@@ -1411,7 +1442,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
 
         {/* ⚙️ STATUS OPERASIONAL (ringkas) */}
-        <Card style={{ borderRadius: "20px", marginTop: "18px", padding: "6px 20px" }}>
+        <div className="portal-status">
+        <Card style={{ borderRadius: "20px", padding: "6px 20px" }}>
           <div className="status-op-row">
             <div className="section-title-icon" style={{ background: "var(--info-50)", color: "var(--info)", margin: 0, padding: "9px" }}><IconTruck size={16} /></div>
             <div style={{ flex: 1 }}>
@@ -1437,9 +1469,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: overtimeMingguIni.length > 0 ? "var(--warn)" : "var(--ok)", flexShrink: 0 }} />
           </div>
         </Card>
+        </div>
 
         {/* 🚗 DETAIL RIWAYAT ARMADA + ⏱️ OVERTIME MINGGU INI (kartu detail, tetap dipertahankan dari versi lama) */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: "18px", marginTop: "18px" }}>
+        <div className="portal-detail">
 
           <Card style={{ borderRadius: "18px" }}>
             <div className="section-title">
@@ -1509,28 +1542,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
       </div>
 
-      {/* 📱 BOTTOM NAV APP-STYLE (HANYA MUNCUL DI HP) */}
-      <div className="app-bottom-nav">
-        <button className="nav-item active" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          <IconHome size={21} />
-          <span>Home</span>
-        </button>
-        <button className="nav-item" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
-          <IconWrench size={21} />
-          <span>Kerusakan</span>
-        </button>
-        <div className="nav-fab" onClick={() => setActiveModal("sbo")} role="button" aria-label="Lapor Bahaya (SBO)">
-          <IconAlertTriangle size={22} color="#fff" />
-        </div>
-        <button className="nav-item" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
-          <IconClipboard size={21} />
-          <span>ATK</span>
-        </button>
-        <button className="nav-item" onClick={() => setActiveModal("login")}>
-          <IconUserCircle size={21} />
-          <span>Profil</span>
-        </button>
-      </div>
 
       {/* MODAL WRAPPER (via komponen Modal) */}
       <Modal
@@ -1541,7 +1552,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         {/* MODAL 1: LOGIN */}
         {activeModal === "login" && (
           <>
-            <div style={{ textAlign: "center", marginBottom: "25px", marginTop: "10px" }}><div style={{ fontSize: "45px", marginBottom: "15px" }}>🏢</div><h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "22px", fontWeight: "800" }}>Akses Staf Internal</h2></div>
+            <div style={{ textAlign: "center", marginBottom: "25px", marginTop: "10px" }}><div style={{ fontSize: "45px", marginBottom: "15px" }}>🏢</div><h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800" }}>Akses Staf Internal</h2></div>
             <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email Anda" />
               <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Kata Sandi" />
@@ -1564,10 +1575,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           // desktop, ke-reproduce & diverifikasi langsung sebelum akhirnya dilepas lagi.
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ marginBottom: "15px", paddingRight: "20px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#fdf4ff", padding:"8px", borderRadius:"12px"}}>🖇️</span> Gudang ATK GA</h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "13px" }}>Pusat permintaan alat tulis kantor (Kertas, Pulpen, dll).</p>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#fdf4ff", padding:"8px", borderRadius:"12px"}}>🖇️</span> Gudang ATK GA</h2>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "13px" }}>Pusat permintaan alat tulis kantor (Kertas, Pulpen, dll).</p>
             </div>
-            <div style={{ display: "flex", background: "#f1f5f9", padding: "6px", borderRadius: "14px", marginBottom: "20px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", background: "var(--hover)", padding: "6px", borderRadius: "14px", marginBottom: "20px", border: "1px solid var(--line)" }}>
               <button onClick={() => setAtkTab("REQUEST")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "14px", background: atkTab === "REQUEST" ? "white" : "transparent", color: atkTab === "REQUEST" ? "#d53f8c" : "#64748b", boxShadow: atkTab === "REQUEST" ? "0 2px 4px rgba(0,0,0,0.05)" : "none", cursor: "pointer" }}>📝 Buat Request</button>
               <button onClick={() => setAtkTab("LACAK")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", fontSize: "14px", background: atkTab === "LACAK" ? "white" : "transparent", color: atkTab === "LACAK" ? "#d53f8c" : "#64748b", boxShadow: atkTab === "LACAK" ? "0 2px 4px rgba(0,0,0,0.05)" : "none", cursor: "pointer" }}>🔍 Lacak Resi ATK</button>
             </div>
@@ -1592,8 +1603,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   {masterAtkList
                     .filter(p => p.nama_barang.toLowerCase().includes(searchAtkProduk.toLowerCase()))
                     .map((produk) => (
-                      <div key={produk.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden", background: "white", display: "flex", flexDirection: "column" }}>
-                        <div style={{ width: "100%", aspectRatio: "1", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <div key={produk.id} style={{ border: "1px solid var(--line)", borderRadius: "12px", overflow: "hidden", background: "var(--surface)", display: "flex", flexDirection: "column" }}>
+                        <div style={{ width: "100%", aspectRatio: "1", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {produk.foto_url ? (
                             <>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1617,11 +1628,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                           )}
                         </div>
                         <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
-                          <span style={{ fontSize: "11px", fontWeight: "bold", color: "#2d3748", lineHeight: "1.3" }}>{produk.nama_barang}</span>
+                          <span style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink)", lineHeight: "1.3" }}>{produk.nama_barang}</span>
                           <button
                             type="button"
                             onClick={() => handleTambahKeKeranjang(produk)}
-                            style={{ marginTop: "auto", background: "#d53f8c", color: "white", border: "none", borderRadius: "8px", padding: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+                            style={{ marginTop: "auto", background: "#d53f8c", color: "#fff", border: "none", borderRadius: "8px", padding: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
                           >
                             + Keranjang
                           </button>
@@ -1629,35 +1640,35 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       </div>
                     ))}
                   {masterAtkList.filter(p => p.nama_barang.toLowerCase().includes(searchAtkProduk.toLowerCase())).length === 0 && (
-                    <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px" }}>Barang tidak ditemukan.</div>
+                    <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px" }}>Barang tidak ditemukan.</div>
                   )}
                 </div>
 
                 {/* KERANJANG */}
-                <div style={{ borderTop: "2px solid #edf2f7", paddingTop: "15px" }}>
-                  <div style={{ fontWeight: "800", fontSize: "14px", color: "#1a202c", marginBottom: "10px" }}>
+                <div style={{ borderTop: "2px solid var(--line)", paddingTop: "15px" }}>
+                  <div style={{ fontWeight: "800", fontSize: "14px", color: "var(--ink)", marginBottom: "10px" }}>
                     🛒 Keranjang ({formAtkItems.length} item)
                   </div>
                   {formAtkItems.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "20px", color: "#a0aec0", fontSize: "13px", border: "1px dashed #cbd5e0", borderRadius: "12px" }}>
+                    <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "13px", border: "1px dashed var(--line)", borderRadius: "12px" }}>
                       Keranjang masih kosong. Pilih barang di atas.
                     </div>
                   ) : (
                     <form onSubmit={handleSubmitAtk} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                       {formAtkItems.map((item, index) => (
-                        <div key={index} style={{ display: "flex", alignItems: "center", gap: "8px", border: "1px solid #e2e8f0", padding: "8px 10px", borderRadius: "10px", background: "#f8fafc" }}>
-                          <span style={{ flex: "1 1 35%", fontSize: "12px", fontWeight: "bold", color: "#2d3748", lineHeight: "1.3" }}>{item.nama_barang}</span>
+                        <div key={index} style={{ display: "flex", alignItems: "center", gap: "8px", border: "1px solid var(--line)", padding: "8px 10px", borderRadius: "10px", background: "var(--bg)" }}>
+                          <span style={{ flex: "1 1 35%", fontSize: "12px", fontWeight: "bold", color: "var(--ink)", lineHeight: "1.3" }}>{item.nama_barang}</span>
                           <input
                             type="text" required placeholder="Jml"
                             value={item.jumlah}
                             onChange={(e) => handleAtkItemChange(index, "jumlah", e.target.value)}
-                            style={{ width: "44px", padding: "7px 4px", borderRadius: "7px", border: "1px solid #cbd5e0", fontSize: "12px", textAlign: "center", background: "white", outline: "none" }}
+                            style={{ width: "44px", padding: "7px 4px", borderRadius: "7px", border: "1px solid var(--line)", fontSize: "12px", textAlign: "center", background: "var(--surface)", outline: "none" }}
                           />
                           <input
                             type="text" placeholder="Catatan (opsional)"
                             value={item.deskripsi}
                             onChange={(e) => handleAtkItemChange(index, "deskripsi", e.target.value)}
-                            style={{ flex: "1 1 40%", padding: "7px 8px", borderRadius: "7px", border: "1px solid #cbd5e0", fontSize: "12px", background: "white", outline: "none" }}
+                            style={{ flex: "1 1 40%", padding: "7px 8px", borderRadius: "7px", border: "1px solid var(--line)", fontSize: "12px", background: "var(--surface)", outline: "none" }}
                           />
                           <button type="button" onClick={() => handleRemoveAtkItem(index)} style={{ flexShrink: 0, background: "none", border: "none", color: "#e53e3e", fontSize: "16px", cursor: "pointer", padding: "2px 4px" }}>✖</button>
                         </div>
@@ -1673,12 +1684,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                           datalistOptions={employees.map(emp => emp.nama)}
                         />
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568" }}>Invoice To *</label>
+                          <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)" }}>Invoice To *</label>
                           <select
                             required
                             value={formAtkPemohon.dept}
                             onChange={(e) => setFormAtkPemohon({ ...formAtkPemohon, dept: e.target.value })}
-                            style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", background: "#f8fafc", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+                            style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", outline: "none", boxSizing: "border-box", cursor: "pointer" }}
                           >
                             <option value="" disabled>Pilih Invoice To...</option>
                             <optgroup label="Unit Bisnis (PT)">
@@ -1710,23 +1721,23 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       <span style={{ fontWeight: "900", color: "#97266d", fontSize: "18px" }}>📦 {hasilAtk.resi}</span>
                       <Badge tone={hasilAtk.status.includes("Selesai") ? "success" : "warning"}>{hasilAtk.status.toUpperCase()}</Badge>
                     </div>
-                    <div style={{ fontSize: "13px", color: "#4a5568", lineHeight: "1.8", marginBottom: "15px" }}>
+                    <div style={{ fontSize: "13px", color: "var(--ink-soft)", lineHeight: "1.8", marginBottom: "15px" }}>
                       <div>Pemohon: <b>{hasilAtk.nama_pemohon}</b> ({hasilAtk.departemen})</div>
                       <div>Waktu Request: <b>{formatJam(hasilAtk.waktu_request)}</b></div>
                     </div>
                     <div style={{ fontWeight: "bold", fontSize: "12px", color: "#702459", marginBottom: "5px" }}>Daftar Pesanan:</div>
-                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px", color: "#4a5568" }}>
+                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px", color: "var(--ink-soft)" }}>
                       {hasilAtk.items?.map((it, idx) => (
                         <li key={idx} style={{ marginBottom: "5px" }}>
                           <b style={{ color: "#d53f8c" }}>{it.nama_barang}</b> ({it.jumlah})
-                          {it.deskripsi && <div style={{ fontSize: "11px", color: "#718096", fontStyle: "italic" }}>{it.deskripsi}</div>}
+                          {it.deskripsi && <div style={{ fontSize: "11px", color: "var(--ink-soft)", fontStyle: "italic" }}>{it.deskripsi}</div>}
                         </li>
                       ))}
                     </ul>
                     {hasilAtk.status === "Menunggu Disiapkan" && <div style={{ fontSize: "12px", color: "#dd6b20", marginTop: "15px", fontStyle: "italic" }}>* Silakan tunggu info lebih lanjut, GA sedang memproses.</div>}
                   </div>
                 ) : (
-                  <div style={{ textAlign: "center", padding: "40px", color: "#a0aec0" }}>Masukkan kode resi yang Anda dapatkan saat request untuk melacak barang.</div>
+                  <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Masukkan kode resi yang Anda dapatkan saat request untuk melacak barang.</div>
                 )}
               </div>
             )}
@@ -1736,9 +1747,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         {/* MODAL 3: OVERTIME GEDUNG */}
         {activeModal === "overtime" && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ marginBottom: "25px", paddingRight: "20px", borderBottom: "2px solid #edf2f7", paddingBottom: "15px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Overtime Gedung</h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "13px" }}>Formulir request lembur pemakaian AC/Listrik untuk Karyawan.</p>
+            <div style={{ marginBottom: "25px", paddingRight: "20px", borderBottom: "2px solid var(--line)", paddingBottom: "15px" }}>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Overtime Gedung</h2>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "13px" }}>Formulir request lembur pemakaian AC/Listrik untuk Karyawan.</p>
             </div>
             <form onSubmit={handleSubmitOvertime} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <Input
@@ -1750,7 +1761,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 datalistOptions={employees.map(emp => emp.nama)}
               />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                <Input label="Departemen / Tenant" type="text" required readOnly value={formOvertime.dept} style={{ background: "#e2e8f0" }} />
+                <Input label="Departemen / Tenant" type="text" required readOnly value={formOvertime.dept} style={{ background: "var(--hover)" }} />
                 <Input label="Tanggal Lembur *" type="date" required value={formOvertime.tanggal} onChange={(e) => setFormOvertime({ ...formOvertime, tanggal: e.target.value })} />
               </div>
               <Input label="Area / Ruangan yang Digunakan *" type="text" required placeholder="Misal: Ruang Meeting Lt.2 / Seluruh Lantai 3" value={formOvertime.area} onChange={(e) => setFormOvertime({ ...formOvertime, area: e.target.value })} />
@@ -1771,8 +1782,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         {(activeModal === "tamu" || activeModal === "paket") && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ marginBottom: "20px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background: activeModal === "tamu" ? "#fff5f5" : "#fffaf0", padding:"8px", borderRadius:"12px"}}>{activeModal === "tamu" ? "🧑‍💼" : "📦"}</span> {activeModal === "tamu" ? "Pelacakan Tamu" : "Pelacakan Paket"}</h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "13px" }}>Ketik dan cari untuk melihat riwayat log operasional.</p>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background: activeModal === "tamu" ? "#fff5f5" : "#fffaf0", padding:"8px", borderRadius:"12px"}}>{activeModal === "tamu" ? "🧑‍💼" : "📦"}</span> {activeModal === "tamu" ? "Pelacakan Tamu" : "Pelacakan Paket"}</h2>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "13px" }}>Ketik dan cari untuk melihat riwayat log operasional.</p>
             </div>
             <div style={{ display: "flex", gap: "10px", marginBottom: "25px" }}>
               <Input containerStyle={{ flex: 1 }} type="text" placeholder={activeModal === "tamu" ? "Ketik nama tamu / instansi..." : "Ketik nama penerima paket..."} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -1787,11 +1798,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   <TBody>
                     {hasilTamu.length > 0 ? hasilTamu.map(t => (
                       <Tr key={t.id}>
-                        <Td><div style={{ fontWeight: "bold", color: "#2d3748" }}>{t.nama}</div><div style={{ fontSize: "11px", color: "#718096" }}>{t.instansi_dept}</div></Td>
-                        <Td style={{ color: "#4a5568" }}>{t.tujuan}</Td>
+                        <Td><div style={{ fontWeight: "bold", color: "var(--ink)" }}>{t.nama}</div><div style={{ fontSize: "11px", color: "var(--ink-soft)" }}>{t.instansi_dept}</div></Td>
+                        <Td style={{ color: "var(--ink-soft)" }}>{t.tujuan}</Td>
                         <Td><div style={{ fontSize: "11px", display: "flex", flexDirection: "column", gap: "2px" }}><span><b style={{color: "#38a169"}}>In:</b> {formatJam(t.waktu_masuk)}</span><span><b style={{color: "#e53e3e"}}>Out:</b> {t.waktu_keluar ? formatJam(t.waktu_keluar) : "Di Dalam"}</span></div></Td>
                       </Tr>
-                    )) : <Tr><Td colSpan={3} style={{ textAlign: "center", padding: "40px", color: "#a0aec0" }}>Tidak ada riwayat ditemukan.</Td></Tr>}
+                    )) : <Tr><Td colSpan={3} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Tidak ada riwayat ditemukan.</Td></Tr>}
                   </TBody>
                 </Table>
               ) : (
@@ -1802,12 +1813,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   <TBody>
                     {hasilPaket.length > 0 ? hasilPaket.map(p => (
                       <Tr key={p.id}>
-                        <Td style={{ fontWeight: "bold", color: "#2d3748" }}>{p.penerima}</Td>
-                        <Td style={{ color: "#718096" }}>{p.kurir}</Td>
-                        <Td style={{ color: "#4a5568", fontSize: "12px" }}>{formatJam(p.waktu_diterima)}</Td>
+                        <Td style={{ fontWeight: "bold", color: "var(--ink)" }}>{p.penerima}</Td>
+                        <Td style={{ color: "var(--ink-soft)" }}>{p.kurir}</Td>
+                        <Td style={{ color: "var(--ink-soft)", fontSize: "12px" }}>{formatJam(p.waktu_diterima)}</Td>
                         <Td><Badge tone={p.status.includes("Diambil") ? "success" : "warning"}>{p.status}</Badge></Td>
                       </Tr>
-                    )) : <Tr><Td colSpan={4} style={{ textAlign: "center", padding: "40px", color: "#a0aec0" }}>Tidak ada riwayat ditemukan.</Td></Tr>}
+                    )) : <Tr><Td colSpan={4} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Tidak ada riwayat ditemukan.</Td></Tr>}
                   </TBody>
                 </Table>
               )}
@@ -1818,11 +1829,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         {/* MODAL 6: SBO */}
         {activeModal === "sbo" && (
           <form onSubmit={handleSubmitSbo} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div style={{ marginBottom: "10px", paddingRight: "30px", borderBottom: "2px solid #edf2f7", paddingBottom: "20px" }}>
+            <div style={{ marginBottom: "10px", paddingRight: "30px", borderBottom: "2px solid var(--line)", paddingBottom: "20px" }}>
               <h2 style={{ margin: "0 0 8px 0", color: "#22543d", fontSize: "20px", display: "flex", alignItems: "center", gap: "10px", fontWeight: "800" }}>
                 <span style={{background:"#c6f6d5", padding:"8px", borderRadius:"12px"}}>🦺</span> Lapor Bahaya (SBO)
               </h2>
-              <p style={{ margin: 0, color: "#718096", fontSize: "13px", lineHeight: "1.5" }}>Laporan IK-QHSE-SML-001. Laporkan temuan kondisi fisik atau perilaku kerja yang berbahaya di area operasional.</p>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "13px", lineHeight: "1.5" }}>Laporan IK-QHSE-SML-001. Laporkan temuan kondisi fisik atau perilaku kerja yang berbahaya di area operasional.</p>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
@@ -1838,13 +1849,13 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-              <Input label="Unit Bisnis / Departemen *" type="text" required readOnly placeholder="Terisi otomatis dari Nama Pelapor..." value={formSbo.unit_bisnis} style={{ background: "#e2e8f0" }} />
+              <Input label="Unit Bisnis / Departemen *" type="text" required readOnly placeholder="Terisi otomatis dari Nama Pelapor..." value={formSbo.unit_bisnis} style={{ background: "var(--hover)" }} />
               <Input label="Lokasi Temuan *" type="text" required placeholder="Cth: Area Parkir Basement" value={formSbo.lokasi} onChange={(e) => setFormSbo({ ...formSbo, lokasi: e.target.value })} />
             </div>
 
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#4a5568", marginBottom: "6px", display: "block" }}>Kategori Temuan *</label>
-              <select required value={formSbo.kategori_temuan} onChange={(e) => setFormSbo({ ...formSbo, kategori_temuan: e.target.value })} style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "14px", fontWeight: "bold", color: "#2d3748", background: "#f8fafc", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Kategori Temuan *</label>
+              <select required value={formSbo.kategori_temuan} onChange={(e) => setFormSbo({ ...formSbo, kategori_temuan: e.target.value })} style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", fontWeight: "bold", color: "var(--ink)", background: "var(--bg)", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
                 <option value="Kondisi Tidak Aman (Unsafe Condition)">⚠️ Kondisi Tidak Aman (Unsafe Condition)</option>
                 <option value="Perilaku Tidak Aman (Unsafe Act)">🛑 Perilaku Tidak Aman (Unsafe Act)</option>
                 <option value="Near Miss (Hampir Celaka)">⚡ Near Miss (Hampir Celaka)</option>
@@ -1866,9 +1877,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             <Input label="Apa Penyebab Temuan Tersebut? *" type="text" required placeholder="Cth: Genangan air hujan, kelalaian pekerja..." value={formSbo.penyebab} onChange={(e) => setFormSbo({ ...formSbo, penyebab: e.target.value })} />
             <Input label="Tindakan Pengamanan (Save Action) *" type="text" required placeholder="Cth: Memasang rambu peringatan lantai licin" value={formSbo.action_taken} onChange={(e) => setFormSbo({ ...formSbo, action_taken: e.target.value })} />
 
-            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "15px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <label style={{ fontSize: "13px", fontWeight: "bold", color: "#2d3748" }}>Status Temuan Saat Ini:</label>
-              <select required value={formSbo.status_temuan} onChange={(e) => setFormSbo({ ...formSbo, status_temuan: e.target.value })} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e0", fontSize: "13px", fontWeight: "bold", color: formSbo.status_temuan === "Open" ? "#e53e3e" : "#38a169", outline: "none", cursor: "pointer", background: "white" }}>
+            <div style={{ background: "var(--bg)", border: "1px solid var(--line)", padding: "15px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <label style={{ fontSize: "13px", fontWeight: "bold", color: "var(--ink)" }}>Status Temuan Saat Ini:</label>
+              <select required value={formSbo.status_temuan} onChange={(e) => setFormSbo({ ...formSbo, status_temuan: e.target.value })} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "13px", fontWeight: "bold", color: formSbo.status_temuan === "Open" ? "#e53e3e" : "#38a169", outline: "none", cursor: "pointer", background: "var(--surface)" }}>
                 <option value="Open">🔴 OPEN (Masih Berbahaya)</option>
                 <option value="Close">🟢 CLOSE (Sudah Aman)</option>
               </select>
@@ -1877,12 +1888,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             {formSbo.kategori_temuan.includes("Unsafe Act") && (
               <div style={{ background: "#fff5f5", border: "1px solid #fed7d7", padding: "20px", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
                 <div style={{ fontSize: "12px", fontWeight: "800", color: "#c53030", letterSpacing: "0.5px" }}>[ WAJIB UNTUK UNSAFE ACT ]</div>
-                <Input label="Komitmen Pelaku Kedepan?" type="text" required placeholder="Komitmen dari pelanggar..." value={formSbo.komitmen_pelaku} onChange={(e) => setFormSbo({ ...formSbo, komitmen_pelaku: e.target.value })} style={{ background: "white" }} />
-                <Input label="Konsekuensi Jika Mengulangi?" type="text" required placeholder="Cth: Diberi teguran lisan / SP1..." value={formSbo.konsekuensi} onChange={(e) => setFormSbo({ ...formSbo, konsekuensi: e.target.value })} style={{ background: "white" }} />
+                <Input label="Komitmen Pelaku Kedepan?" type="text" required placeholder="Komitmen dari pelanggar..." value={formSbo.komitmen_pelaku} onChange={(e) => setFormSbo({ ...formSbo, komitmen_pelaku: e.target.value })} style={{ background: "var(--surface)" }} />
+                <Input label="Konsekuensi Jika Mengulangi?" type="text" required placeholder="Cth: Diberi teguran lisan / SP1..." value={formSbo.konsekuensi} onChange={(e) => setFormSbo({ ...formSbo, konsekuensi: e.target.value })} style={{ background: "var(--surface)" }} />
               </div>
             )}
 
-            <div style={{ background: fotoSbo ? "#f0fff4" : "#f8fafc", border: fotoSbo ? "2px solid #9ae6b4" : "2px dashed #cbd5e0", padding: "25px 20px", borderRadius: "16px", textAlign: "center", transition: "0.2s", marginTop: "10px" }}>
+            <div style={{ background: fotoSbo ? "#f0fff4" : "#f8fafc", border: fotoSbo ? "2px solid #9ae6b4" : "2px dashed var(--line)", padding: "25px 20px", borderRadius: "16px", textAlign: "center", transition: "0.2s", marginTop: "10px" }}>
               <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "35px", filter: fotoSbo ? "none" : "grayscale(100%) opacity(0.6)" }}>📸</span>
                 <div style={{ fontSize: "14px", fontWeight: "bold", color: fotoSbo ? "#22543d" : "#4a5568" }}>{fotoSbo ? "Foto Temuan Terlampir ✓" : "Unggah Bukti Foto Temuan (Wajib) *"}</div>
@@ -1894,7 +1905,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 <div style={{marginTop: "15px", position: "relative", display: "inline-block"}}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={fotoSbo} alt="Bukti Bahaya" style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "10px", border: "1px solid #c6f6d5", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />
-                  <button type="button" onClick={() => setFotoSbo("")} style={{position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "white", border: "none", width: "25px", height: "25px", borderRadius: "50%", cursor: "pointer", fontSize: "12px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)"}}>✖</button>
+                  <button type="button" onClick={() => setFotoSbo("")} style={{position: "absolute", top: "-10px", right: "-10px", background: "#e53e3e", color: "#fff", border: "none", width: "25px", height: "25px", borderRadius: "50%", cursor: "pointer", fontSize: "12px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.2)"}}>✖</button>
                 </div>
               )}
             </div>
@@ -1909,9 +1920,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         {activeModal === "helpdesk" && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ marginBottom: "15px", paddingRight: "20px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "#1a202c", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#ebf8ff", padding:"8px", borderRadius:"12px"}}>🛠️</span> Helpdesk GA</h2>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background:"#ebf8ff", padding:"8px", borderRadius:"12px"}}>🛠️</span> Helpdesk GA</h2>
             </div>
-            <div style={{ display: "flex", background: "#f1f5f9", padding: "6px", borderRadius: "14px", marginBottom: "25px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", background: "var(--hover)", padding: "6px", borderRadius: "14px", marginBottom: "25px", border: "1px solid var(--line)" }}>
               <button onClick={() => setHelpdeskTab("LAPOR")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", background: helpdeskTab === "LAPOR" ? "white" : "transparent", color: helpdeskTab === "LAPOR" ? "#3182ce" : "#64748b" }}>📝 Lapor</button>
               <button onClick={() => setHelpdeskTab("LACAK")} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontWeight: "bold", background: helpdeskTab === "LACAK" ? "white" : "transparent", color: helpdeskTab === "LACAK" ? "#3182ce" : "#64748b" }}>🔍 Lacak</button>
             </div>
@@ -1927,15 +1938,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 />
                 <Input label="Titik Lokasi *" type="text" required value={formHelpdesk.lokasi} onChange={(e) => setFormHelpdesk({ ...formHelpdesk, lokasi: e.target.value })} />
                 <Textarea label="Deskripsi Masalah *" required value={formHelpdesk.deskripsi} onChange={(e) => setFormHelpdesk({ ...formHelpdesk, deskripsi: e.target.value })} style={{ minHeight: "60px" }} />
-                <div style={{ background: fotoAwal ? "#ebf8ff" : "#f8fafc", border: fotoAwal ? "2px solid #90cdf4" : "2px dashed #cbd5e0", padding: "20px", borderRadius: "16px", textAlign: "center" }}>
-                  <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}><span style={{ fontSize: "35px" }}>📸</span><div style={{ fontSize: "14px", fontWeight: "bold", color: "#4a5568" }}>Unggah Foto Kerusakan *</div><input type="file" accept="image/*" capture="environment" onChange={(e) => handleImageUpload(e, setFotoAwal)} style={{ display: "none" }} required={!fotoAwal} /></label>
+                <div style={{ background: fotoAwal ? "#ebf8ff" : "#f8fafc", border: fotoAwal ? "2px solid #90cdf4" : "2px dashed var(--line)", padding: "20px", borderRadius: "16px", textAlign: "center" }}>
+                  <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}><span style={{ fontSize: "35px" }}>📸</span><div style={{ fontSize: "14px", fontWeight: "bold", color: "var(--ink-soft)" }}>Unggah Foto Kerusakan *</div><input type="file" accept="image/*" capture="environment" onChange={(e) => handleImageUpload(e, setFotoAwal)} style={{ display: "none" }} required={!fotoAwal} /></label>
                   {isUploadingFoto ? (
                     <div style={{ fontSize: "13px", fontWeight: "bold", color: "#d69e2e", marginTop: "10px" }}>⏳ Mengunggah foto...</div>
                   ) : fotoAwal && (
                     <div style={{marginTop: "15px"}}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={fotoAwal} alt="Awal" style={{ width: "100%", maxHeight: "150px", objectFit: "cover", borderRadius: "10px" }} />
-                      <button type="button" onClick={() => setFotoAwal("")} style={{background: "#e53e3e", color: "white", padding: "5px", borderRadius: "50%", marginTop: "5px"}}>✖</button>
+                      <button type="button" onClick={() => setFotoAwal("")} style={{background: "#e53e3e", color: "#fff", padding: "5px", borderRadius: "50%", marginTop: "5px"}}>✖</button>
                     </div>
                   )}
                 </div>
@@ -1949,20 +1960,20 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 </div>
                 <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "15px" }}>
                   {hasilHelpdesk.length > 0 ? hasilHelpdesk.map((tiket) => (
-                    <div key={tiket.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "15px" }}>
+                    <div key={tiket.id} style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "15px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
                         <span style={{ fontWeight: "800", fontSize: "14px" }}>📍 {tiket.lokasi}</span>
                         <Badge tone="warning">{tiket.status}</Badge>
                       </div>
-                      <div style={{ fontSize: "13px", color: "#4a5568" }}>{tiket.deskripsi}</div>
+                      <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}>{tiket.deskripsi}</div>
                     </div>
-                  )) : <div style={{ textAlign: "center", padding: "30px", color: "#a0aec0" }}>Hasil pencarian tiket akan muncul di sini.</div>}
+                  )) : <div style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>Hasil pencarian tiket akan muncul di sini.</div>}
                 </div>
               </div>
             )}
           </div>
         )}
       </Modal>
-    </div>
+    </AdminShell>
   );
 }
