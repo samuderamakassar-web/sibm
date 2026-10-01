@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hitungShiftSesi, waktuWITASekarang } from "../lib/shift";
 import { type PengumumanGedung, dalamTanggalTayang, urutkanPengumuman } from "../lib/pengumuman";
 import PengumumanCarousel from "../components/PengumumanCarousel";
@@ -43,6 +43,23 @@ const SERI_TREN: { key: SeriTren; label: string; satuan: string; warna: string; 
   { key: "tiket", label: "Tiket selesai", satuan: "tiket selesai", warna: "var(--warn)", koleksi: "helpdesk_tickets", field: "waktu_selesai" },
 ];
 type NilaiSeri = Record<SeriTren, number | null>;
+const keNilaiSeri = (angka: (number | null)[]) => Object.fromEntries(SERI_TREN.map((s, i) => [s.key, angka[i]])) as NilaiSeri;
+const totalNilaiSeri = (n: NilaiSeri | undefined) =>
+  n && SERI_TREN.every((s) => n[s.key] !== null) ? SERI_TREN.reduce((a, s) => a + (n[s.key] || 0), 0) : null;
+
+// Hitungan hari yang SUDAH LEWAT tidak berubah lagi -> disimpan di browser (localStorage), jadi tiap
+// buka portal cukup menghitung hari ini (4 baca), bukan 7-31 hari x 4 seri lagi. Kalau storage tidak
+// tersedia (mode privat dsb.) cuma jadi tanpa cache, tetap jalan.
+const KUNCI_CACHE_HARIAN = "sibm_portal_hitungan_harian_v1";
+function bacaCacheHarian(): Record<string, NilaiSeri> {
+  try { return JSON.parse(localStorage.getItem(KUNCI_CACHE_HARIAN) || "{}") || {}; } catch { return {}; }
+}
+function simpanCacheHarian(data: Record<string, NilaiSeri>) {
+  try {
+    const kunci = Object.keys(data).sort().slice(-400); // simpan ~13 bulan terakhir saja
+    localStorage.setItem(KUNCI_CACHE_HARIAN, JSON.stringify(Object.fromEntries(kunci.map((k) => [k, data[k]]))));
+  } catch { /* storage penuh/diblokir -- abaikan */ }
+}
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
@@ -206,11 +223,10 @@ export default function PortalSIBM() {
   const [kendaraanMetaMap, setKendaraanMetaMap] = useState<Record<string, { kategori: string; warna: string }>>({});
   const [daftarSemuaKendaraan, setDaftarSemuaKendaraan] = useState<string[]>([]);
 
-  // STATE TREN AKTIVITAS & KALENDER AKTIVITAS (dashboard baru) — data dibatasi (limit) biar
+  // Tamu & paket terbaru (limit) — dipakai badge Menu Cepat. Tren & Kalender pakai hitungan server (§58Q/§58R). Dibatasi limit biar
   // gak narik seluruh histori collection tiap buka portal, konsisten sama pola limit() di halaman lain
   const [visitorLogsTrend, setVisitorLogsTrend] = useState<DataTamu[]>([]);
   const [packageLogsTrend, setPackageLogsTrend] = useState<DataPaket[]>([]);
-  const [ticketsTrend, setTicketsTrend] = useState<HelpdeskTicket[]>([]);
 
   // STATE MODAL & SEARCH
   const [activeModal, setActiveModal] = useState<"none" | "login" | "tamu" | "paket" | "helpdesk" | "sbo" | "atk" | "overtime">("none");
@@ -330,10 +346,9 @@ export default function PortalSIBM() {
       }
     );
 
-    // 5. Tarik Info Pemeliharaan Gedung (tiket ini juga jadi sumber angka "Tiket Selesai" di widget Tren Aktivitas)
+    // 5. Tarik Info Pemeliharaan Gedung 
     const unsubMaintenance = onSnapshot(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(20)), (snapshot) => {
       const tickets = snapshot.docs.map(d => d.data() as HelpdeskTicket);
-      setTicketsTrend(tickets);
       const activeMaintenance = tickets.filter(t => t.status === "Sedang Dikerjakan").slice(0, 3);
       if (activeMaintenance.length > 0) {
         const infos = activeMaintenance.map(t => `SEDANG DIKERJAKAN: Perbaikan ${t.lokasi} (${t.deskripsi})`);
@@ -1006,45 +1021,75 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   })();
 
   // ==========================================
-  // TREN AKTIVITAS (7 hari terakhir) & KALENDER AKTIVITAS (bulan berjalan)
-  // Sumber: data yang sudah ditarik dengan limit() di atas (bukan query baru tanpa batas) —
-  // jujur soal keterbatasannya: kalau volume harian tinggi, hari-hari lebih lama di kalender bisa
-  // belum kecover jendela limit(60)/limit(30), makanya ditandai "tidak ada data" bukan dianggap 0.
+  // TREN AKTIVITAS (7 hari) & KALENDER AKTIVITAS (per bulan) -- §58Q/§58R
+  // Satu sumber: hitungan agregat server (getCountFromServer) per HARI per seri, filter rentang 1 field.
+  // Dulu keduanya dihitung dari data limit(20/30/60) sehingga angka kurang & awal bulan "tidak ada data".
+  // Hari lampau di-cache di browser (lihat bacaCacheHarian), hari ini selalu dihitung ulang tiap buka.
   // ==========================================
-  const tanggalWITAdariTimestamp = (ts?: Timestamp | null) => {
-    if (!ts) return null;
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(ts.toDate());
-  };
-
   const NAMA_HARI_PENDEK = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
-  // 📊 TREN AKTIVITAS 7 HARI (§58Q) -- dulu dihitung dari data yang ditarik dengan limit (tamu/paket 60,
-  // armada 30, tiket 20 terakhir), jadi total 7 hari hampir pasti KURANG; "Tiket Selesai" juga dihitung
-  // per tanggal LAPOR, bukan tanggal selesai. Sekarang hitungan agregat server per hari (7 hari x 4 seri
-  // + 4 total minggu sebelumnya = 32 hitungan, masing-masing ~1 baca) SEKALI tiap halaman dibuka.
-  const [trenHarian, setTrenHarian] = useState<{ tanggal: string; nilai: NilaiSeri }[] | null>(null);
-  const [trenMingguLalu, setTrenMingguLalu] = useState<NilaiSeri | null>(null);
+  const [hitunganHarian, setHitunganHarian] = useState<Record<string, NilaiSeri>>({});
   const [seriTren, setSeriTren] = useState<SeriTren>("tamu");
+  const [bulanKalender, setBulanKalender] = useState(() => todayISO.slice(0, 7));
+  const [seriKalender, setSeriKalender] = useState<SeriTren | "semua">("semua");
+  const [tanggalDipilih, setTanggalDipilih] = useState<string | null>(null);
+  const tanggalSudahDiambil = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     let batal = false;
+    const dibutuhkan = new Set<string>();
+    for (let i = 0; i < 14; i++) dibutuhkan.add(geserTanggalISO(todayISO, -i)); // tren 7 hari + 7 hari pembanding
+    const [th, bl] = bulanKalender.split("-").map(Number);
+    for (let d = 1; d <= new Date(th, bl, 0).getDate(); d++) {
+      const iso = `${bulanKalender}-${String(d).padStart(2, "0")}`;
+      if (iso <= todayISO) dibutuhkan.add(iso);
+    }
     const awalHariWITA = (iso: string) => Timestamp.fromDate(new Date(`${iso}T00:00:00+08:00`));
-    const hitungRentang = (s: (typeof SERI_TREN)[number], dari: string, sampai: string) =>
-      getCountFromServer(query(collection(db, s.koleksi), where(s.field, ">=", awalHariWITA(dari)), where(s.field, "<", awalHariWITA(sampai))))
+    const hitungHari = (s: (typeof SERI_TREN)[number], iso: string) =>
+      getCountFromServer(query(collection(db, s.koleksi), where(s.field, ">=", awalHariWITA(iso)), where(s.field, "<", awalHariWITA(geserTanggalISO(iso, 1)))))
         .then((r) => r.data().count as number | null)
-        .catch((e) => { console.error(`[portal] Gagal menghitung tren ${s.key}:`, e); return null; });
-    const keNilai = (angka: (number | null)[]) =>
-      Object.fromEntries(SERI_TREN.map((s, i) => [s.key, angka[i]])) as NilaiSeri;
-    const daftarTanggal = Array.from({ length: 7 }, (_, i) => geserTanggalISO(todayISO, i - 6));
-    Promise.all([
-      Promise.all(daftarTanggal.map((tgl) => Promise.all(SERI_TREN.map((s) => hitungRentang(s, tgl, geserTanggalISO(tgl, 1)))))),
-      Promise.all(SERI_TREN.map((s) => hitungRentang(s, geserTanggalISO(todayISO, -13), geserTanggalISO(todayISO, -6)))),
-    ]).then(([perHari, mingguLalu]) => {
+        .catch((e) => { console.error(`[portal] Gagal menghitung ${s.key} ${iso}:`, e); return null; });
+
+    Promise.resolve().then(async () => {
+      const cache = bacaCacheHarian();
+      const dariCache: Record<string, NilaiSeri> = {};
+      const perluAmbil: string[] = [];
+      dibutuhkan.forEach((iso) => {
+        if (tanggalSudahDiambil.current.has(iso)) return;
+        if (iso < todayISO && cache[iso]) dariCache[iso] = cache[iso];
+        else perluAmbil.push(iso);
+      });
       if (batal) return;
-      setTrenHarian(daftarTanggal.map((tanggal, i) => ({ tanggal, nilai: keNilai(perHari[i]) })));
-      setTrenMingguLalu(keNilai(mingguLalu));
+      Object.keys(dariCache).forEach((iso) => tanggalSudahDiambil.current.add(iso));
+      if (Object.keys(dariCache).length) setHitunganHarian((lama) => ({ ...lama, ...dariCache }));
+      if (!perluAmbil.length) return;
+      const hasil = await Promise.all(
+        perluAmbil.map(async (iso) => [iso, keNilaiSeri(await Promise.all(SERI_TREN.map((s) => hitungHari(s, iso))))] as const)
+      );
+      if (batal) return;
+      setHitunganHarian((lama) => ({ ...lama, ...Object.fromEntries(hasil) }));
+      const cacheBaru = { ...cache };
+      hasil.forEach(([iso, n]) => {
+        if (totalNilaiSeri(n) === null) return; // ada yang gagal -> coba lagi kunjungan berikutnya
+        tanggalSudahDiambil.current.add(iso);
+        if (iso < todayISO) cacheBaru[iso] = n;
+      });
+      simpanCacheHarian(cacheBaru);
     });
     return () => { batal = true; };
-  }, [todayISO]);
+  }, [todayISO, bulanKalender]);
+
+  const tanggalTren = Array.from({ length: 7 }, (_, i) => geserTanggalISO(todayISO, i - 6));
+  const tanggalPembanding = Array.from({ length: 7 }, (_, i) => geserTanggalISO(todayISO, i - 13));
+  const trenHarian = tanggalTren.every((tg) => hitunganHarian[tg])
+    ? tanggalTren.map((tanggal) => ({ tanggal, nilai: hitunganHarian[tanggal] }))
+    : null;
+  const trenMingguLalu: NilaiSeri | null = tanggalPembanding.every((tg) => hitunganHarian[tg])
+    ? keNilaiSeri(SERI_TREN.map((s) => tanggalPembanding.reduce<number | null>((a, tg) => {
+        const v = hitunganHarian[tg][s.key];
+        return a === null || v === null ? null : a + v;
+      }, 0)))
+    : null;
 
   const infoSeriTren = SERI_TREN.find((s) => s.key === seriTren) || SERI_TREN[0];
   const totalSeri = (key: SeriTren) => {
@@ -1063,30 +1108,28 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     if (persen === 0) return "sama dengan 7 hari sebelumnya";
     return `${persen > 0 ? "▲" : "▼"} ${Math.abs(persen)}% dibanding 7 hari sebelumnya (${totalSeriMingguLalu})`;
   })();
-  const kalenderAktivitas = useMemo(() => {
-    const [thn, bln] = todayISO.split("-").map(Number);
-    const jumlahHari = new Date(thn, bln, 0).getDate();
-    const counts: Record<string, number> = {};
-    const prefixBulan = todayISO.slice(0, 7);
-    const tambah = (tgl: string | null) => { if (tgl && tgl.startsWith(prefixBulan)) counts[tgl] = (counts[tgl] || 0) + 1; };
-    visitorLogsTrend.forEach(t => tambah(tanggalWITAdariTimestamp(t.waktu_masuk)));
-    logKendaraanMentah.forEach(k => tambah(tanggalWITAdariTimestamp(k.waktu_catat)));
-    ticketsTrend.forEach(t => tambah(tanggalWITAdariTimestamp(t.waktu_lapor)));
-    packageLogsTrend.forEach(p => tambah(tanggalWITAdariTimestamp(p.waktu_diterima)));
-
-    const nilaiTerbesar = Math.max(1, ...Object.values(counts));
-    const daftarHari: { tanggal: number; iso: string; level: number; adaData: boolean; hariIni: boolean }[] = [];
-    for (let d = 1; d <= jumlahHari; d++) {
-      const iso = `${prefixBulan}-${String(d).padStart(2, "0")}`;
-      const c = counts[iso] || 0;
-      daftarHari.push({ tanggal: d, iso, level: c === 0 ? 0 : Math.min(4, Math.ceil((c / nilaiTerbesar) * 4)), adaData: c > 0, hariIni: iso === todayISO });
-    }
-
-    const hariPertama = new Date(thn, bln - 1, 1).getDay(); // 0=Minggu..6=Sabtu
-    const leadingBlanks = hariPertama === 0 ? 6 : hariPertama - 1; // konversi ke kolom Senin..Minggu
-
-    return { daftarHari, leadingBlanks };
-  }, [todayISO, visitorLogsTrend, logKendaraanMentah, ticketsTrend, packageLogsTrend]);
+  // 🗓️ KALENDER AKTIVITAS (§58R)
+  const [thnKal, blnKal] = bulanKalender.split("-").map(Number);
+  const nilaiKalender = (n: NilaiSeri | undefined) => (seriKalender === "semua" ? totalNilaiSeri(n) : n ? n[seriKalender] : null);
+  const hariKalender = Array.from({ length: new Date(thnKal, blnKal, 0).getDate() }, (_, i) => {
+    const iso = `${bulanKalender}-${String(i + 1).padStart(2, "0")}`;
+    return { tanggal: i + 1, iso, nilai: nilaiKalender(hitunganHarian[iso]), dimuat: !!hitunganHarian[iso], nanti: iso > todayISO, hariIni: iso === todayISO };
+  });
+  const maxKalender = Math.max(1, ...hariKalender.map((h) => h.nilai || 0));
+  const levelKalender = (v: number | null) => (!v ? 0 : Math.min(4, Math.ceil((v / maxKalender) * 4)));
+  const hariPertamaKal = new Date(thnKal, blnKal - 1, 1).getDay(); // 0=Minggu
+  const kosongAwalKal = hariPertamaKal === 0 ? 6 : hariPertamaKal - 1; // kolom Senin..Minggu
+  const totalBulanKal = hariKalender.every((h) => h.nanti || h.nilai !== null) ? hariKalender.reduce((a, h) => a + (h.nilai || 0), 0) : null;
+  const bulanIni = todayISO.slice(0, 7);
+  const bulanMinKal = geserTanggalISO(`${bulanIni}-01`, -335).slice(0, 7); // ~12 bulan ke belakang
+  const geserBulanKal = (arah: number) => {
+    const d = new Date(thnKal, blnKal - 1 + arah, 1);
+    setBulanKalender(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    setTanggalDipilih(null);
+  };
+  const tanggalDetailKal = tanggalDipilih?.startsWith(bulanKalender) ? tanggalDipilih : bulanKalender === bulanIni ? todayISO : null;
+  const detailKal = tanggalDetailKal ? hitunganHarian[tanggalDetailKal] : undefined;
+  const labelSeriKal = seriKalender === "semua" ? "aktivitas" : SERI_TREN.find((s) => s.key === seriKalender)?.satuan || "";
 
   // Level 0-4 aktivitas; level >= 2 memakai teks putih (lihat kalender-cell). Level 0-1 ikut token tema.
   const WARNA_LEVEL_KALENDER = ["var(--hover)", "var(--red-50)", "#e07a86", "#c93a4c", "#a3122a"];
@@ -1221,7 +1264,22 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         }
 
         /* 🗓️ KALENDER AKTIVITAS */
-        .kalender-cell { aspect-ratio: 1; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+        .kalender-cell { aspect-ratio: 1; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-family: inherit; padding: 0; cursor: pointer; min-width: 0; }
+        .kalender-cell.is-nanti { cursor: default; opacity: 0.45; }
+        .kalender-cell.is-dipilih { box-shadow: 0 0 0 2px var(--tile), 0 0 0 3.5px var(--ink); }
+        .kalender-cell:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .kal-kepala { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .kal-pilih { height: 34px; font-size: 12px; max-width: 55%; color: var(--ink); }
+        .kal-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+        .kal-panah { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--bg); color: var(--ink); font-size: 18px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .kal-panah:disabled { opacity: 0.3; cursor: default; }
+        .kal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+        .kal-hari { font-size: 10px; color: var(--muted); font-weight: 700; text-align: center; }
+        .kal-hari.is-akhir-pekan { color: var(--red-600); opacity: 0.75; }
+        .kal-detail { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--bg); min-height: 44px; }
+        .kal-detail-angka { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-soft); }
+        .kal-detail-angka > span { display: inline-flex; align-items: center; gap: 6px; }
+        .kal-detail-angka b { color: var(--ink); }
         @media (min-width: 480px) { .kalender-cell { font-size: 14px; } }
 
         /* 📱 BOTTOM NAV APP-STYLE */
@@ -1440,41 +1498,75 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </Card>
         </div>
 
-        {/* 🗓️ KALENDER AKTIVITAS */}
+        {/* 🗓️ KALENDER AKTIVITAS (§58R) -- ketuk tanggal untuk rinciannya, bisa mundur s.d. ~12 bulan */}
         <div className="portal-kalender">
         <Card style={{ borderRadius: "20px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "14px" }}>
+          <div className="kal-kepala">
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>Kalender Aktivitas</h3>
-            <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>{new Date(thnW, blnW - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</span>
+            <select className="sa-field kal-pilih" aria-label="Jenis aktivitas di kalender" value={seriKalender} onChange={(e) => setSeriKalender(e.target.value as SeriTren | "semua")}>
+              <option value="semua">Semua aktivitas</option>
+              {SERI_TREN.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px", marginBottom: "6px" }}>
-            {["S", "S", "R", "K", "J", "S", "M"].map((h, idx) => <span key={idx} style={{ fontSize: "9px", color: "var(--muted)", fontWeight: 700, textAlign: "center" }}>{h}</span>)}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
-            {Array.from({ length: kalenderAktivitas.leadingBlanks }).map((_, idx) => <div key={`blank-${idx}`} />)}
-            {kalenderAktivitas.daftarHari.map((h) => (
-              <div
-                key={h.iso}
-                className="kalender-cell"
-                title={h.adaData ? `Tanggal ${h.tanggal}: ada aktivitas` : `Tanggal ${h.tanggal}: belum ada data`}
-                style={{
-                  background: WARNA_LEVEL_KALENDER[h.level],
-                  border: h.adaData ? "none" : "1px dashed var(--line)",
-                  boxShadow: h.hariIni ? "0 0 0 2px var(--tile), 0 0 0 3.5px var(--ink)" : "none",
-                  color: h.level >= 2 ? "#fff" : h.hariIni ? "var(--red-600)" : "var(--ink-soft)",
-                  fontWeight: h.hariIni ? 800 : 700,
-                }}
-              >
-                {h.tanggal}
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", marginTop: "14px" }}>
-            <span style={{ fontSize: "9px", color: "var(--muted)", fontWeight: 600 }}>Rendah</span>
-            <div style={{ display: "flex", gap: "2px" }}>
-              {WARNA_LEVEL_KALENDER.slice(1).map((c, idx) => <div key={idx} style={{ width: "12px", height: "12px", borderRadius: "3px", background: c }} />)}
+          <div className="kal-nav">
+            <button type="button" className="kal-panah" onClick={() => geserBulanKal(-1)} disabled={bulanKalender <= bulanMinKal} aria-label="Bulan sebelumnya">‹</button>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 800, color: "var(--ink)" }}>{new Date(thnKal, blnKal - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</div>
+              <div style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>{totalBulanKal === null ? "Menghitung..." : `${totalBulanKal} ${labelSeriKal} bulan ini`}</div>
             </div>
-            <span style={{ fontSize: "9px", color: "var(--muted)", fontWeight: 600 }}>Tinggi</span>
+            <button type="button" className="kal-panah" onClick={() => geserBulanKal(1)} disabled={bulanKalender >= bulanIni} aria-label="Bulan berikutnya">›</button>
+          </div>
+          <div className="kal-grid" style={{ marginBottom: "6px" }}>
+            {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((h) => <span key={h} className={`kal-hari${h === "Sab" || h === "Min" ? " is-akhir-pekan" : ""}`}>{h}</span>)}
+          </div>
+          <div className="kal-grid">
+            {Array.from({ length: kosongAwalKal }).map((_, idx) => <div key={`blank-${idx}`} />)}
+            {hariKalender.map((h) => {
+              const level = levelKalender(h.nilai);
+              const gagal = h.dimuat && h.nilai === null && !h.nanti;
+              return (
+                <button
+                  key={h.iso}
+                  type="button"
+                  className={`kalender-cell${h.nanti ? " is-nanti" : ""}${tanggalDetailKal === h.iso ? " is-dipilih" : ""}`}
+                  disabled={h.nanti}
+                  onClick={() => setTanggalDipilih(h.iso)}
+                  aria-label={`${h.tanggal} ${new Date(thnKal, blnKal - 1).toLocaleDateString("id-ID", { month: "long" })}: ${h.nanti ? "belum terjadi" : h.nilai === null ? "belum dimuat" : `${h.nilai} ${labelSeriKal}`}`}
+                  aria-pressed={tanggalDetailKal === h.iso}
+                  style={{
+                    background: h.nanti ? "transparent" : WARNA_LEVEL_KALENDER[level],
+                    border: gagal ? "1px dashed var(--line)" : h.nanti ? "1px solid var(--line)" : "none",
+                    color: level >= 2 ? "#fff" : h.hariIni ? "var(--red-600)" : "var(--ink-soft)",
+                    fontWeight: h.hariIni ? 800 : 700,
+                  }}
+                >
+                  {h.tanggal}
+                </button>
+              );
+            })}
+          </div>
+          <div className="kal-detail" aria-live="polite">
+            {tanggalDetailKal ? (
+              <>
+                <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--ink)", marginBottom: "6px" }}>
+                  {tanggalDetailKal === todayISO ? "Hari ini, " : ""}{new Date(`${tanggalDetailKal}T00:00:00`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}
+                </div>
+                <div className="kal-detail-angka">
+                  {SERI_TREN.map((s) => (
+                    <span key={s.key}><span className="tren-dot" style={{ background: s.warna }} />{s.label} <b>{detailKal ? (detailKal[s.key] ?? "—") : "…"}</b></span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: "12px", color: "var(--muted)" }}>Ketuk tanggal untuk melihat rinciannya.</div>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", marginTop: "12px" }}>
+            <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600 }}>Sepi</span>
+            <div style={{ display: "flex", gap: "2px" }}>
+              {WARNA_LEVEL_KALENDER.map((c, idx) => <div key={idx} style={{ width: "12px", height: "12px", borderRadius: "3px", background: c }} />)}
+            </div>
+            <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600 }}>Ramai</span>
           </div>
         </Card>
         </div>
