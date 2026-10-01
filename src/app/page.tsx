@@ -177,11 +177,6 @@ export default function PortalSIBM() {
   const [driverStatusMap, setDriverStatusMap] = useState<Record<string, string>>({ "Amal Setiawan": "Memuat...", "Muhammad Renaldy": "Memuat..." });
   const [overtimeMingguIni, setOvertimeMingguIni] = useState<OvertimeLog[]>([]);
 
-  // STATE INFO PEMELIHARAAN GEDUNG
-  // String kosong = "belum ada info / normal", BUKAN "Memuat..." — dulu placeholder loading dipakai
-  // di sini, tapi sekarang string ini juga dipakai sebagai flag boolean (Ringkasan Hari Ini & Status
-  // Operasional), jadi placeholder loading yang truthy bikin sekilas salah nampilin "ada perbaikan".
-  const [maintenanceInfo, setMaintenanceInfo] = useState<string>("");
 
   // Pengumuman Gedung -- SEKARANG bisa lebih dari 1 sekaligus, tayang bergiliran (carousel) di
   // bawah header, gantikan ticker teks tunggal lama (settings/pengumuman, sudah tidak dipakai).
@@ -346,18 +341,6 @@ export default function PortalSIBM() {
       }
     );
 
-    // 5. Tarik Info Pemeliharaan Gedung 
-    const unsubMaintenance = onSnapshot(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(20)), (snapshot) => {
-      const tickets = snapshot.docs.map(d => d.data() as HelpdeskTicket);
-      const activeMaintenance = tickets.filter(t => t.status === "Sedang Dikerjakan").slice(0, 3);
-      if (activeMaintenance.length > 0) {
-        const infos = activeMaintenance.map(t => `SEDANG DIKERJAKAN: Perbaikan ${t.lokasi} (${t.deskripsi})`);
-        setMaintenanceInfo(infos.join("   |   "));
-      } else {
-        setMaintenanceInfo("");
-      }
-    });
-
     // 5b. Tarik Riwayat Tamu & Paket (dibatasi limit 60 — dipakai buat widget Tren Aktivitas & Kalender Aktivitas,
     // juga badge Menu Cepat; pencarian tamu/paket pakai getDocs terbatas di bukaPencarian)
     const unsubVisitorTrend = onSnapshot(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc"), limit(60)), (snapshot) => {
@@ -426,7 +409,7 @@ export default function PortalSIBM() {
       }
     });
 
-    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubMaintenance(); unsubBroadcast(); unsubSurveiCampaign(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
+    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubBroadcast(); unsubSurveiCampaign(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
   }, [todayISO, tomorrowISO, previewBesokAktif, tanggalPreviewOB, seninMingguIni, mingguMingguIni]);
 
   // Auto-geser kartu pengumuman tiap 6 detik kalau lebih dari 1 -- "stop" dilakukan admin lewat
@@ -964,6 +947,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     .slice(0, 50);
   const jumlahTamuDiDalam = visitorLogsTrend.filter((tm) => !tm.waktu_keluar && tm.waktu_masuk && new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(tm.waktu_masuk.toDate()) === todayISO).length;
   const jumlahPaketMenunggu = packageLogsTrend.filter((p) => p.status === "Belum Diambil").length;
+  // ⚙️ STATUS OPERASIONAL (§58S)
+  const jumlahArmadaBengkel = mobilStatus.filter((m) => m.status_kendaraan?.includes("Bengkel") || m.status_kendaraan?.includes("Service")).length;
+  const tiketDikerjakan = tiketTerbuka.filter((tk) => tk.status === "Sedang Dikerjakan");
+  const lemburHariIni = overtimeMingguIni.filter((ot) => ot.tanggal === todayISO);
   const lompatKe = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // ==========================================
@@ -1238,7 +1225,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .team-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
         .team-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
         .team-avatar-fallback { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
-        .status-op-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #f0efee; }
+        .status-op-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border: none; border-bottom: 1px solid #f0efee; width: 100%; background: none; font-family: inherit; text-align: left; cursor: pointer; color: inherit; }
+        .status-op-row:hover .status-op-judul { color: var(--brand); }
+        .status-op-row:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
+        .status-op-teks { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .status-op-judul { font-size: 13px; font-weight: 700; color: var(--ink); }
+        .status-op-sub { font-size: 11.5px; color: var(--ink-soft); line-height: 1.4; }
+        .status-op-detail { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .status-op-titik { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        #riwayat-armada-section, #overtime-section { scroll-margin-top: 90px; }
         .status-op-row:last-child { border-bottom: none; }
 
         /* 📊 CHART BARS */
@@ -1608,33 +1603,46 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </div>
         </div>
 
-        {/* ⚙️ STATUS OPERASIONAL (ringkas) */}
+        {/* ⚙️ STATUS OPERASIONAL (§58S) -- tiap baris bisa diketuk ke detailnya; warna titik: hijau normal,
+            oranye perlu perhatian, biru info (lembur bukan masalah, jadi tidak oranye). */}
         <div className="portal-status" id="status-operasional-section">
         <Card style={{ borderRadius: "20px", padding: "6px 20px" }}>
-          <div className="status-op-row">
-            <div className="section-title-icon" style={{ background: "var(--info-50)", color: "var(--info)", margin: 0, padding: "9px" }}><IconTruck size={16} /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>Status Armada</div>
-              <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "1px" }}>{mobilStatus.filter(m => isStandbyLabel(m.status_kendaraan)).length} dari {mobilStatus.length} kendaraan standby</div>
-            </div>
-            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }} />
-          </div>
-          <div className="status-op-row">
-            <div className="section-title-icon" style={{ background: "var(--ok-50)", color: "var(--ok)", margin: 0, padding: "9px" }}><IconWrench size={16} /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>Maintenance Gedung</div>
-              <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "1px" }}>{maintenanceInfo || "Tidak ada perbaikan berjalan"}</div>
-            </div>
-            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: maintenanceInfo ? "var(--warn)" : "var(--ok)", flexShrink: 0 }} />
-          </div>
-          <div className="status-op-row">
-            <div className="section-title-icon" style={{ background: "var(--warn-50)", color: "var(--warn)", margin: 0, padding: "9px" }}><IconClock size={16} /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>Overtime Minggu Ini</div>
-              <div style={{ fontSize: "10.5px", color: "var(--muted)", marginTop: "1px" }}>{overtimeMingguIni.length} pengajuan &middot; {seninMingguIni.split("-").reverse().join("/")}-{mingguMingguIni.split("-").reverse().join("/")}</div>
-            </div>
-            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: overtimeMingguIni.length > 0 ? "var(--warn)" : "var(--ok)", flexShrink: 0 }} />
-          </div>
+          <button type="button" className="status-op-row" onClick={() => lompatKe("riwayat-armada-section")}>
+            <span className="section-title-icon" style={{ background: "var(--info-50)", color: "var(--info)", margin: 0, padding: "9px" }}><IconTruck size={16} /></span>
+            <span className="status-op-teks">
+              <span className="status-op-judul">Armada</span>
+              <span className="status-op-sub">
+                {mobilStatus.length === 0 ? "Belum ada data kendaraan" : `${jumlahArmadaSiap} siap · ${jumlahArmadaKeluar} keluar${jumlahArmadaBengkel ? ` · ${jumlahArmadaBengkel} di bengkel` : ""}`}
+              </span>
+            </span>
+            <span className="status-op-titik" style={{ background: mobilStatus.length > 0 && jumlahArmadaSiap === 0 ? "var(--warn)" : "var(--ok)" }} aria-hidden="true" />
+          </button>
+          <button type="button" className="status-op-row" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LACAK"); }}>
+            <span className="section-title-icon" style={{ background: "var(--ok-50)", color: "var(--ok)", margin: 0, padding: "9px" }}><IconWrench size={16} /></span>
+            <span className="status-op-teks">
+              <span className="status-op-judul">Perbaikan Gedung</span>
+              <span className="status-op-sub">
+                {tiketTerbuka.length === 0
+                  ? "Tidak ada laporan kerusakan terbuka"
+                  : `${tiketDikerjakan.length} dikerjakan · ${tiketTerbuka.length - tiketDikerjakan.length} menunggu`}
+              </span>
+              {tiketDikerjakan.length > 0 && (
+                <span className="status-op-sub status-op-detail">Sedang: {tiketDikerjakan.slice(0, 2).map((tk) => tk.lokasi).join(", ")}{tiketDikerjakan.length > 2 ? ` +${tiketDikerjakan.length - 2}` : ""}</span>
+              )}
+            </span>
+            <span className="status-op-titik" style={{ background: tiketTerbuka.length > 0 ? "var(--warn)" : "var(--ok)" }} aria-hidden="true" />
+          </button>
+          <button type="button" className="status-op-row" onClick={() => lompatKe("overtime-section")}>
+            <span className="section-title-icon" style={{ background: "var(--warn-50)", color: "var(--warn)", margin: 0, padding: "9px" }}><IconClock size={16} /></span>
+            <span className="status-op-teks">
+              <span className="status-op-judul">Lembur Hari Ini</span>
+              <span className="status-op-sub">
+                {lemburHariIni.length === 0 ? "Tidak ada lembur" : `${lemburHariIni.length} area · ${lemburHariIni.map((ot) => `${ot.area_ruangan} (${ot.jam_mulai}–${ot.jam_selesai})`).slice(0, 2).join(", ")}${lemburHariIni.length > 2 ? "…" : ""}`}
+              </span>
+              <span className="status-op-sub status-op-detail">{overtimeMingguIni.length} pengajuan minggu ini</span>
+            </span>
+            <span className="status-op-titik" style={{ background: lemburHariIni.length > 0 ? "var(--info)" : "var(--muted)" }} aria-hidden="true" />
+          </button>
         </Card>
         </div>
 
@@ -1642,7 +1650,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         <div className="portal-detail">
 
           <Card style={{ borderRadius: "18px" }}>
-            <div className="section-title">
+            <div className="section-title" id="riwayat-armada-section">
               <div className="section-title-icon"><IconTruck size={18} /></div>
               <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: "800" }}>Riwayat Armada Operasional</h3>
             </div>
@@ -1677,7 +1685,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </Card>
 
           <Card style={{ borderRadius: "18px" }}>
-            <div className="section-title">
+            <div className="section-title" id="overtime-section">
               <div className="section-title-icon"><IconClock size={18} /></div>
               <div>
                 <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: "800" }}>Overtime Gedung (Minggu Ini)</h3>
