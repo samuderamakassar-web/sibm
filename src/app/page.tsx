@@ -31,6 +31,7 @@ interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: st
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
 interface ObStatusData { nama: string; status: string; lokasi: string[]; }
 interface Employee { id: string; nama: string; departemen: string; email?: string; }
+const BATAS_PENCARIAN = 300;
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
@@ -332,7 +333,7 @@ export default function PortalSIBM() {
     });
 
     // 5b. Tarik Riwayat Tamu & Paket (dibatasi limit 60 — dipakai buat widget Tren Aktivitas & Kalender Aktivitas,
-    // BUKAN pencarian; pencarian tamu/paket tetap pakai getDocs on-demand di handleCariTamu/handleCariPaket)
+    // juga badge Menu Cepat; pencarian tamu/paket pakai getDocs terbatas di bukaPencarian)
     const unsubVisitorTrend = onSnapshot(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc"), limit(60)), (snapshot) => {
       setVisitorLogsTrend(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DataTamu)));
     });
@@ -692,25 +693,24 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     } finally { setIsOvertimeLoading(false); }
   };
 
-  const handleCariTamu = async () => {
+  // 🔎 LACAK TAMU / CEK PAKET (§58P) -- dulu tiap tombol "Cari" membaca SELURUH koleksi sejak awal
+  // (biaya baca Firestore & lambat makin lama makin parah). Sekarang ambil BATAS_PENCARIAN catatan
+  // terbaru sekali saat modal dibuka, penyaringan (nama/instansi/tujuan, penerima/kurir) di browser.
+  const bukaPencarian = async (jenis: "tamu" | "paket") => {
+    setActiveModal(jenis);
+    setSearchQuery("");
     setIsSearching(true);
     try {
-      const snap = await getDocs(collection(db, "security_visitor_logs"));
-      const rawData = snap.docs.map(d => ({ id: d.id, ...d.data() } as DataTamu));
-      const filtered = searchQuery.trim() ? rawData.filter(t => String(t.nama).toLowerCase().includes(searchQuery.toLowerCase().trim())) : rawData;
-      filtered.sort((a, b) => getTime(b.waktu_masuk) - getTime(a.waktu_masuk));
-      setHasilTamu(filtered.slice(0, 50));
-    } finally { setIsSearching(false); }
-  };
-
-  const handleCariPaket = async () => {
-    setIsSearching(true);
-    try {
-      const snap = await getDocs(collection(db, "packages"));
-      const rawData = snap.docs.map(d => ({ id: d.id, ...d.data() } as DataPaket));
-      const filtered = searchQuery.trim() ? rawData.filter(p => String(p.penerima).toLowerCase().includes(searchQuery.toLowerCase().trim())) : rawData;
-      filtered.sort((a, b) => getTime(b.waktu_diterima) - getTime(a.waktu_diterima));
-      setHasilPaket(filtered.slice(0, 50));
+      if (jenis === "tamu") {
+        const snap = await getDocs(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc"), limit(BATAS_PENCARIAN)));
+        setHasilTamu(snap.docs.map(d => ({ id: d.id, ...d.data() } as DataTamu)));
+      } else {
+        const snap = await getDocs(query(collection(db, "packages"), orderBy("waktu_diterima", "desc"), limit(BATAS_PENCARIAN)));
+        setHasilPaket(snap.docs.map(d => ({ id: d.id, ...d.data() } as DataPaket)));
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal memuat data. Periksa koneksi lalu coba lagi.", "error");
     } finally { setIsSearching(false); }
   };
 
@@ -928,6 +928,16 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const jumlahArmadaSiap = mobilStatus.filter((m) => isStandbyLabel(m.status_kendaraan)).length;
   const jumlahArmadaKeluar = mobilStatus.filter((m) => m.status_kendaraan?.toLowerCase().includes("keluar")).length;
   const obLibur = isWeekend(todayISO);
+  const kataCari = searchQuery.toLowerCase().trim();
+  const cocokCari = (...nilai: (string | undefined)[]) => !kataCari || nilai.some((v) => String(v || "").toLowerCase().includes(kataCari));
+  const tamuTampil = hasilTamu.filter((tm) => cocokCari(tm.nama, tm.instansi_dept, tm.tujuan)).slice(0, 50);
+  // Paket yang belum diambil di atas -- yang dicari karyawan biasanya "paket saya sudah datang?"
+  const paketTampil = hasilPaket
+    .filter((p) => cocokCari(p.penerima, p.kurir))
+    .sort((a, b) => Number(a.status === "Sudah Diambil") - Number(b.status === "Sudah Diambil"))
+    .slice(0, 50);
+  const jumlahTamuDiDalam = visitorLogsTrend.filter((tm) => !tm.waktu_keluar && tm.waktu_masuk && new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(tm.waktu_masuk.toDate()) === todayISO).length;
+  const jumlahPaketMenunggu = packageLogsTrend.filter((p) => p.status === "Belum Diambil").length;
   const lompatKe = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // ==========================================
@@ -1129,6 +1139,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
         /* 🧱 QUICK ACTION + KARTU */
         .qa-card {
+          position: relative; width: 100%; display: flex; align-items: center; font-family: inherit; color: inherit;
           cursor: pointer; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
           box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
@@ -1140,20 +1151,24 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
            kepotong jadi "2 lalu 1 sendirian" yang keliatan berantakan -- ini yang dikeluhkan. */
         .menu-cepat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .qa-card { padding: 14px 8px !important; flex-direction: column !important; text-align: center; gap: 8px !important; }
-        .qa-card h2 { font-size: 12px !important; }
-        .qa-card p { display: none; }
+        .qa-teks { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .qa-judul { color: var(--ink); font-size: 12px; font-weight: 800; }
+        .qa-sub { display: none; color: var(--muted); font-size: 11px; }
+        .qa-badge { flex-shrink: 0; padding: 2px 7px; border-radius: 8px; background: var(--brand); color: #fff; font-size: 10px; font-weight: 800; white-space: nowrap; }
+        .qa-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
         @media (min-width: 640px) {
           .menu-cepat-grid { gap: 12px; }
           .qa-card { padding: 18px !important; flex-direction: row !important; text-align: left; gap: 12px !important; }
-          .qa-card h2 { font-size: 14px !important; }
-          .qa-card p { display: block; }
+          .qa-judul { font-size: 14px; }
+          .qa-sub { display: block; }
+          .qa-badge { margin-left: auto; }
         }
         .qa-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); border-color: rgba(220,38,38,0.28); }
         /* Kartu Survei Kepuasan cuma tampil sesekali (kampanye aktif admin) & melebar 1 baris penuh
            (bukan ikut grid 3 kolom kartu lain) -- tetap tampilkan subtitle "X hari lagi" bahkan di
            mobile (beda dari .qa-card biasa yang nyembunyiin <p> di layar kecil). */
         .qa-card-survei { flex-direction: row !important; text-align: left; }
-        .qa-card-survei p { display: block !important; }
+        .qa-card-survei .qa-sub { display: block !important; }
         .qa-card-survei:hover { border-color: rgba(124,58,237,0.35) !important; }
         .qa-icon-chip {
           width: 44px; height: 44px; border-radius: 13px; background: var(--red-50); color: var(--red-600);
@@ -1230,6 +1245,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         @media (min-width: 1000px) {
           .menu-cepat-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
           .qa-card { flex-direction: column !important; align-items: flex-start !important; }
+          .qa-badge { margin-left: 0; }
         }
         @media (max-width: 1080px) {
           .portal-ringkasan, .portal-pengumuman { grid-column: 1 / -1; }
@@ -1306,48 +1322,49 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         <div className="portal-menu" id="menu-cepat-section">
           <div style={{ fontSize: "15px", fontWeight: 800, marginBottom: "12px", color: "var(--ink)" }}>Menu Cepat</div>
           <div className="menu-cepat-grid">
-            <div className="qa-card" onClick={() => { setActiveModal("tamu"); setSearchQuery(""); setHasilTamu([]); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-              <div className="qa-icon-chip"><IconIdCard size={20} /></div>
-              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Lacak Tamu</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Cek pengunjung gedung</p></div>
-            </div>
-            <div className="qa-card" onClick={() => { setActiveModal("paket"); setSearchQuery(""); setHasilPaket([]); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-              <div className="qa-icon-chip"><IconPackage size={20} /></div>
-              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Resi Paket</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lacak dokumen logistik</p></div>
-            </div>
-            {/* Request ATK, Kerusakan & Bahaya SBO disembunyikan di mobile (sudah ada shortcut sama persis di bottom-nav
-                mobile: ATK, Kerusakan, FAB tengah) — di desktop TETAP MUNCUL karena gak ada bottom-nav sama sekali.
-                Dibungkus wrapper terpisah (bukan taruh class toggle langsung di .qa-card) supaya display:flex
-                bawaan .qa-card gak ketiban display:block/none dari class toggle-nya. */}
+            <button type="button" className="qa-card" onClick={() => bukaPencarian("tamu")}>
+              <span className="qa-icon-chip"><IconIdCard size={20} /></span>
+              <span className="qa-teks"><span className="qa-judul">Lacak Tamu</span><span className="qa-sub">Cek tamu yang datang</span></span>
+              {jumlahTamuDiDalam > 0 && <span className="qa-badge">{jumlahTamuDiDalam} di dalam</span>}
+            </button>
+            <button type="button" className="qa-card" onClick={() => bukaPencarian("paket")}>
+              <span className="qa-icon-chip"><IconPackage size={20} /></span>
+              <span className="qa-teks"><span className="qa-judul">Cek Paket</span><span className="qa-sub">Paket kiriman untuk Anda</span></span>
+              {jumlahPaketMenunggu > 0 && <span className="qa-badge">{jumlahPaketMenunggu} menunggu</span>}
+            </button>
+            {/* Request ATK, Kerusakan & Bahaya SBO disembunyikan di mobile (sudah ada di bottom-nav: ATK,
+                Kerusakan, FAB tengah) -- di desktop tetap muncul karena tidak ada bottom-nav. Dibungkus
+                wrapper supaya display:flex bawaan .qa-card tidak ketiban class toggle-nya. */}
             <div className="desktop-only-hide">
-              <div className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-                <div className="qa-icon-chip"><IconClipboard size={20} /></div>
-                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Request ATK</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Barang kantor ke GA</p></div>
-              </div>
+              <button type="button" className="qa-card" onClick={() => { setActiveModal("atk"); setAtkTab("REQUEST"); }}>
+                <span className="qa-icon-chip"><IconClipboard size={20} /></span>
+                <span className="qa-teks"><span className="qa-judul">Request ATK</span><span className="qa-sub">Minta barang kantor ke GA</span></span>
+              </button>
             </div>
-            <div className="qa-card" onClick={() => setActiveModal("overtime")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-              <div className="qa-icon-chip"><IconClock size={20} /></div>
-              <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Lembur AC</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Request ruang lembur</p></div>
+            <button type="button" className="qa-card" onClick={() => setActiveModal("overtime")}>
+              <span className="qa-icon-chip"><IconClock size={20} /></span>
+              <span className="qa-teks"><span className="qa-judul">Lembur AC</span><span className="qa-sub">AC/listrik di luar jam kerja</span></span>
+            </button>
+            <div className="desktop-only-hide">
+              <button type="button" className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
+                <span className="qa-icon-chip"><IconWrench size={20} /></span>
+                <span className="qa-teks"><span className="qa-judul">Kerusakan</span><span className="qa-sub">Lapor fasilitas rusak</span></span>
+              </button>
             </div>
             <div className="desktop-only-hide">
-              <div className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-                <div className="qa-icon-chip"><IconWrench size={20} /></div>
-                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Kerusakan</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Lapor fasilitas rusak</p></div>
-              </div>
-            </div>
-            <div className="desktop-only-hide">
-              <div className="qa-card" onClick={() => setActiveModal("sbo")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
-                <div className="qa-icon-chip"><IconAlertTriangle size={20} /></div>
-                <div><h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>Bahaya SBO</h2><p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Temuan kondisi darurat</p></div>
-              </div>
+              <button type="button" className="qa-card" onClick={() => setActiveModal("sbo")}>
+                <span className="qa-icon-chip"><IconAlertTriangle size={20} /></span>
+                <span className="qa-teks"><span className="qa-judul">Bahaya SBO</span><span className="qa-sub">Temuan kondisi berbahaya</span></span>
+              </button>
             </div>
             {surveiAktif && (
-              <div className="qa-card qa-card-survei" onClick={() => router.push("/survei-kepuasan")} style={{ padding: "18px", display: "flex", alignItems: "center", gap: "12px", gridColumn: "1 / -1" }}>
-                <div className="qa-icon-chip" style={{ background: "var(--accent-50, #f5f3ff)", color: "var(--accent, #7c3aed)" }}><IconClipboardSurvei size={20} /></div>
-                <div>
-                  <h2 style={{ margin: "0 0 2px 0", color: "var(--ink)", fontSize: "14px", fontWeight: 800 }}>📋 Survei Kepuasan Gedung</h2>
-                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "11px" }}>Isi kuesioner pelayanan gedung — {sisaHariSurvei} hari lagi</p>
-                </div>
-              </div>
+              <button type="button" className="qa-card qa-card-survei" onClick={() => router.push("/survei-kepuasan")} style={{ gridColumn: "1 / -1" }}>
+                <span className="qa-icon-chip" style={{ background: "var(--accent-50, #f5f3ff)", color: "var(--accent, #7c3aed)" }}><IconClipboardSurvei size={20} /></span>
+                <span className="qa-teks">
+                  <span className="qa-judul">Survei Kepuasan Gedung</span>
+                  <span className="qa-sub">Isi kuesioner pelayanan gedung — {sisaHariSurvei} hari lagi</span>
+                </span>
+              </button>
             )}
           </div>
         </div>
@@ -1796,31 +1813,43 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </div>
         )}
 
-        {/* MODAL 4 & 5: PELACAKAN TAMU & PAKET (TABEL) */}
+        {/* MODAL 4 & 5: LACAK TAMU & CEK PAKET (§58P) -- data dimuat sekali saat dibuka, disaring saat mengetik */}
         {(activeModal === "tamu" || activeModal === "paket") && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ marginBottom: "20px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}><span style={{background: activeModal === "tamu" ? "#fff5f5" : "#fffaf0", padding:"8px", borderRadius:"12px"}}>{activeModal === "tamu" ? "🧑‍💼" : "📦"}</span> {activeModal === "tamu" ? "Pelacakan Tamu" : "Pelacakan Paket"}</h2>
-              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "13px" }}>Ketik dan cari untuk melihat riwayat log operasional.</p>
+            <div style={{ marginBottom: "16px", paddingRight: "30px" }}>
+              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "21px", fontWeight: 800, display: "flex", alignItems: "center", gap: "10px" }}>
+                <span className="qa-icon-chip" style={{ width: "38px", height: "38px", borderRadius: "12px" }}>{activeModal === "tamu" ? <IconIdCard size={18} /> : <IconPackage size={18} />}</span>
+                {activeModal === "tamu" ? "Lacak Tamu" : "Cek Paket"}
+              </h2>
+              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "13px" }}>
+                {activeModal === "tamu" ? "Cari berdasarkan nama tamu, instansi, atau tujuan." : "Cari berdasarkan nama penerima atau kurir. Paket yang belum diambil tampil paling atas."}
+              </p>
             </div>
-            <div style={{ display: "flex", gap: "10px", marginBottom: "25px" }}>
-              <Input containerStyle={{ flex: 1 }} type="text" placeholder={activeModal === "tamu" ? "Ketik nama tamu / instansi..." : "Ketik nama penerima paket..."} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-              <Button type="button" fullWidth={false} loading={isSearching} loadingText="..." onClick={activeModal === "tamu" ? handleCariTamu : handleCariPaket} style={{ background: activeModal === "tamu" ? "#e53e3e" : "#dd6b20" }}>Cari</Button>
+            <Input
+              containerStyle={{ marginBottom: "8px" }} type="search" autoFocus
+              placeholder={activeModal === "tamu" ? "Ketik nama / instansi / tujuan..." : "Ketik nama penerima / kurir..."}
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label={activeModal === "tamu" ? "Cari tamu" : "Cari paket"}
+            />
+            <div style={{ fontSize: "11.5px", color: "var(--muted)", marginBottom: "14px" }}>
+              {isSearching
+                ? "Memuat data terbaru..."
+                : `Menampilkan ${activeModal === "tamu" ? tamuTampil.length : paketTampil.length} dari ${BATAS_PENCARIAN} catatan terakhir${kataCari ? " yang cocok" : ""}.`}
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {activeModal === "tamu" ? (
                 <Table>
                   <THead>
-                    <Tr><Th>Identitas</Th><Th>Tujuan</Th><Th>Waktu Log</Th></Tr>
+                    <Tr><Th>Identitas</Th><Th>Tujuan</Th><Th>Waktu</Th></Tr>
                   </THead>
                   <TBody>
-                    {hasilTamu.length > 0 ? hasilTamu.map(t => (
-                      <Tr key={t.id}>
-                        <Td><div style={{ fontWeight: "bold", color: "var(--ink)" }}>{t.nama}</div><div style={{ fontSize: "11px", color: "var(--ink-soft)" }}>{t.instansi_dept}</div></Td>
-                        <Td style={{ color: "var(--ink-soft)" }}>{t.tujuan}</Td>
-                        <Td><div style={{ fontSize: "11px", display: "flex", flexDirection: "column", gap: "2px" }}><span><b style={{color: "#38a169"}}>In:</b> {formatJam(t.waktu_masuk)}</span><span><b style={{color: "#e53e3e"}}>Out:</b> {t.waktu_keluar ? formatJam(t.waktu_keluar) : "Di Dalam"}</span></div></Td>
+                    {tamuTampil.length > 0 ? tamuTampil.map(tm => (
+                      <Tr key={tm.id}>
+                        <Td><div style={{ fontWeight: "bold", color: "var(--ink)" }}>{tm.nama}</div><div style={{ fontSize: "11px", color: "var(--ink-soft)" }}>{tm.instansi_dept}</div></Td>
+                        <Td style={{ color: "var(--ink-soft)" }}>{tm.tujuan}</Td>
+                        <Td><div style={{ fontSize: "11px", display: "flex", flexDirection: "column", gap: "2px" }}><span><b style={{ color: "var(--ok)" }}>Masuk:</b> {formatJam(tm.waktu_masuk)}</span><span><b style={{ color: "var(--red-600)" }}>Keluar:</b> {tm.waktu_keluar ? formatJam(tm.waktu_keluar) : "Masih di dalam"}</span></div></Td>
                       </Tr>
-                    )) : <Tr><Td colSpan={3} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Tidak ada riwayat ditemukan.</Td></Tr>}
+                    )) : <Tr><Td colSpan={3} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>{isSearching ? "Memuat..." : "Tidak ada tamu yang cocok."}</Td></Tr>}
                   </TBody>
                 </Table>
               ) : (
@@ -1829,14 +1858,14 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                     <Tr><Th>Penerima</Th><Th>Kurir</Th><Th>Tiba</Th><Th>Status</Th></Tr>
                   </THead>
                   <TBody>
-                    {hasilPaket.length > 0 ? hasilPaket.map(p => (
+                    {paketTampil.length > 0 ? paketTampil.map(p => (
                       <Tr key={p.id}>
                         <Td style={{ fontWeight: "bold", color: "var(--ink)" }}>{p.penerima}</Td>
                         <Td style={{ color: "var(--ink-soft)" }}>{p.kurir}</Td>
                         <Td style={{ color: "var(--ink-soft)", fontSize: "12px" }}>{formatJam(p.waktu_diterima)}</Td>
-                        <Td><Badge tone={p.status.includes("Diambil") ? "success" : "warning"}>{p.status}</Badge></Td>
+                        <Td><Badge tone={p.status === "Sudah Diambil" ? "success" : "warning"}>{p.status}</Badge></Td>
                       </Tr>
-                    )) : <Tr><Td colSpan={4} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Tidak ada riwayat ditemukan.</Td></Tr>}
+                    )) : <Tr><Td colSpan={4} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>{isSearching ? "Memuat..." : "Tidak ada paket yang cocok."}</Td></Tr>}
                   </TBody>
                 </Table>
               )}
