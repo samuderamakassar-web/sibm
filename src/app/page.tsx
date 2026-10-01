@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { hitungShiftSesi, waktuWITASekarang } from "../lib/shift";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
@@ -391,25 +392,6 @@ export default function PortalSIBM() {
       setMasterAtkList(snap.docs.map(d => ({ id: d.id, ...d.data() } as MasterAtk)));
     });
 
-    // 6. Tarik Security Shift
-    const fetchSecurity = async () => {
-      try {
-        const currentMonthId = todayISO.substring(0, 7);
-        const mSnap = await getDoc(doc(db, "security_monthly_schedules", currentMonthId));
-        if (mSnap.exists()) {
-          const dataHari = ((mSnap.data().data_hari || {}) as Record<string, Record<string, string>>)[todayISO] || {};
-          const jamSekarang = new Date().getHours();
-          const shift1 = Object.keys(dataHari).filter(k => dataHari[k]?.includes("Shift 1"));
-          const shift2 = Object.keys(dataHari).filter(k => dataHari[k]?.includes("Shift 2"));
-          if (jamSekarang >= 8 && jamSekarang < 20) {
-            setSecurityShift({ current: shift1, next: shift2, currentName: "Shift 1 (08:00 - 20:00)", nextName: "Shift 2 (20:00 - 08:00)" });
-          } else {
-            setSecurityShift({ current: shift2, next: shift1, currentName: "Shift 2 (20:00 - 08:00)", nextName: "Shift 1 (Besok 08:00)" });
-          }
-        }
-      } catch (e) { console.error(e); }
-    };
-    fetchSecurity();
 
     // 7. Tarik Pengumuman Gedung (bisa lebih dari 1 sekaligus, tayang bergiliran)
     const unsubBroadcast = onSnapshot(
@@ -433,6 +415,56 @@ export default function PortalSIBM() {
 
   // Auto-geser kartu pengumuman tiap 6 detik kalau lebih dari 1 -- "stop" dilakukan admin lewat
   // toggle Aktif/Nonaktif per pengumuman di admin/broadcast, bukan lewat kontrol di sisi user.
+  // 🛡️ SHIFT SECURITY AKTIF (§58N) -- pakai hitungShiftSesi() yang sama dengan dashboard Security.
+  // Shift 2 (20:00-08:00) melewati tengah malam: pukul 00:00-08:00 jadwal yang berlaku milik tanggal
+  // KEMARIN (dulu portal salah mengambil jadwal hari ini = petugas yang baru masuk malam nanti).
+  // Dicek ulang tiap menit supaya ikut berganti tepat 08:00/20:00 walau portal dibiarkan terbuka.
+  const [infoShiftAktif, setInfoShiftAktif] = useState(() => hitungShiftSesi(waktuWITASekarang()));
+  useEffect(() => {
+    const id = setInterval(() => {
+      const baru = hitungShiftSesi(waktuWITASekarang());
+      setInfoShiftAktif((lama) => (lama.tanggal_shift === baru.tanggal_shift && lama.shift === baru.shift ? lama : baru));
+    }, 60000);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    let batal = false;
+    const { tanggal_shift, shift } = infoShiftAktif;
+    const besok = new Date(`${tanggal_shift}T00:00:00`);
+    besok.setDate(besok.getDate() + 1);
+    const tglBesok = `${besok.getFullYear()}-${String(besok.getMonth() + 1).padStart(2, "0")}-${String(besok.getDate()).padStart(2, "0")}`;
+    // Shift berikutnya: Shift 1 -> Shift 2 tanggal yang sama; Shift 2 -> Shift 1 besoknya.
+    const shiftBerikut = shift === "Shift 1" ? "Shift 2" : "Shift 1";
+    const tglBerikut = shift === "Shift 1" ? tanggal_shift : tglBesok;
+    // Roster disimpan per bulan kalender; tanggal 1 dini hari butuh dokumen bulan sebelumnya.
+    const bulan = Array.from(new Set([tanggal_shift.slice(0, 7), tglBerikut.slice(0, 7)]));
+    Promise.all(bulan.map((bln) => getDoc(doc(db, "security_monthly_schedules", bln))))
+      .then((snaps) => {
+        if (batal) return;
+        const dataHari: Record<string, Record<string, string>> = {};
+        snaps.forEach((s) => { if (s.exists()) Object.assign(dataHari, s.data().data_hari || {}); });
+        const petugas = (tgl: string, label: string) => Object.keys(dataHari[tgl] || {}).filter((nama) => dataHari[tgl][nama]?.includes(label));
+        setSecurityShift({
+          current: petugas(tanggal_shift, shift),
+          next: petugas(tglBerikut, shiftBerikut),
+          currentName: shift === "Shift 1" ? "Shift 1 (08:00 - 20:00)" : "Shift 2 (20:00 - 08:00)",
+          nextName: shift === "Shift 1" ? "Shift 2 (20:00 - 08:00)" : "Shift 1 (Besok 08:00)",
+        });
+      })
+      .catch((e) => console.error("[portal] Gagal memuat roster Security:", e));
+    return () => { batal = true; };
+  }, [infoShiftAktif]);
+
+  // 🛠️ TIKET HELPDESK YANG BELUM SELESAI (§58N) -- dasar judul "Ringkasan Hari Ini". Dulu judul cuma
+  // melihat tiket "Sedang Dikerjakan" di 20 tiket terakhir, jadi tiket "Menunggu" tidak pernah terhitung.
+  const [tiketTerbuka, setTiketTerbuka] = useState<HelpdeskTicket[]>([]);
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "!=", "Selesai")), (snap) => {
+      setTiketTerbuka(snap.docs.map((d) => d.data() as HelpdeskTicket));
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     if (daftarPengumuman.length <= 1) return;
     const t = setInterval(() => {
@@ -902,6 +934,22 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const hadirOB = isWeekend(todayISO) ? [] : obBertugas.filter(o => o.status.includes("Hadir"));
   const driverEntries = Object.entries(driverStatusMap);
 
+  // 📋 KOTAK RINGKASAN HARI INI (§58N)
+  const jumlahPerbaikanJalan = tiketTerbuka.filter((tk) => tk.status === "Sedang Dikerjakan").length;
+  const jumlahLaporanMenunggu = tiketTerbuka.length - jumlahPerbaikanJalan;
+  const judulRingkasan =
+    jumlahPerbaikanJalan > 0 && jumlahLaporanMenunggu > 0
+      ? `${jumlahPerbaikanJalan} perbaikan berjalan · ${jumlahLaporanMenunggu} laporan menunggu`
+      : jumlahPerbaikanJalan > 0
+      ? `${jumlahPerbaikanJalan} perbaikan sedang berjalan`
+      : jumlahLaporanMenunggu > 0
+      ? `${jumlahLaporanMenunggu} laporan kerusakan menunggu ditangani`
+      : "Semua operasional normal";
+  const jumlahArmadaSiap = mobilStatus.filter((m) => isStandbyLabel(m.status_kendaraan)).length;
+  const jumlahArmadaKeluar = mobilStatus.filter((m) => m.status_kendaraan?.toLowerCase().includes("keluar")).length;
+  const obLibur = isWeekend(todayISO);
+  const lompatKe = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   // ==========================================
   // TIM BERTUGAS HARI INI — gabungan OB/CS + Security + Driver jadi satu daftar untuk dashboard baru
   // ==========================================
@@ -1184,7 +1232,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         }
         .ringkasan-strip { background: var(--brand) !important; border-radius: 28px !important; box-shadow: none !important; height: 100%; box-sizing: border-box; }
         .ringkasan-strip::before { display: none !important; }
-        .ringkasan-chip { background: rgba(0,0,0,0.2) !important; border: none !important; border-radius: 16px !important; }
+        .ringkasan-chip { background: rgba(0,0,0,0.2) !important; border: none !important; border-radius: 16px !important; color: #fff; font-family: inherit; cursor: pointer; min-width: 0; transition: background 0.15s; }
+        .ringkasan-chip:hover { background: rgba(0,0,0,0.3) !important; }
+        .ringkasan-angka { font-size: 20px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+        .ringkasan-angka.is-teks { font-size: 15px; }
+        .ringkasan-dari { font-size: 13px; font-weight: 700; opacity: 0.75; }
+        .ringkasan-label { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.85); margin-top: 2px; }
+        .ringkasan-sub { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,0.72); margin-top: 3px; }
+        .ringkasan-nama { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+        #tim-bertugas-section, #status-operasional-section { scroll-margin-top: 90px; }
         .qa-card { background: var(--tile) !important; border: none !important; border-radius: 22px !important; box-shadow: none !important; }
         .qa-card:hover { transform: translateY(-2px); }
         .team-row { background: var(--bg) !important; border: none !important; border-radius: 16px !important; }
@@ -1265,21 +1321,23 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "16px" }}>
             <div>
               <div style={{ fontSize: "10.5px", fontWeight: 800, letterSpacing: "1.4px", textTransform: "uppercase", color: "rgba(255,255,255,0.72)" }}>Ringkasan Hari Ini</div>
-              <div style={{ fontSize: "19px", fontWeight: 800, marginTop: "5px" }}>{maintenanceInfo ? "Ada perbaikan sedang berjalan" : "Semua operasional normal"}</div>
+              <div style={{ fontSize: "19px", fontWeight: 800, marginTop: "5px" }}>{judulRingkasan}</div>
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <div className="ringkasan-chip">
-                <div style={{ fontSize: "18px", fontWeight: 800 }}>{hadirOB.length}</div>
-                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>OB &amp; CS Bertugas</div>
-              </div>
-              <div className="ringkasan-chip">
-                <div style={{ fontSize: "18px", fontWeight: 800 }}>{mobilStatus.length}</div>
-                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>Kendaraan Aktif</div>
-              </div>
-              <div className="ringkasan-chip">
-                <div style={{ fontSize: "13px", fontWeight: 800 }}>{securityShift.currentName.split(" (")[0]}</div>
-                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "rgba(255,255,255,0.8)", marginTop: "2px" }}>{securityShift.currentName.match(/\(([^)]+)\)/)?.[1] || "Security"}</div>
-              </div>
+              <button type="button" className="ringkasan-chip" onClick={() => lompatKe("tim-bertugas-section")} aria-label="Lihat tim OB & CS bertugas">
+                <div className="ringkasan-angka">{obLibur ? "Libur" : hadirOB.length}</div>
+                <div className="ringkasan-label">OB &amp; CS {obLibur ? "akhir pekan" : "bertugas"}</div>
+              </button>
+              <button type="button" className="ringkasan-chip" onClick={() => lompatKe("status-operasional-section")} aria-label="Lihat status armada">
+                <div className="ringkasan-angka">{jumlahArmadaSiap}<span className="ringkasan-dari">/{mobilStatus.length}</span></div>
+                <div className="ringkasan-label">Armada siap</div>
+                <div className="ringkasan-sub">{jumlahArmadaKeluar} sedang keluar</div>
+              </button>
+              <button type="button" className="ringkasan-chip" onClick={() => lompatKe("tim-bertugas-section")} aria-label="Lihat Security yang sedang jaga">
+                <div className="ringkasan-angka is-teks">{securityShift.currentName.split(" (")[0]}</div>
+                <div className="ringkasan-label">{securityShift.currentName.match(/\(([^)]+)\)/)?.[1]?.replace(" - ", " – ") || "Security"}</div>
+                <div className="ringkasan-sub ringkasan-nama">{securityShift.current.length > 0 ? securityShift.current.join(" · ") : "Belum ada jadwal"}</div>
+              </button>
             </div>
           </div>
         </div>
@@ -1405,7 +1463,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
 
         {/* 👥 TIM BERTUGAS HARI INI */}
-        <div className="portal-tim">
+        <div className="portal-tim" id="tim-bertugas-section">
           <div className="section-title">
             <div className="section-title-icon"><IconShield size={18} /></div>
             <div>
@@ -1442,7 +1500,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
 
         {/* ⚙️ STATUS OPERASIONAL (ringkas) */}
-        <div className="portal-status">
+        <div className="portal-status" id="status-operasional-section">
         <Card style={{ borderRadius: "20px", padding: "6px 20px" }}>
           <div className="status-op-row">
             <div className="section-title-icon" style={{ background: "var(--info-50)", color: "var(--info)", margin: 0, padding: "9px" }}><IconTruck size={16} /></div>
