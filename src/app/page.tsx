@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { hitungShiftSesi, waktuWITASekarang } from "../lib/shift";
+import { type PengumumanGedung, dalamTanggalTayang, urutkanPengumuman } from "../lib/pengumuman";
+import PengumumanCarousel from "../components/PengumumanCarousel";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
@@ -29,18 +31,6 @@ interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: st
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
 interface ObStatusData { nama: string; status: string; lokasi: string[]; }
 interface Employee { id: string; nama: string; departemen: string; email?: string; }
-interface PengumumanGedung { id: string; judul: string; teks: string; warnaTema: string; }
-
-// Sinkron sama PALET_TEMA di admin/broadcast/page.tsx -- kartu pengumuman render pakai gradient
-// yang sama persis dengan preview yang dilihat admin pas bikin, biar WYSIWYG.
-const GRADIENT_TEMA_PENGUMUMAN: Record<string, string> = {
-  merah: "linear-gradient(150deg,#9f1d1d 0%,#dc2626 55%,#c62828 100%)",
-  biru: "linear-gradient(150deg,#1e3a8a 0%,#2563eb 55%,#1d4ed8 100%)",
-  hijau: "linear-gradient(150deg,#14532d 0%,#16a34a 55%,#15803d 100%)",
-  kuning: "linear-gradient(150deg,#92400e 0%,#d97706 55%,#b45309 100%)",
-  ungu: "linear-gradient(150deg,#4c1d95 0%,#7c3aed 55%,#6d28d9 100%)",
-  gelap: "linear-gradient(150deg,#18181b 0%,#3f3f46 55%,#27272a 100%)",
-};
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
@@ -167,7 +157,6 @@ export default function PortalSIBM() {
   // Pengumuman Gedung -- SEKARANG bisa lebih dari 1 sekaligus, tayang bergiliran (carousel) di
   // bawah header, gantikan ticker teks tunggal lama (settings/pengumuman, sudah tidak dipakai).
   const [daftarPengumuman, setDaftarPengumuman] = useState<PengumumanGedung[]>([]);
-  const [slideAktif, setSlideAktif] = useState(0);
 
   // Kampanye Survei Kepuasan Gedung -- admin aktifkan lewat modal di admin/survei-kepuasan
   // (pilih durasi aktif), kartu Menu Cepat di bawah cuma tampil selama aktif & belum expired.
@@ -465,18 +454,9 @@ export default function PortalSIBM() {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    if (daftarPengumuman.length <= 1) return;
-    const t = setInterval(() => {
-      setSlideAktif((prev) => (prev + 1) % daftarPengumuman.length);
-    }, 6000);
-    return () => clearInterval(t);
-  }, [daftarPengumuman.length]);
-
-  // Kalau pengumuman aktif berkurang (mis. admin matiin salah satu) & index lagi di luar
-  // jangkauan array yang baru, dibulatkan ke slot valid saat render (bukan lewat effect+setState,
-  // biar gak ada cascading render) -- daripada nunjuk ke slot kosong.
-  const slideAman = daftarPengumuman.length > 0 ? slideAktif % daftarPengumuman.length : 0;
+  // Pengumuman yang tayang HARI INI (§58O): aktif + dalam rentang tanggal mulai/berakhir, yang
+  // "penting" selalu di depan. Rotasi, jeda & pemutar video diurus PengumumanCarousel.
+  const pengumumanTayang = urutkanPengumuman(daftarPengumuman.filter((p) => dalamTanggalTayang(p, todayISO)));
 
   const getTime = (ts?: Timestamp | null) => ts ? ts.toMillis() : 0;
 
@@ -1219,7 +1199,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .portal-sesi { grid-column: 1 / -1; order: 0; }
         .portal-ringkasan { grid-column: span 5; order: 1; }
         .portal-pengumuman { grid-column: span 7; order: 2; border-radius: 28px; overflow: hidden; display: flex; flex-direction: column; }
-        .portal-pengumuman > div:first-child { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px 26px !important; text-align: left !important; }
+        .portal-pengumuman { background: var(--tile); border: 1px solid var(--line); }
+        .portal-pengumuman > .pgm { flex: 1; }
         .portal-grid.tanpa-pengumuman .portal-ringkasan { grid-column: 1 / -1; }
         .portal-menu { grid-column: 1 / -1; order: 3; }
         .portal-tren { grid-column: span 5; order: 4; }
@@ -1267,7 +1248,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       `}} />
 
 
-      <div className={`portal-grid${daftarPengumuman.length > 0 ? "" : " tanpa-pengumuman"}`}>
+      <div className={`portal-grid${pengumumanTayang.length > 0 ? "" : " tanpa-pengumuman"}`}>
         {/* 👋 SESI STAF MASIH AKTIF -- lihat catatan lengkap di deklarasi state sesiStafAktif */}
         {sesiStafAktif && !bannerSesiDitutup && (
           <div className="portal-sesi" style={{ background: "var(--info-50, #eff6ff)", borderRadius: "20px", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", flexWrap: "wrap", fontSize: "12.5px" }}>
@@ -1287,31 +1268,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </div>
         )}
 
-        {/* 📢 CAROUSEL PENGUMUMAN GEDUNG -- bisa lebih dari 1 kartu, tayang bergiliran tiap 6 detik,
-            admin kontrol tayang/berhenti per pengumuman lewat admin/broadcast (bukan kontrol di sini). */}
-        {daftarPengumuman.length > 0 && (
+        {/* 📢 PENGUMUMAN GEDUNG (§58O) -- teks / poster gambar / video, admin kelola di admin/broadcast. */}
+        {pengumumanTayang.length > 0 && (
           <div className="portal-pengumuman">
-            <div
-              onClick={() => daftarPengumuman.length > 1 && setSlideAktif((slideAman + 1) % daftarPengumuman.length)}
-              style={{
-                padding: "16px 24px", textAlign: "center", color: "#fff", cursor: daftarPengumuman.length > 1 ? "pointer" : "default",
-                background: GRADIENT_TEMA_PENGUMUMAN[daftarPengumuman[slideAman]?.warnaTema] || GRADIENT_TEMA_PENGUMUMAN.merah,
-                transition: "background 0.4s ease",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 800, letterSpacing: "1px", textTransform: "uppercase", opacity: 0.85 }}>📢 {daftarPengumuman[slideAman]?.judul}</div>
-              <div style={{ fontSize: "13px", fontWeight: 600, marginTop: "3px", lineHeight: 1.5 }}>{daftarPengumuman[slideAman]?.teks}</div>
-            </div>
-            {daftarPengumuman.length > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", gap: "6px", padding: "8px 0", background: "rgba(0,0,0,0.06)" }}>
-                {daftarPengumuman.map((p, idx) => (
-                  <button
-                    key={p.id} onClick={() => setSlideAktif(idx)} aria-label={`Pengumuman ${idx + 1}`}
-                    style={{ width: idx === slideAman ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", cursor: "pointer", background: idx === slideAman ? "var(--red-600)" : "var(--line)", transition: "width 0.3s ease" }}
-                  />
-                ))}
-              </div>
-            )}
+            <PengumumanCarousel daftar={pengumumanTayang} />
           </div>
         )}
 
