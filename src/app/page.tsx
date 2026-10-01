@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { hitungShiftSesi, waktuWITASekarang } from "../lib/shift";
 import { type PengumumanGedung, dalamTanggalTayang, urutkanPengumuman } from "../lib/pengumuman";
 import PengumumanCarousel from "../components/PengumumanCarousel";
-import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, getCountFromServer, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import { kirimEmail } from "../lib/notify";
@@ -32,6 +32,17 @@ interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterim
 interface ObStatusData { nama: string; status: string; lokasi: string[]; }
 interface Employee { id: string; nama: string; departemen: string; email?: string; }
 const BATAS_PENCARIAN = 300;
+
+// 📊 Seri Tren Aktivitas (§58Q). Tiap seri = 1 koleksi + 1 field waktu -> dihitung dengan
+// getCountFromServer per hari (filter rentang 1 field, tidak butuh index komposit).
+type SeriTren = "tamu" | "paket" | "armada" | "tiket";
+const SERI_TREN: { key: SeriTren; label: string; satuan: string; warna: string; koleksi: string; field: string }[] = [
+  { key: "tamu", label: "Tamu", satuan: "tamu", warna: "var(--ok)", koleksi: "security_visitor_logs", field: "waktu_masuk" },
+  { key: "paket", label: "Paket", satuan: "paket", warna: "var(--accent)", koleksi: "packages", field: "waktu_diterima" },
+  { key: "armada", label: "Armada", satuan: "catatan keluar/masuk", warna: "var(--info)", koleksi: "operational_vehicle_logs", field: "waktu_catat" },
+  { key: "tiket", label: "Tiket selesai", satuan: "tiket selesai", warna: "var(--warn)", koleksi: "helpdesk_tickets", field: "waktu_selesai" },
+];
+type NilaiSeri = Record<SeriTren, number | null>;
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
@@ -1007,50 +1018,51 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
 
   const NAMA_HARI_PENDEK = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
-  const trenAktivitas7Hari = useMemo(() => {
-    const hari: { tanggal: string; label: string; tamu: number; kendaraan: number; tiket: number; paket: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const iso = geserTanggalISO(todayISO, -i);
-      const [y, m, d] = iso.split("-").map(Number);
-      hari.push({ tanggal: iso, label: NAMA_HARI_PENDEK[new Date(y, m - 1, d).getDay()], tamu: 0, kendaraan: 0, tiket: 0, paket: 0 });
-    }
-    const idxByTanggal: Record<string, number> = {};
-    hari.forEach((h, i) => { idxByTanggal[h.tanggal] = i; });
-
-    visitorLogsTrend.forEach(t => {
-      const tgl = tanggalWITAdariTimestamp(t.waktu_masuk);
-      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].tamu++;
+  // 📊 TREN AKTIVITAS 7 HARI (§58Q) -- dulu dihitung dari data yang ditarik dengan limit (tamu/paket 60,
+  // armada 30, tiket 20 terakhir), jadi total 7 hari hampir pasti KURANG; "Tiket Selesai" juga dihitung
+  // per tanggal LAPOR, bukan tanggal selesai. Sekarang hitungan agregat server per hari (7 hari x 4 seri
+  // + 4 total minggu sebelumnya = 32 hitungan, masing-masing ~1 baca) SEKALI tiap halaman dibuka.
+  const [trenHarian, setTrenHarian] = useState<{ tanggal: string; nilai: NilaiSeri }[] | null>(null);
+  const [trenMingguLalu, setTrenMingguLalu] = useState<NilaiSeri | null>(null);
+  const [seriTren, setSeriTren] = useState<SeriTren>("tamu");
+  useEffect(() => {
+    let batal = false;
+    const awalHariWITA = (iso: string) => Timestamp.fromDate(new Date(`${iso}T00:00:00+08:00`));
+    const hitungRentang = (s: (typeof SERI_TREN)[number], dari: string, sampai: string) =>
+      getCountFromServer(query(collection(db, s.koleksi), where(s.field, ">=", awalHariWITA(dari)), where(s.field, "<", awalHariWITA(sampai))))
+        .then((r) => r.data().count as number | null)
+        .catch((e) => { console.error(`[portal] Gagal menghitung tren ${s.key}:`, e); return null; });
+    const keNilai = (angka: (number | null)[]) =>
+      Object.fromEntries(SERI_TREN.map((s, i) => [s.key, angka[i]])) as NilaiSeri;
+    const daftarTanggal = Array.from({ length: 7 }, (_, i) => geserTanggalISO(todayISO, i - 6));
+    Promise.all([
+      Promise.all(daftarTanggal.map((tgl) => Promise.all(SERI_TREN.map((s) => hitungRentang(s, tgl, geserTanggalISO(tgl, 1)))))),
+      Promise.all(SERI_TREN.map((s) => hitungRentang(s, geserTanggalISO(todayISO, -13), geserTanggalISO(todayISO, -6)))),
+    ]).then(([perHari, mingguLalu]) => {
+      if (batal) return;
+      setTrenHarian(daftarTanggal.map((tanggal, i) => ({ tanggal, nilai: keNilai(perHari[i]) })));
+      setTrenMingguLalu(keNilai(mingguLalu));
     });
-    logKendaraanMentah.forEach(k => {
-      const tgl = tanggalWITAdariTimestamp(k.waktu_catat);
-      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].kendaraan++;
-    });
-    ticketsTrend.forEach(t => {
-      if (!t.status?.toLowerCase().includes("selesai")) return;
-      const tgl = tanggalWITAdariTimestamp(t.waktu_lapor);
-      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].tiket++;
-    });
-    packageLogsTrend.forEach(p => {
-      const tgl = tanggalWITAdariTimestamp(p.waktu_diterima);
-      if (tgl && idxByTanggal[tgl] !== undefined) hari[idxByTanggal[tgl]].paket++;
-    });
+    return () => { batal = true; };
+  }, [todayISO]);
 
-    return hari;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todayISO, visitorLogsTrend, logKendaraanMentah, ticketsTrend, packageLogsTrend]);
-
-  const trenMaxNilai = useMemo(() => {
-    let max = 1;
-    trenAktivitas7Hari.forEach(h => { max = Math.max(max, h.tamu, h.kendaraan, h.tiket, h.paket); });
-    return max;
-  }, [trenAktivitas7Hari]);
-
-  // Sengaja TANPA useMemo (lihat catatan di timBertugasHariIni di atas) — pola reduce+object-literal
-  // ini yang bikin React Compiler gagal mempertahankan memoization manualnya di source.
-  const trenTotal = trenAktivitas7Hari.reduce((acc, h) => ({
-    tamu: acc.tamu + h.tamu, kendaraan: acc.kendaraan + h.kendaraan, tiket: acc.tiket + h.tiket, paket: acc.paket + h.paket
-  }), { tamu: 0, kendaraan: 0, tiket: 0, paket: 0 });
-
+  const infoSeriTren = SERI_TREN.find((s) => s.key === seriTren) || SERI_TREN[0];
+  const totalSeri = (key: SeriTren) => {
+    if (!trenHarian) return null;
+    let total = 0;
+    for (const h of trenHarian) { const v = h.nilai[key]; if (v === null) return null; total += v; }
+    return total;
+  };
+  const totalSeriAktif = totalSeri(seriTren);
+  const totalSeriMingguLalu = trenMingguLalu?.[seriTren] ?? null;
+  const maxSeriAktif = Math.max(1, ...(trenHarian || []).map((h) => h.nilai[seriTren] || 0));
+  const perbandinganTren = (() => {
+    if (totalSeriAktif === null || totalSeriMingguLalu === null) return null;
+    if (totalSeriMingguLalu === 0) return totalSeriAktif === 0 ? "sama dengan 7 hari sebelumnya" : `naik dari 0 pada 7 hari sebelumnya`;
+    const persen = Math.round(((totalSeriAktif - totalSeriMingguLalu) / totalSeriMingguLalu) * 100);
+    if (persen === 0) return "sama dengan 7 hari sebelumnya";
+    return `${persen > 0 ? "▲" : "▼"} ${Math.abs(persen)}% dibanding 7 hari sebelumnya (${totalSeriMingguLalu})`;
+  })();
   const kalenderAktivitas = useMemo(() => {
     const [thn, bln] = todayISO.split("-").map(Number);
     const jumlahHari = new Date(thn, bln, 0).getDate();
@@ -1187,8 +1199,26 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .status-op-row:last-child { border-bottom: none; }
 
         /* 📊 CHART BARS */
-        .tren-bar-col { display: flex; align-items: flex-end; gap: 3px; height: 100%; flex: 1; justify-content: center; }
-        .tren-bar { width: 6px; border-radius: 2px; min-height: 2px; }
+        .tren-seri { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+        .tren-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; border-radius: 14px; border: 1px solid transparent; background: var(--bg); color: var(--ink-soft); font-family: inherit; cursor: pointer; text-align: left; min-width: 0; }
+        .tren-chip.is-active { background: var(--tile); border-color: var(--ink); color: var(--ink); }
+        .tren-chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .tren-chip-atas { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .tren-chip-angka { font-size: 19px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+        .tren-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .tren-banding { font-size: 12px; color: var(--ink-soft); font-weight: 600; margin-bottom: 14px; min-height: 16px; }
+        .tren-grafik { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+        .tren-kolom { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+        .tren-nilai { font-size: 12px; font-weight: 800; color: var(--ink); min-height: 15px; font-variant-numeric: tabular-nums; }
+        .tren-batang-wadah { width: 100%; max-width: 34px; height: 110px; display: flex; align-items: flex-end; border-radius: 9px; background: var(--bg); overflow: hidden; }
+        .tren-batang { width: 100%; border-radius: 9px; transition: height 0.35s ease; }
+        .tren-hari { font-size: 10.5px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+        .tren-tgl { font-size: 10px; color: var(--muted); margin-top: -3px; }
+        .tren-kolom.is-hari-ini .tren-hari { color: var(--red-600); font-weight: 800; }
+        @media (max-width: 520px) {
+          .tren-seri { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .tren-kolom.is-hari-ini .tren-hari { font-size: 9.5px; }
+        }
 
         /* 🗓️ KALENDER AKTIVITAS */
         .kalender-cell { aspect-ratio: 1; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
@@ -1369,33 +1399,43 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           </div>
         </div>
 
-        {/* 📊 TREN AKTIVITAS GEDUNG */}
+        {/* 📊 TREN AKTIVITAS GEDUNG (§58Q) -- 1 seri ditampilkan per kali (pilih lewat chip), angka tiap hari terlihat tanpa hover */}
         <div id="tren-aktivitas-section" className="portal-tren">
         <Card style={{ borderRadius: "20px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "14px" }}>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>Tren Aktivitas Gedung</h3>
             <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>7 hari terakhir</span>
           </div>
-          <div style={{ display: "flex", gap: "18px", flexWrap: "wrap", marginBottom: "18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--ok)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Tamu</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.tamu}</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--info)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Kendaraan</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.kendaraan}</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--warn)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Tiket Selesai</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.tiket}</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent)" }} /><span style={{ fontSize: "10.5px", color: "var(--ink-soft)", fontWeight: 600 }}>Paket</span><span style={{ fontSize: "10.5px", color: "var(--ink)", fontWeight: 800 }}>{trenTotal.paket}</span></div>
+          <div className="tren-seri" role="tablist" aria-label="Pilih data tren">
+            {SERI_TREN.map((s) => {
+              const total = totalSeri(s.key);
+              return (
+                <button key={s.key} type="button" role="tab" aria-selected={seriTren === s.key} className={`tren-chip${seriTren === s.key ? " is-active" : ""}`} onClick={() => setSeriTren(s.key)}>
+                  <span className="tren-chip-atas"><span className="tren-dot" style={{ background: s.warna }} />{s.label}</span>
+                  <span className="tren-chip-angka">{trenHarian ? (total ?? "—") : "…"}</span>
+                </button>
+              );
+            })}
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end", height: "110px", borderBottom: "1px solid var(--line)", paddingBottom: "8px" }}>
-            {trenAktivitas7Hari.map((h) => (
-              <div className="tren-bar-col" key={h.tanggal} title={`${h.label}: ${h.tamu} tamu, ${h.kendaraan} kendaraan, ${h.tiket} tiket, ${h.paket} paket`}>
-                <div className="tren-bar" style={{ height: `${Math.max(2, (h.tamu / trenMaxNilai) * 100)}%`, background: "var(--ok)" }} />
-                <div className="tren-bar" style={{ height: `${Math.max(2, (h.kendaraan / trenMaxNilai) * 100)}%`, background: "var(--info)" }} />
-                <div className="tren-bar" style={{ height: `${Math.max(2, (h.tiket / trenMaxNilai) * 100)}%`, background: "var(--warn)" }} />
-                <div className="tren-bar" style={{ height: `${Math.max(2, (h.paket / trenMaxNilai) * 100)}%`, background: "var(--accent)" }} />
-              </div>
-            ))}
+          <div className="tren-banding">
+            {!trenHarian ? "Menghitung..." : totalSeriAktif === null ? "Sebagian data gagal dimuat." : `${totalSeriAktif} ${infoSeriTren.satuan} dalam 7 hari${perbandinganTren ? " · " + perbandinganTren : ""}`}
           </div>
-          <div style={{ display: "flex", marginTop: "8px" }}>
-            {trenAktivitas7Hari.map((h, idx) => (
-              <span key={h.tanggal} style={{ flex: 1, textAlign: "center", fontSize: "10px", fontWeight: idx === 6 ? 800 : 600, color: idx === 6 ? "var(--red-600)" : "#a1a1aa" }}>{h.label}</span>
-            ))}
+          <div className="tren-grafik" role="img" aria-label={trenHarian ? `${infoSeriTren.label} per hari: ${trenHarian.map((h) => `${h.tanggal.slice(8)} = ${h.nilai[seriTren] ?? "tidak diketahui"}`).join(", ")}` : "Memuat grafik"}>
+            {(trenHarian || Array.from({ length: 7 }, (_, i) => ({ tanggal: geserTanggalISO(todayISO, i - 6), nilai: null as NilaiSeri | null }))).map((h) => {
+              const v = h.nilai ? h.nilai[seriTren] : null;
+              const [y, m, d] = h.tanggal.split("-").map(Number);
+              const hariIni = h.tanggal === todayISO;
+              return (
+                <div key={h.tanggal} className={`tren-kolom${hariIni ? " is-hari-ini" : ""}`}>
+                  <span className="tren-nilai">{v ?? (trenHarian ? "—" : "")}</span>
+                  <div className="tren-batang-wadah">
+                    <div className="tren-batang" style={{ height: `${v ? Math.max(4, (v / maxSeriAktif) * 100) : 0}%`, background: infoSeriTren.warna }} />
+                  </div>
+                  <span className="tren-hari">{hariIni ? "Hari ini" : NAMA_HARI_PENDEK[new Date(y, m - 1, d).getDay()]}</span>
+                  <span className="tren-tgl">{d}</span>
+                </div>
+              );
+            })}
           </div>
         </Card>
         </div>
