@@ -174,7 +174,11 @@ export default function PortalSIBM() {
   const [obBesok, setObBesok] = useState<ObStatusData[]>([]);
   const [logKendaraanMentah, setLogKendaraanMentah] = useState<KendaraanLog[]>([]);
   const [securityShift, setSecurityShift] = useState<SecurityShift>({ current: [], next: [], currentName: "Memuat...", nextName: "Memuat..." });
-  const [driverStatusMap, setDriverStatusMap] = useState<Record<string, string>>({ "Amal Setiawan": "Memuat...", "Muhammad Renaldy": "Memuat..." });
+  // Driver diambil dari users_master (departemen "Driver"), bukan nama hardcode (§58T).
+  const [daftarDriver, setDaftarDriver] = useState<string[]>([]);
+  const [driverStatusMap, setDriverStatusMap] = useState<Record<string, { status: string; waktu: Timestamp | null }>>({});
+  // Absensi (attendance_logs) kemarin & hari ini, kunci "tanggal|nama" -- kemarin perlu utk Security Shift 2 lewat tengah malam.
+  const [absensiTim, setAbsensiTim] = useState<Record<string, { masuk: Timestamp | null; pulang: Timestamp | null }>>({});
   const [overtimeMingguIni, setOvertimeMingguIni] = useState<OvertimeLog[]>([]);
 
 
@@ -319,18 +323,6 @@ export default function PortalSIBM() {
       setLogKendaraanMentah(snapshot.docs.map(d => d.data() as KendaraanLog));
     });
 
-    // 3. Tarik Status Driver
-    const unsubDriver = onSnapshot(query(collection(db, "driver_status_logs"), orderBy("waktu_ubah", "desc")), (snapshot) => {
-      const latestMap: Record<string, string> = {};
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as DriverStatusLog;
-        if (data.nama_driver && !latestMap[data.nama_driver]) latestMap[data.nama_driver] = data.status;
-      });
-      if (!latestMap["Amal Setiawan"]) latestMap["Amal Setiawan"] = "Standby";
-      if (!latestMap["Muhammad Renaldy"]) latestMap["Muhammad Renaldy"] = "Standby";
-      setDriverStatusMap(latestMap);
-    });
-
     // 4. Tarik Overtime Minggu Ini (Senin-Minggu WITA) — dulu cuma hari ini, sekarang direkap 1 minggu sekaligus
     const unsubOvertime = onSnapshot(
       query(collection(db, "ga_overtime_requests"), where("tanggal", ">=", seninMingguIni), where("tanggal", "<=", mingguMingguIni)),
@@ -355,11 +347,14 @@ export default function PortalSIBM() {
     // Foto profil staf (untuk kartu "Tim Bertugas") & foto kendaraan (untuk armada)
     getDocs(collection(db, "users_master")).then(snap => {
       const map: Record<string, string> = {};
+      const driver: string[] = [];
       snap.docs.forEach(d => {
         const data = d.data();
         if (data.nama && data.foto_url) map[data.nama] = data.foto_url;
+        if (data.nama && data.departemen === "Driver") driver.push(data.nama);
       });
       setStaffFotoMap(map);
+      setDaftarDriver(driver.sort());
     }).catch(err => console.error("[hero] Gagal memuat foto staf:", err));
 
     getDocs(collection(db, "master_kendaraan")).then(snap => {
@@ -409,7 +404,7 @@ export default function PortalSIBM() {
       }
     });
 
-    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubDriver(); unsubOvertime(); unsubBroadcast(); unsubSurveiCampaign(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
+    return () => { unsubPlot(); unsubPlotBesok(); unsubVeh(); unsubOvertime(); unsubBroadcast(); unsubSurveiCampaign(); unsubMasterAtk(); unsubVisitorTrend(); unsubPackageTrend(); };
   }, [todayISO, tomorrowISO, previewBesokAktif, tanggalPreviewOB, seninMingguIni, mingguMingguIni]);
 
   // Auto-geser kartu pengumuman tiap 6 detik kalau lebih dari 1 -- "stop" dilakukan admin lewat
@@ -453,6 +448,39 @@ export default function PortalSIBM() {
       .catch((e) => console.error("[portal] Gagal memuat roster Security:", e));
     return () => { batal = true; };
   }, [infoShiftAktif]);
+
+  // 🚐 STATUS DRIVER (§58T) -- dulu onSnapshot SELURUH driver_status_logs tanpa limit (ikut membesar tiap
+  // hari, terbaca ulang tiap portal dibuka). Sekarang 1 dokumen terakhir per driver.
+  useEffect(() => {
+    const unsubs = daftarDriver.map((nama) =>
+      onSnapshot(
+        query(collection(db, "driver_status_logs"), where("nama_driver", "==", nama), orderBy("waktu_ubah", "desc"), limit(1)),
+        (snap) => {
+          const d = snap.docs[0]?.data() as DriverStatusLog | undefined;
+          setDriverStatusMap((lama) => ({ ...lama, [nama]: { status: d?.status || "Standby", waktu: (d?.waktu_ubah as Timestamp | undefined) || null } }));
+        },
+        (err) => console.error(`[portal] Gagal memuat status driver ${nama}:`, err)
+      )
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [daftarDriver]);
+
+  // 🕘 ABSENSI TIM (§58T) -- label "Hadir" dulu cuma berarti "ada di plot", tidak dicek ke absensi.
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(db, "attendance_logs"), where("tanggal", "in", [geserTanggalISO(todayISO, -1), todayISO])),
+      (snap) => {
+        const map: Record<string, { masuk: Timestamp | null; pulang: Timestamp | null }> = {};
+        snap.docs.forEach((d) => {
+          const x = d.data();
+          if (x.nama && x.tanggal) map[`${x.tanggal}|${x.nama}`] = { masuk: x.waktu_checkin || null, pulang: x.waktu_checkout || null };
+        });
+        setAbsensiTim(map);
+      },
+      (err) => console.error("[portal] Gagal memuat absensi:", err)
+    );
+    return () => unsub();
+  }, [todayISO]);
 
   // 🛠️ TIKET HELPDESK YANG BELUM SELESAI (§58N) -- dasar judul "Ringkasan Hari Ini". Dulu judul cuma
   // melihat tiket "Sedang Dikerjakan" di 20 tiket terakhir, jadi tiket "Menunggu" tidak pernah terhitung.
@@ -921,7 +949,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   // memang tidak ada jadwal weekend, tapi dokumen daily_plots lama yang belum di-regenerate ulang
   // masih bisa nyimpan plot basi, jadi kalau dibaca mentah-mentah tim bertugas hari ini jadi "tidak sesuai".
   const hadirOB = isWeekend(todayISO) ? [] : obBertugas.filter(o => o.status.includes("Hadir"));
-  const driverEntries = Object.entries(driverStatusMap);
 
   // 📋 KOTAK RINGKASAN HARI INI (§58N)
   const jumlahPerbaikanJalan = tiketTerbuka.filter((tk) => tk.status === "Sedang Dikerjakan").length;
@@ -954,58 +981,63 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const lompatKe = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // ==========================================
-  // TIM BERTUGAS HARI INI — gabungan OB/CS + Security + Driver jadi satu daftar untuk dashboard baru
+  // TIM BERTUGAS (§58T) -- dikelompokkan per unit; status dari absensi & log driver sungguhan.
   // ==========================================
-  type TimBertugasEntry = { key: string; nama: string; sub: string; label: string; tipe: "ob" | "security" | "driver"; foto?: string; aktif: boolean };
-  // Catatan: sengaja TANPA useMemo — React Compiler (aktif di project ini, lihat eslint
-  // react-hooks/preserve-manual-memoization) auto-memoize komputasi biasa, dan array dependency
-  // manual di sini gampang meleset dari inferensi compiler (akses properti nested kayak
-  // securityShift.current) sehingga malah bikin error build, bukan warning.
-  const timBertugasHariIni: TimBertugasEntry[] = (() => {
-    const daftar: TimBertugasEntry[] = [];
-    if (!previewBesokAktif) {
-      hadirOB.forEach(o => {
-        daftar.push({
-          key: `ob-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: true,
-          sub: `OB · ${o.lokasi.join(", ") || "Standby"}`,
-          label: "HADIR",
-        });
+  type NadaTim = "ok" | "warn" | "info" | "muted";
+  type AnggotaTim = { key: string; nama: string; sub: string; label: string; nada: NadaTim; foto?: string };
+  const jamTimWITA = (ts: Timestamp | null | undefined) =>
+    ts ? new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" }).format(ts.toDate()) : "";
+  const sejakWITA = (ts: Timestamp | null) => {
+    if (!ts) return "";
+    const tgl = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(ts.toDate());
+    return tgl === todayISO ? `sejak ${jamTimWITA(ts)}` : `sejak ${ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Makassar" })}`;
+  };
+  const statusAbsen = (nama: string, tanggal: string, labelHadir: string): Pick<AnggotaTim, "label" | "nada"> & { ket: string } => {
+    const a = absensiTim[`${tanggal}|${nama}`];
+    if (a?.pulang) return { label: "PULANG", nada: "muted", ket: `pulang ${jamTimWITA(a.pulang)}` };
+    if (a?.masuk) return { label: labelHadir, nada: "ok", ket: `masuk ${jamTimWITA(a.masuk)}` };
+    return { label: "TERJADWAL", nada: "muted", ket: "belum absen masuk" };
+  };
+
+  const anggotaOB: AnggotaTim[] = previewBesokAktif
+    ? obBesok.map((o) => ({
+        key: `ob-next-${o.nama}`, nama: o.nama, foto: staffFotoMap[o.nama], label: "RENCANA", nada: "info" as NadaTim,
+        sub: o.lokasi.join(", ") || "Standby",
+      }))
+    : hadirOB.map((o) => {
+        const s = statusAbsen(o.nama, todayISO, "HADIR");
+        return { key: `ob-${o.nama}`, nama: o.nama, foto: staffFotoMap[o.nama], label: s.label, nada: s.nada, sub: `${o.lokasi.join(", ") || "Standby"} · ${s.ket}` };
       });
-    } else {
-      // Sudah lewat jam 17:00 (atau masih dini hari sebelum jam 6) -> tampilkan rencana plot
-      // periode kerja berikutnya sebagai ganti daftar "hadir" hari ini yang sudah tidak relevan.
-      obBesok.forEach(o => {
-        daftar.push({
-          key: `ob-next-${o.nama}`, nama: o.nama, tipe: "ob", foto: staffFotoMap[o.nama], aktif: false,
-          sub: `OB · ${o.lokasi.join(", ") || "Standby"} (rencana ${tanggalPreviewOB === todayISO ? "hari ini" : "besok"})`,
-          label: "SEGERA",
-        });
-      });
-    }
-    securityShift.current.forEach(nama => {
-      daftar.push({
-        key: `sec-${nama}`, nama, tipe: "security", foto: staffFotoMap[nama], aktif: true,
-        sub: `Security · ${securityShift.currentName}`,
-        label: "JAGA",
-      });
-    });
-    securityShift.next.forEach(nama => {
-      daftar.push({
-        key: `sec-next-${nama}`, nama, tipe: "security", foto: staffFotoMap[nama], aktif: false,
-        sub: `Security · ${securityShift.nextName}`,
-        label: "BERIKUTNYA",
-      });
-    });
-    driverEntries.forEach(([nama, status]) => {
-      const standby = status.includes("Standby");
-      daftar.push({
-        key: `drv-${nama}`, nama, tipe: "driver", foto: staffFotoMap[nama], aktif: !standby,
-        sub: `Driver · ${standby ? "standby di pool" : "sedang bertugas keluar"}`,
-        label: standby ? "STANDBY" : "KELUAR",
-      });
-    });
-    return daftar;
-  })();
+  const anggotaSecurity: AnggotaTim[] = securityShift.current.map((nama) => {
+    const s = statusAbsen(nama, infoShiftAktif.tanggal_shift, "JAGA");
+    return { key: `sec-${nama}`, nama, foto: staffFotoMap[nama], label: s.label, nada: s.nada, sub: s.ket };
+  });
+  const STATUS_DRIVER = (status: string): Pick<AnggotaTim, "label" | "nada"> & { ket: string } =>
+    status.includes("Keluar") ? { label: "KELUAR", nada: "warn", ket: "bertugas di luar" }
+    : status.includes("Bengkel") || status.includes("Service") ? { label: "BENGKEL", nada: "warn", ket: "kendaraan di bengkel" }
+    : status.includes("Pulang") ? { label: "PULANG", nada: "muted", ket: "selesai tugas" }
+    : { label: "STANDBY", nada: "ok", ket: "siaga di kantor" };
+  const anggotaDriver: AnggotaTim[] = daftarDriver.map((nama) => {
+    const st = driverStatusMap[nama];
+    if (!st) return { key: `drv-${nama}`, nama, foto: staffFotoMap[nama], label: "…", nada: "muted" as NadaTim, sub: "memuat status" };
+    const s = STATUS_DRIVER(st.status);
+    return { key: `drv-${nama}`, nama, foto: staffFotoMap[nama], label: s.label, nada: s.nada, sub: [s.ket, sejakWITA(st.waktu)].filter(Boolean).join(" · ") };
+  });
+  const kelompokTim: { key: string; judul: string; ket: string; anggota: AnggotaTim[]; kosong: string }[] = [
+    {
+      key: "ob", judul: "OB & CS", anggota: anggotaOB,
+      ket: previewBesokAktif ? `rencana plot ${tanggalPreviewOB === todayISO ? "hari ini" : "besok"} · tampil kembali 06:00` : "",
+      kosong: isWeekend(previewBesokAktif ? tanggalPreviewOB : todayISO) ? "Libur akhir pekan" : "Belum ada plot",
+    },
+    { key: "sec", judul: "Security", ket: securityShift.currentName, anggota: anggotaSecurity, kosong: "Belum ada jadwal shift" },
+    { key: "drv", judul: "Driver", ket: "", anggota: anggotaDriver, kosong: "Belum ada data driver" },
+  ];
+  const WARNA_NADA: Record<NadaTim, { fg: string; bg: string }> = {
+    ok: { fg: "var(--ok)", bg: "var(--ok-50)" },
+    warn: { fg: "var(--warn)", bg: "var(--warn-50)" },
+    info: { fg: "var(--info)", bg: "var(--info-50)" },
+    muted: { fg: "var(--muted)", bg: "var(--hover)" },
+  };
 
   // ==========================================
   // TREN AKTIVITAS (7 hari) & KALENDER AKTIVITAS (per bulan) -- §58Q/§58R
@@ -1223,6 +1255,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           border-left: 3px solid var(--line);
         }
         .team-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+        .tim-grup-judul { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 800; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+        .tim-grup-jumlah { font-size: 11px; color: var(--muted); }
+        .tim-grup-ket { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; text-align: right; }
+        .tim-label { font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 20px; flex-shrink: 0; letter-spacing: 0.02em; }
+        .tim-kosong { padding: 12px 14px; border-radius: 14px; border: 1px dashed var(--line); color: var(--muted); font-size: 12.5px; }
+        .tim-berikut { font-size: 12px; color: var(--ink-soft); padding: 10px 14px; border-radius: 14px; background: var(--bg); line-height: 1.5; }
         .team-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
         .team-avatar-fallback { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
         .status-op-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border: none; border-bottom: 1px solid #f0efee; width: 100%; background: none; font-family: inherit; text-align: left; cursor: pointer; color: inherit; }
@@ -1566,39 +1604,50 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </Card>
         </div>
 
-        {/* 👥 TIM BERTUGAS HARI INI */}
+        {/* 👥 TIM BERTUGAS (§58T) -- per unit; label dari absensi (OB/Security) & status terakhir driver */}
         <div className="portal-tim" id="tim-bertugas-section">
           <div className="section-title">
             <div className="section-title-icon"><IconShield size={18} /></div>
-            <div>
-              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Tim Bertugas Hari Ini</h3>
-              {previewBesokAktif && (
-                <div style={{ fontSize: "10.5px", color: "var(--muted)", fontWeight: 600, marginTop: "1px" }}>
-                  OB &amp; CS: rencana plot {tanggalPreviewOB === todayISO ? "hari ini" : "besok"} (tampil kembali pukul 06:00)
-                </div>
-              )}
-            </div>
+            <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Tim Bertugas</h3>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {timBertugasHariIni.length > 0 ? timBertugasHariIni.map((t) => {
-              const warna = t.tipe === "ob" ? { fg: "var(--red-600)", bg: "var(--red-50)" } : t.tipe === "security" ? { fg: "var(--info)", bg: "var(--info-50)" } : { fg: t.aktif ? "var(--warn)" : "var(--ok)", bg: t.aktif ? "var(--warn-50)" : "var(--ok-50)" };
-              return (
-                <div className="team-row" key={t.key}>
-                  {t.foto ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={t.foto} alt={t.nama} className="team-avatar" />
-                  ) : (
-                    <div className="team-avatar-fallback" style={{ background: warna.bg, color: warna.fg }}>{getInitials(t.nama)}</div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{t.nama}</div>
-                    <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "1px" }}>{t.sub}</div>
-                  </div>
-                  <span style={{ fontSize: "9.5px", fontWeight: 800, color: warna.fg, background: warna.bg, padding: "4px 9px", borderRadius: "20px", flexShrink: 0 }}>{t.label}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {kelompokTim.map((k) => (
+              <div key={k.key}>
+                <div className="tim-grup-judul">
+                  <span>{k.judul}</span>
+                  {k.anggota.length > 0 && <span className="tim-grup-jumlah">{k.anggota.length}</span>}
+                  {k.ket && <span className="tim-grup-ket">{k.ket}</span>}
                 </div>
-              );
-            }) : (
-              <div style={{ textAlign: "center", padding: "24px", color: "var(--muted)", fontSize: "13px", border: "1px dashed var(--line)", borderRadius: "14px" }}>Belum ada staf yang terplot bertugas hari ini.</div>
+                {k.anggota.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {k.anggota.map((a) => {
+                      const w = WARNA_NADA[a.nada];
+                      return (
+                        <div className="team-row" key={a.key}>
+                          {a.foto ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={a.foto} alt="" className="team-avatar" />
+                          ) : (
+                            <div className="team-avatar-fallback" style={{ background: w.bg, color: w.fg }}>{getInitials(a.nama)}</div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{a.nama}</div>
+                            <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.sub}</div>
+                          </div>
+                          <span className="tim-label" style={{ color: w.fg, background: w.bg }}>{a.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="tim-kosong">{k.kosong}</div>
+                )}
+              </div>
+            ))}
+            {securityShift.next.length > 0 && (
+              <div className="tim-berikut">
+                <b>Security berikutnya</b> · {securityShift.nextName}: {securityShift.next.join(", ")}
+              </div>
             )}
           </div>
         </div>
