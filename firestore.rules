@@ -113,7 +113,7 @@ service cloud.firestore {
 
     // --------------------------------------------------------------------
     // SEMUA collection operasional lain (master/referensi + transaksional):
-    // read & write TERBUKA -- sama seperti kondisi sebelum ada rules ini,
+    // [RIWAYAT -- sejak §60 write sudah dibatasi, lihat blok di bawah] read & write TERBUKA -- sama seperti kondisi sebelum ada rules ini,
     // supaya portal publik tanpa login (lihat catatan panjang di atas) tetap
     // berfungsi penuh. Ini BUKAN pengunduran keamanan dibanding sebelumnya
     // (memang begini sejak awal, cuma sekarang eksplisit di rules bukan
@@ -126,8 +126,9 @@ service cloud.firestore {
     // update rutin sebagai bagian pekerjaan sehari-hari, bukan cuma admin),
     // supaya gak mematahkan fitur yang sedang dipakai tim secara aktif.
     // --------------------------------------------------------------------
-    match /{col}/{docId} {
-      allow read, write: if col in [
+    // Daftar collection operasional (master/referensi + transaksional).
+    function koleksiOperasional() {
+      return [
           'master_atk', 'master_kendaraan', 'employees_directory',
           'sop_documents', 'security_magang_directory', 'settings',
           'ob_settings', 'helpdesk_tickets', 'qhse_sbo_reports',
@@ -146,6 +147,22 @@ service cloud.firestore {
           // §59 Validasi Karyawan (Security) & Pemantauan Jam Kerja (QHSE)
           'validasi_karyawan', 'pemantauan_jam_kerja'
         ];
+    }
+
+    // Collection yang DITULIS portal publik TANPA login (src/app/page.tsx: form ATK, Lembur AC,
+    // SBO, Lapor Kerusakan; SurveiKepuasanPage) -- cuma boleh MEMBUAT dokumen baru.
+    function koleksiFormPublik() {
+      return ['helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests', 'ga_overtime_requests', 'survei_kepuasan_gedung'];
+    }
+
+    // §60 Tahap 1 pengetatan: TULIS wajib akun staf terdaftar (hasProfile = users_master/{uid}
+    // ada -- bukan sekadar isSignedIn(), karena akun Firebase Auth bisa dibuat sendiri lewat SDK).
+    // Pengecualian: 5 form publik di atas boleh create tanpa login. BACA masih publik (portal
+    // tanpa login membacanya) -- dibatasi di tahap berikutnya. Cron (firebase-admin) tidak terkena rules.
+    match /{col}/{docId} {
+      allow read: if col in koleksiOperasional();
+      allow create: if col in koleksiOperasional() && (col in koleksiFormPublik() || hasProfile());
+      allow update, delete: if col in koleksiOperasional() && hasProfile();
     }
 
     // --------------------------------------------------------------------
