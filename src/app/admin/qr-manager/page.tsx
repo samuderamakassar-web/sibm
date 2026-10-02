@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import AdminShell from "../../../components/admin/AdminShell";
+import { useTitikPatroli } from "../../../lib/titikPatroli";
 
 
 // ==============================================================
@@ -18,16 +19,9 @@ const DATA_OB = [
 ];
 
 // ==============================================================
-// 2. DATA MASTER SECURITY PATROLI (DISINKRONKAN DENGAN MODUL PATROLI)
+// 2. DATA SECURITY PATROLI -- dari master /admin/titik-patroli (src/lib/titikPatroli.ts, §79).
+// Dulu salinan terpisah yang sudah berbeda dari halaman Patroli (tanpa Taman Belakang & Parkiran).
 // ==============================================================
-const DATA_SECURITY = [
-  { lantai: "Ground (Basement)", area: [{ id: "Ground::Parkiran Basement", nama: "Area Parkiran Basement" }, { id: "Ground::Toilet", nama: "Toilet Basement" }, { id: "Ground::Ruang Genset", nama: "Ruang Genset" }, { id: "Ground::Ruang Pompa", nama: "Ruang Pompa Utama" }, { id: "Ground::Gudang", nama: "Gudang Basement" }, { id: "Ground::Mushallah Basement", nama: "Mushallah Basement" }] },
-  { lantai: "Lantai 1", area: [{ id: "Lantai 1::Lobby", nama: "Lobby Utama" }, { id: "Lantai 1::Asbin", nama: "Ruang Asbin" }, { id: "Lantai 1::Ruang Meeting", nama: "Ruang Meeting Lt 1" }, { id: "Lantai 1::Toilet", nama: "Toilet Lt 1" }, { id: "Lantai 1::Ruang Tamu", nama: "Ruang Tamu" }, { id: "Lantai 1::Pantry", nama: "Pantry Lt 1" }] },
-  { lantai: "Lantai 2", area: [{ id: "Lantai 2::Ruang Kerja Utama", nama: "Ruang Kerja Utama" }, { id: "Lantai 2::Pantry", nama: "Pantry Lt 2" }, { id: "Lantai 2::Toilet", nama: "Toilet Lt 2" }, { id: "Lantai 2::Ruang Kerja SAI", nama: "Ruang Kerja SAI" }, { id: "Lantai 2::Ruang Direktur", nama: "Ruang Direktur" }, { id: "Lantai 2::Ruang GM", nama: "Ruang General Manager" }, { id: "Lantai 2::Server", nama: "Ruang Server (IT)" }, { id: "Lantai 2::Ruang Arsip", nama: "Ruang Arsip" }] },
-  { lantai: "Lantai 3", area: [{ id: "Lantai 3::Gudang", nama: "Gudang Lt 3" }, { id: "Lantai 3::Toilet", nama: "Toilet Lt 3" }, { id: "Lantai 3::Ruang Kesehatan", nama: "Klinik / Ruang Kesehatan" }, { id: "Lantai 3::Ruang Meeting", nama: "Ruang Meeting Lt 3" }, { id: "Lantai 3::Ruang Kerja Kosong", nama: "Ruang Kerja Kosong" }, { id: "Lantai 3::Ruang Kerja PPNP", nama: "Ruang Kerja PPNP" }] },
-  { lantai: "Lantai 4", area: [{ id: "Lantai 4::Ruang Kerja Kosong", nama: "Ruang Kerja Kosong" }, { id: "Lantai 4::Toilet", nama: "Toilet Lt 4" }, { id: "Lantai 4::Pantry", nama: "Pantry Lt 4" }, { id: "Lantai 4::Mushallah", nama: "Mushallah Utama" }] },
-  { lantai: "Lantai 5", area: [{ id: "Lantai 5::Rooftop", nama: "Area Rooftop" }, { id: "Lantai 5::Gudang", nama: "Gudang Lt 5" }, { id: "Lantai 5::Ruang Pompa", nama: "Ruang Pompa Air Lt 5" }] }
-];
 
 export default function AdminQRManagerPage() {
   // Sebelumnya halaman ini TIDAK punya pengecekan akses sama sekali (siapa pun yang tahu URL-nya
@@ -46,6 +40,8 @@ export default function AdminQRManagerPage() {
     window.print();
   };
 
+  const { daftar: masterTitik } = useTitikPatroli();
+  const DATA_SECURITY = masterTitik.map((l) => ({ lantai: l.lantai, area: l.titik.map((x) => ({ id: x.id, nama: x.aktif === false ? `${x.nama} (nonaktif)` : x.nama })) }));
   const currentData = activeTab === "OB" ? DATA_OB : DATA_SECURITY;
 
   if (!isReady || !session) return null;

@@ -79,6 +79,7 @@ const MENU_GROUPS: MenuGroup[] = [
     tone: "ok",
     items: [
       { title: "Master Data APAR", desc: "APAR per lantai & QR inspeksi", path: "/admin/apar", icon: "fireExtinguisher" },
+      { title: "Titik Patroli", desc: "Titik wajib scan per lantai (renovasi)", path: "/admin/titik-patroli", icon: "shield" },
       { title: "QR Code Generator", desc: "Label titik patroli & kebersihan", path: "/admin/qr-manager", icon: "printer" },
       { title: "Hari Libur", desc: "Tanggal merah & cuti bersama", path: "/admin/hari-libur", icon: "calendar" },
     ],

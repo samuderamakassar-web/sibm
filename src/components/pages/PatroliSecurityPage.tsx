@@ -8,6 +8,7 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { hitungShiftSesi, waktuWITASekarang, sesiMinimumTerpenuhi, BATAS_SESI, MINIMUM_SESI_PER_SHIFT, ShiftSesiInfo } from "../../lib/shift";
 import AdminShell from "../admin/AdminShell";
+import { useTitikPatroli, type LantaiPatroli } from "../../lib/titikPatroli";
 import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
@@ -55,60 +56,9 @@ const IconMapPin = ({ size = 14, color = "currentColor" }: IconProps) => (
 );
 
 // ==========================================
-// 1. DATA TITIK PATROLI
+// 1. DATA TITIK PATROLI -- dari master /admin/titik-patroli (src/lib/titikPatroli.ts, §79).
+// Titik nonaktif (mis. area renovasi) tidak wajib discan & tidak dihitung terlewat.
 // ==========================================
-const GROUPED_PATROLI_DASAR: Record<string, { id: string, nama: string }[]> = {
-  "Ground (Basement)": [
-    { id: "Ground::Parkiran Basement", nama: "Area Parkiran Basement" },
-    { id: "Ground::Toilet", nama: "Toilet Basement" },
-    { id: "Ground::Ruang Genset", nama: "Ruang Genset" },
-    { id: "Ground::Ruang Pompa", nama: "Ruang Pompa Utama" },
-    { id: "Ground::Gudang", nama: "Gudang Basement" },
-    { id: "Ground::Mushallah Basement", nama: "Mushallah Basement" },
-  ],
-  "Lantai 1": [
-    { id: "Lantai 1::Lobby", nama: "Lobby Utama" },
-    { id: "Lantai 1::Asbin", nama: "Ruang Asbin" },
-    { id: "Lantai 1::Ruang Meeting", nama: "Ruang Meeting Lt 1" },
-    { id: "Lantai 1::Toilet", nama: "Toilet Lt 1" },
-    { id: "Lantai 1::Ruang Tamu", nama: "Ruang Tamu" },
-    { id: "Lantai 1::Pantry", nama: "Pantry Lt 1" },
-    { id: "Lantai 1::Taman Belakang", nama: "Taman Belakang / Garden" },
-  ],
-  "Lantai 2": [
-    { id: "Lantai 2::Ruang Kerja Utama", nama: "Ruang Kerja Utama" },
-    { id: "Lantai 2::Pantry", nama: "Pantry Lt 2" },
-    { id: "Lantai 2::Toilet", nama: "Toilet Lt 2" },
-    { id: "Lantai 2::Ruang Kerja SAI", nama: "Ruang Kerja SAI" },
-    { id: "Lantai 2::Ruang Direktur", nama: "Ruang Direktur" },
-    { id: "Lantai 2::Ruang GM", nama: "Ruang General Manager" },
-    { id: "Lantai 2::Server", nama: "Ruang Server (IT)" },
-    { id: "Lantai 2::Ruang Arsip", nama: "Ruang Arsip" },
-  ],
-  "Lantai 3": [
-    { id: "Lantai 3::Gudang", nama: "Gudang Lt 3" },
-    { id: "Lantai 3::Toilet", nama: "Toilet Lt 3" },
-    { id: "Lantai 3::Ruang Kesehatan", nama: "Klinik / Ruang Kesehatan" },
-    { id: "Lantai 3::Ruang Meeting", nama: "Ruang Meeting Lt 3" },
-    { id: "Lantai 3::Ruang Kerja Kosong", nama: "Ruang Kerja Kosong" },
-    { id: "Lantai 3::Ruang Kerja PPNP", nama: "Ruang Kerja PPNP" },
-  ],
-  "Lantai 4": [
-    { id: "Lantai 4::Ruang Kerja Kosong", nama: "Ruang Kerja Kosong" },
-    { id: "Lantai 4::Toilet", nama: "Toilet Lt 4" },
-    { id: "Lantai 4::Pantry", nama: "Pantry Lt 4" },
-    { id: "Lantai 4::Mushallah", nama: "Mushallah Utama" },
-  ],
-  "Lantai 5": [
-    { id: "Lantai 5::Rooftop", nama: "Area Rooftop" },
-    { id: "Lantai 5::Gudang", nama: "Gudang Lt 5" },
-    { id: "Lantai 5::Ruang Pompa", nama: "Ruang Pompa Air Lt 5" },
-  ],
-  "Parkiran": [
-    { id: "Parkiran::Parkiran Utama", nama: "Parkiran Utama" },
-  ],
-};
-
 function isWeekend(now: Date): boolean {
   const hari = now.getDay();
   return hari === 0 || hari === 6;
@@ -120,12 +70,16 @@ function isWeekend(now: Date): boolean {
 // (dengan wajib foto bukti) ditangani sendiri, lihat NotifikasiDadakanBanner / scripts terkait.
 // Cek AC menyala jam 07:20 -- cuma Senin-Jumat, khusus petugas Shift 2 (kerja sampai jam
 // 08:00 pagi) yang masih standby pas jam segitu.
-function buatGroupedPatroli(sertakanSiramTanaman: boolean, sertakanCekAC: boolean): Record<string, { id: string, nama: string }[]> {
-  const hasil = { ...GROUPED_PATROLI_DASAR };
+function buatGroupedPatroli(master: LantaiPatroli[], sertakanSiramTanaman: boolean, sertakanCekAC: boolean): Record<string, { id: string, nama: string }[]> {
+  const hasil: Record<string, { id: string, nama: string }[]> = {};
+  master.forEach((l) => {
+    const aktif = l.titik.filter((x) => x.aktif !== false).map((x) => ({ id: x.id, nama: x.nama }));
+    if (aktif.length) hasil[l.lantai] = aktif;
+  });
 
   if (sertakanSiramTanaman) {
     hasil["Parkiran"] = [
-      ...GROUPED_PATROLI_DASAR["Parkiran"],
+      ...(hasil["Parkiran"] || []),
       { id: "Parkiran::Siram Tanaman", nama: "Siram Tanaman" },
     ];
   }
@@ -203,10 +157,11 @@ export default function PatroliSecurityPage() {
     const info = hitungShiftSesi(now);
     return `${info.sesi}|${info.shift}|${isWeekend(now) ? "we" : "wd"}`;
   });
+  const { daftar: masterTitik } = useTitikPatroli();
   const GROUPED_PATROLI = useMemo(() => {
     const [sesi, shift, hari] = kunciSesi.split("|");
-    return buatGroupedPatroli(sesi === "Sesi 1", hari === "wd" && shift === "Shift 2");
-  }, [kunciSesi]);
+    return buatGroupedPatroli(masterTitik, sesi === "Sesi 1", hari === "wd" && shift === "Shift 2");
+  }, [kunciSesi, masterTitik]);
   const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), [GROUPED_PATROLI]);
   const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), [GROUPED_PATROLI]);
   const titikTerlewat = useMemo(
