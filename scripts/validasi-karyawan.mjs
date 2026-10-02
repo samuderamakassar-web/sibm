@@ -80,6 +80,7 @@ async function kirimPush(namaList, dept, judul, isi, link) {
   const res = await messaging.sendEachForMulticast({
     tokens,
     notification: { title: judul, body: isi },
+    data: link ? { link } : {}, // dibaca public/firebase-messaging-sw.js saat notifikasi diketuk
     webpush: { notification: { icon: "/icons/icon-192.png" }, fcmOptions: link ? { link: `https://sibm-app.web.app${link}` } : undefined },
   });
   console.log(`  push ${dept} -> ${penerima.join(", ")}: ${res.successCount} sukses, ${res.failureCount} gagal`);
@@ -191,11 +192,18 @@ async function cekLembur() {
   const bagian = [];
   if (baru.length) bagian.push(`${baru.length} karyawan masih di gedung lewat 18:00${baru.length <= 3 ? ` (${baru.join(", ")})` : ""}`);
   if (tanyaUlang.length) bagian.push(`${tanyaUlang.join(", ")} bilang akan pulang tapi belum check-out`);
-  // Pergantian ke Shift 2: kartu yang belum dijawab Shift 1 diingatkan sekali ke petugas baru.
+  // SERAH TERIMA SHIFT (§65): run pertama sejak 20:00 -> SELALU beri tahu Shift 2 sisa kartu yang belum
+  // dijawab Shift 1 (dulu hanya bila tidak ada kartu baru di run itu, jadi bisa terlewat) + yang
+  // masih lembur/akan pulang di dalam gedung. Kartunya sendiri tetap tampil di halaman Validasi
+  // untuk siapa pun yang jaga, jadi tugas otomatis berpindah ke petugas baru.
   const guardShift = db.collection("reminder_validasi_log").doc(`${hariIni}_lembur_shift2`);
-  if (!bagian.length && menungguTotal > 0 && jamSekarang === 20 && !(await guardShift.get()).exists) {
-    bagian.push(`${menungguTotal} validasi lembur belum dijawab shift sebelumnya`);
-    await guardShift.set({ waktu: FieldValue.serverTimestamp() });
+  if (jamSekarang >= 20 && !(await guardShift.get()).exists) {
+    const lama = menungguTotal - baru.length - tanyaUlang.length;
+    const masihDiDalam = (await db.collection("validasi_karyawan").where("tanggal", "==", hariIni).get())
+      .docs.map((d) => d.data()).filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || v.status === "akan_pulang")).length;
+    if (lama > 0) bagian.push(`SERAH TERIMA: ${lama} karyawan belum divalidasi shift sebelumnya, mohon foto & validasi`);
+    if (masihDiDalam > 0) bagian.push(`${masihDiDalam} karyawan lembur masih di gedung (pantau sampai check-out)`);
+    await guardShift.set({ waktu: FieldValue.serverTimestamp(), belum_divalidasi: lama, masih_di_dalam: masihDiDalam });
   }
   if (bagian.length) {
     await kirimPush(await securityJaga(), "Security", "⏳ Validasi Lembur", `${bagian.join(". ")}. Mohon cek & foto di lokasi.`, "/dashboard/security/validasi");

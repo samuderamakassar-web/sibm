@@ -31,6 +31,8 @@ interface NotifSistem {
   pesan: string;
   dibaca: boolean;
   waktu: Timestamp | null;
+  /** Halaman tujuan (mis. "/dashboard/security/validasi") -- diisi cron sejak §65. */
+  link?: string;
 }
 interface NotifSiaran {
   id: string;
@@ -40,7 +42,7 @@ interface NotifSiaran {
 }
 
 type ItemGabungan =
-  | { tipe: "sistem"; id: string; judul: string; isi: string; waktu: Timestamp | null; dibaca: boolean }
+  | { tipe: "sistem"; id: string; judul: string; isi: string; waktu: Timestamp | null; dibaca: boolean; link?: string }
   | { tipe: "siaran"; id: string; judul: string; isi: string; waktu: Timestamp | null };
 
 function formatWaktu(ts: Timestamp | null): string {
@@ -83,7 +85,7 @@ export default function NotifikasiInboxPage() {
   const jumlahBelumDibaca = sistem.filter((n) => !n.dibaca).length;
 
   const gabungan: ItemGabungan[] = [
-    ...sistem.map((n): ItemGabungan => ({ tipe: "sistem", id: n.id, judul: n.judul, isi: n.pesan, waktu: n.waktu, dibaca: n.dibaca })),
+    ...sistem.map((n): ItemGabungan => ({ tipe: "sistem", id: n.id, judul: n.judul, isi: n.pesan, waktu: n.waktu, dibaca: n.dibaca, link: n.link })),
     ...siaran.map((n): ItemGabungan => ({ tipe: "siaran", id: n.id, judul: n.judul, isi: n.teks, waktu: n.dibuatPada })),
   ].sort((a, b) => (b.waktu?.toMillis() || 0) - (a.waktu?.toMillis() || 0));
 
@@ -93,6 +95,8 @@ export default function NotifikasiInboxPage() {
     if (item.tipe === "sistem" && !item.dibaca) {
       updateDoc(doc(db, "notifikasi_personal", item.id), { dibaca: true }).catch(() => {});
     }
+    // §65: notifikasi yang punya halaman tujuan langsung membuka halaman itu (mis. Validasi Karyawan).
+    if (item.tipe === "sistem" && item.link) router.push(item.link);
   };
 
   return (
@@ -138,6 +142,7 @@ export default function NotifikasiInboxPage() {
                     <span style={{ fontSize: "10.5px", color: "var(--muted)", flexShrink: 0 }}>{formatWaktu(item.waktu)}</span>
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--ink-soft)", marginTop: "3px", lineHeight: 1.5 }}>{item.isi}</div>
+                  {item.tipe === "sistem" && item.link && <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--info)", marginTop: "4px" }}>Ketuk untuk membuka &rarr;</div>}
                 </div>
                 {item.tipe === "sistem" && !item.dibaca && <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--info)", flexShrink: 0, marginTop: "4px" }} />}
               </div>
