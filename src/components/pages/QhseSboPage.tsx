@@ -175,6 +175,9 @@ export default function QhseSboPage() {
   e.preventDefault();
   if (!selectedReport) return;
   if (isUploadingFoto) return showToast("Tunggu foto selesai diunggah dulu.", "warning");
+  // §73: foto kondisi sesudah WAJIB (keputusan user). Dulu input file "required" tapi bila upload gagal
+  // laporan tetap bisa ditutup tanpa foto.
+  if (!fotoAfter) return showToast("Foto kondisi sesudah (after) wajib diunggah sebelum menutup laporan.", "warning");
 
   const yakin = await confirm({
     title: "Tutup Laporan SBO",
@@ -190,7 +193,7 @@ export default function QhseSboPage() {
     await updateDoc(reportRef, {
       status_temuan: "Close",
       tanggal_closed: getTodayISOLocal(),
-      foto_after: fotoAfter || null,
+      foto_after: fotoAfter,
       ditutup_oleh: session?.nama || "-", // §68: siapa yang menutup tercatat (audit)
     });
 
@@ -357,12 +360,12 @@ export default function QhseSboPage() {
 
                   <div style={{ marginBottom: "15px" }}>
                     <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "5px", display: "block" }}>Unggah Foto Kondisi Terkini (After) *</label>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploadingFoto} required style={{ padding: "10px", border: "1px solid var(--line)", borderRadius: "8px", width: "100%", fontSize: "12px" }} />
+                    <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} disabled={isUploadingFoto} required style={{ padding: "10px", border: "1px solid var(--line)", borderRadius: "8px", width: "100%", fontSize: "12px" }} />
                     {isUploadingFoto && <div style={{ fontSize: "11px", color: "#d69e2e", marginTop: "5px", fontWeight: "bold" }}>⏳ Sedang mengunggah foto...</div>}
                     {fotoAfter && !isUploadingFoto && <div style={{ fontSize: "11px", color: "#38a169", marginTop: "5px", fontWeight: "bold" }}>✓ Foto siap diunggah</div>}
                   </div>
 
-                  <button type="submit" disabled={isUpdating} style={{ width: "100%", padding: "15px", background: isUpdating ? "#a0aec0" : "#2f855a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isUpdating ? "not-allowed" : "pointer" }}>
+                  <button type="submit" disabled={isUpdating || isUploadingFoto || !fotoAfter} style={{ width: "100%", padding: "15px", opacity: !fotoAfter ? 0.55 : 1, background: isUpdating ? "#a0aec0" : "#2f855a", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isUpdating ? "not-allowed" : "pointer" }}>
                     {isUpdating ? "Memproses..." : "Tutup Laporan Bahaya Ini"}
                   </button>
                 </form>
