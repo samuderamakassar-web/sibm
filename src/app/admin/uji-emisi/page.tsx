@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp, where, limit } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -108,24 +108,30 @@ export default function UjiEmisiPage() {
     return () => unsub();
   }, [isReady]);
 
-  // 🔹 Odometer terakhir per kendaraan — ambil seluruh log lalu simpan yang paling baru per kendaraan_id
+  // 🔹 Odometer terakhir per kendaraan. §70: dulu SELURUH log odometer semua kendaraan sepanjang masa
+  // dibaca hanya untuk mengambil 1 terbaru per kendaraan. Sekarang 5 terbaru per kendaraan (index
+  // kendaraan_id+tanggal desc sudah ada), dipilih yang waktu_catat-nya paling baru.
+  const idKendaraanKey = kendaraanList.map((k) => k.id).join(",");
   useEffect(() => {
-    if (!isReady) return;
-    const unsub = onSnapshot(collection(db, "kendaraan_odometer_logs"), (snap) => {
-      const latest: Record<string, OdometerLog> = {};
-      snap.forEach((d) => {
-        const data = d.data() as OdometerLog;
-        const existing = latest[data.kendaraan_id];
-        const dataMillis = data.waktu_catat?.toMillis() || 0;
-        const existingMillis = existing?.waktu_catat?.toMillis() || 0;
-        if (!existing || dataMillis > existingMillis || (dataMillis === existingMillis && data.tanggal > existing.tanggal)) {
-          latest[data.kendaraan_id] = data;
-        }
-      });
-      setOdometerLatest(latest);
-    });
-    return () => unsub();
-  }, [isReady]);
+    if (!isReady || !idKendaraanKey) return;
+    const unsubs = idKendaraanKey.split(",").map((id) =>
+      onSnapshot(query(collection(db, "kendaraan_odometer_logs"), where("kendaraan_id", "==", id), orderBy("tanggal", "desc"), limit(5)), (snap) => {
+        let terbaru: OdometerLog | null = null;
+        snap.forEach((d) => {
+          const data = d.data() as OdometerLog;
+          const a = data.waktu_catat?.toMillis() || 0;
+          const b = terbaru?.waktu_catat?.toMillis() || 0;
+          if (!terbaru || data.tanggal > terbaru.tanggal || (data.tanggal === terbaru.tanggal && a > b)) terbaru = data;
+        });
+        setOdometerLatest((lama) => {
+          const baru = { ...lama };
+          if (terbaru) baru[id] = terbaru; else delete baru[id];
+          return baru;
+        });
+      })
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [isReady, idKendaraanKey]);
 
   useEffect(() => {
     if (!isReady) return;

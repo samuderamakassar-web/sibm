@@ -32,7 +32,8 @@ const FORM_KOSONG = {
 const BATAS_HARI_MAU_HABIS = 30;
 
 function todayISO(): string {
-  return new Date().toISOString().substring(0, 10);
+  // §70: tanggal WITA -- dulu toISOString() (UTC) -> sebelum 08:00 WITA masih "kemarin", sisa hari meleset 1.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
 }
 
 function hitungStatus(item: LaptopDevice): { label: string; bg: string; color: string; sisaHari: number | null } {

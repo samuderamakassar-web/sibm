@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, Timestamp, where } from "firebase/firestore";
+import { daftarTahunSejak } from "../../../lib/rentangFilter";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import AdminShell from "../../../components/admin/AdminShell";
@@ -65,21 +66,52 @@ export default function MonitorTukarShiftPage() {
   const [filterBulan, setFilterBulan] = useState<string>(String(new Date().getMonth()));
   const [filterTahun, setFilterTahun] = useState<string>(String(new Date().getFullYear()));
 
+  // Rentang tanggal_shift ("YYYY-MM-DD") dari filter; tanpa filter -> 90 hari terakhir.
+  const rentangTukar = (() => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const tahun = filterTahun !== "SEMUA" ? Number(filterTahun) : null;
+    const bulan = filterBulan !== "SEMUA" ? Number(filterBulan) : null;
+    let dari: string;
+    let sampai: string | null;
+    if (tahun !== null || bulan !== null) {
+      const th = tahun ?? new Date().getFullYear();
+      if (bulan !== null) {
+        dari = `${th}-${pad(bulan + 1)}-01`;
+        sampai = bulan === 11 ? `${th + 1}-01-01` : `${th}-${pad(bulan + 2)}-01`;
+      } else {
+        dari = `${th}-01-01`;
+        sampai = `${th + 1}-01-01`;
+      }
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() - 90);
+      dari = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      sampai = null;
+    }
+    return { dari, sampai, kunci: `${dari}|${sampai}` };
+  })();
+
   useEffect(() => {
     if (!isReady || !session) return;
-    const unsub1 = onSnapshot(query(collection(db, "security_shift_handover"), orderBy("waktu_generate", "desc")), (snap) => {
-      setHandoverList(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HandoverLog)));
+    // §70: dimuat per rentang filter (tanggal_shift "YYYY-MM-DD", filter 1 field) -- dulu seluruh koleksi.
+    const syarat = (koleksi: string) => {
+      const s = [where("tanggal_shift", ">=", rentangTukar.dari)];
+      if (rentangTukar.sampai) s.push(where("tanggal_shift", "<", rentangTukar.sampai));
+      return query(collection(db, koleksi), ...s, orderBy("tanggal_shift", "desc"));
+    };
+    const unsub1 = onSnapshot(syarat("security_shift_handover"), (snap) => {
+      setHandoverList(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HandoverLog))
+        .sort((a, b) => (b.waktu_generate?.toMillis?.() || 0) - (a.waktu_generate?.toMillis?.() || 0)));
     });
-    const unsub2 = onSnapshot(query(collection(db, "security_shift_extend"), orderBy("dibuat_pada", "desc")), (snap) => {
-      setExtendList(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ExtendLog)));
+    const unsub2 = onSnapshot(syarat("security_shift_extend"), (snap) => {
+      setExtendList(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ExtendLog))
+        .sort((a, b) => (b.dibuat_pada?.toMillis?.() || 0) - (a.dibuat_pada?.toMillis?.() || 0)));
     });
     return () => { unsub1(); unsub2(); };
-  }, [isReady, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rentangTukar.kunci mewakili rentang
+  }, [isReady, session, rentangTukar.kunci]);
 
-  const tahunTersedia = Array.from(
-    new Set(handoverList.map((h) => h.tanggal_shift?.substring(0, 4)).filter(Boolean))
-  ).sort((a, b) => Number(b) - Number(a));
-  if (tahunTersedia.length === 0) tahunTersedia.push(String(new Date().getFullYear()));
+  const tahunTersedia = daftarTahunSejak().map(String);
 
   const matchPeriode = (tanggalShift: string) => {
     if (!tanggalShift) return false;
