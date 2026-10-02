@@ -36,14 +36,13 @@ self.addEventListener("notificationclick", (event) => {
   if (data.FCM_MSG) return;
   event.notification.close();
   const tujuan = new URL(data.link || "/", self.location.origin).href;
+  // §76: SW ini terdaftar di scope terpisah (/firebase-cloud-messaging-push-scope, lihat useFcmSetup),
+  // jadi tab SIBM TIDAK dikendalikan olehnya -> client.navigate() akan gagal (hanya untuk client yang
+  // dikendalikan SW ini). Fokuskan tab yang sudah di halaman tujuan; selain itu buka jendela baru.
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((daftar) => {
-      for (const c of daftar) {
-        if (c.url.startsWith(self.location.origin) && "focus" in c) {
-          c.navigate(tujuan);
-          return c.focus();
-        }
-      }
+      const sama = daftar.find((c) => c.url === tujuan && "focus" in c);
+      if (sama) return sama.focus();
       return clients.openWindow(tujuan);
     })
   );

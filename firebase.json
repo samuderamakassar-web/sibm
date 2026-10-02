@@ -7,6 +7,12 @@
     "public": "out",
     "cleanUrls": true,
     "trailingSlash": false,
+    "headers": [
+      {
+        "source": "/@(sw|firebase-messaging-sw).js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",
