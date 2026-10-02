@@ -2693,3 +2693,12 @@ Commit `aed4a3d`, SUDAH DI-DEPLOY. Prioritas 2 rekomendasi (biaya). Pindaian `on
 - Belum dibatasi (sengaja): admin/overtime (rekap tagihan butuh data bulanan lengkap; volume kecil), admin/helpdesk, admin/report (on-demand), admin/apar & uji-emisi (kecil). Kandidat berikutnya bila volume naik.
 
 **Armada portal (masukan user via screenshot):** baris riwayat Tiba/Pulang menampilkan nama tanpa konteks. Sekarang "Dibawa: X" (keluar) / "Pemakai terakhir: X" (tiba/pulang -- parkir membawa `driver_bertugas` dari log sebelumnya) + baris "Diupdate oleh {petugas_security}" ("otomatis dari Buku Tamu" untuk auto-sync); kotak unit menampilkan nama pemakai terakhir.
+
+## 62. Audit Isi Halaman Staf -- Security: Dashboard & Patroli (2 Oktober 2026)
+Prioritas 4 rekomendasi. Pola sama dengan audit portal §58N-§58V.
+
+**Dashboard Security (commit `28aab8b`, deploy):** (1) **BUG** roster dimuat per periode 11->10 lalu `finalData` dipotong ke periode -> pada tgl 11 pukul 00:00-08:00 Shift 2 yang aktif milik tgl 10 (tidak ada di periode baru) -> petugas yang sedang jaga tampil "OFF / Belum Diplot"; di tgl 10 "Jaga berikutnya" kosong. Generator jadwal menyimpan tiap tanggal ke dokumen bulan kalendernya, jadi gabungan 2 dokumen (`plotMentah`) sudah memuat tgl 10 & periode berikutnya -> status & `cariJagaBerikutnya` memakai `plotMentah` (fungsi tak lagi bergantung tanggal aktif ada di data). (2) Baris HARI INI roster pakai tanggal WITA. (3) Klaim Lembur: validasi tanggal harus di periode terpilih (`periodeUntukTanggal()` baru di lib/periodeLembur), jam mulai != selesai, konfirmasi tanggal dobel/sudah diklaim, daftar "Klaim Saya" (Menunggu GA/Disetujui/Ditolak, listener hanya saat modal terbuka), warna token. Modal yang sama di OB & Driver: ditangani saat audit dashboard masing-masing.
+
+**Patroli (commit `0276780`, deploy):** (1) `GROUPED_PATROLI` (titik khusus Sesi 1 / Shift 2 hari kerja) dulu `useMemo([], ...)` dihitung sekali saat buka halaman, sementara laporan memakai sesi saat kirim -> halaman yang terbuka melewati pergantian sesi bisa salah daftar titik & status. Sekarang ikut `kunciSesi` yang diperbarui tiap menit; progres/status dari titik yang ada di daftar berjalan (`jumlahTerscanValid`, status Sempurna = tidak ada titik terlewat). (2) Riwayat petugas `limit(300)`.
+
+Berikutnya: sub-halaman Security lain (Tukar Shift, Inspeksi APAR, Siram, Jadwal Danru), lalu OB, Driver, QHSE, admin.
