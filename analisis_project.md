@@ -2732,3 +2732,16 @@ Commit `8af9e78`, SUDAH DI-DEPLOY. Dipicu pertanyaan user: "kalau push terlewat,
 **Backlog (permintaan user, dicatat dulu):**
 1. Tampilkan di beranda: karyawan yang sedang lembur (dengan foto validasi) & yang tidak masuk hari ini. **Perlu keputusan privasi**: portal publik tanpa login -> usul: portal hanya jumlah/nama tanpa alasan & foto; foto + alasan di hub admin / dashboard staf (login).
 2. Email ke karyawan saat ditandai tidak masuk: "Anda tercatat tidak masuk kantor hari ini (alasan: ...)" -- dikirim dari `ValidasiKaryawanPage` saat simpan (EmailJS, pola sama dengan email bukti lembur).
+
+## 66. Audit Isi Halaman Staf -- Driver (2 Oktober 2026)
+Commit `4e94237`, SUDAH DI-DEPLOY.
+- **BUG:** "Tiba Kantor Kembali" (aksi instan di `DriverArmadaPage` & Log Kendaraan Security) hanya mencatat status kendaraan; status driver (`driver_status_logs`) tetap "Keluar Beroperasi" -> portal/Tim Bertugas menampilkan driver keluar sampai diubah manual. Sekarang bila kendaraan kembali dari Keluar/Bengkel (Tiba atau Pulang), status driver yang membawanya diperbarui lewat `autoDriverStatus` (Standby / Off Duty). Hanya dari status keluar/bengkel -> Off Duty manual tidak tertimpa.
+- Log Kendaraan Security: `DAFTAR_DRIVER`/`DRIVER_ONLY` hardcode -> state dari `users_master` departemen "Driver" (cadangan nama lama).
+- Inspeksi Driver: `getMondayOfWeek` dari tanggal WITA.
+- Dicek OK: Menu Driver (status limit 1), Riwayat (limit 30), Servis & Inspeksi (master kendaraan kecil, log limit 1), klaim lembur sudah `KlaimLemburModal`.
+
+## 67. Kehadiran & Lembur Karyawan (Admin + Portal) + Email Tidak Masuk (2 Oktober 2026)
+Commit `d9989e1`, SUDAH DI-DEPLOY. Backlog §65, keputusan privasi user: portal publik hanya nama & jumlah; versi lengkap di hub admin.
+- `src/components/KehadiranKaryawanPanel.tsx` di hub Admin GA (Tile lebar penuh): lembur (status lanjut / selesai dengan overtime) + foto validasi (klik buka penuh), area, pemvalidasi; tidak masuk hari ini + foto meja, alasan, keterangan; jumlah menunggu validasi & input susulan. Sumber `validasi_karyawan` tanggal kemarin & hari ini.
+- Portal: baris "Kehadiran Karyawan" di Status Operasional (jumlah + nama lembur/tidak masuk).
+- `buildTidakMasukEmailHtml` + kirim dari `ValidasiKaryawanPage` saat Security menandai tidak masuk (email dari employees_directory; gagal/tanpa email tidak menghalangi simpan).
