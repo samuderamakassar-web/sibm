@@ -25,7 +25,7 @@ const db = getFirestore();
 const messaging = getMessaging();
 
 // Lihat catatan di overtime-checkin-reminder.mjs lama: ID EmailJS ini memang publik (ada di bundle situs).
-const EMAILJS = { service_id: "service_0e8e85u", template_id: "template_oriy1nw", user_id: "qnss7aeHCQGexHTDf" };
+const EMAILJS = { service_id: "service_0e8e85u", template_id: "template_oriy1nw", user_id: "TCk2X3epWHvsVcTWX" };
 
 const JAM_MULAI_LEMBUR = "18:00";
 const BATAS_LEMBUR_JAM = 4;

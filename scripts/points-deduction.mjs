@@ -59,7 +59,7 @@ import { getMessaging } from "firebase-admin/messaging";
 // lengkap di sana soal kenapa ID/key ini aman di-hardcode langsung, bukan GitHub Secret).
 const EMAILJS_SERVICE_ID = "service_0e8e85u";
 const EMAILJS_TEMPLATE_ID = "template_oriy1nw";
-const EMAILJS_PUBLIC_KEY = "qnss7aeHCQGexHTDf";
+const EMAILJS_PUBLIC_KEY = "TCk2X3epWHvsVcTWX";
 
 async function kirimEmailViaRestApi(toEmail, toName, subject, message) {
   const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {

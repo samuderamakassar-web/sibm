@@ -27,7 +27,7 @@ const messaging = getMessaging();
 // EmailJS -- duplikat pola yang sama dengan scripts/points-deduction.mjs & overtime-checkin-reminder.mjs.
 const EMAILJS_SERVICE_ID = "service_0e8e85u";
 const EMAILJS_TEMPLATE_ID = "template_oriy1nw";
-const EMAILJS_PUBLIC_KEY = "qnss7aeHCQGexHTDf";
+const EMAILJS_PUBLIC_KEY = "TCk2X3epWHvsVcTWX";
 
 async function kirimEmailViaRestApi(toEmail, toName, subject, message) {
   const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
