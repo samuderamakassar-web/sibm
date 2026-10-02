@@ -6,6 +6,7 @@ import { collection, addDoc, serverTimestamp, doc, query, where, orderBy, onSnap
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/lib/shift";
+import { getSegmenUntukArea, ID_SEGMENT_PELAYANAN, useChecklistOB } from "@/lib/sopChecklist";
 import AdminShell from "../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
 
@@ -45,225 +46,9 @@ const IconInbox = ({ size = 18, color = "currentColor" }: IconProps) => (
 );
 
 // ==========================================
-// KONFIGURASI CHECKLIST PER SEGMENT
-// Edit di sini kalau mau ubah/tambah pertanyaan per lantai.
+// KONFIGURASI CHECKLIST PER SEGMENT -- dipindah ke src/lib/sopChecklist.ts & diatur Admin GA di
+// /admin/sop-checklist (§81). Halaman ini memakai useChecklistOB().
 // ==========================================
-interface PertanyaanItem {
-  id: string;
-  teks: string;
-}
-
-interface SegmentConfig {
-  id: string;
-  nama: string;
-  pertanyaan: PertanyaanItem[];
-}
-
-// Basement gak punya toilet — isinya parkiran + tangga, ditambah ruang-ruang utilitas
-// (Genset, Gudang, Mesin Air, Pompa Hydrant) dan Taman.
-const SEGMENTS_BASEMENT: SegmentConfig[] = [
-  {
-    id: "basement-parkiran",
-    nama: "Parkiran & Tangga",
-    pertanyaan: [
-      { id: "bsm-1", teks: "Area parkiran basement: apakah sudah disapu dengan bersih?" },
-      { id: "bsm-2", teks: "Apakah area parkiran sudah tidak ada sampah berserakan?" },
-      { id: "bsm-3", teks: "Area parkiran luar: apakah sudah disapu bersih?" },
-      { id: "bsm-4", teks: "Area tangga basement ke lobby: apakah sudah disapu dan dipel?" },
-      { id: "bsm-5", teks: "Area tangga utama ke lobby: apakah sudah disapu dan dipel?" },
-    ],
-  },
-  {
-    id: "basement-genset",
-    nama: "Genset",
-    pertanyaan: [
-      { id: "bsm-g1", teks: "Apakah area sekitar genset sudah disapu bersih?" },
-      { id: "bsm-g2", teks: "Apakah ruang genset bebas dari sampah/kotoran?" },
-    ],
-  },
-  {
-    id: "basement-gudang",
-    nama: "Gudang",
-    pertanyaan: [
-      { id: "bsm-gd1", teks: "Apakah lantai gudang sudah disapu?" },
-      { id: "bsm-gd2", teks: "Apakah barang di gudang sudah tertata rapi?" },
-    ],
-  },
-  {
-    id: "basement-mesin-air",
-    nama: "Mesin Air",
-    pertanyaan: [
-      { id: "bsm-ma1", teks: "Apakah area ruang mesin air sudah dibersihkan dari debu?" },
-      { id: "bsm-ma2", teks: "Apakah lantai ruang mesin air sudah disapu?" },
-    ],
-  },
-  {
-    id: "basement-hydrant",
-    nama: "Pompa Hydrant",
-    pertanyaan: [
-      { id: "bsm-ph1", teks: "Apakah area ruang pompa hydrant sudah disapu bersih?" },
-      { id: "bsm-ph2", teks: "Apakah ruang pompa hydrant bebas dari sampah/kotoran?" },
-    ],
-  },
-  {
-    id: "basement-taman",
-    nama: "Taman",
-    pertanyaan: [
-      { id: "bsm-tm1", teks: "Apakah area taman sudah dibersihkan dari sampah/daun kering?" },
-      { id: "bsm-tm2", teks: "Apakah tanaman & rumput taman sudah rapi?" },
-    ],
-  },
-];
-
-// Template segment untuk lantai 2-4 (Toilet pria+wanita terpisah + Area Ruang Kerja).
-// Lantai 1 & Lantai 5 areanya beda (lihat SEGMENTS_LANTAI1/SEGMENTS_LANTAI5 di bawah), jadi
-// gak ikut template ini.
-function buatSegmenLantai(nomorLantai: number): SegmentConfig[] {
-  return [
-    {
-      id: `lt${nomorLantai}-toilet`,
-      nama: "Toilet",
-      pertanyaan: [
-        { id: `lt${nomorLantai}-t1`, teks: "Apakah wastafel bagian wanita sudah dibersihkan?" },
-        { id: `lt${nomorLantai}-t2`, teks: "Apakah wastafel bagian pria sudah dibersihkan?" },
-        { id: `lt${nomorLantai}-t3`, teks: "Apakah kloset pria sudah dibersihkan?" },
-        { id: `lt${nomorLantai}-t4`, teks: "Apakah kloset wanita sudah dibersihkan?" },
-        { id: `lt${nomorLantai}-t5`, teks: "Apakah urinoir sudah dibersihkan?" },
-        { id: `lt${nomorLantai}-t6`, teks: "Apakah keseluruhan lantai toilet wanita dan pria sudah di pel?" },
-      ],
-    },
-    {
-      id: `lt${nomorLantai}-kerja`,
-      nama: "Area Ruang Kerja",
-      pertanyaan: [
-        { id: `lt${nomorLantai}-k1`, teks: "Apakah lantai sudah disapu?" },
-        { id: `lt${nomorLantai}-k2`, teks: "Apakah lantai sudah dipel?" },
-        { id: `lt${nomorLantai}-k3`, teks: "Apakah area kolong meja sudah dibersihkan?" },
-      ],
-    },
-  ];
-}
-
-// Lantai 1: cuma 1 toilet (bukan pria/wanita terpisah kayak lantai 2-4), ditambah
-// Gudang, Parkiran, Bagian Depan Parkiran, dan Taman.
-const SEGMENTS_LANTAI1: SegmentConfig[] = [
-  {
-    id: "lt1-toilet",
-    nama: "Toilet",
-    pertanyaan: [
-      { id: "lt1-t1", teks: "Apakah wastafel toilet sudah dibersihkan?" },
-      { id: "lt1-t2", teks: "Apakah kloset sudah dibersihkan?" },
-      { id: "lt1-t3", teks: "Apakah lantai toilet sudah di pel?" },
-    ],
-  },
-  {
-    id: "lt1-gudang",
-    nama: "Gudang",
-    pertanyaan: [
-      { id: "lt1-g1", teks: "Apakah lantai gudang sudah disapu?" },
-      { id: "lt1-g2", teks: "Apakah barang di gudang sudah tertata rapi?" },
-    ],
-  },
-  {
-    id: "lt1-parkiran",
-    nama: "Parkiran",
-    pertanyaan: [
-      { id: "lt1-p1", teks: "Apakah area parkiran sudah disapu bersih?" },
-      { id: "lt1-p2", teks: "Apakah area parkiran sudah tidak ada sampah berserakan?" },
-    ],
-  },
-  {
-    id: "lt1-depan-parkiran",
-    nama: "Bagian Depan Parkiran",
-    pertanyaan: [
-      { id: "lt1-dp1", teks: "Apakah bagian depan parkiran sudah disapu bersih?" },
-      { id: "lt1-dp2", teks: "Apakah bagian depan parkiran sudah tidak ada sampah berserakan?" },
-    ],
-  },
-  {
-    id: "lt1-taman",
-    nama: "Taman",
-    pertanyaan: [
-      { id: "lt1-tm1", teks: "Apakah area taman sudah dibersihkan dari sampah/daun kering?" },
-      { id: "lt1-tm2", teks: "Apakah tanaman & rumput taman sudah rapi?" },
-    ],
-  },
-];
-
-// Lantai 5: gak ada toilet — isinya Gudang, Ruang Pompa, Rooftop, dan Tandon Air.
-// Dikerjakan bersama semua staff (plot bernilai "Semua / All", lihat NILAI_BERSAMA), cukup 1x per hari.
-const SEGMENTS_LANTAI5: SegmentConfig[] = [
-  {
-    id: "lt5-gudang",
-    nama: "Gudang",
-    pertanyaan: [
-      { id: "lt5-g1", teks: "Apakah lantai gudang sudah disapu?" },
-      { id: "lt5-g2", teks: "Apakah barang di gudang sudah tertata rapi?" },
-    ],
-  },
-  {
-    id: "lt5-pompa",
-    nama: "Ruang Pompa",
-    pertanyaan: [
-      { id: "lt5-rp1", teks: "Apakah area ruang pompa sudah dibersihkan dari debu?" },
-      { id: "lt5-rp2", teks: "Apakah lantai ruang pompa sudah disapu?" },
-    ],
-  },
-  {
-    id: "lt5-rooftop",
-    nama: "Rooftop",
-    pertanyaan: [
-      { id: "lt5-rt1", teks: "Apakah area rooftop sudah disapu bersih?" },
-      { id: "lt5-rt2", teks: "Apakah rooftop sudah tidak ada sampah/daun berserakan?" },
-    ],
-  },
-  {
-    id: "lt5-tandon",
-    nama: "Tandon Air",
-    pertanyaan: [
-      { id: "lt5-ta1", teks: "Apakah area sekitar tandon air sudah bersih?" },
-      { id: "lt5-ta2", teks: "Apakah tidak ada genangan air/sampah di sekitar tandon?" },
-    ],
-  },
-];
-
-// Tugas ekstra tetap buat Zainal -- apa pun area yang diplot untuknya hari itu, checklist
-// hariannya selalu dapat tambahan segment ini di akhir (permintaan user, bukan bagian dari
-// rotasi plotting biasa).
-const NAMA_STAF_MUSHALLAH_TETAP = "Zainal";
-const SEGMENT_MUSHALLAH_L4: SegmentConfig = {
-  id: "mushallah-l4-zainal",
-  nama: "Mushallah Lantai 4",
-  pertanyaan: [
-    { id: "mus-1", teks: "Apakah lantai Mushallah sudah disapu?" },
-    { id: "mus-2", teks: "Apakah karpet Mushallah sudah divakum?" },
-    { id: "mus-3", teks: "Apakah sajadah/karpet sudah dirapikan?" },
-    { id: "mus-4", teks: "Apakah area wudhu sudah dibersihkan?" },
-  ],
-};
-
-const ID_SEGMENT_PELAYANAN = "pelayanan";
-const SEGMENTS_PELAYANAN: SegmentConfig[] = [
-  {
-    id: ID_SEGMENT_PELAYANAN,
-    nama: "Pelayanan",
-    pertanyaan: [
-      { id: "plyn-1", teks: "Apakah belanja / beli makan sudah dilakukan?" },
-      { id: "plyn-2", teks: "Apakah meja sudah dibersihkan?" },
-      { id: "plyn-3", teks: "Apakah piring sudah dicuci?" },
-      { id: "plyn-4", teks: "Apakah minum sudah disajikan?" },
-    ],
-  },
-];
-
-const SEGMENTS_CONFIG: Record<string, SegmentConfig[]> = {
-  "Basement": SEGMENTS_BASEMENT,
-  "Lantai 1": SEGMENTS_LANTAI1,
-  "Lantai 2": buatSegmenLantai(2),
-  "Lantai 3": buatSegmenLantai(3),
-  "Lantai 4": buatSegmenLantai(4),
-  "Lantai 5": SEGMENTS_LANTAI5,
-};
 
 // Sinkron sama NILAI_BERSAMA di PlottingOBPage.tsx — area dgn nilai plot ini dikerjakan
 // bersama semua staff & cukup 1x checklist per hari (dipakai buat Lantai 5).
@@ -271,23 +56,6 @@ const NILAI_BERSAMA = "Semua / All";
 
 // Minimal pasangan foto before/after yang harus lengkap sebelum laporan bisa dikirim.
 const MINIMAL_PASANGAN_FOTO = 2;
-
-function getSegmenUntukArea(area: string, picName?: string): SegmentConfig[] {
-  let segmen: SegmentConfig[];
-  if (SEGMENTS_CONFIG[area]) segmen = SEGMENTS_CONFIG[area];
-  else if (area.toLowerCase().includes("pelayanan")) segmen = SEGMENTS_PELAYANAN;
-  else {
-    const cocok = Object.keys(SEGMENTS_CONFIG).find(
-      (k) => area.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(area.toLowerCase())
-    );
-    segmen = cocok ? SEGMENTS_CONFIG[cocok] : SEGMENTS_CONFIG["Lantai 1"];
-  }
-
-  if (picName === NAMA_STAF_MUSHALLAH_TETAP) {
-    segmen = [...segmen, SEGMENT_MUSHALLAH_L4];
-  }
-  return segmen;
-}
 
 // ==========================================
 // FIX TIMEZONE: "hari ini" harus dihitung berdasarkan WITA (Asia/Makassar, UTC+8),
@@ -415,6 +183,8 @@ export default function ChecklistOBPage() {
   const sesiIniSudahSelesaiSemua = !semuaTugasSudahSelesai && areaTanggungJawab.length > 0 && assignedAreas.length === 0 && !!sesiSekarangUntukFilter;
   // Default pilihan area di step 1 kalau user belum eksplisit milih — dihitung tiap render
   // (bukan lewat effect+setState) biar gak nge-reset pilihan yang udah "dikunci" pas masuk step 2.
+  const { nilai: masterOB } = useChecklistOB();
+  const segmenUntuk = (area: string) => getSegmenUntukArea(masterOB.area, masterOB.tugas_tambahan, area, picName);
   const defaultArea = assignedAreas[0] ?? "";
   const isLiburHariIni = isWeekend(getTodayISOLocal());
 
@@ -667,7 +437,7 @@ export default function ChecklistOBPage() {
       return;
     }
 
-    const daftarSegmen = getSegmenUntukArea(selectedArea, picName);
+    const daftarSegmen = segmenUntuk(selectedArea);
     const semuaPertanyaan = daftarSegmen.flatMap(s => s.pertanyaan);
 
     const belumDijawab = semuaPertanyaan.some(p => !jawabanTugas[p.id]);
@@ -924,7 +694,7 @@ export default function ChecklistOBPage() {
                 </div>
 
                 {/* CHECKLIST PER SEGMENT */}
-                {getSegmenUntukArea(selectedArea, picName).map((segment) => (
+                {segmenUntuk(selectedArea).map((segment) => (
                   <div key={segment.id} style={{ marginBottom: "20px" }}>
                     <h3 className="segment-title">
                       <span className="icon-chip" style={{ width: "22px", height: "22px", background: "var(--ok-solid)", color: "#fff", borderRadius: "6px" }}><IconClipboard size={12} /></span>

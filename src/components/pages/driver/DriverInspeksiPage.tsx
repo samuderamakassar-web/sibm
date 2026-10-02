@@ -7,6 +7,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../ui/ToastProvider";
 import { handleFotoUpload } from "../../../lib/uploadFoto";
 import AdminShell from "../../admin/AdminShell";
+import { useInspeksiDriver } from "../../../lib/sopChecklist";
 import { daerahTulis } from "@/lib/daerah";
 
 
@@ -19,16 +20,7 @@ interface InspeksiTerakhir {
   minggu_of: string;
 }
 
-const CHECKLIST_ITEMS: { key: string; label: string }[] = [
-  { key: "ban", label: "Ban & Tekanan Angin" },
-  { key: "rem", label: "Rem" },
-  { key: "lampu", label: "Lampu (Depan/Belakang/Sein)" },
-  { key: "oli", label: "Oli Mesin" },
-  { key: "air_radiator_aki", label: "Air Radiator & Aki" },
-  { key: "wiper_kaca", label: "Wiper & Kaca" },
-  { key: "ac", label: "AC" },
-  { key: "kebersihan", label: "Kebersihan Interior/Eksterior" },
-];
+// Item inspeksi diatur Admin GA di /admin/sop-checklist (§81) -- lihat useInspeksiDriver() di komponen.
 const STATUS_OPSI = ["Baik", "Perlu Perhatian", "Rusak"];
 
 // Senin minggu berjalan dihitung dari TANGGAL WITA (§66) -- dulu hari dari jam perangkat lalu
@@ -40,11 +32,7 @@ function getMondayOfWeek(d: Date = new Date()): string {
   date.setUTCDate(date.getUTCDate() - (day === 0 ? 6 : day - 1));
   return date.toISOString().slice(0, 10);
 }
-function checklistDefault(): Record<string, string> {
-  const obj: Record<string, string> = {};
-  CHECKLIST_ITEMS.forEach((item) => { obj[item.key] = "Baik"; });
-  return obj;
-}
+
 
 const sharedInputStyle = {
   width: "100%", padding: "16px", borderRadius: "14px", border: "1px solid var(--line)",
@@ -62,13 +50,18 @@ export default function DriverInspeksiPage() {
     deniedMessage: "Akses Ditolak! Halaman ini khusus Tim Driver.",
   });
   const activeDriver = session?.nama || "Driver";
+  // Item inspeksi dari master /admin/sop-checklist (§81), hanya yang aktif.
+  const { nilai: masterInspeksi } = useInspeksiDriver();
+  const CHECKLIST_ITEMS = masterInspeksi.filter((x) => x.aktif !== false).map((x) => ({ key: x.key, label: x.label }));
   const todayISO = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
 
   const [kendaraanMaster, setKendaraanMaster] = useState<KendaraanMaster[]>([]);
   const [kendaraanId, setKendaraanId] = useState<string>("");
   const [inspeksiTerakhir, setInspeksiTerakhir] = useState<InspeksiTerakhir | null>(null);
 
-  const [inspeksiChecklist, setInspeksiChecklist] = useState<Record<string, string>>(checklistDefault());
+  // Hanya menyimpan pilihan yang diubah; item lain bernilai "Baik" (lihat nilaiItem).
+  const [inspeksiChecklist, setInspeksiChecklist] = useState<Record<string, string>>({});
+  const nilaiItem = (key: string) => inspeksiChecklist[key] || "Baik";
   const [catatanInspeksi, setCatatanInspeksi] = useState("");
 
   // 📸 Foto WAJIB per bagian yang diinspeksi — key: CHECKLIST_ITEMS.key, value: url foto
@@ -141,14 +134,16 @@ export default function DriverInspeksiPage() {
         driver: activeDriver,
         tanggal: todayISO,
         minggu_of: getMondayOfWeek(),
-        checklist: inspeksiChecklist,
+        checklist: Object.fromEntries(CHECKLIST_ITEMS.map((i) => [i.key, nilaiItem(i.key)])),
+        // Label disimpan bersama laporan supaya item baru/berubah tetap terbaca di admin Kendaraan.
+        label_checklist: Object.fromEntries(CHECKLIST_ITEMS.map((i) => [i.key, i.label])),
         catatan: catatanInspeksi.trim(),
         checklist_foto: fotoPerBagian,
-        foto_url: fotoPerBagian[CHECKLIST_ITEMS[0].key] || "",
+        foto_url: (CHECKLIST_ITEMS[0] && fotoPerBagian[CHECKLIST_ITEMS[0].key]) || "",
         waktu_catat: serverTimestamp(),
       });
       showToast("Inspeksi mingguan berhasil disimpan!", "success");
-      setInspeksiChecklist(checklistDefault());
+      setInspeksiChecklist({});
       setCatatanInspeksi("");
       setFotoPerBagian({});
     } catch (error) {
@@ -199,7 +194,7 @@ export default function DriverInspeksiPage() {
                       <label style={{ display: "block", fontWeight: "700", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>{item.label} *</label>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginBottom: "10px" }}>
                         {STATUS_OPSI.map((opsi) => {
-                          const dipilih = inspeksiChecklist[item.key] === opsi;
+                          const dipilih = nilaiItem(item.key) === opsi;
                           const warna = opsi === "Baik" ? "#38a169" : opsi === "Perlu Perhatian" ? "#d69e2e" : "#e53e3e";
                           return (
                             <button

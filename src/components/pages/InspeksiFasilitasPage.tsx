@@ -8,6 +8,7 @@ import { kirimEmail } from "@/lib/notify";
 import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
 import { useToast } from "@/components/ui/ToastProvider";
 import AdminShell from "../admin/AdminShell";
+import { useFasilitasOB } from "../../lib/sopChecklist";
 import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
@@ -53,10 +54,7 @@ const IconInbox = ({ size = 18, color = "currentColor" }: IconProps) => (
 // "dll fasilitas gedung lainnya" ditangani lewat tombol "+ Tambah Fasilitas Lain" di form
 // (item custom dgn nama bebas), bukan hardcode semua kemungkinan fasilitas gedung.
 // ==========================================
-const FASILITAS_DEFAULT = ["Kulkas", "Dispenser Pantry Lantai 1", "Dispenser Pantry Lantai 2", "Genset (Tugas Khusus)"];
-function getFasilitasUntukArea(): string[] {
-  return FASILITAS_DEFAULT;
-}
+// Daftar fasilitas diatur Admin GA di /admin/sop-checklist (§81) -- lihat useFasilitasOB() di komponen.
 
 type Kondisi = "Baik" | "Rusak" | "Tidak Ada";
 
@@ -114,6 +112,8 @@ export default function InspeksiFasilitasPage() {
   const router = useRouter();
   const showToast = useToast();
 
+  const { nilai: masterFasilitas } = useFasilitasOB();
+  const getFasilitasUntukArea = () => masterFasilitas.filter((x) => x.aktif !== false).map((x) => x.nama);
   const [picName, setPicName] = useState("");
   const [activeTab, setActiveTab] = useState<"form" | "history">("form");
   const [assignedAreas, setAssignedAreas] = useState<string[]>([]);

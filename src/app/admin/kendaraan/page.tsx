@@ -77,6 +77,7 @@ interface InspeksiLog {
   driver: string;
   tanggal: string;
   checklist: Record<string, string>;
+  label_checklist?: Record<string, string>; // §81: label item saat inspeksi (item bisa diatur admin)
   catatan?: string;
   foto_url?: string;
   waktu_catat?: Timestamp | null;
@@ -305,7 +306,7 @@ function buildRiwayatEntries(kendaraanId: string, kendaraanLabel: string, data: 
     return {
       id: `${kendaraanId}-insp-${l.id}`, kendaraanId, kendaraanLabel, tanggal: l.tanggal, jenis: "Inspeksi" as const,
       tone: (bermasalah.length === 0 ? "success" : "danger") as BadgeTone,
-      utama: bermasalah.length === 0 ? "Semua item kondisi Baik" : bermasalah.map(([k, v]) => `${CHECKLIST_LABELS[k] || k}: ${v}`).join("; "),
+      utama: bermasalah.length === 0 ? "Semua item kondisi Baik" : bermasalah.map(([k, v]) => `${l.label_checklist?.[k] || CHECKLIST_LABELS[k] || k}: ${v}`).join("; "),
       sub: l.catatan,
       pic: l.driver,
       foto: l.foto_url,
