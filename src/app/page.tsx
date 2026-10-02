@@ -195,6 +195,7 @@ export default function PortalSIBM() {
   const [daftarDriver, setDaftarDriver] = useState<string[]>([]);
   const [filterPlatArmada, setFilterPlatArmada] = useState<string | null>(null);
   const [riwayatArmadaLengkap, setRiwayatArmadaLengkap] = useState(false);
+  const [lemburLewatTerbuka, setLemburLewatTerbuka] = useState(false);
   const [driverStatusMap, setDriverStatusMap] = useState<Record<string, { status: string; waktu: Timestamp | null }>>({});
   // Absensi (attendance_logs) kemarin & hari ini, kunci "tanggal|nama" -- kemarin perlu utk Security Shift 2 lewat tengah malam.
   const [absensiTim, setAbsensiTim] = useState<Record<string, { masuk: Timestamp | null; pulang: Timestamp | null }>>({});
@@ -997,10 +998,36 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     iso === todayISO ? "Hari ini" : iso === geserTanggalISO(todayISO, -1) ? "Kemarin"
     : iso === "-" ? "Tanpa tanggal" : new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
 
+  // ⏱️ LEMBUR MINGGU INI (§58V) -- pengajuan "Rejected" dulu ikut tampil; urutan Senin->Minggu bikin lembur
+  // hari ini tenggelam. Sekarang: hari ini dulu, lalu mendatang, yang sudah lewat dilipat.
+  const durasiMenitLembur = (mulai: string, selesai: string) => {
+    const [a, b] = (mulai || "0:0").split(":").map(Number);
+    const [c, d] = (selesai || "0:0").split(":").map(Number);
+    const m = c * 60 + d - (a * 60 + b);
+    return m > 0 ? m : m + 1440; // lewat tengah malam
+  };
+  const formatDurasi = (menit: number) => `${Math.floor(menit / 60)} jam${menit % 60 ? ` ${menit % 60} mnt` : ""}`;
+  const lemburAktif = overtimeMingguIni.filter((ot) => ot.status !== "Rejected");
+  const totalMenitLembur = lemburAktif.reduce((a, ot) => a + durasiMenitLembur(ot.jam_mulai, ot.jam_selesai), 0);
+  const kelompokkanLembur = (daftar: OvertimeLog[]) => {
+    const grup: { tanggal: string; item: OvertimeLog[] }[] = [];
+    daftar.forEach((ot) => {
+      const g = grup[grup.length - 1];
+      if (g && g.tanggal === ot.tanggal) g.item.push(ot); else grup.push({ tanggal: ot.tanggal, item: [ot] });
+    });
+    return grup;
+  };
+  const grupLemburDepan = kelompokkanLembur(lemburAktif.filter((ot) => ot.tanggal >= todayISO));
+  const grupLemburLewat = kelompokkanLembur(lemburAktif.filter((ot) => ot.tanggal < todayISO).reverse());
+  const jumlahLemburLewat = lemburAktif.filter((ot) => ot.tanggal < todayISO).length;
+  const tanggalPendek = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+  const labelHariLembur = (iso: string) =>
+    iso === todayISO ? "Hari ini" : iso === tomorrowISO ? "Besok" : new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "short" });
+
   // ⚙️ STATUS OPERASIONAL (§58S)
   const jumlahArmadaBengkel = mobilStatus.filter((m) => kategoriArmada(m.status_kendaraan) === "bengkel").length;
   const tiketDikerjakan = tiketTerbuka.filter((tk) => tk.status === "Sedang Dikerjakan");
-  const lemburHariIni = overtimeMingguIni.filter((ot) => ot.tanggal === todayISO);
+  const lemburHariIni = lemburAktif.filter((ot) => ot.tanggal === todayISO);
   const lompatKe = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // ==========================================
@@ -1273,6 +1300,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         }
         .section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
         .section-title-icon { background: var(--red-50); color: var(--red-600); padding: 10px; border-radius: 12px; display: flex; }
+        /* ⏱️ LEMBUR (§58V) */
+        .lembur-daftar { display: flex; flex-direction: column; gap: 12px; }
+        .lembur-daftar .is-lewat { opacity: 0.7; }
+        .lembur-hari-ini { color: var(--red-600) !important; }
+        .lembur-item { display: flex; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--bg); margin-bottom: 6px; }
+        .lembur-jam { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; min-width: 92px; }
+        .lembur-jam b { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+        .lembur-jam span { font-size: 11px; color: var(--muted); }
+        .lembur-isi { flex: 1; min-width: 0; }
+        .lembur-area { font-size: 13px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+        .lembur-pemohon { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
         /* 🚗 ARMADA (§58U) */
         .armada-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-bottom: 14px; }
         .armada-unit { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: 16px; border: 2px solid transparent; background: var(--bg); font-family: inherit; color: inherit; cursor: pointer; min-width: 0; }
@@ -1732,7 +1770,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               <span className="status-op-sub">
                 {lemburHariIni.length === 0 ? "Tidak ada lembur" : `${lemburHariIni.length} area · ${lemburHariIni.map((ot) => `${ot.area_ruangan} (${ot.jam_mulai}–${ot.jam_selesai})`).slice(0, 2).join(", ")}${lemburHariIni.length > 2 ? "…" : ""}`}
               </span>
-              <span className="status-op-sub status-op-detail">{overtimeMingguIni.length} pengajuan minggu ini</span>
+              <span className="status-op-sub status-op-detail">{lemburAktif.length} pengajuan minggu ini</span>
             </span>
             <span className="status-op-titik" style={{ background: lemburHariIni.length > 0 ? "var(--info)" : "var(--muted)" }} aria-hidden="true" />
           </button>
@@ -1818,31 +1856,44 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           <Card style={{ borderRadius: "18px" }}>
             <div className="section-title" id="overtime-section">
               <div className="section-title-icon"><IconClock size={18} /></div>
-              <div>
-                <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: "800" }}>Overtime Gedung (Minggu Ini)</h3>
-                <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "var(--muted)" }}>{seninMingguIni.split("-").reverse().join("/")} - {mingguMingguIni.split("-").reverse().join("/")} — langsung tercatat, tinggal direkap untuk tagihan</p>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Lembur Gedung Minggu Ini</h3>
+                <p style={{ margin: "2px 0 0 0", fontSize: "11.5px", color: "var(--muted)" }}>
+                  {tanggalPendek(seninMingguIni)} – {tanggalPendek(mingguMingguIni)}
+                  {lemburAktif.length > 0 && <> · {lemburAktif.length} pengajuan · {formatDurasi(totalMenitLembur)}</>}
+                </p>
               </div>
+              <button type="button" className="sa-btn is-soft" style={{ height: "34px", padding: "0 12px", fontSize: "12px", flexShrink: 0 }} onClick={() => setActiveModal("overtime")}>+ Catat</button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "350px", overflowY: "auto", paddingRight: "5px" }}>
-              {overtimeMingguIni.length > 0 ? overtimeMingguIni.map((ot, idx) => {
-                const isHariIni = ot.tanggal === todayISO;
-                return (
-                  <div key={idx} className="list-row" style={{ flexDirection: "column", gap: "8px", borderLeftColor: isHariIni ? "var(--red-600)" : "var(--line)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
-                      <span style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px", flex: 1 }}>{ot.area_ruangan}</span>
-                      <Badge tone={isHariIni ? "warning" : "neutral"} style={{ marginLeft: "10px" }}>{isHariIni ? "Hari Ini" : ot.tanggal.split("-").reverse().join("/")}</Badge>
-                    </div>
-                    <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}>{ot.nama_pemohon} ({ot.departemen})</div>
-                    <div style={{ fontSize: "13px", color: "var(--red-700)", fontWeight: "bold", background: "var(--red-50)", padding: "6px 10px", borderRadius: "8px", display: "inline-block", width: "fit-content" }}>{ot.jam_mulai} s/d {ot.jam_selesai}</div>
+            {lemburAktif.length === 0 ? (
+              <div className="tim-kosong" style={{ textAlign: "center", padding: "24px 14px" }}>Belum ada lembur tercatat minggu ini.</div>
+            ) : (
+              <div className="lembur-daftar">
+                {grupLemburDepan.length === 0 && <div className="tim-kosong">Tidak ada lembur hari ini atau sisa minggu ini.</div>}
+                {[...grupLemburDepan, ...(lemburLewatTerbuka ? grupLemburLewat : [])].map((g) => (
+                  <div key={g.tanggal} className={g.tanggal < todayISO ? "is-lewat" : ""}>
+                    <div className={`armada-hari${g.tanggal === todayISO ? " lembur-hari-ini" : ""}`}>{labelHariLembur(g.tanggal)}</div>
+                    {g.item.map((ot) => (
+                      <div key={ot.id} className="lembur-item">
+                        <div className="lembur-jam">
+                          <b>{ot.jam_mulai}–{ot.jam_selesai}</b>
+                          <span>{formatDurasi(durasiMenitLembur(ot.jam_mulai, ot.jam_selesai))}</span>
+                        </div>
+                        <div className="lembur-isi">
+                          <div className="lembur-area">{ot.area_ruangan}</div>
+                          <div className="lembur-pemohon">{ot.nama_pemohon}{ot.departemen ? ` · ${ot.departemen}` : ""}</div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                );
-              }) : (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", background: "var(--bg)", borderRadius: "16px", border: "1px dashed var(--line)" }}>
-                  <div style={{ fontSize: "14px", fontWeight: "bold", color: "var(--ink-soft)" }}>Tidak Ada Lembur</div>
-                  <div style={{ fontSize: "12px", marginTop: "5px" }}>Belum ada overtime tercatat minggu ini.</div>
-                </div>
-              )}
-            </div>
+                ))}
+                {jumlahLemburLewat > 0 && (
+                  <button type="button" className="sa-btn is-soft" style={{ width: "100%" }} onClick={() => setLemburLewatTerbuka((v) => !v)}>
+                    {lemburLewatTerbuka ? "Sembunyikan yang sudah lewat" : `Lihat ${jumlahLemburLewat} lembur yang sudah lewat`}
+                  </button>
+                )}
+              </div>
+            )}
           </Card>
 
         </div>
