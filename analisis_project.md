@@ -2721,3 +2721,14 @@ Commit `f8b0608`, SUDAH DI-DEPLOY.
 - Klaim lembur OB sudah memakai `KlaimLemburModal` (§63).
 
 Berikutnya: Driver (menu, armada, inspeksi, servis, riwayat), QHSE (SBO), lalu halaman admin.
+
+## 65. Notifikasi Push Bisa Diketuk + Serah Terima Validasi Jam 20:00 + Backlog Validasi (2 Oktober 2026)
+Commit `8af9e78`, SUDAH DI-DEPLOY. Dipicu pertanyaan user: "kalau push terlewat, apakah Security bisa langsung klik dari notifikasi ke halamannya?"
+- **BUG:** `public/firebase-messaging-sw.js` hanya `onBackgroundMessage` -> `showNotification` tanpa data & TANPA `notificationclick` -> notifikasi yang diketuk tidak membuka apa pun (link `fcmOptions` dari cron §59 tidak terpakai pada notifikasi yang ditampilkan manual). Sekarang `data.link` (dikirim cron validasi-karyawan; script lain tanpa link -> beranda) + listener `notificationclick` (fokus tab SIBM yang ada lalu navigate, atau openWindow); notifikasi bawaan SDK (`data.FCM_MSG`) dibiarkan diurus SDK.
+- Kotak masuk `/notifikasi`: `notifikasi_personal.link` (sudah ditulis cron §59) -> item bisa diketuk ke halaman tujuan + label "Ketuk untuk membuka".
+- **Serah terima shift:** guard `{tanggal}_lembur_shift2` dulu hanya mengirim bila run itu tidak punya kartu baru -> bisa terlewat. Sekarang run pertama >= 20:00 selalu menambahkan "SERAH TERIMA: N belum divalidasi" + "M lembur masih di gedung" ke push Shift 2. Kartu di `/dashboard/security/validasi` tidak terikat petugas, jadi tugas otomatis pindah ke yang jaga.
+- Status pemakaian produksi tidak bisa dicek dari sesi ini (baca Firestore produksi diblokir) -- user diminta cek log Actions "Validasi Karyawan" (baris `B. ...`) / halaman Validasi.
+
+**Backlog (permintaan user, dicatat dulu):**
+1. Tampilkan di beranda: karyawan yang sedang lembur (dengan foto validasi) & yang tidak masuk hari ini. **Perlu keputusan privasi**: portal publik tanpa login -> usul: portal hanya jumlah/nama tanpa alasan & foto; foto + alasan di hub admin / dashboard staf (login).
+2. Email ke karyawan saat ditandai tidak masuk: "Anda tercatat tidak masuk kantor hari ini (alasan: ...)" -- dikirim dari `ValidasiKaryawanPage` saat simpan (EmailJS, pola sama dengan email bukti lembur).
