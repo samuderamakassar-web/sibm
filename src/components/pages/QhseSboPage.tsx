@@ -190,7 +190,8 @@ export default function QhseSboPage() {
     await updateDoc(reportRef, {
       status_temuan: "Close",
       tanggal_closed: getTodayISOLocal(),
-      foto_after: fotoAfter || null
+      foto_after: fotoAfter || null,
+      ditutup_oleh: session?.nama || "-", // §68: siapa yang menutup tercatat (audit)
     });
 
     showToast("Laporan berhasil ditutup!", "success");

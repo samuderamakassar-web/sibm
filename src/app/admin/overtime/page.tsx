@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, Timestamp } from "firebase/firestore";
+import { isAdministrator } from "../../../hooks/useAuthGuard";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { kirimEmail } from "../../../lib/notify";
@@ -94,8 +95,10 @@ export default function AdminOvertimePage() {
     const nama = localStorage.getItem("pic_nama");
     const dept = localStorage.getItem("pic_dept");
 
-    if (!nama || dept !== "Admin GA") {
-      router.push("/shift-checkin");
+    // §68: dulu redirect ke /shift-checkin (rute tidak ada -> 404) & Administrator dept lain ditolak,
+    // beda dengan aturan useAuthGuard di halaman admin lain.
+    if (!nama || (dept !== "Admin GA" && !isAdministrator(localStorage.getItem("pic_role") || ""))) {
+      router.push("/");
       return;
     }
     
