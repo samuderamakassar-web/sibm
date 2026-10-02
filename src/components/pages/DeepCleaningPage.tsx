@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -69,7 +69,8 @@ export default function DeepCleaningPage() {
     if (!isAuthReady || !session) return;
 
     const tasksRef = collection(db, "deep_cleaning_tasks");
-    const q = query(tasksRef, orderBy("tanggal", "desc"));
+    // §64: 300 tugas terbaru (dulu seluruh histori).
+    const q = query(tasksRef, orderBy("tanggal", "desc"), limit(300));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const taskList: DeepCleaningTask[] = [];

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { kirimEmail } from "@/lib/notify";
 import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
@@ -173,7 +173,8 @@ export default function InspeksiFasilitasPage() {
   // ==========================================
   useEffect(() => {
     if (!picName) return;
-    const q = query(collection(db, "inspeksi_fasilitas"), where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"));
+    // §64: 200 terakhir (dulu seluruh riwayat PIC).
+    const q = query(collection(db, "inspeksi_fasilitas"), where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"), limit(200));
     const unsub = onSnapshot(q, (snap) => {
       const logs: InspeksiLog[] = [];
       snap.forEach((d) => logs.push({ ...d.data(), id: d.id } as InspeksiLog));

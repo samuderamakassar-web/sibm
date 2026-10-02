@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, query, where, orderBy, onSnapshot, Timestamp, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/lib/shift";
@@ -439,19 +439,23 @@ export default function ChecklistOBPage() {
           // data lama) -- OB & CS memang tidak ada jadwal Sabtu/Minggu.
           setPlotMapHariIni({});
         } else {
+          // §64: live (dulu getDoc sekali) -- perubahan plot oleh koordinator setelah halaman dibuka
+          // dulu tidak terlihat sampai halaman dimuat ulang.
           const plotRef = doc(db, "daily_plots", todayISO);
-          const plotSnap = await getDoc(plotRef);
-
-          if (plotSnap.exists()) {
-            const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
-            const punyaKu: Record<string, string> = {};
-            Object.keys(plots).forEach((lantai) => {
-              if (plots[lantai] === nama || plots[lantai] === NILAI_BERSAMA) punyaKu[lantai] = plots[lantai];
-            });
-            setPlotMapHariIni(punyaKu);
-          } else {
-            setPlotMapHariIni({});
-          }
+          unsubPlot = onSnapshot(plotRef, (plotSnap) => {
+            if (plotSnap.exists()) {
+              const plots = (plotSnap.data().plot_lantai || {}) as Record<string, string>;
+              const punyaKu: Record<string, string> = {};
+              Object.keys(plots).forEach((lantai) => {
+                if (plots[lantai] === nama || plots[lantai] === NILAI_BERSAMA) punyaKu[lantai] = plots[lantai];
+              });
+              setPlotMapHariIni(punyaKu);
+            } else {
+              setPlotMapHariIni({});
+            }
+            setIsPageLoading(false);
+          });
+          return;
         }
       } catch (error) {
         console.error("Gagal memuat data plotting:", error);
@@ -460,7 +464,9 @@ export default function ChecklistOBPage() {
       }
     };
 
+    let unsubPlot = () => {};
     muatDataAwal();
+    return () => unsubPlot();
   }, [router]);
 
   // ==========================================
@@ -470,7 +476,8 @@ export default function ChecklistOBPage() {
     if (!picName) return;
 
     const checklistRef = collection(db, "ob_checklists");
-    const q = query(checklistRef, where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"));
+    // §64: dibatasi 300 laporan terakhir (dulu seluruh riwayat PIC).
+    const q = query(checklistRef, where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"), limit(300));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const logs: ChecklistLog[] = [];
