@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "booking",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "objek_id", "order": "ASCENDING" },
+        { "fieldPath": "sampai", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "driver_status_logs",
       "queryScope": "COLLECTION",
       "fields": [

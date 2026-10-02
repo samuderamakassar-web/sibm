@@ -7,6 +7,8 @@ import { type PengumumanGedung, dalamTanggalTayang, urutkanPengumuman } from "..
 import PengumumanCarousel from "../components/PengumumanCarousel";
 import { FITUR_ABSENSI_AKTIF } from "../lib/fitur";
 import { gedungPortal } from "../lib/daerah";
+import BookingModal from "../components/BookingModal";
+import { RUANGAN_BOOKING, rentangWaktu, type Booking, type JenisBooking } from "../lib/booking";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, getCountFromServer, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
@@ -197,6 +199,9 @@ export default function PortalSIBM() {
   // Driver diambil dari users_master (departemen "Driver"), bukan nama hardcode (§58T).
   const [daftarDriver, setDaftarDriver] = useState<string[]>([]);
   const [filterPlatArmada, setFilterPlatArmada] = useState<string | null>(null);
+  // 📅 BOOKING (§80) -- modal booking kendaraan/ruangan + booking yang belum selesai (tanda "Dibooking").
+  const [bookingBuka, setBookingBuka] = useState<{ jenis: JenisBooking; objekId: string | null } | null>(null);
+  const [bookingBerjalan, setBookingBerjalan] = useState<Booking[]>([]);
   const [riwayatArmadaLengkap, setRiwayatArmadaLengkap] = useState(false);
   const [lemburLewatTerbuka, setLemburLewatTerbuka] = useState(false);
   const [driverStatusMap, setDriverStatusMap] = useState<Record<string, { status: string; waktu: Timestamp | null }>>({});
@@ -510,6 +515,14 @@ export default function PortalSIBM() {
   // yang dikirim dari portal (lapor kerusakan, SBO, ATK, lembur) tertandai daerah yang benar. Tahap 1:
   // belum menyaring tampilan.
   useEffect(() => { gedungPortal(); }, []);
+
+  // Booking yang belum selesai (koleksi kecil; filter 1 field) -> tanda "Dibooking" di kartu armada.
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, "booking"), where("sampai", ">", Timestamp.fromDate(new Date()))), (snap) => {
+      setBookingBerjalan(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking)).filter((b) => b.status === "aktif"));
+    }, (err) => console.error("[portal] Gagal memuat booking:", err));
+    return () => unsub();
+  }, []);
 
   // 👥 KEHADIRAN KARYAWAN (§67) -- versi PUBLIK: hanya nama & jumlah (tanpa foto/alasan; itu di hub admin).
   const [kehadiranKaryawan, setKehadiranKaryawan] = useState<{ lembur: string[]; tidakMasuk: string[] }>({ lembur: [], tidakMasuk: [] });
@@ -1364,6 +1377,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .armada-pil { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
         .armada-log-detail { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
         .armada-log-pencatat { font-size: 11px; opacity: 0.85; }
+        .armada-booking { font-size: 10px; font-weight: 800; color: #fff; background: var(--accent-solid); padding: 1px 7px; border-radius: 8px; }
+        /* §80: di HP kartu Booking Ruangan selebar 1 baris (3 kartu lain sudah 1 baris penuh). */
+        @media (max-width: 639px) { .menu-cepat-grid { grid-auto-flow: row dense; } .qa-card-booking { grid-column: 1 / -1; flex-direction: row !important; text-align: left; } .qa-card-booking .qa-sub { display: block; } }
         .armada-pemakai { font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .list-row {
           display: flex; gap: 12px; padding: 13px 15px; border-radius: 13px; background: var(--bg);
@@ -1480,7 +1496,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .list-row { background: var(--bg) !important; border-radius: 14px !important; }
         .status-op-row { border-bottom-color: var(--line) !important; }
         @media (min-width: 1000px) {
-          .menu-cepat-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+          .menu-cepat-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
           .qa-card { flex-direction: column !important; align-items: flex-start !important; }
           .qa-badge { margin-left: 0; }
         }
@@ -1568,6 +1584,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               <span className="qa-icon-chip"><IconPackage size={20} /></span>
               <span className="qa-teks"><span className="qa-judul">Cek Paket</span><span className="qa-sub">Paket kiriman untuk Anda</span></span>
               {jumlahPaketMenunggu > 0 && <span className="qa-badge">{jumlahPaketMenunggu} menunggu</span>}
+            </button>
+            <button type="button" className="qa-card qa-card-booking" onClick={() => setBookingBuka({ jenis: "ruangan", objekId: null })}>
+              <span className="qa-icon-chip"><IconClock size={20} /></span>
+              <span className="qa-teks"><span className="qa-judul">Booking Ruangan</span><span className="qa-sub">Meeting, tamu & kesehatan</span></span>
             </button>
             {/* Request ATK, Kerusakan & Bahaya SBO disembunyikan di mobile (sudah ada di bottom-nav: ATK,
                 Kerusakan, FAB tengah) -- di desktop tetap muncul karena tidak ada bottom-nav. Dibungkus
@@ -1832,7 +1852,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
               <div className="section-title-icon"><IconTruck size={18} /></div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Armada Operasional</h3>
-                <p style={{ margin: "2px 0 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Ketuk kendaraan untuk melihat riwayatnya saja</p>
+                <p style={{ margin: "2px 0 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Ketuk kendaraan untuk booking & lihat jadwalnya</p>
               </div>
             </div>
             {mobilStatus.length > 0 && (
@@ -1840,11 +1860,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 {mobilStatus.map((k) => {
                   const info = INFO_KATEGORI_ARMADA[kategoriArmada(k.status_kendaraan)];
                   const dipilih = filterPlatArmada === k.kendaraan;
+                  const bookingKini = bookingBerjalan.find((b) => b.objek_id === k.kendaraan && b.mulai.toMillis() <= Date.now());
                   return (
                     <button
                       key={k.kendaraan} type="button" className={`armada-unit${dipilih ? " is-dipilih" : ""}`}
-                      onClick={() => { setFilterPlatArmada(dipilih ? null : k.kendaraan); setRiwayatArmadaLengkap(false); }}
-                      aria-pressed={dipilih} aria-label={`${k.kendaraan}: ${info.label}${dipilih ? ", filter aktif" : ""}`}
+                      onClick={() => setBookingBuka({ jenis: "kendaraan", objekId: k.kendaraan })}
+                      aria-label={`${k.kendaraan}: ${info.label}${bookingKini ? `, dibooking ${bookingKini.nama_pemesan}` : ""}. Ketuk untuk booking`}
                     >
                       <span className="armada-ikon" style={{ background: info.bg }}>
                         <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={22} />
@@ -1852,6 +1873,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       <span className="armada-plat">{k.kendaraan}</span>
                       <span className="armada-status" style={{ color: info.fg }}><span className="armada-titik" style={{ background: info.fg }} />{info.label}</span>
                       {k.driver_bertugas && k.driver_bertugas !== "-" && <span className="armada-pemakai">{k.driver_bertugas.replace("Standby: ", "")}</span>}
+                      {bookingKini && <span className="armada-booking" title={`${bookingKini.nama_pemesan} · ${rentangWaktu(bookingKini.mulai.toDate(), bookingKini.sampai.toDate())}`}>Dibooking</span>}
                     </button>
                   );
                 })}
@@ -1951,6 +1973,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
       </div>
 
+
+      {/* 📅 BOOKING KENDARAAN / RUANGAN (§80) */}
+      <BookingModal
+        open={!!bookingBuka}
+        onClose={() => setBookingBuka(null)}
+        jenis={bookingBuka?.jenis || "ruangan"}
+        daftarObjek={bookingBuka?.jenis === "kendaraan" ? daftarSemuaKendaraan.map((p) => ({ id: p, nama: p })) : RUANGAN_BOOKING}
+        objekAwal={bookingBuka?.objekId}
+        karyawan={employees}
+        onLihatRiwayat={(o) => { setFilterPlatArmada(o.id); setRiwayatArmadaLengkap(false); setBookingBuka(null); setTimeout(() => lompatKe("riwayat-armada-section"), 100); }}
+      />
 
       {/* MODAL WRAPPER (via komponen Modal) */}
       <Modal

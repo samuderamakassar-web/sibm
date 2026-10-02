@@ -61,6 +61,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { title: "Pengumuman Gedung", desc: "Carousel info di portal utama", path: "/admin/broadcast", icon: "megaphone" },
       { title: "Gudang ATK", desc: "Permintaan alat tulis kantor", path: "/admin/atk", icon: "clipboard" },
       { title: "Persetujuan Overtime", desc: "Lembur AC & listrik", path: "/admin/overtime", icon: "clock" },
+      { title: "Booking Kendaraan & Ruangan", desc: "Jadwal, ubah & batalkan booking", path: "/admin/booking", icon: "calendar" },
       { title: "Helpdesk & Tiket Kerusakan", desc: "Keluhan & perbaikan gedung", path: "/admin/helpdesk", icon: "wrench" },
     ],
   },
