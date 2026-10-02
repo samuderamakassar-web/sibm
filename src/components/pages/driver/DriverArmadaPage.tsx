@@ -286,7 +286,12 @@ export default function DriverArmadaPage() {
     const uniqueKey = `${kendaraan.id}-${aksi.key}`;
     setLoadingInstantKey(uniqueKey);
     try {
-      await catatPergerakan(kendaraan.kendaraan, aksi.status, "-", "Tidak dicatat", false);
+      // §66: kembali dari Keluar/Bengkel yang dibawa driver ini -> status driver ikut diperbarui (dulu
+      // tetap "Keluar Beroperasi" sampai diubah manual di Menu Driver).
+      const sebelumnya = statusPerKendaraan[kendaraan.kendaraan];
+      const kembaliDariLuar = !!sebelumnya && sebelumnya.driver_bertugas === activeDriver &&
+        (sebelumnya.status_kendaraan === "Keluar Beroperasi" || sebelumnya.status_kendaraan === "Masuk Bengkel / Service");
+      await catatPergerakan(kendaraan.kendaraan, aksi.status, "-", "Tidak dicatat", kembaliDariLuar);
       if (aksi.key === "standby") {
         await syncKaryawanHadir(kendaraan);
       }

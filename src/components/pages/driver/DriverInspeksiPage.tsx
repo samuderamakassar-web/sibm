@@ -30,12 +30,14 @@ const CHECKLIST_ITEMS: { key: string; label: string }[] = [
 ];
 const STATUS_OPSI = ["Baik", "Perlu Perhatian", "Rusak"];
 
+// Senin minggu berjalan dihitung dari TANGGAL WITA (§66) -- dulu hari dari jam perangkat lalu
+// diformat WITA, bisa meleset sehari bila zona waktu HP berbeda.
 function getMondayOfWeek(d: Date = new Date()): string {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  date.setDate(diff);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(date);
+  const [y, m, tgl] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(d).split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, tgl));
+  const day = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() - (day === 0 ? 6 : day - 1));
+  return date.toISOString().slice(0, 10);
 }
 function checklistDefault(): Record<string, string> {
   const obj: Record<string, string> = {};

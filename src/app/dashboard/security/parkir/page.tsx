@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp, where, limit } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp, where, limit, getDocs } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useToast } from "../../../../components/ui/ToastProvider";
 import { normalizePlat } from "../../../../lib/platUtils";
@@ -106,10 +106,9 @@ interface VisitorLogMini {
 // ==========================================
 // Pilihan "siapa yang membawa kendaraan" — begitu dipilih "Karyawan", wajib isi nama karyawan
 // spesifiknya (lihat state `namaKaryawan` & field kondisional di modal aksi).
-const DAFTAR_DRIVER = ["Amal Setiawan", "Muhammad Renaldy", "Karyawan"];
-
-// Driver murni yang status kesiagaannya di-tracking otomatis (driver_status_logs)
-const DRIVER_ONLY = ["Amal Setiawan", "Muhammad Renaldy"];
+// §66: driver tetap diambil dari users_master (departemen "Driver") -- dulu nama di-hardcode.
+// Nama lama dipakai sebagai cadangan selama data belum termuat / kalau belum ada akun Driver.
+const DRIVER_CADANGAN = ["Amal Setiawan", "Muhammad Renaldy"];
 
 // 4 aksi pergerakan armada di Tab 1 — menggantikan form dropdown status lama.
 // String status_kendaraan SENGAJA dipertahankan sama seperti sebelumnya untuk "Standby",
@@ -165,7 +164,19 @@ export default function LogOperasionalPage() {
 
   // 🪟 MODAL AKSI CEPAT (dibuka dari salah satu dari 4 tombol per baris kendaraan)
   const [modalAksi, setModalAksi] = useState<{ kendaraan: KendaraanMaster; status: string; label: string } | null>(null);
-  const [driverMobil, setDriverMobil] = useState<string>(DAFTAR_DRIVER[0]);
+  const [driverTetap, setDriverTetap] = useState<string[]>(DRIVER_CADANGAN);
+  // Driver murni yang status kesiagaannya di-tracking otomatis (driver_status_logs)
+  const DRIVER_ONLY = driverTetap;
+  const DAFTAR_DRIVER = [...driverTetap, "Karyawan"];
+  const [driverMobil, setDriverMobil] = useState<string>(DRIVER_CADANGAN[0]);
+  useEffect(() => {
+    getDocs(query(collection(db, "users_master"), where("departemen", "==", "Driver")))
+      .then((snap) => {
+        const nama = snap.docs.map((d) => d.data().nama as string).filter(Boolean).sort();
+        if (nama.length) setDriverTetap(nama);
+      })
+      .catch((err) => console.error("[parkir] Gagal memuat daftar driver:", err));
+  }, []);
   const [namaKaryawan, setNamaKaryawan] = useState<string>("");
   const [tujuan, setTujuan] = useState<string>("");
   const [kilometer, setKilometer] = useState<string>("");
@@ -341,6 +352,19 @@ export default function LogOperasionalPage() {
         tujuan_keperluan: "-",
         kilometer_kendaraan: "Tidak dicatat",
       });
+
+      // §66: kendaraan KEMBALI dari Keluar/Bengkel (Tiba atau Pulang) -> status driver yang membawanya
+      // ikut diperbarui. Dulu tidak -> driver tetap "Keluar Beroperasi" di portal & Tim Bertugas sampai
+      // ia ubah sendiri. Hanya dari status keluar/bengkel, jadi Off Duty manual tidak tertimpa.
+      const dariLuar = logTerkini && (logTerkini.status_kendaraan === "Keluar Beroperasi" || logTerkini.status_kendaraan === "Masuk Bengkel / Service");
+      if (dariLuar && DRIVER_ONLY.includes(driverTerakhir)) {
+        await addDoc(collection(db, "driver_status_logs"), {
+          nama_driver: driverTerakhir,
+          status: autoDriverStatus(aksi.status),
+          waktu_ubah: serverTimestamp(),
+          petugas_security: picName + " (Sistem Auto-Sync)",
+        });
+      }
 
       if (aksi.key === "standby") {
         await syncKaryawanHadir(kendaraan);
