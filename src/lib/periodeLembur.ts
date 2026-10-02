@@ -48,3 +48,8 @@ export function daftarPeriodeLembur(sekarang: Date = new Date()): OpsiPeriodeLem
 export function periodeLemburAktif(sekarang: Date = new Date()): string {
   return daftarPeriodeLembur(sekarang)[0].value;
 }
+
+/** Label siklus tempat sebuah tanggal (YYYY-MM-DD, WITA) jatuh -- untuk validasi klaim lembur. */
+export function periodeUntukTanggal(tanggalISO: string): string {
+  return periodeLemburAktif(new Date(`${tanggalISO}T12:00:00+08:00`));
+}
