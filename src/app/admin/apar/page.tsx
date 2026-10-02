@@ -9,6 +9,7 @@ import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
 import AparInspectionBanner from "../../../components/AparInspectionBanner";
 import AdminShell from "../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan shell admin (src/app/admin/page.tsx)
@@ -148,7 +149,7 @@ export default function AdminAparPage() {
         });
         showToast("Data APAR berhasil diperbarui.", "success");
       } else {
-        await addDoc(collection(db, "apar_units"), {
+        await addDoc(collection(db, "apar_units"), { daerah: daerahTulis(),
           lantai: form.lantai, kode: form.kode, lokasi: form.lokasi, kadaluarsa: form.kadaluarsa,
           terakhir_inspeksi: null, dibuat: serverTimestamp()
         });

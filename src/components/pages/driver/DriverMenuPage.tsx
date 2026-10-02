@@ -12,6 +12,7 @@ import AbsensiCard from "../../AbsensiCard";
 import KlaimLemburModal from "../../KlaimLemburModal";
 import AdminShell from "../../admin/AdminShell";
 import Tile from "../../admin/Tile";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security
@@ -84,7 +85,7 @@ export default function DriverMenuPage() {
   const handleUpdateStatusPersonel = async (statusBaru: string) => {
     setIsLoadingPersonel(true);
     try {
-      await addDoc(collection(db, "driver_status_logs"), {
+      await addDoc(collection(db, "driver_status_logs"), { daerah: daerahTulis(),
         nama_driver: activeDriver,
         status: statusBaru,
         waktu_ubah: serverTimestamp(),

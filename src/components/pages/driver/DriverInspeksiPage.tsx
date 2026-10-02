@@ -7,6 +7,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../ui/ToastProvider";
 import { handleFotoUpload } from "../../../lib/uploadFoto";
 import AdminShell from "../../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 
 interface KendaraanMaster {
@@ -134,7 +135,7 @@ export default function DriverInspeksiPage() {
 
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "kendaraan_inspeksi_logs"), {
+      await addDoc(collection(db, "kendaraan_inspeksi_logs"), { daerah: daerahTulis(),
         kendaraan_id: kendaraanId,
         kendaraan: kendaraan,
         driver: activeDriver,

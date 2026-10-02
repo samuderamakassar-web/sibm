@@ -11,6 +11,7 @@ import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../../lib/unitBi
 import { normalizePlat } from "../../lib/platUtils";
 import AdminShell from "../admin/AdminShell";
 import { jamWITA, normalNama, selesaikanLemburSaatCheckout, tanggalWITA } from "../../lib/validasiKaryawan";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -292,7 +293,7 @@ export default function BukuTamuSecurity() {
       const statusTerkini = snapLog.empty ? "" : (snapLog.docs[0].data().status_kendaraan || "");
       if (statusTerkini === "Tiba di Kantor (Standby)") return;
 
-      await addDoc(collection(db, "operational_vehicle_logs"), {
+      await addDoc(collection(db, "operational_vehicle_logs"), { daerah: daerahTulis(),
         petugas_security: `${picName} (Auto-Sync Buku Tamu)`,
         waktu_catat: serverTimestamp(),
         kendaraan: kendaraanCocok.kendaraan,
@@ -440,7 +441,7 @@ export default function BukuTamuSecurity() {
     const namaFinal = jenisPengunjung === "Karyawan" ? searchKaryawan : (kategoriEksternal === "Magang" ? searchMagang : formData.nama);
 
     try {
-      await addDoc(collection(db, "security_visitor_logs"), {
+      await addDoc(collection(db, "security_visitor_logs"), { daerah: daerahTulis(),
         nama: namaFinal,
         instansi_dept: formData.instansi_dept,
         no_kendaraan: jenisPengunjung === "Karyawan" ? formData.no_kendaraan : "",
@@ -463,7 +464,7 @@ export default function BukuTamuSecurity() {
       if (jenisFinal === "Magang") {
         const slug = slugifyNama(namaFinal);
         if (slug) {
-          await setDoc(doc(db, "security_magang_directory", slug), {
+          await setDoc(doc(db, "security_magang_directory", slug), { daerah: daerahTulis(),
             nama: namaFinal.trim(),
             instansi_dept: formData.instansi_dept,
             updated_at: serverTimestamp()

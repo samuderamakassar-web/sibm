@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain (DashboardOBPage/ChecklistOBPage)
@@ -191,7 +192,7 @@ export default function StockOpnamePage() {
           nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       } else {
-        await addDoc(collection(db, "ob_stock"), {
+        await addDoc(collection(db, "ob_stock"), { daerah: daerahTulis(),
           nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       }
@@ -212,7 +213,7 @@ export default function StockOpnamePage() {
 
     try {
       await updateDoc(doc(db, "ob_stock", id), { qty: newQty, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current });
-      await addDoc(collection(db, "ob_stock_logs"), {
+      await addDoc(collection(db, "ob_stock_logs"), { daerah: daerahTulis(),
         id_barang: id, nama_barang: nama_barang, jenis_transaksi: change > 0 ? "MASUK (TAMBAH)" : "KELUAR (PAKAI)", jumlah_perubahan: Math.abs(change), sisa_stok_akhir: newQty, pic_bertugas: picRef.current, waktu_transaksi: serverTimestamp()
       });
     } catch (error) {

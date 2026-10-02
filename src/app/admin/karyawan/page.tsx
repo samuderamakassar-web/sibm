@@ -13,6 +13,7 @@ import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../../../lib/uni
 import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
+import { daerahTulis } from "@/lib/daerah";
 
 function normalizeNoWA(raw: string): string {
   if (!raw) return "";
@@ -93,7 +94,7 @@ export default function ManajemenKaryawanPage() {
         setEditingId(null);
         showToast(`Data ${dataToSave.nama} berhasil diperbarui.`, "success");
       } else {
-        await addDoc(collection(db, "employees_directory"), dataToSave);
+        await addDoc(collection(db, "employees_directory"), { ...dataToSave, daerah: daerahTulis() });
         showToast(`${dataToSave.nama} berhasil ditambahkan ke direktori.`, "success");
       }
 
@@ -154,7 +155,7 @@ export default function ManajemenKaryawanPage() {
           const [nama, dept, plat, noWa, email] = line.split(",");
 
           if (nama && dept) {
-            await addDoc(collection(db, "employees_directory"), {
+            await addDoc(collection(db, "employees_directory"), { daerah: daerahTulis(),
               nama: nama.trim(),
               departemen: dept.trim(),
               plat_kendaraan: plat ? plat.trim() : "",

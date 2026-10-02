@@ -10,6 +10,7 @@ import { buildAtkSiapEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 
 interface KontakKaryawan {
@@ -253,7 +254,7 @@ export default function AdminAtkPage() {
     if (!newItemName.trim()) return;
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "master_atk"), {
+      await addDoc(collection(db, "master_atk"), { daerah: daerahTulis(),
         nama_barang: newItemName.trim().toUpperCase(),
         foto_url: newItemFoto || null,
       });

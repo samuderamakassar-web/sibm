@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/lib/shift";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -707,7 +708,7 @@ export default function ChecklistOBPage() {
         }),
       }));
 
-      await addDoc(collection(db, "ob_checklists"), {
+      await addDoc(collection(db, "ob_checklists"), { daerah: daerahTulis(),
         pic_bertugas: picName,
         area: selectedArea,
         tanggal: todayISO,

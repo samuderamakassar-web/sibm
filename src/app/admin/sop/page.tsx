@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "@/lib/uploadDokumen";
 import AdminShell from "../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 type IconProps = { size?: number; color?: string };
 const IconBook = ({ size = 20, color = "currentColor" }: IconProps) => (
@@ -98,7 +99,7 @@ export default function AdminSopPage() {
 
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "sop_documents"), {
+      await addDoc(collection(db, "sop_documents"), { daerah: daerahTulis(),
         judul: judul.trim(),
         deskripsi: deskripsi.trim(),
         target_dept: targetDept,

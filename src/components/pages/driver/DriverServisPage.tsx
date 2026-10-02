@@ -7,6 +7,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../ui/ToastProvider";
 import { handleFotoUpload } from "../../../lib/uploadFoto";
 import AdminShell from "../../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 
 interface KendaraanMaster {
@@ -163,7 +164,7 @@ export default function DriverServisPage() {
       }
       const fotoUtama = Object.values(fotoDetail)[0] || "";
 
-      await addDoc(collection(db, "kendaraan_service_logs"), {
+      await addDoc(collection(db, "kendaraan_service_logs"), { daerah: daerahTulis(),
         kendaraan_id: kendaraanId,
         kendaraan: kendaraan,
         tanggal: todayISO,
@@ -178,7 +179,7 @@ export default function DriverServisPage() {
       });
 
       // Odometer otomatis ikut tercatat begitu laporan servis dikirim — gak perlu tombol "Catat" terpisah lagi
-      await addDoc(collection(db, "kendaraan_odometer_logs"), {
+      await addDoc(collection(db, "kendaraan_odometer_logs"), { daerah: daerahTulis(),
         kendaraan_id: kendaraanId,
         kendaraan: kendaraan,
         odometer: odometerInput.trim(),

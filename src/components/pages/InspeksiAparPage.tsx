@@ -7,6 +7,7 @@ import { db } from "../../lib/firebase";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { useToast } from "../ui/ToastProvider";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -143,7 +144,7 @@ export default function InspeksiAparPage() {
     setIsSaving(true);
 
     try {
-      await addDoc(collection(db, "apar_inspections"), {
+      await addDoc(collection(db, "apar_inspections"), { daerah: daerahTulis(),
         apar_id: formTarget.id,
         kode: formTarget.kode,
         lantai: formTarget.lantai,

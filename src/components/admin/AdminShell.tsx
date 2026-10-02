@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import NotifikasiBellButton from "../NotifikasiBellButton";
 import AdminIcon from "./AdminIcon";
+import PemilihWilayah from "./PemilihWilayah";
 import { useAdminTheme } from "./useAdminTheme";
 
 interface AdminShellProps {
@@ -95,6 +96,7 @@ export default function AdminShell({
 
         <div className="sa-header-right">
           {headerExtra}
+          {userName && <PemilihWilayah />}
           <button
             type="button"
             className="sa-icon-btn"

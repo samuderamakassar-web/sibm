@@ -9,6 +9,7 @@ import { useToast } from "../ui/ToastProvider";
 import { waktuWITASekarang } from "../../lib/shift";
 import { handleFotoUpload } from "../../lib/uploadFoto";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman Security lainnya
@@ -108,7 +109,7 @@ export default function NotifikasiDadakanSiramPage() {
       async (url) => {
         try {
           const label = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" }).format(new Date());
-          await setDoc(doc(db, "notifikasi_dadakan_siram", docId), {
+          await setDoc(doc(db, "notifikasi_dadakan_siram", docId), { daerah: daerahTulis(),
             tanggal: tanggalISO,
             jendela,
             petugas: picName,

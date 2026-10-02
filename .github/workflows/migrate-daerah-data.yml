@@ -1,0 +1,30 @@
+name: Migrasi Daerah Data (manual)
+
+# §78 multi-daerah fase 2 tahap 1: isi field `daerah` = "Makassar" ke dokumen lama.
+# HANYA dijalankan manual dari tab Actions -> "Migrasi Daerah Data (manual)" -> Run workflow.
+# Jalankan dulu dengan dry_run = true (hanya menghitung), lalu ulangi dengan dry_run = false.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = hanya hitung (aman), false = tulis ke database"
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+jobs:
+  migrasi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # firebase-admin & @google-cloud/firestore mensyaratkan Node >= 22 (lihat insiden §53)
+      - name: Install dependencies
+        run: npm ci
+      - name: Jalankan migrasi daerah
+        run: node scripts/migrate-daerah-data.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          DRY_RUN: ${{ inputs.dry_run }}

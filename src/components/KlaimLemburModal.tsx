@@ -15,6 +15,7 @@ import { tanggalISOWITASekarang } from "../lib/shift";
 import { useToast } from "./ui/ToastProvider";
 import { useConfirm } from "./ui/ConfirmProvider";
 import Modal from "./ui/Modal";
+import { daerahTulis } from "@/lib/daerah";
 
 interface ItemLembur {
   tanggal: string;
@@ -105,7 +106,7 @@ export default function KlaimLemburModal({
     }
     setMengirim(true);
     try {
-      await addDoc(collection(db, "ga_overtime_requests"), {
+      await addDoc(collection(db, "ga_overtime_requests"), { daerah: daerahTulis(),
         nama_pemohon: picName,
         departemen,
         periode,

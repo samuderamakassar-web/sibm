@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react";
 import { collection, addDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import { daerahTulis } from "@/lib/daerah";
 
 type IconProps = { size?: number; color?: string };
 const IconCheckCircle = ({ size = 40, color = "currentColor" }: IconProps) => (
@@ -226,7 +227,7 @@ export default function SurveiKepuasanPage() {
 
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "survei_kepuasan_gedung"), {
+      await addDoc(collection(db, "survei_kepuasan_gedung"), { daerah: daerahTulis(),
         periode: hitungPeriodeSurvei(),
         waktu_submit: serverTimestamp(),
         nama: nama.trim(),

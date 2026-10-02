@@ -10,6 +10,7 @@ import Modal from "../../../components/ui/Modal";
 import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
+import { daerahTulis } from "@/lib/daerah";
 
 interface LaptopDevice {
   id: string;
@@ -120,7 +121,7 @@ export default function AdminLaptopPage() {
         await updateDoc(doc(db, "master_laptop", editingId), dataToSave);
         showToast("Data laptop berhasil diperbarui.", "success");
       } else {
-        await addDoc(collection(db, "master_laptop"), { ...dataToSave, dikembalikan: false });
+        await addDoc(collection(db, "master_laptop"), { daerah: daerahTulis(), ...dataToSave, dikembalikan: false });
         showToast("Data laptop baru berhasil ditambahkan.", "success");
       }
       setShowModal(false);

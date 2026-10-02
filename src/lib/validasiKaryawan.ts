@@ -17,6 +17,7 @@ import {
 import { db } from "./firebase";
 import { kirimEmail } from "./notify";
 import { buildLemburSelesaiEmailHtml } from "./emailTemplates";
+import { daerahTulis } from "@/lib/daerah";
 
 export const JAM_MULAI_LEMBUR = "18:00";
 export const BATAS_LEMBUR_JAM = 4; // PP 35/2021: lembur maks. 4 jam/hari
@@ -151,7 +152,7 @@ export async function catatLanjutLembur(v: ValidasiKaryawan, p: { area: string; 
       visitor_log_id: v.visitor_log_id || "",
     });
   } else {
-    const baru = await addDoc(collection(db, "ga_overtime_requests"), {
+    const baru = await addDoc(collection(db, "ga_overtime_requests"), { daerah: daerahTulis(),
       nama_pemohon: v.nama,
       departemen: v.departemen || "-",
       area_ruangan: p.area,
@@ -176,7 +177,7 @@ export async function catatLanjutLembur(v: ValidasiKaryawan, p: { area: string; 
 /** Check-in susulan (lupa diinput) dengan jam yang diatur Security. */
 export async function checkInSusulan(v: ValidasiKaryawan, p: { jamMasuk: string; platKendaraan?: string; petugas: string }) {
   const waktu = waktuWITA(v.tanggal, p.jamMasuk);
-  const log = await addDoc(collection(db, "security_visitor_logs"), {
+  const log = await addDoc(collection(db, "security_visitor_logs"), { daerah: daerahTulis(),
     nama: v.nama,
     instansi_dept: v.departemen || "-",
     no_kendaraan: p.platKendaraan || "",
@@ -191,7 +192,7 @@ export async function checkInSusulan(v: ValidasiKaryawan, p: { jamMasuk: string;
     input_susulan: true,
     dicatat_pada: serverTimestamp(),
   });
-  await setDoc(doc(db, "validasi_karyawan", v.id), {
+  await setDoc(doc(db, "validasi_karyawan", v.id), { daerah: daerahTulis(),
     status: "diinput_susulan", visitor_log_id: log.id, waktu_masuk: Timestamp.fromDate(waktu),
     divalidasi_oleh: p.petugas, waktu_validasi: serverTimestamp(),
   }, { merge: true });

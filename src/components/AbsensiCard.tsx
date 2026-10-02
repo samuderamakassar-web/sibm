@@ -19,6 +19,7 @@ import { db } from "../lib/firebase";
 import { tanggalISOWITASekarang } from "../lib/shift";
 import { useToast } from "./ui/ToastProvider";
 import { FITUR_ABSENSI_AKTIF } from "../lib/fitur";
+import { daerahTulis } from "@/lib/daerah";
 
 interface AbsensiDoc {
   nama: string;
@@ -72,7 +73,7 @@ function AbsensiCardIsi({ picName, departemen }: AbsensiCardProps) {
     if (!docId || !picName) return;
     setIsSaving(true);
     try {
-      await setDoc(doc(db, "attendance_logs", docId), {
+      await setDoc(doc(db, "attendance_logs", docId), { daerah: daerahTulis(),
         nama: picName,
         departemen,
         tanggal,
@@ -92,7 +93,7 @@ function AbsensiCardIsi({ picName, departemen }: AbsensiCardProps) {
     if (!docId || !picName) return;
     setIsSaving(true);
     try {
-      await setDoc(doc(db, "attendance_logs", docId), { waktu_checkout: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, "attendance_logs", docId), { daerah: daerahTulis(), waktu_checkout: serverTimestamp() }, { merge: true });
       showToast("Absen pulang berhasil dicatat. Terima kasih atas kerja hari ini!", "success");
     } catch (err) {
       console.error(err);

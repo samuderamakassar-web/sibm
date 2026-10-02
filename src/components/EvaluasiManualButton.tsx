@@ -29,6 +29,7 @@ import { useState } from "react";
 import { collection, addDoc, doc, updateDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useToast } from "./ui/ToastProvider";
+import { daerahTulis } from "@/lib/daerah";
 
 type IconProps = { size?: number; color?: string };
 const IconStar = ({ size = 13, color = "currentColor" }: IconProps) => (
@@ -94,7 +95,7 @@ export default function EvaluasiManualButton({ nama, departemen, sumberJenis, su
         }
       });
 
-      await addDoc(collection(db, "evaluasi_manual"), {
+      await addDoc(collection(db, "evaluasi_manual"), { daerah: daerahTulis(),
         nama, departemen, sumberJenis, sumberId, tanggalLaporan, delta: jumlah, alasan, dievaluasiOleh, waktu: serverTimestamp(),
       });
 

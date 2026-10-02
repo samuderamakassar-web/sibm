@@ -6,6 +6,7 @@ import { hitungShiftSesi, waktuWITASekarang } from "../lib/shift";
 import { type PengumumanGedung, dalamTanggalTayang, urutkanPengumuman } from "../lib/pengumuman";
 import PengumumanCarousel from "../components/PengumumanCarousel";
 import { FITUR_ABSENSI_AKTIF } from "../lib/fitur";
+import { gedungPortal } from "../lib/daerah";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, getCountFromServer, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
@@ -22,6 +23,7 @@ import { Table, THead, TBody, Tr, Th, Td } from "../components/ui/Table";
 import VehicleIcon3D from "../components/VehicleIcon3D";
 import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../lib/unitBisnis";
 import AdminShell from "../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // INTERFACES
@@ -504,6 +506,11 @@ export default function PortalSIBM() {
     return () => unsub();
   }, [todayISO]);
 
+  // 🏢 GEDUNG PORTAL (§78) -- link per gedung (?gedung=makassar, dicetak jadi QR) diingat di HP supaya data
+  // yang dikirim dari portal (lapor kerusakan, SBO, ATK, lembur) tertandai daerah yang benar. Tahap 1:
+  // belum menyaring tampilan.
+  useEffect(() => { gedungPortal(); }, []);
+
   // 👥 KEHADIRAN KARYAWAN (§67) -- versi PUBLIK: hanya nama & jumlah (tanpa foto/alasan; itu di hub admin).
   const [kehadiranKaryawan, setKehadiranKaryawan] = useState<{ lembur: string[]; tidakMasuk: string[] }>({ lembur: [], tidakMasuk: [] });
   useEffect(() => {
@@ -687,7 +694,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     setIsAtkLoading(true);
     const newResi = generateResiCode();
     try {
-      await addDoc(collection(db, "ga_atk_requests"), { resi: newResi, nama_pemohon: formAtkPemohon.nama, departemen: formAtkPemohon.dept, items: formAtkItems, status: "Menunggu Disiapkan", waktu_request: serverTimestamp() });
+      await addDoc(collection(db, "ga_atk_requests"), { daerah: daerahTulis(), resi: newResi, nama_pemohon: formAtkPemohon.nama, departemen: formAtkPemohon.dept, items: formAtkItems, status: "Menunggu Disiapkan", waktu_request: serverTimestamp() });
 
       // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — rincian per barang dalam tabel
       kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, formAtkPemohon.dept, [{ label: "Kode Resi", value: newResi }], {
@@ -729,7 +736,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     }
     setIsOvertimeLoading(true);
     try {
-      await addDoc(collection(db, "ga_overtime_requests"), {
+      await addDoc(collection(db, "ga_overtime_requests"), { daerah: daerahTulis(),
         nama_pemohon: formOvertime.nama,
         departemen: formOvertime.dept,
         area_ruangan: formOvertime.area,
@@ -821,7 +828,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     }
     setIsSboLoading(true);
     try {
-      await addDoc(collection(db, "qhse_sbo_reports"), {
+      await addDoc(collection(db, "qhse_sbo_reports"), { daerah: daerahTulis(),
         ...formSbo,
         nama_pelapor: formSbo.nama_pelapor || "Anonim / Visitor",
         foto_bukti: fotoSbo,
@@ -850,7 +857,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     }
     setIsHelpdeskLoading(true);
     try {
-      await addDoc(collection(db, "helpdesk_tickets"), {
+      await addDoc(collection(db, "helpdesk_tickets"), { daerah: daerahTulis(),
         nama_pelapor: formHelpdesk.nama,
         departemen: formHelpdesk.dept,
         lokasi: formHelpdesk.lokasi,

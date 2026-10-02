@@ -8,6 +8,7 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { hitungShiftSesi, waktuWITASekarang, sesiMinimumTerpenuhi, BATAS_SESI, MINIMUM_SESI_PER_SHIFT, ShiftSesiInfo } from "../../lib/shift";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -433,7 +434,7 @@ export default function PatroliSecurityPage() {
     setIsLoading(true);
     try {
       const sesiSaatSubmit = hitungShiftSesi(waktuWITASekarang());
-      await addDoc(collection(db, "security_patrols"), {
+      await addDoc(collection(db, "security_patrols"), { daerah: daerahTulis(),
         petugas: picName,
         waktu_laporan: serverTimestamp(),
         tanggal_shift: sesiSaatSubmit.tanggal_shift,

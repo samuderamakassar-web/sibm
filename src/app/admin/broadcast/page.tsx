@@ -8,6 +8,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import { PengumumanSlide, PengumumanStyle } from "../../../components/PengumumanCarousel";
+import { daerahTulis } from "@/lib/daerah";
 import {
   type JenisPengumuman,
   type PengumumanGedung,
@@ -180,7 +181,7 @@ export default function BroadcastAdminPage() {
       }
       if (mulai) data.mulai = mulai;
       if (berakhir) data.berakhir = berakhir;
-      await addDoc(collection(db, "pengumuman_gedung"), data);
+      await addDoc(collection(db, "pengumuman_gedung"), { ...data, daerah: daerahTulis() });
       resetForm();
       setShowForm(false);
       showToast(

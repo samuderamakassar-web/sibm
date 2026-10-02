@@ -19,6 +19,7 @@ import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
 import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, menitSejakBatasShift, AMBANG_TELAT_SERAH_TERIMA_MENIT, TOLERANSI_JENDELA_TUKAR_JAGA_MENIT, ShiftLabel } from "../../lib/shift";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 type IconProps = { size?: number; color?: string };
 const IconQrCode = ({ size = 36, color = "currentColor" }: IconProps) => (
@@ -102,7 +103,7 @@ export default function TukarShiftSecurityPage() {
     if (!myName) return;
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "security_shift_handover"), {
+      await addDoc(collection(db, "security_shift_handover"), { daerah: daerahTulis(),
         tanggal_shift: info.tanggal_shift,
         shift: info.shift,
         petugas_keluar: myName,

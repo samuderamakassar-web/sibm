@@ -9,6 +9,7 @@ import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
 import { normalizePlat } from "../../../lib/platUtils";
 import AdminShell from "../../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security/parkir (tampilan dibuat sama persis)
@@ -191,7 +192,7 @@ export default function DriverArmadaPage() {
     if (sudahHadir) return;
 
     try {
-      await addDoc(collection(db, "security_visitor_logs"), {
+      await addDoc(collection(db, "security_visitor_logs"), { daerah: daerahTulis(),
         nama: karyawanCocok.nama,
         instansi_dept: karyawanCocok.departemen || "",
         no_kendaraan: kendaraan.plat_nomor || "",
@@ -256,7 +257,7 @@ export default function DriverArmadaPage() {
   // itu yang beneran berarti driver-nya sedang bertugas di luar bareng kendaraan itu. Parkir/Standby &
   // Pulang (aksi instan) cuma soal status KENDARAAN, jadi TIDAK ikut mengubah status kesiagaan driver.
   const catatPergerakan = async (kendaraanNama: string, status: string, tujuanIsi: string, kmIsi: string, syncDriverStatus: boolean) => {
-    await addDoc(collection(db, "operational_vehicle_logs"), {
+    await addDoc(collection(db, "operational_vehicle_logs"), { daerah: daerahTulis(),
       petugas_security: "Aplikasi Driver",
       waktu_catat: serverTimestamp(),
       kendaraan: kendaraanNama,
@@ -267,7 +268,7 @@ export default function DriverArmadaPage() {
     });
 
     if (syncDriverStatus) {
-      await addDoc(collection(db, "driver_status_logs"), {
+      await addDoc(collection(db, "driver_status_logs"), { daerah: daerahTulis(),
         nama_driver: activeDriver,
         status: autoDriverStatus(status),
         waktu_ubah: serverTimestamp(),

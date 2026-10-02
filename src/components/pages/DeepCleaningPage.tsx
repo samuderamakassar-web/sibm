@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 interface DeepCleaningTask {
   id: string;
@@ -94,7 +95,7 @@ export default function DeepCleaningPage() {
 
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "deep_cleaning_tasks"), {
+      await addDoc(collection(db, "deep_cleaning_tasks"), { daerah: daerahTulis(),
         tanggal: formData.tanggal,
         area: formData.area,
         tugas: formData.tugas,

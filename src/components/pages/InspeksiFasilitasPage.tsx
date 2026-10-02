@@ -8,6 +8,7 @@ import { kirimEmail } from "@/lib/notify";
 import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
 import { useToast } from "@/components/ui/ToastProvider";
 import AdminShell from "../admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain
@@ -276,7 +277,7 @@ export default function InspeksiFasilitasPage() {
 
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "inspeksi_fasilitas"), {
+      await addDoc(collection(db, "inspeksi_fasilitas"), { daerah: daerahTulis(),
         area: selectedArea,
         pic_bertugas: picName,
         minggu_mulai: seninMingguIni,
@@ -290,7 +291,7 @@ export default function InspeksiFasilitasPage() {
       // email sama sekali buat temuan dari inspeksi) supaya langsung ketahuan, bukan cuma
       // nongol diam-diam di tabel admin/helpdesk.
       const rusak = semuaDinilai.filter((h) => h.kondisi === "Rusak");
-      await Promise.all(rusak.map((h) => addDoc(collection(db, "helpdesk_tickets"), {
+      await Promise.all(rusak.map((h) => addDoc(collection(db, "helpdesk_tickets"), { daerah: daerahTulis(),
         nama_pelapor: picName,
         departemen: "OB & CS",
         waktu_lapor: serverTimestamp(),

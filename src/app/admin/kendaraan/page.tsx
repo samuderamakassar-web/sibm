@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { daerahTulis } from "@/lib/daerah";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy,
   where, Timestamp, serverTimestamp
@@ -628,7 +629,7 @@ export default function ManajemenKendaraanPage() {
         await updateDoc(doc(db, "master_kendaraan", editingId), dataToSave);
         showToast(`Data ${dataToSave.kendaraan} berhasil diperbarui.`, "success");
       } else {
-        await addDoc(collection(db, "master_kendaraan"), dataToSave);
+        await addDoc(collection(db, "master_kendaraan"), { ...dataToSave, daerah: daerahTulis() });
         showToast(`${dataToSave.kendaraan} berhasil ditambahkan.`, "success");
       }
 
@@ -657,7 +658,7 @@ export default function ManajemenKendaraanPage() {
         const kendaraanId = buildKendaraanId(parsed.plat_nomor, parsed.pic_kendaraan, parsed.unit_bisnis);
         const sudahAda = kendaraanList.some((k) => k.kendaraan.toLowerCase() === kendaraanId.toLowerCase());
         if (sudahAda) continue;
-        await addDoc(collection(db, "master_kendaraan"), {
+        await addDoc(collection(db, "master_kendaraan"), { daerah: daerahTulis(),
           kendaraan: kendaraanId,
           plat_nomor: parsed.plat_nomor,
           jenis: "",
@@ -748,7 +749,7 @@ export default function ManajemenKendaraanPage() {
     }
     setIsSavingOdometer(true);
     try {
-      await addDoc(collection(db, "kendaraan_odometer_logs"), {
+      await addDoc(collection(db, "kendaraan_odometer_logs"), { daerah: daerahTulis(),
         kendaraan_id: logTargetKendaraan.id,
         kendaraan: logTargetKendaraan.kendaraan,
         odometer: Number(formOdometer.odometer),
@@ -809,7 +810,7 @@ export default function ManajemenKendaraanPage() {
     }
     setIsSavingService(true);
     try {
-      await addDoc(collection(db, "kendaraan_service_logs"), {
+      await addDoc(collection(db, "kendaraan_service_logs"), { daerah: daerahTulis(),
         kendaraan_id: logTargetKendaraan.id,
         kendaraan: logTargetKendaraan.kendaraan,
         tanggal: formService.tanggal,

@@ -11,6 +11,7 @@ import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "../../../lib/uploadD
 import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
+import { daerahTulis } from "@/lib/daerah";
 
 type Jenis = "Legalitas" | "Perizinan" | "Perjanjian";
 
@@ -143,7 +144,7 @@ export default function AdminLegalitasPage() {
         diupload_pada: todayISO(),
       };
       if (modalMode === "baru") {
-        await addDoc(collection(db, "master_legalitas"), {
+        await addDoc(collection(db, "master_legalitas"), { daerah: daerahTulis(),
           nama_dokumen: formData.nama_dokumen.trim(),
           jenis: formData.jenis,
           riwayat: [versiBaru],

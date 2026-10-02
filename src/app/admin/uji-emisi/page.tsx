@@ -8,6 +8,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
 import AdminShell from "../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan admin/apar/page.tsx & shell admin
@@ -154,7 +155,7 @@ export default function UjiEmisiPage() {
     if (!editTarget) return;
     setIsSaving(true);
     try {
-      await setDoc(doc(db, "kendaraan_uji_emisi", editTarget.id), {
+      await setDoc(doc(db, "kendaraan_uji_emisi", editTarget.id), { daerah: daerahTulis(),
         ...form,
         waktu_update: serverTimestamp(),
         diupdate_oleh: adminName,

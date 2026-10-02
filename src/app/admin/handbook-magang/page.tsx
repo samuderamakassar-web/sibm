@@ -8,6 +8,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "../../../lib/uploadDokumen";
 import AdminShell from "../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // Ikon SVG garis — konsisten dengan admin/broadcast & admin/sop
 type IconProps = { size?: number; color?: string };
@@ -104,7 +105,7 @@ export default function HandbookMagangAdminPage() {
 
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "handbook_magang"), {
+      await addDoc(collection(db, "handbook_magang"), { daerah: daerahTulis(),
         judul: judul.trim(),
         jenis,
         url: urlFinal,

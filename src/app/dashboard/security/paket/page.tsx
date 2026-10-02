@@ -16,6 +16,7 @@ import Textarea from "../../../../components/ui/Textarea";
 import Badge from "../../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../../components/ui/Table";
 import AdminShell from "../../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -270,7 +271,7 @@ export default function PaketPage() {
     try {
       const waktuKirim = new Date(); // serverTimestamp() belum resolve saat itu juga -- pakai jam lokal untuk isi notif/email
       const fotoUrl = await dataUrlKeCloudinary(previewUrl, "sibm/paket");
-      await addDoc(collection(db, "packages"), {
+      await addDoc(collection(db, "packages"), { daerah: daerahTulis(),
         jenis_barang: jenisBarang,
         penerima: penerima,
         kurir: kurir,

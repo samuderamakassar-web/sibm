@@ -32,6 +32,7 @@ const BATAS_LEMBUR_JAM = 4;
 const BATAS_DI_GEDUNG_JAM = 12;
 const MENIT_TANYA_ULANG_PULANG = 45;
 const SLOT_CEK_MASUK = ["09", "13"];
+const DAERAH_DEFAULT = "Makassar"; // §78: penanda daerah dokumen (tahap 1, sebelum cron per daerah)
 
 // ---------- waktu WITA ----------
 const FMT_TGL = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
@@ -152,7 +153,7 @@ async function cekBelumInput() {
     }
     if (k && k.status !== "menunggu") continue; // sudah dijawab Security
     if (!k) tulis.push([db.collection("validasi_karyawan").doc(id), {
-      jenis: "belum_input", tanggal: hariIni, nama: e.nama, departemen: e.departemen || "-",
+      jenis: "belum_input", tanggal: hariIni, nama: e.nama, departemen: e.departemen || "-", daerah: e.daerah || DAERAH_DEFAULT,
       status: "menunggu", dibuat_pada: FieldValue.serverTimestamp(),
     }, "set"]);
     menunggu.push(e.nama);
@@ -186,7 +187,7 @@ async function cekLembur() {
     const snap = await ref.get();
     if (!snap.exists) {
       await ref.set({
-        jenis: "lembur", tanggal: tgl, nama: s.nama, departemen: s.instansi_dept || "-", status: "menunggu",
+        jenis: "lembur", tanggal: tgl, nama: s.nama, departemen: s.instansi_dept || "-", status: "menunggu", daerah: s.daerah || DAERAH_DEFAULT,
         visitor_log_id: s.id, waktu_masuk: s.waktu_masuk, dibuat_pada: FieldValue.serverTimestamp(),
       });
       baru.push(s.nama); menungguTotal++;
@@ -259,7 +260,7 @@ async function pantauJamKerja() {
     const ref = db.collection("pemantauan_jam_kerja").doc(s.id);
     if ((await ref.get()).exists) continue;
     await ref.set({
-      nama: s.nama, departemen: s.instansi_dept || "-", tanggal: tanggalWITA(masuk), waktu_masuk: s.waktu_masuk,
+      nama: s.nama, departemen: s.instansi_dept || "-", tanggal: tanggalWITA(masuk), waktu_masuk: s.waktu_masuk, daerah: s.daerah || DAERAH_DEFAULT,
       pemicu, jam_di_gedung_saat_lapor: Math.round(jamGedung * 10) / 10, jam_lembur_saat_lapor: Math.round(jamLembur * 10) / 10,
       status: "berlangsung", dilaporkan_pada: FieldValue.serverTimestamp(),
     });

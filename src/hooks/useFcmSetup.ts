@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
 import { doc, setDoc } from "firebase/firestore";
+import { daerahTulis } from "@/lib/daerah";
 import { db, app } from "@/lib/firebase"; // sesuaikan: pastikan lib/firebase.ts mengekspor `app` (hasil initializeApp)
 
 // GANTI dengan VAPID public key dari Firebase Console
@@ -46,7 +47,7 @@ export function useFcmSetup(picName: string, aktif: boolean, dept?: string) {
         if (token) {
           // Simpan token supaya API route reminder tau mau kirim push ke siapa.
           // Pakai nama sebagai key sementara karena app ini belum pakai Firebase Auth UID.
-          await setDoc(doc(db, "fcm_tokens", picName), {
+          await setDoc(doc(db, "fcm_tokens", picName), { daerah: daerahTulis(),
             pic_nama: picName,
             token,
             dept: dept || "",

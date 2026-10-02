@@ -7,6 +7,7 @@ import { db } from "../../../../lib/firebase";
 import { useToast } from "../../../../components/ui/ToastProvider";
 import { normalizePlat } from "../../../../lib/platUtils";
 import AdminShell from "../../../../components/admin/AdminShell";
+import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -238,7 +239,7 @@ export default function LogOperasionalPage() {
     if (sudahHadir) return;
 
     try {
-      await addDoc(collection(db, "security_visitor_logs"), {
+      await addDoc(collection(db, "security_visitor_logs"), { daerah: daerahTulis(),
         nama: karyawanCocok.nama,
         instansi_dept: karyawanCocok.departemen || "",
         no_kendaraan: kendaraan.plat_nomor || "",
@@ -343,7 +344,7 @@ export default function LogOperasionalPage() {
       const logTerkini = statusPerKendaraan[kendaraan.kendaraan];
       const driverTerakhir = logTerkini?.driver_bertugas && logTerkini.driver_bertugas !== "-" ? logTerkini.driver_bertugas : "-";
 
-      await addDoc(collection(db, "operational_vehicle_logs"), {
+      await addDoc(collection(db, "operational_vehicle_logs"), { daerah: daerahTulis(),
         petugas_security: picName,
         waktu_catat: serverTimestamp(),
         kendaraan: kendaraan.kendaraan,
@@ -358,7 +359,7 @@ export default function LogOperasionalPage() {
       // ia ubah sendiri. Hanya dari status keluar/bengkel, jadi Off Duty manual tidak tertimpa.
       const dariLuar = logTerkini && (logTerkini.status_kendaraan === "Keluar Beroperasi" || logTerkini.status_kendaraan === "Masuk Bengkel / Service");
       if (dariLuar && DRIVER_ONLY.includes(driverTerakhir)) {
-        await addDoc(collection(db, "driver_status_logs"), {
+        await addDoc(collection(db, "driver_status_logs"), { daerah: daerahTulis(),
           nama_driver: driverTerakhir,
           status: autoDriverStatus(aksi.status),
           waktu_ubah: serverTimestamp(),
@@ -397,7 +398,7 @@ export default function LogOperasionalPage() {
 
     setIsLoadingAksi(true);
     try {
-      await addDoc(collection(db, "operational_vehicle_logs"), {
+      await addDoc(collection(db, "operational_vehicle_logs"), { daerah: daerahTulis(),
         petugas_security: picName,
         waktu_catat: serverTimestamp(),
         kendaraan: modalAksi.kendaraan.kendaraan,
@@ -409,7 +410,7 @@ export default function LogOperasionalPage() {
 
       // 💡 AUTO-UPDATE STATUS DRIVER — hanya untuk driver tetap (Amal/Renaldy), bukan Karyawan umum
       if (DRIVER_ONLY.includes(driverMobil)) {
-        await addDoc(collection(db, "driver_status_logs"), {
+        await addDoc(collection(db, "driver_status_logs"), { daerah: daerahTulis(),
           nama_driver: driverMobil,
           status: autoDriverStatus(modalAksi.status),
           waktu_ubah: serverTimestamp(),
