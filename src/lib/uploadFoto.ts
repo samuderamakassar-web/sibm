@@ -52,3 +52,16 @@ export function handleFotoUpload(
   };
   reader.readAsDataURL(file);
 }
+
+/**
+ * §69: foto yang masih berupa data URL (base64) diunggah ke Cloudinary dan dikembalikan URL-nya.
+ * Dulu helpdesk (foto hasil) & paket (foto terima/serah) menyimpan base64 LANGSUNG di dokumen
+ * Firestore -> tiap dokumen membawa puluhan-ratusan KB gambar yang ikut terunduh di setiap listener
+ * (portal, halaman paket) & ikut ke email (melebihi batas ukuran EmailJS). Nilai yang sudah URL
+ * (atau kosong) dikembalikan apa adanya.
+ */
+export async function dataUrlKeCloudinary(nilai: string, folder: string): Promise<string> {
+  if (!nilai || !nilai.startsWith("data:")) return nilai;
+  const blob = await (await fetch(nilai)).blob();
+  return uploadFotoToCloudinary(blob, folder);
+}

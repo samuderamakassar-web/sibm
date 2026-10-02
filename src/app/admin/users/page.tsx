@@ -186,6 +186,19 @@ export default function UserManagementPage() {
       };
 
       if (isEditMode && editId) {
+        // §69: banyak data memakai NAMA sebagai kunci (roster Security, patroli, plot OB, token
+        // notifikasi, klaim lembur) -> ganti nama memutus riwayat lama dari akun ini.
+        const namaLama = users.find((u) => u.id === editId)?.nama || "";
+        if (namaLama && namaLama.trim() !== formData.nama.trim()) {
+          const lanjut = await confirm({
+            title: "Ganti Nama Staf?",
+            message: `Nama "${namaLama}" akan diganti menjadi "${formData.nama.trim()}". Roster, riwayat patroli/checklist, plot OB, klaim lembur & notifikasi yang tercatat dengan nama lama TIDAK ikut berubah, dan staf perlu login ulang agar notifikasi tersambung. Lanjutkan hanya untuk koreksi ejaan yang memang perlu.`,
+            confirmText: "Ya, ganti nama",
+            cancelText: "Batal",
+            variant: "danger",
+          });
+          if (!lanjut) { setIsLoading(false); return; }
+        }
         const userRef = doc(db, "users_master", editId);
         await updateDoc(userRef, { ...userDataToSave, waktu_update: serverTimestamp() });
         showToast("Data pengguna berhasil diperbarui!", "success");

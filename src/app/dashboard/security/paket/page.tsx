@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs, where, limit, type QuerySnapshot } from "firebase/firestore";
+import { dataUrlKeCloudinary } from "../../../../lib/uploadFoto";
 import { db } from "../../../../lib/firebase";
 import { kirimEmail } from "../../../..//lib/notify";
 import { buildPaketEmailHtml } from "../../../../lib/emailTemplates";
@@ -268,6 +269,7 @@ export default function PaketPage() {
 
     try {
       const waktuKirim = new Date(); // serverTimestamp() belum resolve saat itu juga -- pakai jam lokal untuk isi notif/email
+      const fotoUrl = await dataUrlKeCloudinary(previewUrl, "sibm/paket");
       await addDoc(collection(db, "packages"), {
         jenis_barang: jenisBarang,
         penerima: penerima,
@@ -276,13 +278,13 @@ export default function PaketPage() {
         waktu_diterima: serverTimestamp(),
         waktu_diambil: null,
         status: "Belum Diambil",
-        foto_bukti_url: previewUrl,
+        foto_bukti_url: fotoUrl,
         foto_bukti_ambil_url: "",
         petugas_input: picName,
         petugas_ambil: "",
       });
 
-      await kirimNotifikasiPaketDiterima(penerima, jenisBarang, kurir, keterangan, waktuKirim, previewUrl);
+      await kirimNotifikasiPaketDiterima(penerima, jenisBarang, kurir, keterangan, waktuKirim, fotoUrl);
 
       setPenerima("");
       setKurir("");
@@ -315,7 +317,7 @@ export default function PaketPage() {
       await updateDoc(doc(db, "packages", serahkanTarget.id), {
         waktu_diambil: serverTimestamp(),
         status: "Sudah Diambil",
-        foto_bukti_ambil_url: fotoSerahTerima,
+        foto_bukti_ambil_url: await dataUrlKeCloudinary(fotoSerahTerima, "sibm/paket"),
         petugas_ambil: picName,
       });
       showToast(`Paket berhasil diserahkan ke ${serahkanTarget.penerima}.`, "success");

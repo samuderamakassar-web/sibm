@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp, where } from "firebase/firestore";
+import { daftarTahunSejak, rentangBulanTahun } from "../../../lib/rentangFilter";
 import * as XLSX from "xlsx";
+import { dataUrlKeCloudinary } from "../../../lib/uploadFoto";
 import { db } from "../../../lib/firebase";
 import { kirimEmail } from "../../../lib/notify";
 import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
@@ -50,7 +52,15 @@ export default function AdminHelpdeskPage() {
     redirectTo: "/",
     deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
   });
-  const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
+  // §69: dulu SELURUH tiket (termasuk tiket lama ber-foto base64) dibaca ulang tiap perubahan.
+  // Sekarang tiket belum selesai (selalu tampil) + tiket dalam rentang filter bulan/tahun (default 90 hari).
+  const [tiketTerbuka, setTiketTerbuka] = useState<HelpdeskTicket[]>([]);
+  const [tiketRentang, setTiketRentang] = useState<HelpdeskTicket[]>([]);
+  const tickets: HelpdeskTicket[] = (() => {
+    const map = new Map<string, HelpdeskTicket>();
+    [...tiketRentang, ...tiketTerbuka].forEach((tk) => map.set(tk.id, tk));
+    return Array.from(map.values()).sort((a, b) => (b.waktu_lapor?.toMillis() || 0) - (a.waktu_lapor?.toMillis() || 0));
+  })();
   const [isReady, setIsReady] = useState(false);
   const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
 
@@ -66,14 +76,23 @@ export default function AdminHelpdeskPage() {
   // (bukan 1 dropdown gabungan "Agustus 2026") biar bisa lihat "semua Agustus lintas tahun" dst.
   const [filterBulan, setFilterBulan] = useState<string>("SEMUA");
   const [filterTahun, setFilterTahun] = useState<string>("SEMUA");
+  const rentang = rentangBulanTahun(filterBulan, filterTahun, "SEMUA", 90);
+  useEffect(() => {
+    if (!isAuthReady || !session) return;
+    const syarat = [where("waktu_lapor", ">=", Timestamp.fromDate(rentang.dari))];
+    if (rentang.sampai) syarat.push(where("waktu_lapor", "<", Timestamp.fromDate(rentang.sampai)));
+    const unsub = onSnapshot(query(collection(db, "helpdesk_tickets"), ...syarat, orderBy("waktu_lapor", "desc")), (snap) => {
+      setTiketRentang(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HelpdeskTicket)));
+    }, (err) => console.error("[helpdesk] Gagal memuat tiket:", err));
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rentang.kunci mewakili rentang
+  }, [isAuthReady, session, rentang.kunci]);
 
   useEffect(() => {
     if (!isAuthReady || !session) return;
 
-    const q = query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as HelpdeskTicket));
-      setTickets(data);
+    const unsubscribe = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "!=", "Selesai")), (snap) => {
+      setTiketTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HelpdeskTicket)));
       setIsReady(true);
     });
 
@@ -157,7 +176,7 @@ export default function AdminHelpdeskPage() {
       const ref = doc(db, "helpdesk_tickets", selectedTicket.id);
       await updateDoc(ref, {
         status: statusUbah,
-        foto_proses: fotoHasil || null,
+        foto_proses: (await dataUrlKeCloudinary(fotoHasil, "sibm/helpdesk")) || null,
         ...(baruTertutup ? { waktu_selesai: serverTimestamp() } : {}),
       });
 
@@ -204,9 +223,7 @@ export default function AdminHelpdeskPage() {
   };
 
   const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-  const tahunTersedia = Array.from(
-    new Set(tickets.filter((t) => t.waktu_lapor).map((t) => String(t.waktu_lapor!.toDate().getFullYear())))
-  ).sort().reverse();
+  const tahunTersedia = daftarTahunSejak().map(String);
 
   const filteredTickets = tickets.filter((t) => {
     const matchStatus = filterStatus === "Semua" || t.status === filterStatus;
@@ -247,7 +264,7 @@ export default function AdminHelpdeskPage() {
 
   return (
     <AdminShell title="Helpdesk & Tiket Kerusakan" subtitle="Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung" userName={adminName}>
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{__html: `
 
         .helpdesk-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
         .helpdesk-table th { padding: 12px 15px; font-weight: bold; }
