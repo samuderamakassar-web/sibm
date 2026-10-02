@@ -86,7 +86,7 @@ export default function AdminShell({
             <div className="sa-logo">
               {/* eslint-disable-next-line @next/next/no-img-element -- static export, gambar kecil lokal */}
               <img className="sa-logo-mark" src="/icons/logo-mark.png" alt="Samudera" width={38} height={38} />
-              <span>
+              <span className="sa-logo-teks">
                 SIBM <span className="sa-logo-sub">{brandSub}</span>
               </span>
             </div>

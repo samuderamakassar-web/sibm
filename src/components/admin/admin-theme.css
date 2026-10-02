@@ -64,7 +64,11 @@
   color: var(--ink);
   font-family: var(--font-jakarta), system-ui, sans-serif;
   min-height: 100vh;
+  /* overflow-x: hidden menjadikan .sibm-admin wadah scroll sendiri -> header position:sticky ikut
+     tergulir (tidak menempel). clip memotong overflow horizontal TANPA membuat wadah scroll.
+     hidden tetap ditulis sebagai cadangan untuk browser lama yang belum kenal clip. */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Blok token gelap ditulis 2x (bukan typo): 1x untuk pilihan manual, 1x untuk ikut OS. */
@@ -162,10 +166,17 @@
   gap: 10px;
   min-width: 0;
 }
+.sa-header-left {
+  flex: 1 1 auto;
+}
+.sa-header-right {
+  flex: 0 0 auto;
+}
 
 .sa-logo {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 12px;
   font-weight: 700;
   font-size: 17px;
@@ -182,6 +193,11 @@
 .sa-logo-sub {
   font-weight: 500;
   color: var(--ink-soft);
+}
+.sa-logo-teks {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Tombol bulat 44px (target sentuh minimal) -- kembali, tema, logout. */
@@ -330,6 +346,41 @@
     padding: 0 6px;
   }
   .sa-hide-mobile {
+    display: none;
+  }
+}
+
+/* HP sempit: 4 tombol kanan (tema, lonceng, akun, keluar) + logo dulu melebihi 375px -> teks logo
+   tertimpa & tombol keluar terdorong keluar layar. Tombol diperkecil ke 40px (masih >= target sentuh
+   minimum), jarak dirapatkan, keterangan "Admin GA" disembunyikan. */
+@media (max-width: 480px) {
+  .sa-header {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .sa-header-left,
+  .sa-header-right {
+    gap: 6px;
+  }
+  .sa-icon-btn,
+  .sa-back-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .sa-account {
+    height: 40px;
+    padding: 0 4px;
+  }
+  .sa-logo {
+    gap: 8px;
+    font-size: 16px;
+  }
+  .sa-logo-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .sa-logo-sub {
     display: none;
   }
 }
