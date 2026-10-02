@@ -1008,7 +1008,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   };
   const formatDurasi = (menit: number) => `${Math.floor(menit / 60)} jam${menit % 60 ? ` ${menit % 60} mnt` : ""}`;
   const lemburAktif = overtimeMingguIni.filter((ot) => ot.status !== "Rejected");
-  const totalMenitLembur = lemburAktif.reduce((a, ot) => a + durasiMenitLembur(ot.jam_mulai, ot.jam_selesai), 0);
+  // "Berlangsung" = lembur divalidasi Security yang belum check-out (jam selesai masih kosong, §59).
+  const lemburBerlangsung = (ot: OvertimeLog) => ot.status === "Berlangsung" || !ot.jam_selesai;
+  const totalMenitLembur = lemburAktif.filter((ot) => !lemburBerlangsung(ot)).reduce((a, ot) => a + durasiMenitLembur(ot.jam_mulai, ot.jam_selesai), 0);
   const kelompokkanLembur = (daftar: OvertimeLog[]) => {
     const grup: { tanggal: string; item: OvertimeLog[] }[] = [];
     daftar.forEach((ot) => {
@@ -1768,7 +1770,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             <span className="status-op-teks">
               <span className="status-op-judul">Lembur Hari Ini</span>
               <span className="status-op-sub">
-                {lemburHariIni.length === 0 ? "Tidak ada lembur" : `${lemburHariIni.length} area · ${lemburHariIni.map((ot) => `${ot.area_ruangan} (${ot.jam_mulai}–${ot.jam_selesai})`).slice(0, 2).join(", ")}${lemburHariIni.length > 2 ? "…" : ""}`}
+                {lemburHariIni.length === 0 ? "Tidak ada lembur" : `${lemburHariIni.length} area · ${lemburHariIni.map((ot) => `${ot.area_ruangan} (${ot.jam_mulai}–${lemburBerlangsung(ot) ? "sekarang" : ot.jam_selesai})`).slice(0, 2).join(", ")}${lemburHariIni.length > 2 ? "…" : ""}`}
               </span>
               <span className="status-op-sub status-op-detail">{lemburAktif.length} pengajuan minggu ini</span>
             </span>
@@ -1876,8 +1878,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                     {g.item.map((ot) => (
                       <div key={ot.id} className="lembur-item">
                         <div className="lembur-jam">
-                          <b>{ot.jam_mulai}–{ot.jam_selesai}</b>
-                          <span>{formatDurasi(durasiMenitLembur(ot.jam_mulai, ot.jam_selesai))}</span>
+                          <b>{ot.jam_mulai}–{lemburBerlangsung(ot) ? "sekarang" : ot.jam_selesai}</b>
+                          <span>{lemburBerlangsung(ot) ? "berlangsung" : formatDurasi(durasiMenitLembur(ot.jam_mulai, ot.jam_selesai))}</span>
                         </div>
                         <div className="lembur-isi">
                           <div className="lembur-area">{ot.area_ruangan}</div>

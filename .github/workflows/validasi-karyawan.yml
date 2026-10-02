@@ -1,9 +1,9 @@
-name: Overtime Check-in Reminder
+name: Validasi Karyawan (Belum Input, Lembur, Jam Kerja)
 
 on:
   schedule:
-    # Tiap 30 menit sepanjang hari -- ambang 9 jam gak butuh presisi ke-menit, push ke Security
-    # sengaja diulang tiap run selama karyawan yang bersangkutan belum check-out.
+    # Tiap 30 menit (§59): slot cek belum-input 09:00 & 13:00, lembur mulai 18:00, tanya ulang
+    # "akan pulang" setelah 45 menit, pemantauan jam kerja QHSE. Logika jadwal ada di script.
     - cron: "*/30 * * * *"
   workflow_dispatch: {} # buat test manual dari tab Actions
 
@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Jalankan reminder overtime check-in
-        run: node scripts/overtime-checkin-reminder.mjs
+      - name: Jalankan validasi karyawan
+        run: node scripts/validasi-karyawan.mjs
         env:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}

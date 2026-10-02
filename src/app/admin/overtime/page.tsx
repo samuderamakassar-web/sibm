@@ -41,6 +41,15 @@ interface OvertimeRequest {
   jam_mulai?: string;
   jam_selesai?: string;
   alasan?: string;
+
+  // Lembur divalidasi Security (§59): jam mulai 18:00, jam selesai = check-out Buku Tamu,
+  // durasi_tagih_jam = dibulatkan ke atas per jam. status "Berlangsung" selama belum check-out.
+  sumber?: string;
+  durasi_tagih_jam?: number;
+  tanggal_selesai?: string;
+  jam_mulai_rencana?: string;
+  jam_selesai_rencana?: string;
+  validasi_security?: { oleh?: string; foto_url?: string };
 }
 
 interface KontakKaryawan {
@@ -257,6 +266,10 @@ export default function AdminOvertimePage() {
     XLSX.writeFile(workbook, `${namaFile}_${new Date().toISOString().split("T")[0]}.xlsx`);
   };
 
+  // Jam yang ditagihkan: hasil validasi Security (dibulatkan ke atas) kalau ada, selain itu dari jam pengajuan.
+  const jamTagihGedung = (req: OvertimeRequest): number =>
+    typeof req.durasi_tagih_jam === "number" ? req.durasi_tagih_jam : hitungDurasiJam(req.jam_mulai, req.jam_selesai);
+
   const handleExportGedung = () => {
     const filtered = dataGedung.filter(req => checkFilter(req, false));
     if (filtered.length === 0) return showToast("Data lembur Gedung masih kosong / tidak ada yang cocok dengan filter!", "warning");
@@ -269,7 +282,7 @@ export default function AdminOvertimePage() {
       req.tanggal ? formatTanggalHari(req.tanggal).split(",")[0] : "-",
       req.jam_mulai || "-",
       req.jam_selesai || "-",
-      hitungDurasiJam(req.jam_mulai, req.jam_selesai),
+      req.status === "Berlangsung" ? "Berlangsung" : jamTagihGedung(req),
       req.departemen || "-",
       req.area_ruangan || "-",
       formatJam(req.waktu_request),
@@ -574,7 +587,22 @@ export default function AdminOvertimePage() {
                       </td>
                       <td>
                         <div style={{ fontWeight: "bold", color: "var(--ink)" }}>📅 {formatTanggalHari(req.tanggal)}</div>
-                        <div style={{ fontSize: "12px", color: "var(--warn)", fontWeight: "bold", marginTop: "4px" }}>🕒 {req.jam_mulai || "-"} - {req.jam_selesai || "-"} ({hitungDurasiJam(req.jam_mulai, req.jam_selesai)} jam)</div>
+                        <div style={{ fontSize: "12px", color: "var(--warn)", fontWeight: "bold", marginTop: "4px" }}>
+                          🕒 {req.jam_mulai || "-"} - {req.status === "Berlangsung" ? "belum check-out" : (req.jam_selesai || "-")}
+                          {req.status === "Berlangsung" ? "" : ` (${jamTagihGedung(req)} jam${typeof req.durasi_tagih_jam === "number" ? " ditagih" : ""})`}
+                        </div>
+                        {req.status === "Berlangsung" && (
+                          <span style={{ display: "inline-block", marginTop: "6px", fontSize: "10.5px", fontWeight: 800, padding: "2px 8px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>Berlangsung</span>
+                        )}
+                        {req.jam_mulai_rencana && (
+                          <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>Rencana di portal: {req.jam_mulai_rencana} - {req.jam_selesai_rencana || "-"}</div>
+                        )}
+                        {req.validasi_security?.oleh && (
+                          <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>
+                            Divalidasi Security: {req.validasi_security.oleh}
+                            {req.validasi_security.foto_url && <> · <a href={req.validasi_security.foto_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)", fontWeight: 700 }}>lihat foto</a></>}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div style={{ fontSize: "11px", color: "var(--warn)", background: "var(--warn-50)", padding: "4px 8px", borderRadius: "6px", display: "inline-block", fontWeight: "bold", border: "1px solid var(--warn)" }}>

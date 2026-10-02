@@ -459,6 +459,7 @@ export default function SecurityDashboard() {
   // MENU UTAMA SECURITY — warna dipetakan ke token desain (lihat tokenColors di bawah)
   // hideOnMobile: true = card disembunyikan di HP karena modulnya sudah ada shortcut permanen di bottom nav
   const menuSecurity = [
+    { title: "Validasi Karyawan", desc: "Cek lembur lewat 18:00 & karyawan yang belum tercatat masuk.", path: "/dashboard/security/validasi", action: "link", token: "warn", icon: IconClock, hideOnMobile: false },
     { title: "Buku Tamu Digital", desc: "Registrasi tamu dan akses karyawan.", path: "/dashboard/security/buku-tamu", action: "link", token: "red", icon: IconUserPlus, hideOnMobile: true },
     { title: "Manajemen Paket", desc: "Pencatatan resi kurir & ekspedisi.", path: "/dashboard/security/paket", action: "link", token: "warn", icon: IconPackage, hideOnMobile: true },
     { title: "Patroli Area", desc: "Scan QR code & checklist keamanan.", path: "/dashboard/security/patroli", action: "link", token: "ok", icon: IconShield, hideOnMobile: false },
@@ -469,6 +470,17 @@ export default function SecurityDashboard() {
     { title: "Notifikasi Dadakan: Siram Tanaman", desc: "Upload bukti foto siram tanaman (Pagi 06:00-07:00 / Malam 20:00-22:00).", path: "/dashboard/security/notifikasi-dadakan", action: "link", token: "ok", icon: IconDroplet, hideOnMobile: false },
     { title: "Tukar Shift / Jaga", desc: "Serah terima jaga wajib scan QR ke petugas pengganti.", path: "/dashboard/security/tukar-shift", action: "link", token: "info", icon: IconQrCode, hideOnMobile: false },
   ];
+
+  // 🕘 VALIDASI KARYAWAN (§59) -- jumlah kartu yang menunggu jawaban (lembur & belum tercatat masuk).
+  const [jumlahValidasi, setJumlahValidasi] = useState(0);
+  useEffect(() => {
+    const hariIni = tanggalISOWITASekarang();
+    const kemarin = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date(Date.now() - 86400000));
+    const unsub = onSnapshot(query(collection(db, "validasi_karyawan"), where("tanggal", "in", [kemarin, hariIni])), (snap) => {
+      setJumlahValidasi(snap.docs.filter((d) => d.data().status === "menunggu").length);
+    }, (err) => console.error("[security] Gagal memuat validasi karyawan:", err));
+    return () => unsub();
+  }, []);
 
   const tokenColors: Record<string, { bg: string; color: string }> = {
     info: { bg: "var(--info-50)", color: "var(--info)" },
@@ -670,6 +682,20 @@ export default function SecurityDashboard() {
         )}
 
         {!isMagang && <AbsensiCard picName={picName} departemen="Security" />}
+
+        {!isMagang && jumlahValidasi > 0 && (
+          <button
+            type="button"
+            className="no-print"
+            onClick={() => router.push("/dashboard/security/validasi")}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", width: "100%", background: "var(--warn-50)", border: "none", borderRadius: "16px", padding: "14px 16px", marginTop: "10px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13px", fontWeight: 800, color: "var(--warn)" }}>
+              <IconClock size={18} /> {jumlahValidasi} karyawan perlu divalidasi (lembur / belum tercatat masuk)
+            </span>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>Buka &rarr;</span>
+          </button>
+        )}
 
         {/* 👑 MENU KHUSUS DANRU */}
         {isKoordinatorArea && (

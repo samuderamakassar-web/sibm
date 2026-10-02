@@ -7,6 +7,7 @@ import AbsensiCard from "../AbsensiCard";
 import { useFcmSetup } from "../../hooks/useFcmSetup";
 import AdminShell from "../admin/AdminShell";
 import Tile from "../admin/Tile";
+import PemantauanJamKerja from "../PemantauanJamKerja";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan portal utama & dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -157,6 +158,9 @@ export default function DashboardQHSEPage() {
       <div>
 
         <AbsensiCard picName={picName} departemen="QHSE" />
+
+        {/* ⏱️ PEMANTAUAN JAM KERJA (§59) -- lembur > 4 jam / > 12 jam di gedung, dari cron validasi-karyawan */}
+        <PemantauanJamKerja petugas={picName} />
 
         {/* 🔹 GRID MENU UTAMA QHSE */}
         <div className="admin-grid">

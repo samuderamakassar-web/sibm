@@ -171,30 +171,37 @@ export function buildOvertimeTercatatEmailHtml(p: {
 }
 
 /**
- * Notifikasi ke KARYAWAN (bukan PIC lembur ruangan) begitu check-in Buku Tamu Digital-nya
- * (jenis "Karyawan") sudah lebih dari 9 jam tanpa check-out -- pengingat overtime otomatis dari
- * pencatatan kehadiran fisik di gedung, terpisah dari alur pengajuan Overtime Gedung/AC yang sudah ada.
+ * Bukti lembur ke KARYAWAN saat check-out (§59) -- lembur yang divalidasi Security di lokasi,
+ * jam selesai = jam check-out Buku Tamu, jam tagih dibulatkan ke atas per jam.
  */
-export function buildOvertimeCheckinEmailHtml(p: {
-  namaKaryawan: string;
+export function buildLemburSelesaiEmailHtml(p: {
+  nama: string;
   departemen: string;
-  jamMasuk: string;
-  jamSekarang: string;
+  area: string;
+  tanggal: string;
+  jamMulai: string;
+  jamSelesai: string;
+  jamTagih: number;
+  divalidasiOleh: string;
 }): string {
   const rows = [
-    fieldRow("Jam Masuk (Buku Tamu)", escapeHtml(p.jamMasuk)),
-    fieldRow("Sudah Berlalu Sejak", escapeHtml(p.jamSekarang)),
-    fieldRow("Departemen", escapeHtml(p.departemen)),
+    fieldRow("Tanggal", escapeHtml(p.tanggal)),
+    fieldRow("Departemen / Tenant", escapeHtml(p.departemen)),
+    fieldRow("Area / Lantai", escapeHtml(p.area)),
+    fieldRow("Jam Lembur", `${escapeHtml(p.jamMulai)} &ndash; ${escapeHtml(p.jamSelesai)} (check-out)`),
+    fieldRow("Jam Ditagihkan", `<b>${p.jamTagih} jam</b> <span style="color:#71717a;font-weight:400;">(dibulatkan ke atas)</span>`),
+    fieldRow("Divalidasi Security", escapeHtml(p.divalidasiOleh)),
   ].join("");
 
   const body = `
     <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
-      Halo ${escapeHtml(p.namaKaryawan)}, Anda memasuki jam overtime (lebih dari 9 jam sejak check-in di Buku Tamu Digital gedung). Mohon segera konfirmasi ke Security sampai berapa lama Anda akan lembur. <strong>Abaikan email ini kalau Anda akan segera pulang.</strong>
+      Halo ${escapeHtml(p.nama)}, lembur Anda hari ini sudah tercatat berdasarkan validasi Security dan jam check-out di Buku Tamu gedung. Rincian ini akan masuk rekap tagihan:
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+    <p style="margin:16px 0 0 0;font-size:12px;color:#71717a;line-height:1.6;">Jam lembur dihitung mulai 18:00. Bila ada yang tidak sesuai, hubungi Admin GA.</p>
   `;
 
-  return emailShell("&#8987; Pengingat Jam Overtime", body);
+  return emailShell("&#9201; Lembur Gedung Tercatat", body);
 }
 
 /**

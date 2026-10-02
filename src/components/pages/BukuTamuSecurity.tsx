@@ -10,6 +10,7 @@ import Modal from "../ui/Modal";
 import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../../lib/unitBisnis";
 import { normalizePlat } from "../../lib/platUtils";
 import AdminShell from "../admin/AdminShell";
+import { jamWITA, normalNama, selesaikanLemburSaatCheckout, tanggalWITA } from "../../lib/validasiKaryawan";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -377,6 +378,28 @@ export default function BukuTamuSecurity() {
     if (jenisPengunjung === "Tamu Eksternal" && isUploadingFoto) {
       return showToast("Tunggu foto selesai diunggah dulu.", "warning");
     }
+
+    // 💡 ANTI DOBEL (§59) — karyawan yang masih "Di Dalam Area" hari ini tidak bisa di-check-in lagi;
+    // yang sudah check-out hari ini (mis. keluar makan siang) perlu konfirmasi "masuk kembali".
+    if (jenisPengunjung === "Karyawan") {
+      const hariIniISO = tanggalWITA(new Date());
+      const sesiHariIni = visitorLogs.filter((l) =>
+        l.jenis === "Karyawan" && normalNama(l.nama) === normalNama(searchKaryawan) && l.waktu_masuk && tanggalWITA(l.waktu_masuk.toDate()) === hariIniISO);
+      const terbuka = sesiHariIni.find((l) => l.status === "Di Dalam Area");
+      if (terbuka) {
+        return showToast(`Data sudah ada: ${searchKaryawan} sudah check-in pukul ${jamWITA(terbuka.waktu_masuk!.toDate())} dan belum check-out.`, "warning");
+      }
+      if (sesiHariIni.length > 0) {
+        const terakhir = sesiHariIni[0];
+        const lanjut = await confirm({
+          title: "Sudah Tercatat Hari Ini",
+          message: `${searchKaryawan} sudah check-in hari ini${terakhir.waktu_keluar ? ` dan check-out pukul ${jamWITA(terakhir.waktu_keluar.toDate())}` : ""}. Catat masuk kembali?`,
+          confirmText: "Ya, masuk kembali",
+          cancelText: "Batal",
+        });
+        if (!lanjut) return;
+      }
+    }
     setIsLoading(true);
 
     const jenisFinal: JenisPengunjung = jenisPengunjung === "Karyawan" ? "Karyawan" : kategoriEksternal;
@@ -442,10 +465,18 @@ export default function BukuTamuSecurity() {
     if (!yakin) return;
 
     try {
+      const waktuKeluar = new Date();
       await updateDoc(doc(db, "security_visitor_logs", id), {
         status: "Selesai / Keluar",
         waktu_keluar: serverTimestamp()
       });
+      // ⏱️ LEMBUR (§59) — isi jam selesai lembur dari jam check-out ini (gagal tidak membatalkan check-out;
+      // cron validasi-karyawan.mjs punya jalur cadangan).
+      const log = visitorLogs.find((l) => l.id === id);
+      if (log?.jenis === "Karyawan") {
+        selesaikanLemburSaatCheckout(id, log.waktu_masuk?.toDate() || null, waktuKeluar)
+          .catch((err) => console.error("[buku-tamu] Gagal menutup lembur:", err));
+      }
       showToast(`${namaPengunjung} berhasil di-check-out.`, "success");
     } catch (error) {
       console.error("Gagal Check-Out:", error);
