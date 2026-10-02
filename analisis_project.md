@@ -2745,3 +2745,12 @@ Commit `d9989e1`, SUDAH DI-DEPLOY. Backlog §65, keputusan privasi user: portal 
 - `src/components/KehadiranKaryawanPanel.tsx` di hub Admin GA (Tile lebar penuh): lembur (status lanjut / selesai dengan overtime) + foto validasi (klik buka penuh), area, pemvalidasi; tidak masuk hari ini + foto meja, alasan, keterangan; jumlah menunggu validasi & input susulan. Sumber `validasi_karyawan` tanggal kemarin & hari ini.
 - Portal: baris "Kehadiran Karyawan" di Status Operasional (jumlah + nama lembur/tidak masuk).
 - `buildTidakMasukEmailHtml` + kirim dari `ValidasiKaryawanPage` saat Security menandai tidak masuk (email dari employees_directory; gagal/tanpa email tidak menghalangi simpan).
+
+## 68. Nonaktifkan Absensi (Sakelar) + Banner Email ber-QR + Audit QHSE & Admin Tahap 1 (2 Oktober 2026)
+Commit `488ba2c` & `bde045b`, SUDAH DI-DEPLOY.
+- **Absensi dinonaktifkan (permintaan user: belum dibutuhkan):** `src/lib/fitur.ts` `FITUR_ABSENSI_AKTIF = false`. `AbsensiCard` jadi pembungkus yang mengembalikan null (isi lama di `AbsensiCardIsi`) -> hilang di dashboard Security/OB/Driver/QHSE & hub Admin (kotak di kartu sapaan disembunyikan); portal tidak membaca `attendance_logs` & Tim Bertugas kembali ke status jadwal (HADIR/JAGA "sesuai jadwal"). Aktifkan lagi: ubah ke `true`, build, deploy. Data lama tidak dihapus; `/admin/monitor-absensi` tetap ada (tidak di menu).
+- **Banner email:** `scripts/generate-email-banner.mjs` (sharp + devDependency `qrcode`) -> `public/email/sibm-banner.png` 1200x420 (penjelasan SIBM, 6 fitur, URL, QR ke https://sibm-app.web.app), terverifikasi HTTP 200. Semua email -- `emailShell` di `src/lib/emailTemplates.ts` + shell di 5 script (laptop, legalitas, points-deduction, shift-handover-escalation, validasi-karyawan) -- kini punya tombol "Buka Aplikasi SIBM" + banner yang bisa diketuk (lebar 468px, alt text).
+- **QHSE SBO:** OK secara umum (volume kecil, tanpa limit dibiarkan). Penutupan kini mencatat `ditutup_oleh`. Catatan: foto sesudah (after) masih opsional saat menutup -- belum diwajibkan (kebijakan QHSE, tanyakan user).
+- **Admin tahap 1 -- BUG:** admin/atk, admin/overtime, admin/report me-redirect pengguna tak berhak ke `/shift-checkin` (rute tidak ada -> 404) & menolak Administrator dept lain. Sekarang ke `/` dan `isAdministrator(pic_role)` diizinkan (selaras useAuthGuard).
+
+Sisa audit admin: helpdesk, kendaraan, users, karyawan, apar, uji-emisi, laptop, legalitas, sop, handbook, survei, monitor-* (ob/poin/cron/dadakan/tukar-shift), qr-manager.
