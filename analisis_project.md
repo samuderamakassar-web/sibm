@@ -2880,3 +2880,20 @@ Semua script cron (`validasi-karyawan`, `patroli-*`, `security-tugas`, `shift-ha
 
 ### 78E. Migrasi Data Lama SELESAI (3 Oktober 2026)
 User menjalankan workflow "Migrasi Daerah Data (manual)": run #1 `dry_run=true` -> 7.595 dokumen perlu diisi di 41 koleksi (terbesar: security_visitor_logs 2.815, notifikasi_checklist_ob 814, operational_vehicle_logs 803, ob_stock_logs 650, notifikasi_patroli 458, packages 406, ob_checklists 388; kendaraan_uji_emisi & handbook_magang 0). Run #2 `dry_run=false` -> **"SELESAI: 7595 dokumen diisi."** tanpa error. Semua data operasional lama kini ber-`daerah: "Makassar"`; data baru ditandai otomatis (78A). **Tahap 1 TUNTAS.** Prasyarat tahap 2 (filter baca per daerah) terpenuhi; tahap 2-4 menunggu kepastian daerah kedua (keputusan user). Workflow migrasi aman dijalankan ulang kapan saja (idempotent) -- mis. sebelum tahap 2 untuk menyapu dokumen yang mungkin terlewat.
+
+## 79. Master Titik Patroli Bisa Diatur Admin (3 Oktober 2026)
+Commit `4a878da`, SUDAH DI-DEPLOY. Permintaan user (koreksi karena renovasi) + keputusan "bisa diatur dari Admin".
+- `src/lib/titikPatroli.ts`: `TITIK_PATROLI_BAWAAN` (isi kode lama) + `useTitikPatroli()` (live `settings/titik_patroli`, fallback bawaan). ID titik = isi QR (tetap saat nama diganti); `idTitikBaru(lantai, nama)`.
+- `/admin/titik-patroli` (menu Alat & Master): ubah nama, **Nonaktif sementara** + keterangan (area renovasi), tambah/hapus titik (hapus = QR lama tak dikenali, disarankan nonaktif), tambah lantai; disusun sebagai draft lalu disimpan sekali.
+- Halaman Patroli Security: `buatGroupedPatroli(master, ...)` hanya titik aktif (nonaktif tidak wajib & tidak dihitung terlewat); Siram Tanaman & Cek AC tetap tambahan otomatis.
+- QR Code Generator: dari master yang sama -- **dulu salinan terpisah tanpa "Taman Belakang" & "Parkiran Utama"** (QR keduanya tidak bisa dicetak). Titik nonaktif tetap bisa dicetak (label "(nonaktif)").
+- Daftar titik per lantai saat ini dikirim ke user untuk dikoreksi langsung di menu baru.
+
+## 80. Booking Kendaraan & Ruangan (3 Oktober 2026) -- backlog §77 DIKERJAKAN
+Commit lihat git log, SUDAH DI-DEPLOY (hosting + rules + index). Keputusan user: langsung tercatat tanpa persetujuan; bentrok -> modal pemberitahuan; perubahan/pembatalan mendadak oleh admin; semua kendaraan Master Kendaraan; ruangan: Ruang Meeting Lt 1, Ruang Meeting Lt 3, Ruang Tamu (Lt 1), Ruang Kesehatan (Lt 3).
+- Data `booking` { daerah, jenis, objek_id (plat / id ruangan), objek_nama, nama_pemesan, departemen, mulai, sampai (Timestamp), keperluan, status aktif|dibatalkan, dibuat_pada, diubah_oleh/pada, dibatalkan_oleh/pada, alasan_batal }. `src/lib/booking.ts`: `RUANGAN_BOOKING`, `bookingObjek()` (index `booking(objek_id, sampai)`), `cariBentrok()` (overlap mulai < sampaiBaru && sampai > mulaiBaru, status aktif, kecuali diri sendiri), `buatBooking()`, input datetime-local dibaca sebagai WITA.
+- `src/components/BookingModal.tsx`: pilih objek, "SEDANG DIPAKAI SEKARANG", jadwal terdekat, form (nama harus dari Master Data Karyawan), modal bentrok "Jadwal sudah dibooking oleh ...".
+- Portal: ketuk kendaraan di kartu Armada -> booking kendaraan (tombol "Lihat riwayat" menggantikan filter lama), tanda "Dibooking" (listener `booking` sampai > sekarang); Menu Cepat "Booking Ruangan" (desktop grid 7 kolom; HP selebar 1 baris + grid dense).
+- `/admin/booking` (Layanan GA): per hari, filter jenis, opsi 30 hari lalu, Ubah jadwal (cek bentrok), Batalkan + alasan, tambah booking.
+- Rules: `booking` di koleksiOperasional + koleksiFormPublik (create tanpa login) + koleksiBacaPublik; diverifikasi REST (booking 200, fcm_tokens 403); query bentrok via REST runQuery berhasil (index siap).
+- Belum: notifikasi email/push booking (sengaja, kuota email §75); pengingat sebelum jam mulai; integrasi booking kendaraan dengan log keluar Security.
