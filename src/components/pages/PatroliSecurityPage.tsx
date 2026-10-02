@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, doc, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, doc, Timestamp, limit } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
@@ -193,26 +193,40 @@ export default function PatroliSecurityPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const GROUPED_PATROLI = useMemo(() => {
+  // §62: dulu dihitung SEKALI saat halaman dibuka -> kalau dibiarkan terbuka melewati pergantian
+  // sesi/shift, daftar titik (titik khusus Sesi 1 / Shift 2 hari kerja) tidak ikut berubah padahal
+  // laporan dicatat dengan sesi SAAT KIRIM -> status Sempurna/Sebagian bisa salah. Sekarang ikut
+  // shiftSesiInfo yang diperbarui tiap menit.
+  const [kunciSesi, setKunciSesi] = useState(() => {
     const now = waktuWITASekarang();
-    const weekend = isWeekend(now);
     const info = hitungShiftSesi(now);
-    return buatGroupedPatroli(info.sesi === "Sesi 1", !weekend && info.shift === "Shift 2");
-  }, []);
+    return `${info.sesi}|${info.shift}|${isWeekend(now) ? "we" : "wd"}`;
+  });
+  const GROUPED_PATROLI = useMemo(() => {
+    const [sesi, shift, hari] = kunciSesi.split("|");
+    return buatGroupedPatroli(sesi === "Sesi 1", hari === "wd" && shift === "Shift 2");
+  }, [kunciSesi]);
   const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), [GROUPED_PATROLI]);
-  const progressPersen = (scannedItems.length / totalTitikKeseluruhan) * 100;
   const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), [GROUPED_PATROLI]);
   const titikTerlewat = useMemo(
     () => semuaTitikPatroli.filter((t) => !scannedItems.some((s) => s.id === t.id)),
     [scannedItems, semuaTitikPatroli]
   );
   const belumLengkapAlasan = titikTerlewat.some((t) => !(alasanTerlewat[t.id] || "").trim());
+  // Hanya titik yang ada di daftar sesi ini yang dihitung (daftar bisa berubah saat ganti sesi).
+  const jumlahTerscanValid = semuaTitikPatroli.length - titikTerlewat.length;
+  const progressPersen = (jumlahTerscanValid / totalTitikKeseluruhan) * 100;
 
   // ==========================================
   // KEPATUHAN SESI PATROLI (Shift & Sesi aktif + progres minimal 2/3 sesi)
   // ==========================================
   useEffect(() => {
-    const perbaruiSesi = () => setShiftSesiInfo(hitungShiftSesi(waktuWITASekarang()));
+    const perbaruiSesi = () => {
+      const now = waktuWITASekarang();
+      const info = hitungShiftSesi(now);
+      setShiftSesiInfo(info);
+      setKunciSesi(`${info.sesi}|${info.shift}|${isWeekend(now) ? "we" : "wd"}`);
+    };
     perbaruiSesi();
     const interval = setInterval(perbaruiSesi, 60000);
     return () => clearInterval(interval);
@@ -388,7 +402,8 @@ export default function PatroliSecurityPage() {
     if (!picName) return;
 
     // Mengambil riwayat yang dilaporkan oleh user ini
-    const q = query(collection(db, "security_patrols"), where("petugas", "==", picName), orderBy("waktu_laporan", "desc"));
+    // §62: dibatasi 300 laporan terakhir (~3 bulan) -- dulu seluruh riwayat petugas tanpa batas.
+    const q = query(collection(db, "security_patrols"), where("petugas", "==", picName), orderBy("waktu_laporan", "desc"), limit(300));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: PatroliLog[] = [];
       snapshot.forEach(docSnap => data.push({ id: docSnap.id, ...docSnap.data() } as PatroliLog));
@@ -427,7 +442,7 @@ export default function PatroliSecurityPage() {
         titik_patroli: scannedItems,
         area_terlewat: titikTerlewat.map((t) => ({ id: t.id, nama: t.nama, alasan: alasanTerlewat[t.id] || "" })),
         catatan_shift: catatanUmum,
-        status: scannedItems.length === totalTitikKeseluruhan ? "Selesai Sempurna" : "Selesai Sebagian"
+        status: titikTerlewat.length === 0 ? "Selesai Sempurna" : "Selesai Sebagian"
       });
 
       setIsSuccess(true);
@@ -555,7 +570,7 @@ export default function PatroliSecurityPage() {
             <div className="panel" style={{ marginBottom: "25px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconTarget size={17} color="var(--muted)" /> Progres Keliling</h2>
-                <span style={{ fontWeight: "900", color: progressPersen === 100 ? "var(--ok)" : "var(--red-600)" }}>{scannedItems.length} / {totalTitikKeseluruhan} Titik</span>
+                <span style={{ fontWeight: "900", color: progressPersen === 100 ? "var(--ok)" : "var(--red-600)" }}>{jumlahTerscanValid} / {totalTitikKeseluruhan} Titik</span>
               </div>
               <div style={{ width: "100%", background: "var(--line)", borderRadius: "50px", height: "12px", overflow: "hidden" }}>
                 <div style={{ height: "100%", background: progressPersen === 100 ? "var(--ok)" : "linear-gradient(90deg, var(--red-600), var(--warn))", width: `${progressPersen}%`, transition: "width 0.5s ease-in-out" }}></div>
