@@ -30,6 +30,7 @@ export type StatusValidasi =
   | "diinput_susulan" // belum_input -> Security check-in susulan
   | "tidak_masuk" // belum_input -> ditandai tidak masuk
   | "sudah_hadir" // belum_input -> ternyata sudah check-in (diselesaikan otomatis)
+  | "libur" // belum_input -> tanggal ditandai hari libur setelah kartu dibuat (§71)
   | "lanjut" // lembur -> lanjut lembur, menunggu check-out
   | "akan_pulang" // lembur -> akan pulang, menunggu check-out
   | "selesai"; // lembur -> sudah check-out

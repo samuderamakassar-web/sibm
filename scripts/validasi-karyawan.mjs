@@ -119,7 +119,19 @@ const sesiTerbuka = (await db.collection("security_visitor_logs").where("status"
 async function cekBelumInput() {
   if (!hariKerja || jamSekarang < 9) return;
   const libur = (await db.collection("settings").doc("validasi_karyawan").get()).data()?.hari_libur || [];
-  if (libur.includes(hariIni)) { console.log("A. Hari libur (settings/validasi_karyawan), skip."); return; }
+  if (libur.includes(hariIni)) {
+    // §71: libur ditambahkan SETELAH kartu terlanjur dibuat (mis. jam 09:00) -> tutup kartunya supaya
+    // hilang dari halaman Validasi & banner Security.
+    const sisa = (await db.collection("validasi_karyawan").where("tanggal", "==", hariIni).get())
+      .docs.filter((d) => d.data().jenis === "belum_input" && d.data().status === "menunggu");
+    for (let i = 0; i < sisa.length; i += 400) {
+      const batch = db.batch();
+      sisa.slice(i, i + 400).forEach((d) => batch.update(d.ref, { status: "libur" }));
+      await batch.commit();
+    }
+    console.log(`A. Hari libur (settings/validasi_karyawan), skip. ${sisa.length} kartu ditutup.`);
+    return;
+  }
 
   const awalHari = Timestamp.fromDate(waktuWITA(hariIni, "00:00"));
   const masukHariIni = (await db.collection("security_visitor_logs").where("waktu_masuk", ">=", awalHari).get())
