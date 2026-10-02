@@ -6,7 +6,29 @@ Deploy: `next.config.ts` pakai `output: "export"` (static export murni) → API 
 
 ---
 
-## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (29 September 2026 — §58 TERBARU)
+## 0. 🔴 MULAI DARI SINI — Ringkasan & Lanjutan (2 Oktober 2026 — §74 TERBARU)
+
+### 🔴🔴 PALING URGENT (per 2 Oktober 2026)
+
+1. **Uji nyata setelah rotasi kunci (§74):** kirim 1 Lapor Kerusakan + foto dari portal -> email ke Admin GA masuk (dengan banner baru §68) & foto tampil di admin Helpdesk. EmailJS Public Key sekarang `TCk2X3epWHvsVcTWX` (di `.env.local` + 5 `scripts/*.mjs`). JANGAN klik "Refresh Keys" EmailJS tanpa memperbarui keduanya.
+2. **Kuota EmailJS gratis 200/bulan** hampir tidak cukup untuk fitur sekarang -- lihat rekomendasi pengurangan di §75 (keputusan user).
+3. **Cek alur Validasi Karyawan di produksi (§59/§65):** log Actions "Validasi Karyawan" (baris `A.`/`B.`/`C.`), halaman `/dashboard/security/validasi`, push 09:00/13:00/18:00/20:00, email bukti lembur saat check-out.
+4. **Isi Hari Libur** keagamaan & cuti bersama 2026/2027 di `/admin/hari-libur` (§71) sesuai SKB 3 Menteri.
+5. **Uji akses setelah rules tahap 2 (§72):** satu aksi baca/simpan per peran (Security, OB, Driver, QHSE, Admin) + portal tanpa login.
+6. Lama (masih berlaku): Admin GA & QHSE login + izinkan notifikasi browser (FCM); fase 2 multi-daerah ditunda (§56F).
+
+### Ringkasan sesi §59–§74 (terbaru dulu)
+
+- **§74** rotasi kunci selesai (Cloudinary Root dinonaktifkan, EmailJS Public Key baru, Use Private Key OFF). **§73** foto after SBO wajib.
+- **§72** rules tahap 2: baca koleksi non-publik wajib akun staf (insiden ~3-5 menit portal kosong karena kutip hilang -- lihat memory/aturan edit rules). **§71** halaman `/admin/hari-libur`.
+- **§68–§70** absensi dinonaktifkan (`src/lib/fitur.ts`), banner email ber-QR di semua email, audit admin selesai (foto base64 -> Cloudinary, tanggal UTC laptop/legalitas, rute 404, query dibatasi).
+- **§62–§67** audit staf: Security (roster ganti periode, patroli), logout "Akses Ditolak", `KlaimLemburModal` bersama, OB (plot live), Driver (status kembali saat kendaraan tiba), notifikasi push bisa diketuk + serah terima 20:00, panel Kehadiran & lembur (admin) + baris portal + email tidak masuk.
+- **§59–§61** Validasi Karyawan oleh Security (belum input 09/13, lembur 18:00 foto, jam selesai dari check-out, pemantauan QHSE), header sticky, rules tahap 1 (tulis wajib akun staf), batasi query tanpa batas.
+- **§58N–§58V** audit isi portal 9 bagian (angka dari data limit -> hitungan server, Pengumuman teks/gambar/video, dll.).
+
+---
+
+### (Arsip) Ringkasan per 29 September 2026
 
 Dokumen ini di-update biar chat/sesi berikutnya langsung nyambung tanpa baca ulang semua histori di bawah. **Daftar di bawah dicek ulang terhadap git history per 28 September** -- poin yang sudah selesai/tergantikan sudah dibuang (lihat §57C).
 
@@ -2796,3 +2818,31 @@ Commit rules (lihat git log), SUDAH DI-DEPLOY (firestore:rules). Item terbuka §
 - **EmailJS:** user menekan "Refresh Keys" -> Public Key DAN Private Key berganti sekaligus (Public Key baru `TCk2X3epWHvsVcTWX`). Semua email sempat gagal sampai Public Key baru dipasang di `.env.local` (build aplikasi) & 5 script cron (commit `26de7b7`, deploy). Security: "Allow EmailJS API for non-browser applications" ON, "Use Private Key" OFF (app & cron tidak mengirim accessToken), Domains kosong (domain whitelist bisa memblokir cron). Private Key tidak dipakai di mana pun. JANGAN klik Refresh Keys lagi tanpa memperbarui Public Key di `.env.local` + scripts/*.mjs.
 - **Cloudinary:** API key baru `sibm-utama-2026` (Master Admin) dibuat, kunci **Root dinonaktifkan** (secret lama bocor di chat). Upload app tidak terpengaruh (unsigned preset `sibm_storage`).
 - **Catatan kuota EmailJS:** paket gratis 200 email/bulan (screenshot 2 Okt: 95/200 terpakai, reset 3 Okt). Email baru §59-§67 (bukti lembur, tidak masuk, laporan QHSE) menambah volume -- pantau, pertimbangkan upgrade bila mendekati batas.
+
+## 75. Analisis Kuota Email (EmailJS gratis 200/bulan) & Rekomendasi Pengurangan (2 Oktober 2026)
+Status: **ANALISIS, belum ada perubahan kode -- menunggu keputusan user.** Semua email memakai 1 template EmailJS (`template_oriy1nw`). Per 2 Okt: 95/200 terpakai (reset 3 Okt).
+
+| # | Email | Dikirim dari | Penerima | Pemicu | Perkiraan/bulan* |
+|---|---|---|---|---|---|
+| 1 | Request Baru Masuk (ATK/Lembur AC/Kerusakan) | portal `page.tsx` | SETIAP Admin GA | tiap pengajuan | tinggi (x jumlah admin) |
+| 2 | Notifikasi Paket Masuk | Paket Security | penerima paket | tiap paket | tinggi |
+| 3 | Tercatat Tidak Masuk (§67) | Validasi Karyawan | karyawan | tiap karyawan ditandai tidak masuk | sedang-tinggi |
+| 4 | Lembur Gedung Tercatat / bukti check-out (§59) | Buku Tamu | karyawan | tiap lembur divalidasi | sedang |
+| 5 | Overtime Gedung Tercatat | portal | pemohon | tiap pengajuan Lembur AC | sedang |
+| 6 | Update Tiket Helpdesk | admin Helpdesk | pelapor | TIAP perubahan status (2x/tiket) | sedang |
+| 7 | Laporan Kerusakan Baru (inspeksi) | Inspeksi Fasilitas OB | SETIAP Admin GA | per ITEM rusak | sedang |
+| 8 | ATK Siap Diambil | admin ATK | pemohon | tiap request selesai | rendah-sedang |
+| 9 | Laporan SBO Baru | portal | SETIAP QHSE | tiap SBO | rendah |
+| 10 | Jam Kerja Melebihi Batas + Rekap (§59) | cron validasi | SETIAP QHSE | 2 email per kejadian | rendah |
+| 11 | Kepatuhan Patroli / Eskalasi Tukar Shift / Laptop / Legalitas | cron | SETIAP Admin GA | harian bila ada temuan / berulang | rendah-sedang |
+
+*Volume nyata bisa dilihat di dashboard EmailJS (Email History / Statistics).
+
+**Rekomendasi pengurangan (urut dampak terbesar, risiko terkecil):**
+1. **#1 Request Baru ke Admin GA -> matikan email** (push `laporan-baru-reminder` + kartu "Perlu tindakan" di hub sudah ada). Dampak: admin yang belum mengizinkan notifikasi browser hanya tahu dari hub/push.
+2. **#6 Update Helpdesk -> hanya saat "Selesai"** (bukan "Sedang Dikerjakan"). Dampak: pelapor tidak dikabari saat mulai dikerjakan; tetap bisa cek "Lacak tiket" di portal.
+3. **#7 Inspeksi Fasilitas -> 1 email rekap per inspeksi** (bukan per item per admin). Dampak: tidak ada informasi yang hilang.
+4. **#10 Rekap QHSE saat check-out -> cukup push + panel QHSE** (email hanya saat lapor pertama). Dampak: total jam akhir tidak sampai via email.
+5. **#5 vs #4 dobel:** lembur yang divalidasi Security bisa dapat 2 email (tercatat dari portal + bukti check-out); opsional: email #5 hanya bila tidak ada validasi -- butuh logika tambahan, prioritas rendah.
+
+**Pertahankan:** #2 paket, #3 tidak masuk, #4 bukti lembur, #8 ATK siap, #9 SBO -- langsung ditindaklanjuti penerima / jadi bukti. Bila setelah pengurangan masih mendekati 200/bulan, opsi realistis: **upgrade paket EmailJS** (cek harga di dashboard), karena #2–#4 berskala dengan jumlah karyawan.
