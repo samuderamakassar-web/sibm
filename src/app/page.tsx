@@ -138,6 +138,23 @@ const isWeekend = (iso: string) => {
 // kehitung dobel/lebih kalau pernah dicatat pakai driver yang beda-beda.
 const getPlat = (kendaraan?: string) => (kendaraan || "").split(" - ")[0].trim();
 
+// Status kendaraan dari halaman Parkir Security: "Tiba di Kantor (Standby)", "Pulang (Selesai Tugas Hari Ini)",
+// "Keluar Beroperasi", "Masuk Bengkel / Service" (+ "Standby (Parkiran)" untuk unit tanpa log baru). §58U
+type KategoriArmada = "siap" | "keluar" | "bengkel" | "pulang";
+const kategoriArmada = (status?: string): KategoriArmada => {
+  const s = (status || "").toLowerCase();
+  if (s.includes("bengkel") || s.includes("service")) return "bengkel";
+  if (s.includes("keluar")) return "keluar";
+  if (s.includes("pulang")) return "pulang";
+  return "siap";
+};
+const INFO_KATEGORI_ARMADA: Record<KategoriArmada, { label: string; fg: string; bg: string }> = {
+  siap: { label: "Siap", fg: "var(--ok)", bg: "var(--ok-50)" },
+  keluar: { label: "Keluar", fg: "var(--red-600)", bg: "var(--red-50)" },
+  bengkel: { label: "Bengkel", fg: "var(--warn)", bg: "var(--warn-50)" },
+  pulang: { label: "Dibawa pulang", fg: "var(--info)", bg: "var(--info-50)" },
+};
+
 // FUNGSI GENERATE RESI
 const generateResiCode = () => {
   const dateCode = new Date().toISOString().slice(2, 7).replace("-", "");
@@ -176,6 +193,8 @@ export default function PortalSIBM() {
   const [securityShift, setSecurityShift] = useState<SecurityShift>({ current: [], next: [], currentName: "Memuat...", nextName: "Memuat..." });
   // Driver diambil dari users_master (departemen "Driver"), bukan nama hardcode (§58T).
   const [daftarDriver, setDaftarDriver] = useState<string[]>([]);
+  const [filterPlatArmada, setFilterPlatArmada] = useState<string | null>(null);
+  const [riwayatArmadaLengkap, setRiwayatArmadaLengkap] = useState(false);
   const [driverStatusMap, setDriverStatusMap] = useState<Record<string, { status: string; waktu: Timestamp | null }>>({});
   // Absensi (attendance_logs) kemarin & hari ini, kunci "tanggal|nama" -- kemarin perlu utk Security Shift 2 lewat tengah malam.
   const [absensiTim, setAbsensiTim] = useState<Record<string, { masuk: Timestamp | null; pulang: Timestamp | null }>>({});
@@ -875,17 +894,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const formatJam = (ts: Timestamp | null | undefined) => ts ? new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
 
   // Ubah 1 baris log kendaraan jadi kalimat history biasa (bukan card per-kendaraan lagi) — dipakai di card "Status Armada Operasional"
-  const buatKalimatRiwayat = (log: KendaraanLog) => {
-    const plat = log.kendaraan?.split(" - ")[0] || log.kendaraan;
-    const driver = log.driver_bertugas?.replace("Standby: ", "") || "Karyawan";
-    const status = log.status_kendaraan?.toLowerCase() || "";
-    const tujuan = log.tujuan_keperluan && log.tujuan_keperluan !== "-" ? ` menuju ${log.tujuan_keperluan}` : "";
-    if (status.includes("keluar")) return `${plat} keluar${tujuan} — driver ${driver}`;
-    if (status.includes("tiba")) return `${plat} tiba kembali — driver ${driver}`;
-    if (status.includes("bengkel") || status.includes("service")) return `${plat} masuk servis/bengkel`;
-    return `${plat} — ${log.status_kendaraan} — driver ${driver}`;
-  };
-
   const getInitials = (nama: string) => nama.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   // Status armada final yang dipakai di UI: gabungan status terkini per kendaraan (dari 30 log terakhir) +
@@ -961,8 +969,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       : jumlahLaporanMenunggu > 0
       ? `${jumlahLaporanMenunggu} laporan kerusakan menunggu ditangani`
       : "Semua operasional normal";
-  const jumlahArmadaSiap = mobilStatus.filter((m) => isStandbyLabel(m.status_kendaraan)).length;
-  const jumlahArmadaKeluar = mobilStatus.filter((m) => m.status_kendaraan?.toLowerCase().includes("keluar")).length;
+  const jumlahArmadaSiap = mobilStatus.filter((m) => kategoriArmada(m.status_kendaraan) === "siap").length;
+  const jumlahArmadaKeluar = mobilStatus.filter((m) => kategoriArmada(m.status_kendaraan) === "keluar").length;
+  const jumlahArmadaPulang = mobilStatus.filter((m) => kategoriArmada(m.status_kendaraan) === "pulang").length;
   const obLibur = isWeekend(todayISO);
   const kataCari = searchQuery.toLowerCase().trim();
   const cocokCari = (...nilai: (string | undefined)[]) => !kataCari || nilai.some((v) => String(v || "").toLowerCase().includes(kataCari));
@@ -974,8 +983,22 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     .slice(0, 50);
   const jumlahTamuDiDalam = visitorLogsTrend.filter((tm) => !tm.waktu_keluar && tm.waktu_masuk && new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(tm.waktu_masuk.toDate()) === todayISO).length;
   const jumlahPaketMenunggu = packageLogsTrend.filter((p) => p.status === "Belum Diambil").length;
+  // 🚗 RIWAYAT ARMADA (§58U) -- dikelompokkan per hari, bisa disaring per kendaraan.
+  const riwayatArmadaTersaring = logKendaraanMentah.filter((log) => !filterPlatArmada || getPlat(log.kendaraan).toUpperCase().replace(/\s+/g, "") === filterPlatArmada.toUpperCase().replace(/\s+/g, ""));
+  const BATAS_RIWAYAT_ARMADA = 8;
+  const riwayatArmadaTampil = riwayatArmadaLengkap ? riwayatArmadaTersaring : riwayatArmadaTersaring.slice(0, BATAS_RIWAYAT_ARMADA);
+  const grupRiwayatArmada: { tanggal: string; log: KendaraanLog[] }[] = [];
+  riwayatArmadaTampil.forEach((log) => {
+    const tgl = log.waktu_catat ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(log.waktu_catat.toDate()) : "-";
+    const g = grupRiwayatArmada[grupRiwayatArmada.length - 1];
+    if (g && g.tanggal === tgl) g.log.push(log); else grupRiwayatArmada.push({ tanggal: tgl, log: [log] });
+  });
+  const labelHariRiwayat = (iso: string) =>
+    iso === todayISO ? "Hari ini" : iso === geserTanggalISO(todayISO, -1) ? "Kemarin"
+    : iso === "-" ? "Tanpa tanggal" : new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
+
   // ⚙️ STATUS OPERASIONAL (§58S)
-  const jumlahArmadaBengkel = mobilStatus.filter((m) => m.status_kendaraan?.includes("Bengkel") || m.status_kendaraan?.includes("Service")).length;
+  const jumlahArmadaBengkel = mobilStatus.filter((m) => kategoriArmada(m.status_kendaraan) === "bengkel").length;
   const tiketDikerjakan = tiketTerbuka.filter((tk) => tk.status === "Sedang Dikerjakan");
   const lemburHariIni = overtimeMingguIni.filter((ot) => ot.tanggal === todayISO);
   const lompatKe = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1250,6 +1273,26 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         }
         .section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
         .section-title-icon { background: var(--red-50); color: var(--red-600); padding: 10px; border-radius: 12px; display: flex; }
+        /* 🚗 ARMADA (§58U) */
+        .armada-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-bottom: 14px; }
+        .armada-unit { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: 16px; border: 2px solid transparent; background: var(--bg); font-family: inherit; color: inherit; cursor: pointer; min-width: 0; }
+        .armada-unit.is-dipilih { border-color: var(--ink); background: var(--tile); }
+        .armada-unit:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .armada-ikon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .armada-plat { font-size: 11.5px; font-weight: 800; color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .armada-status { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+        .armada-titik { width: 6px; height: 6px; border-radius: 50%; }
+        .armada-filter { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
+        .armada-filter button { border: none; background: none; color: var(--brand); font-weight: 700; font-family: inherit; font-size: 12px; cursor: pointer; padding: 4px 0; }
+        .armada-riwayat { display: flex; flex-direction: column; gap: 12px; }
+        .armada-hari { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+        .armada-log { display: flex; align-items: stretch; gap: 10px; padding: 7px 0; }
+        .armada-jam { width: 40px; flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; padding-top: 1px; }
+        .armada-garis { width: 3px; border-radius: 2px; flex-shrink: 0; }
+        .armada-log-isi { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .armada-log-atas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink); }
+        .armada-pil { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
+        .armada-log-detail { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
         .list-row {
           display: flex; gap: 12px; padding: 13px 15px; border-radius: 13px; background: var(--bg);
           border-left: 3px solid var(--line);
@@ -1345,6 +1388,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .portal-tim { grid-column: span 4; order: 7; background: var(--tile); border-radius: 28px; padding: 22px; }
         .portal-detail { grid-column: span 8; order: 8; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
         .portal-tren > div, .portal-kalender > div, .portal-status > div, .portal-detail > div {
+          min-width: 0; box-sizing: border-box;
           background: var(--tile) !important; border: none !important; border-radius: 28px !important; box-shadow: none !important; height: 100%; margin: 0 !important;
         }
         .ringkasan-strip { background: var(--brand) !important; border-radius: 28px !important; box-shadow: none !important; height: 100%; box-sizing: border-box; }
@@ -1379,7 +1423,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           .portal-grid > * { grid-column: 1 / -1 !important; }
           .portal-pengumuman { order: 1; }
           .portal-ringkasan { order: 2; }
-          .portal-detail { grid-template-columns: 1fr; }
+          .portal-detail { grid-template-columns: minmax(0, 1fr); }
           .portal-tim { padding: 18px; }
         }
       `}} />
@@ -1661,7 +1705,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             <span className="status-op-teks">
               <span className="status-op-judul">Armada</span>
               <span className="status-op-sub">
-                {mobilStatus.length === 0 ? "Belum ada data kendaraan" : `${jumlahArmadaSiap} siap · ${jumlahArmadaKeluar} keluar${jumlahArmadaBengkel ? ` · ${jumlahArmadaBengkel} di bengkel` : ""}`}
+                {mobilStatus.length === 0 ? "Belum ada data kendaraan" : `${jumlahArmadaSiap} siap · ${jumlahArmadaKeluar} keluar${jumlahArmadaBengkel ? ` · ${jumlahArmadaBengkel} di bengkel` : ""}${jumlahArmadaPulang ? ` · ${jumlahArmadaPulang} dibawa pulang` : ""}`}
               </span>
             </span>
             <span className="status-op-titik" style={{ background: mobilStatus.length > 0 && jumlahArmadaSiap === 0 ? "var(--warn)" : "var(--ok)" }} aria-hidden="true" />
@@ -1701,36 +1745,74 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
           <Card style={{ borderRadius: "18px" }}>
             <div className="section-title" id="riwayat-armada-section">
               <div className="section-title-icon"><IconTruck size={18} /></div>
-              <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: "800" }}>Riwayat Armada Operasional</h3>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ margin: 0, color: "var(--ink)", fontSize: "16px", fontWeight: 800 }}>Armada Operasional</h3>
+                <p style={{ margin: "2px 0 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Ketuk kendaraan untuk melihat riwayatnya saja</p>
+              </div>
             </div>
             {mobilStatus.length > 0 && (
-              <div style={{ display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "14px", marginBottom: "4px" }}>
+              <div className="armada-grid">
                 {mobilStatus.map((k) => {
-                  const isBengkel = k.status_kendaraan?.includes("Bengkel") || k.status_kendaraan?.includes("Service");
-                  const standby = !isBengkel && isStandbyLabel(k.status_kendaraan);
-                  const statusColor = isBengkel ? "#a1a1aa" : standby ? "var(--ok)" : "var(--red-600)";
+                  const info = INFO_KATEGORI_ARMADA[kategoriArmada(k.status_kendaraan)];
+                  const dipilih = filterPlatArmada === k.kendaraan;
                   return (
-                    <div key={k.kendaraan} title={`${k.kendaraan} — ${k.status_kendaraan?.replace("Keluar Beroperasi", "Keluar")}`} style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", width: "58px" }}>
-                      <div style={{ width: "46px", height: "46px", borderRadius: "14px", border: `2px solid ${statusColor}`, background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={24} />
-                      </div>
-                      <div style={{ fontSize: "9px", fontWeight: 800, color: "var(--ink-soft)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "56px" }}>{k.kendaraan}</div>
-                    </div>
+                    <button
+                      key={k.kendaraan} type="button" className={`armada-unit${dipilih ? " is-dipilih" : ""}`}
+                      onClick={() => { setFilterPlatArmada(dipilih ? null : k.kendaraan); setRiwayatArmadaLengkap(false); }}
+                      aria-pressed={dipilih} aria-label={`${k.kendaraan}: ${info.label}${dipilih ? ", filter aktif" : ""}`}
+                    >
+                      <span className="armada-ikon" style={{ background: info.bg }}>
+                        <VehicleIcon3D jenis={kendaraanMetaMap[k.kendaraan]?.kategori} warna={kendaraanMetaMap[k.kendaraan]?.warna} size={22} />
+                      </span>
+                      <span className="armada-plat">{k.kendaraan}</span>
+                      <span className="armada-status" style={{ color: info.fg }}><span className="armada-titik" style={{ background: info.fg }} />{info.label}</span>
+                    </button>
                   );
                 })}
               </div>
             )}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto", paddingRight: "5px" }}>
-              {logKendaraanMentah.length > 0 ? logKendaraanMentah.map((log, idx) => {
-                const keluar = log.status_kendaraan?.toLowerCase().includes("keluar");
-                return (
-                  <div key={idx} className="list-row" style={{ borderLeftColor: keluar ? "var(--red-600)" : "#22c55e" }}>
-                    <div style={{ minWidth: "68px", flexShrink: 0, fontWeight: "700", color: "var(--ink-soft)", fontSize: "12px" }}>{formatJam(log.waktu_catat)}</div>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: "13px", color: "var(--ink-soft)", wordBreak: "break-word" }}>{buatKalimatRiwayat(log)}</div>
+            {filterPlatArmada && (
+              <div className="armada-filter">
+                Riwayat <b>{filterPlatArmada}</b>
+                <button type="button" onClick={() => setFilterPlatArmada(null)}>Tampilkan semua</button>
+              </div>
+            )}
+            {grupRiwayatArmada.length > 0 ? (
+              <div className="armada-riwayat">
+                {grupRiwayatArmada.map((g) => (
+                  <div key={g.tanggal}>
+                    <div className="armada-hari">{labelHariRiwayat(g.tanggal)}</div>
+                    {g.log.map((log, idx) => {
+                      const kat = kategoriArmada(log.status_kendaraan);
+                      const info = INFO_KATEGORI_ARMADA[kat];
+                      const driver = log.driver_bertugas?.replace("Standby: ", "");
+                      const tujuan = log.tujuan_keperluan && log.tujuan_keperluan !== "-" ? log.tujuan_keperluan : "";
+                      const detail = [driver && driver !== "-" ? driver : "", kat === "keluar" && tujuan ? `ke ${tujuan}` : ""].filter(Boolean).join(" · ");
+                      return (
+                        <div key={`${g.tanggal}-${idx}`} className="armada-log">
+                          <span className="armada-jam">{log.waktu_catat ? jamTimWITA(log.waktu_catat) : "-"}</span>
+                          <span className="armada-garis" style={{ background: info.fg }} />
+                          <span className="armada-log-isi">
+                            <span className="armada-log-atas">
+                              <b>{getPlat(log.kendaraan)}</b>
+                              <span className="armada-pil" style={{ color: info.fg, background: info.bg }}>{kat === "siap" ? "Tiba / standby" : info.label}</span>
+                            </span>
+                            {detail && <span className="armada-log-detail">{detail}</span>}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              }) : <div style={{ textAlign: "center", padding: "20px", color: "var(--muted)", fontSize: "14px", border: "1px dashed var(--line)", borderRadius: "12px" }}>Belum ada riwayat kendaraan tercatat.</div>}
-            </div>
+                ))}
+                {riwayatArmadaTersaring.length > BATAS_RIWAYAT_ARMADA && (
+                  <button type="button" className="sa-btn is-soft" style={{ width: "100%" }} onClick={() => setRiwayatArmadaLengkap((v) => !v)}>
+                    {riwayatArmadaLengkap ? "Tampilkan lebih sedikit" : `Tampilkan ${riwayatArmadaTersaring.length - BATAS_RIWAYAT_ARMADA} catatan lagi`}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="tim-kosong">{filterPlatArmada ? `Belum ada riwayat ${filterPlatArmada} di ${logKendaraanMentah.length} catatan terakhir.` : "Belum ada riwayat kendaraan tercatat."}</div>
+            )}
           </Card>
 
           <Card style={{ borderRadius: "18px" }}>

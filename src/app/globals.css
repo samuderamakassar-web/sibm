@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Safari iOS: jangan perbesar teks otomatis (text autosizing) -- ukuran huruf mengikuti CSS. §58U */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
