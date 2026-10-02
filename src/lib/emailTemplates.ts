@@ -171,6 +171,36 @@ export function buildOvertimeTercatatEmailHtml(p: {
 }
 
 /**
+ * Pemberitahuan ke KARYAWAN saat Security menandainya "tidak masuk" (§67) -- supaya karyawan tahu
+ * & bisa meluruskan bila keliru (mis. sebenarnya hadir tapi lupa dicatat di Buku Tamu).
+ */
+export function buildTidakMasukEmailHtml(p: {
+  nama: string;
+  departemen: string;
+  tanggal: string;
+  alasan: string;
+  keterangan?: string;
+  dicatatOleh: string;
+}): string {
+  const rows = [
+    fieldRow("Tanggal", escapeHtml(p.tanggal)),
+    fieldRow("Departemen / Tenant", escapeHtml(p.departemen)),
+    fieldRow("Keterangan", escapeHtml(p.alasan) + (p.keterangan ? ` &mdash; ${escapeHtml(p.keterangan)}` : "")),
+    fieldRow("Dicatat oleh", `${escapeHtml(p.dicatatOleh)} (Security)`),
+  ].join("");
+
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      Halo ${escapeHtml(p.nama)}, Anda tercatat <b>tidak masuk kantor</b> hari ini berdasarkan pengecekan Security gedung.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+    <p style="margin:16px 0 0 0;font-size:12px;color:#71717a;line-height:1.6;">Bila Anda sebenarnya hadir (mis. belum tercatat di Buku Tamu), silakan lapor ke pos Security atau Admin GA agar dicatat ulang.</p>
+  `;
+
+  return emailShell("&#128203; Tercatat Tidak Masuk Kantor", body);
+}
+
+/**
  * Bukti lembur ke KARYAWAN saat check-out (§59) -- lembur yang divalidasi Security di lokasi,
  * jam selesai = jam check-out Buku Tamu, jam tagih dibulatkan ke atas per jam.
  */

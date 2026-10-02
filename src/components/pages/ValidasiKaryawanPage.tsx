@@ -10,7 +10,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
-import { collection, doc, onSnapshot, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
@@ -18,6 +18,8 @@ import { useConfirm } from "../ui/ConfirmProvider";
 import Modal from "../ui/Modal";
 import AdminShell from "../admin/AdminShell";
 import { handleFotoUpload } from "../../lib/uploadFoto";
+import { kirimEmail } from "../../lib/notify";
+import { buildTidakMasukEmailHtml } from "../../lib/emailTemplates";
 import {
   ALASAN_TIDAK_MASUK, catatLanjutLembur, checkInSusulan, jamWITA, MENIT_TANYA_ULANG_PULANG, normalNama, tanggalWITA,
   type ValidasiKaryawan,
@@ -123,6 +125,20 @@ export default function ValidasiKaryawanPage() {
           divalidasi_oleh: petugas, waktu_validasi: serverTimestamp(),
         });
         showToast(`${aksi.v.nama} ditandai tidak masuk (${alasan}).`, "success");
+        // §67: kabari karyawan lewat email (tidak menghalangi simpan bila gagal / tidak ada email).
+        const v = aksi.v;
+        const ket = keterangan.trim();
+        getDocs(query(collection(db, "employees_directory"), where("nama", "==", v.nama), limit(1)))
+          .then((snap) => {
+            const email = snap.empty ? "" : (snap.docs[0].data().email as string) || "";
+            if (!email) return;
+            return kirimEmail(email, "Tercatat Tidak Masuk Kantor", buildTidakMasukEmailHtml({
+              nama: v.nama, departemen: v.departemen || "-",
+              tanggal: new Date(`${v.tanggal}T00:00:00`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+              alasan, keterangan: ket, dicatatOleh: petugas,
+            }), v.nama);
+          })
+          .catch((err) => console.error("[validasi] Gagal kirim email tidak masuk:", err));
       }
       setAksi(null);
     } catch (err) {

@@ -16,6 +16,7 @@ import { tanggalISOWITASekarang } from "../../lib/shift";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
+import KehadiranKaryawanPanel from "../../components/KehadiranKaryawanPanel";
 import { useFcmSetup } from "../../hooks/useFcmSetup";
 import AdminShell from "../../components/admin/AdminShell";
 import AdminIcon, { type AdminIconName } from "../../components/admin/AdminIcon";
@@ -377,6 +378,11 @@ export default function AdminDashboardPage() {
                 );
               })}
             </div>
+          </Tile>
+
+          {/* §67 Kehadiran & lembur karyawan (versi lengkap: foto & alasan -- khusus login) */}
+          <Tile style={{ gridColumn: "1 / -1" }}>
+            <KehadiranKaryawanPanel />
           </Tile>
 
           {MENU_GROUPS.map((g) => (

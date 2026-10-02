@@ -502,6 +502,23 @@ export default function PortalSIBM() {
     return () => unsub();
   }, [todayISO]);
 
+  // 👥 KEHADIRAN KARYAWAN (§67) -- versi PUBLIK: hanya nama & jumlah (tanpa foto/alasan; itu di hub admin).
+  const [kehadiranKaryawan, setKehadiranKaryawan] = useState<{ lembur: string[]; tidakMasuk: string[] }>({ lembur: [], tidakMasuk: [] });
+  useEffect(() => {
+    const kemarin = geserTanggalISO(todayISO, -1);
+    const unsub = onSnapshot(query(collection(db, "validasi_karyawan"), where("tanggal", "in", [kemarin, todayISO])), (snap) => {
+      const lembur: string[] = [];
+      const tidakMasuk: string[] = [];
+      snap.docs.forEach((d) => {
+        const v = d.data();
+        if (v.jenis === "lembur" && v.status === "lanjut") lembur.push(v.nama);
+        if (v.jenis === "belum_input" && v.tanggal === todayISO && v.status === "tidak_masuk") tidakMasuk.push(v.nama);
+      });
+      setKehadiranKaryawan({ lembur: lembur.sort(), tidakMasuk: tidakMasuk.sort() });
+    }, (err) => console.error("[portal] Gagal memuat kehadiran karyawan:", err));
+    return () => unsub();
+  }, [todayISO]);
+
   // 🛠️ TIKET HELPDESK YANG BELUM SELESAI (§58N) -- dasar judul "Ringkasan Hari Ini". Dulu judul cuma
   // melihat tiket "Sedang Dikerjakan" di 20 tiket terakhir, jadi tiket "Menunggu" tidak pernah terhitung.
   const [tiketTerbuka, setTiketTerbuka] = useState<HelpdeskTicket[]>([]);
@@ -1769,6 +1786,19 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             </span>
             <span className="status-op-titik" style={{ background: tiketTerbuka.length > 0 ? "var(--warn)" : "var(--ok)" }} aria-hidden="true" />
           </button>
+          <div className="status-op-row" style={{ cursor: "default" }}>
+            <span className="section-title-icon" style={{ background: "var(--accent-50)", color: "var(--accent)", margin: 0, padding: "9px" }}><IconIdCard size={16} /></span>
+            <span className="status-op-teks">
+              <span className="status-op-judul">Kehadiran Karyawan</span>
+              <span className="status-op-sub">
+                {kehadiranKaryawan.lembur.length === 0 && kehadiranKaryawan.tidakMasuk.length === 0
+                  ? "Belum ada catatan lembur / tidak masuk"
+                  : `${kehadiranKaryawan.lembur.length} sedang lembur · ${kehadiranKaryawan.tidakMasuk.length} tidak masuk`}
+              </span>
+              {kehadiranKaryawan.lembur.length > 0 && <span className="status-op-sub status-op-detail">Lembur: {kehadiranKaryawan.lembur.join(", ")}</span>}
+              {kehadiranKaryawan.tidakMasuk.length > 0 && <span className="status-op-sub status-op-detail">Tidak masuk: {kehadiranKaryawan.tidakMasuk.join(", ")}</span>}
+            </span>
+          </div>
           <button type="button" className="status-op-row" onClick={() => lompatKe("overtime-section")}>
             <span className="section-title-icon" style={{ background: "var(--warn-50)", color: "var(--warn)", margin: 0, padding: "9px" }}><IconClock size={16} /></span>
             <span className="status-op-teks">
