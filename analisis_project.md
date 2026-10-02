@@ -2711,3 +2711,13 @@ Commit `f44a5bc`, SUDAH DI-DEPLOY.
 - Dicek, BUKAN bug: "Tiket selesai 0" di Tren portal -- satu-satunya penutup tiket (admin/helpdesk) mengisi `waktu_selesai`; memang belum ada tiket ditutup 7 hari terakhir (4 menunggu, 0 dikerjakan).
 
 Berikutnya: audit isi halaman OB & CS (checklist, stok, inspeksi fasilitas, plotting, deep cleaning), lalu Driver, QHSE, admin.
+
+## 64. Audit Isi Halaman Staf -- OB & CS (2 Oktober 2026)
+Commit `f8b0608`, SUDAH DI-DEPLOY.
+- **Checklist (`ChecklistOBPage`):** plot lantai PIC dulu `getDoc` sekali saat buka halaman -> perubahan plot koordinator tidak terlihat sampai reload; sekarang `onSnapshot` (unsub saat unmount). Riwayat PIC `limit(300)`. Dicek OK: jendela sesi Pagi/Siang/Sore (`sesiOBSekarang`), anti lapor ganda per area+sesi+tanggal, tanggal WITA, akhir pekan kosong, validasi Pelayanan "Tidak" wajib alasan+foto, minimal pasangan foto.
+- **Inspeksi Fasilitas:** riwayat PIC `limit(200)`; siklus mingguan Senin WITA OK.
+- **Deep Cleaning:** `limit(300)` tugas terbaru (dulu seluruh histori).
+- **Stok Opname** (sudah `limit(LIMIT_LOG_ANALISA)`) & **Plotting** (query per rentang `documentId`, akhir pekan ditangani) OK.
+- Klaim lembur OB sudah memakai `KlaimLemburModal` (§63).
+
+Berikutnya: Driver (menu, armada, inspeksi, servis, riwayat), QHSE (SBO), lalu halaman admin.
