@@ -2754,3 +2754,12 @@ Commit `488ba2c` & `bde045b`, SUDAH DI-DEPLOY.
 - **Admin tahap 1 -- BUG:** admin/atk, admin/overtime, admin/report me-redirect pengguna tak berhak ke `/shift-checkin` (rute tidak ada -> 404) & menolak Administrator dept lain. Sekarang ke `/` dan `isAdministrator(pic_role)` diizinkan (selaras useAuthGuard).
 
 Sisa audit admin: helpdesk, kendaraan, users, karyawan, apar, uji-emisi, laptop, legalitas, sop, handbook, survei, monitor-* (ob/poin/cron/dadakan/tukar-shift), qr-manager.
+
+## 69. Audit Admin Tahap 2 -- Helpdesk, Kendaraan, Users (+ Foto Base64 Paket) (2 Oktober 2026)
+Commit `87040eb`, SUDAH DI-DEPLOY.
+- **BUG biaya/ukuran:** admin Helpdesk (`foto_proses`) dan Paket Security (`foto_bukti_url`, `foto_bukti_ambil_url`) menyimpan foto sebagai data URL base64 (canvas `toDataURL`) LANGSUNG di dokumen Firestore -> puluhan-ratusan KB per dokumen terunduh di setiap listener (portal tiketTerbuka, badge & Cek Paket, halaman Paket) dan base64 foto paket ikut ke email `kirimNotifikasiPaketDiterima` (melebihi batas ukuran EmailJS). Sekarang `dataUrlKeCloudinary()` (`src/lib/uploadFoto.ts`) mengunggah ke Cloudinary (`sibm/helpdesk`, `sibm/paket`) saat simpan; yang disimpan hanya URL. Data lama (base64) tetap tampil apa adanya.
+- **Admin Helpdesk:** `tiketTerbuka` (status != Selesai, live, selalu tampil) + `tiketRentang` per filter bulan/tahun (`rentangBulanTahun`, default 90 hari); daftar tahun statis.
+- **Users:** konfirmasi saat mengganti nama staf (nama = kunci di roster, patroli, plot OB, klaim lembur, fcm_tokens, notifikasi_personal). Dicek OK: email terkunci saat edit; hapus = hapus profil (akun Auth tersisa tapi tanpa profil -> tidak bisa menulis karena rules `hasProfile`).
+- **Kendaraan:** OK -- riwayat (odometer/servis/inspeksi/pergerakan) hanya dimuat untuk kendaraan yang dipilih. Catatan: pergerakan per plat tanpa limit (bertambah ~1.500/tahun/kendaraan) -- kandidat limit bila lambat.
+
+Sisa audit admin: karyawan, apar, uji-emisi, laptop, legalitas, sop, handbook, survei, monitor-ob/poin/cron/dadakan/tukar-shift, qr-manager, atk/overtime/report (isi).
