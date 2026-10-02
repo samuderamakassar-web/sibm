@@ -17,6 +17,7 @@ import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
 import KehadiranKaryawanPanel from "../../components/KehadiranKaryawanPanel";
+import { FITUR_ABSENSI_AKTIF } from "../../lib/fitur";
 import { useFcmSetup } from "../../hooks/useFcmSetup";
 import AdminShell from "../../components/admin/AdminShell";
 import AdminIcon, { type AdminIconName } from "../../components/admin/AdminIcon";
@@ -318,9 +319,11 @@ export default function AdminDashboardPage() {
                 Gedung aman hari ini?
               </h1>
             </div>
-            <div className={styles.heroAbsensi}>
-              <AbsensiCard picName={adminName} departemen={session.dept || "Admin GA"} />
-            </div>
+            {FITUR_ABSENSI_AKTIF && (
+              <div className={styles.heroAbsensi}>
+                <AbsensiCard picName={adminName} departemen={session.dept || "Admin GA"} />
+              </div>
+            )}
           </Tile>
 
           <Tile className={styles.pantau}>

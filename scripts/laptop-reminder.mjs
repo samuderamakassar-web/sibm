@@ -82,7 +82,7 @@ function htmlEmailLaptop(daftar) {
       </td></tr>
       <tr><td style="padding:26px;">${body}</td></tr>
       <tr><td style="padding:16px 26px;background:#f7f6f5;border-top:1px solid #e7e5e4;">
-        <div style="font-size:11px;color:#71717a;">Email otomatis dari Sistem Informasi Bangunan &amp; Manajemen (SIBM). Mohon tidak membalas email ini.</div>
+        <!-- §68 banner + tautan aplikasi (public/email/sibm-banner.png, scripts/generate-email-banner.mjs) --><a href="https://sibm-app.web.app" style="display:inline-block;background:#a3122a;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 18px;border-radius:10px;margin:0 0 14px 0;">Buka Aplikasi SIBM &rarr;</a><a href="https://sibm-app.web.app" style="display:block;margin:0 0 12px 0;"><img src="https://sibm-app.web.app/email/sibm-banner.png" width="468" alt="SIBM - Sistem Informasi Bangunan &amp; Manajemen. Buka sibm-app.web.app" style="display:block;width:100%;max-width:468px;height:auto;border:0;border-radius:10px;"></a><div style="font-size:11px;color:#71717a;">Email otomatis dari Sistem Informasi Bangunan &amp; Manajemen (SIBM). Mohon tidak membalas email ini.</div>
       </td></tr>
     </table>
   </div>`;

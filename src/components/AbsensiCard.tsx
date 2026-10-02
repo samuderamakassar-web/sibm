@@ -18,6 +18,7 @@ import { doc, onSnapshot, setDoc, serverTimestamp, Timestamp } from "firebase/fi
 import { db } from "../lib/firebase";
 import { tanggalISOWITASekarang } from "../lib/shift";
 import { useToast } from "./ui/ToastProvider";
+import { FITUR_ABSENSI_AKTIF } from "../lib/fitur";
 
 interface AbsensiDoc {
   nama: string;
@@ -43,7 +44,13 @@ interface AbsensiCardProps {
   departemen: string;
 }
 
-export default function AbsensiCard({ picName, departemen }: AbsensiCardProps) {
+// Dinonaktifkan lewat sakelar FITUR_ABSENSI_AKTIF (src/lib/fitur.ts) -- semua pemakai otomatis ikut.
+export default function AbsensiCard(props: AbsensiCardProps) {
+  if (!FITUR_ABSENSI_AKTIF) return null;
+  return <AbsensiCardIsi {...props} />;
+}
+
+function AbsensiCardIsi({ picName, departemen }: AbsensiCardProps) {
   const showToast = useToast();
   const [data, setData] = useState<AbsensiDoc | null | undefined>(undefined); // undefined = masih loading
   const [isSaving, setIsSaving] = useState(false);

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { hitungShiftSesi, waktuWITASekarang } from "../lib/shift";
 import { type PengumumanGedung, dalamTanggalTayang, urutkanPengumuman } from "../lib/pengumuman";
 import PengumumanCarousel from "../components/PengumumanCarousel";
+import { FITUR_ABSENSI_AKTIF } from "../lib/fitur";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, getCountFromServer, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
@@ -487,6 +488,7 @@ export default function PortalSIBM() {
 
   // 🕘 ABSENSI TIM (§58T) -- label "Hadir" dulu cuma berarti "ada di plot", tidak dicek ke absensi.
   useEffect(() => {
+    if (!FITUR_ABSENSI_AKTIF) return; // §68: fitur absensi dinonaktifkan
     const unsub = onSnapshot(
       query(collection(db, "attendance_logs"), where("tanggal", "in", [geserTanggalISO(todayISO, -1), todayISO])),
       (snap) => {
@@ -1064,6 +1066,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     return tgl === todayISO ? `sejak ${jamTimWITA(ts)}` : `sejak ${ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Makassar" })}`;
   };
   const statusAbsen = (nama: string, tanggal: string, labelHadir: string): Pick<AnggotaTim, "label" | "nada"> & { ket: string } => {
+    // §68: absensi nonaktif -> status dari jadwal saja (seperti sebelum §58T).
+    if (!FITUR_ABSENSI_AKTIF) return { label: labelHadir, nada: "ok", ket: "sesuai jadwal" };
     const a = absensiTim[`${tanggal}|${nama}`];
     if (a?.pulang) return { label: "PULANG", nada: "muted", ket: `pulang ${jamTimWITA(a.pulang)}` };
     if (a?.masuk) return { label: labelHadir, nada: "ok", ket: `masuk ${jamTimWITA(a.masuk)}` };
