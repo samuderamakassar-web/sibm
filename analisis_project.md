@@ -2702,3 +2702,12 @@ Prioritas 4 rekomendasi. Pola sama dengan audit portal §58N-§58V.
 **Patroli (commit `0276780`, deploy):** (1) `GROUPED_PATROLI` (titik khusus Sesi 1 / Shift 2 hari kerja) dulu `useMemo([], ...)` dihitung sekali saat buka halaman, sementara laporan memakai sesi saat kirim -> halaman yang terbuka melewati pergantian sesi bisa salah daftar titik & status. Sekarang ikut `kunciSesi` yang diperbarui tiap menit; progres/status dari titik yang ada di daftar berjalan (`jumlahTerscanValid`, status Sempurna = tidak ada titik terlewat). (2) Riwayat petugas `limit(300)`.
 
 Berikutnya: sub-halaman Security lain (Tukar Shift, Inspeksi APAR, Siram, Jadwal Danru), lalu OB, Driver, QHSE, admin.
+
+## 63. Bug Logout "Akses Ditolak" + Klaim Lembur Jadi Komponen Bersama + Sisa Halaman Security (2 Oktober 2026)
+Commit `f44a5bc`, SUDAH DI-DEPLOY.
+- **BUG logout (dilaporkan user via screenshot):** setiap logout dari halaman admin muncul toast "Akses Ditolak! Halaman ini khusus Admin GA." -- berlaku SEMUA halaman ber-`useAuthGuard`. Penyebab: `logout()` memanggil `signOut()` sebelum navigasi; `onAuthStateChanged` di halaman yang masih ter-mount melihat user null -> toast + redirect. Perbaikan di `src/hooks/useAuthGuard.ts`: flag modul `sedangLogout` (guard diam bila tidak login & sedang logout), `router.push` dulu baru `signOut`, flag direset 3 detik setelah signOut.
+- **KlaimLemburModal** (`src/components/KlaimLemburModal.tsx`): 3 salinan modal klaim lembur (dashboard Security, `DashboardOBPage`, `DriverMenuPage`) diganti satu komponen dengan props label/nilai bawaan. Membawa perbaikan §62 (validasi periode via `periodeUntukTanggal`, jam, tanggal dobel/sudah diklaim, daftar "Klaim Saya" + status) ke OB & Driver. Departemen sekarang tetap ("Security"/"OB & CS"/"Driver"), bukan dari localStorage. Format dokumen `ga_overtime_requests` tidak berubah.
+- Sisa halaman Security: Tukar Shift (info shift sudah diperbarui tiap menit -- OK), Siram (WITA -- OK), Jadwal Danru (OK), Inspeksi APAR: `bulanTahunSekarang()` kini WITA (dulu jam perangkat).
+- Dicek, BUKAN bug: "Tiket selesai 0" di Tren portal -- satu-satunya penutup tiket (admin/helpdesk) mengisi `waktu_selesai`; memang belum ada tiket ditutup 7 hari terakhir (4 menunggu, 0 dikerjakan).
+
+Berikutnya: audit isi halaman OB & CS (checklist, stok, inspeksi fasilitas, plotting, deep cleaning), lalu Driver, QHSE, admin.
