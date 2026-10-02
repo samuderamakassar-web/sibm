@@ -2858,3 +2858,22 @@ Permintaan user, dicatat dulu:
 2. **Menu Booking Ruangan:** Ruang Meeting, Ruang Tamu, Ruang Kesehatan -- pola sama (cek bentrok jadwal, tampilkan pemesan bila bentrok).
 
 Catatan desain awal (untuk saat dikerjakan): koleksi baru mis. `booking_kendaraan` & `booking_ruangan` { objek_id, nama_pemesan, departemen, mulai (Timestamp), sampai, tujuan/keperluan, status, dibuat_pada, daerah }; cek bentrok = query per objek pada rentang waktu (mulai < sampaiBaru && sampai > mulaiBaru); perlu rules create publik (koleksiFormPublik) + baca publik terbatas; integrasi dengan status armada (kendaraan yang dibooking & sudah lewat jam mulai -> pengingat ke Security/driver); pertimbangkan persetujuan Admin GA vs langsung tercatat; ikut skema `daerah` fase 2 (§78).
+
+## 78. Multi-Daerah FASE 2 -- Tahap 1 Fondasi Selesai + Rencana Tahap 2–4 (3 Oktober 2026)
+Commit `2e5c824`, SUDAH DI-DEPLOY (hosting). Lanjutan §56F. **Keputusan user:** portal = link/QR per gedung (`?gedung=`); Super Admin = pemilih wilayah di header (satu wilayah per waktu, default Makassar); daerah kedua belum pasti -> kerjakan fondasi dulu tanpa mengganggu Makassar.
+
+### 78A. Tahap 1 (SELESAI) -- menambah, tidak mengubah perilaku
+- `src/lib/daerah.ts`: `daerahTulis()` (akun staf -> `pic_daerah`; Super Admin `PUSAT` -> `wilayahAktifSuperAdmin()`; portal tanpa login -> `gedungPortal()` dari `?gedung=` diingat di localStorage `sibm_gedung`; default `"Makassar"`), `rapikanNamaDaerah()`.
+- 53 titik `addDoc/setDoc` diberi `daerah: daerahTulis()` (codemod + 3 manual: pengumuman, karyawan, master kendaraan). **Belum ditandai (tahap 3):** `daily_plots`, `security_monthly_schedules`, `settings`, `ob_settings`, `staff_points_bulanan` (ID tanggal/bulan/konfigurasi -> bentrok antar daerah), `users_master` (sudah punya daerah §56).
+- `src/components/admin/PemilihWilayah.tsx` di header AdminShell (hanya akun PUSAT, disembunyikan di HP): menentukan daerah data BARU yang ditulis Super Admin; belum menyaring tampilan.
+- Portal `useEffect(gedungPortal)`. Cron `validasi-karyawan` menandai `daerah` (dari karyawan/visitor log, default Makassar).
+- `scripts/migrate-daerah-data.mjs` + `.github/workflows/migrate-daerah-data.yml` (MANUAL, input `dry_run`): isi `daerah: "Makassar"` ke dokumen lama 41 koleksi, idempotent, batch 400. **AKSI USER:** Actions -> "Migrasi Daerah Data (manual)" -> Run workflow dry_run=true (cek angka) -> ulangi dry_run=false.
+
+### 78B. Tahap 2 (BELUM) -- filter baca per daerah
+Semua query admin/monitor & dashboard staf tambah `where("daerah", "==", daerahAktif)`; portal `where daerah == gedungPortal()`. Banyak query `where X + orderBy Y` -> **perlu index komposit baru** (daerah + field urut) di `firestore.indexes.json`. Hitungan agregat portal (Tren/Kalender) + count admin juga per daerah. Hanya setelah tahap 1 + migrasi selesai (data lama tanpa daerah akan hilang dari tampilan bila difilter).
+
+### 78C. Tahap 3 (BELUM) -- dokumen ber-ID tanggal/bulan per daerah
+`security_monthly_schedules/{YYYY-MM}` -> `{daerah}_{YYYY-MM}`; `daily_plots/{tanggal}` -> `{daerah}_{tanggal}`; `settings/*` & `ob_settings/config` -> per daerah (mis. `settings/validasi_karyawan_{daerah}`, hari libur per daerah); `security_shift_extend` id, `notifikasi_dadakan_siram` id, `validasi_karyawan` id, `attendance_logs` id, `staff_points_bulanan` -> sertakan daerah. Perlu migrasi ID lama (salin ke ID baru) + baca dengan cadangan ID lama selama transisi.
+
+### 78D. Tahap 4 (BELUM) -- cron & rules per daerah
+Semua script cron (`validasi-karyawan`, `patroli-*`, `security-tugas`, `shift-handover-escalation`, `points-deduction`, `laporan-baru`, reminder laptop/legalitas/apar/kendaraan) loop per daerah aktif (daftar dari users_master), penerima push/email = staf daerah itu. Rules: `read/update` koleksi operasional dibatasi `resource.data.daerah == myDaerah() || isSuperAdmin()`; `create` wajib `request.resource.data.daerah` = daerah akun (portal publik: daerah apa pun). Query list harus menyertakan filter daerah agar lolos rules.
