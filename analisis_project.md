@@ -2763,3 +2763,14 @@ Commit `87040eb`, SUDAH DI-DEPLOY.
 - **Kendaraan:** OK -- riwayat (odometer/servis/inspeksi/pergerakan) hanya dimuat untuk kendaraan yang dipilih. Catatan: pergerakan per plat tanpa limit (bertambah ~1.500/tahun/kendaraan) -- kandidat limit bila lambat.
 
 Sisa audit admin: karyawan, apar, uji-emisi, laptop, legalitas, sop, handbook, survei, monitor-ob/poin/cron/dadakan/tukar-shift, qr-manager, atk/overtime/report (isi).
+
+## 70. Audit Admin Tahap 3 -- Sapuan Cepat Sisa Halaman (2 Oktober 2026) -- AUDIT HALAMAN STAF & ADMIN SELESAI
+Commit `372715c`, SUDAH DI-DEPLOY. Pindaian pola bug (tanggal UTC/jam perangkat, query tanpa batas pada koleksi yang tumbuh, nama hardcode, rute tidak ada) di 17 halaman admin tersisa.
+- **BUG:** admin/laptop & admin/legalitas `todayISO()` = `new Date().toISOString()` (UTC) -> sebelum 08:00 WITA masih tanggal kemarin, sisa hari meleset 1 tiap pagi. Sekarang WITA. (Script reminder laptop/legalitas/apar sudah WITA.)
+- admin/uji-emisi: `onSnapshot(kendaraan_odometer_logs)` seluruh koleksi demi KM terakhir per kendaraan -> per kendaraan `where kendaraan_id, orderBy tanggal desc, limit 5` (index ada), pilih terbaru.
+- admin/monitor-tukar-shift: handover & extend per rentang `tanggal_shift` dari filter (default 90 hari), urut client; daftar tahun statis.
+- Dibiarkan (sengaja/kecil): monitor-ob `daily_plots` utuh (~1 dok/hari, ada catatan alasan), `apar_inspections` (~600/tahun), master data (karyawan, kendaraan, laptop, legalitas, sop, handbook). Nama file export memakai toISOString -- kosmetik.
+
+**Rangkuman audit isi halaman staf & admin §62-§70:** bug berarti yang ditemukan & diperbaiki -- status jaga saat ganti periode roster, daftar titik patroli basi, klaim lembur salah periode (+3 salinan modal), logout memunculkan "Akses Ditolak", plot OB tidak live, status driver tidak kembali saat kendaraan tiba, notifikasi push tidak bisa diketuk, rute /shift-checkin 404, foto base64 di Firestore (helpdesk & paket, juga ke email), tanggal UTC (laptop/legalitas/APAR/inspeksi driver), plus belasan query tanpa batas.
+
+**Masih terbuka / perlu keputusan user:** (1) rotasi Cloudinary API Secret & EmailJS Private Key; (2) rules tahap 2 (batasi BACA, privasi log tamu publik); (3) halaman Hari Libur untuk cek validasi karyawan; (4) foto after SBO wajib atau tidak; (5) kandidat limit: log pergerakan per kendaraan di admin/kendaraan.
