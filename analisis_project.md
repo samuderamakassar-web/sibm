@@ -2774,3 +2774,9 @@ Commit `372715c`, SUDAH DI-DEPLOY. Pindaian pola bug (tanggal UTC/jam perangkat,
 **Rangkuman audit isi halaman staf & admin §62-§70:** bug berarti yang ditemukan & diperbaiki -- status jaga saat ganti periode roster, daftar titik patroli basi, klaim lembur salah periode (+3 salinan modal), logout memunculkan "Akses Ditolak", plot OB tidak live, status driver tidak kembali saat kendaraan tiba, notifikasi push tidak bisa diketuk, rute /shift-checkin 404, foto base64 di Firestore (helpdesk & paket, juga ke email), tanggal UTC (laptop/legalitas/APAR/inspeksi driver), plus belasan query tanpa batas.
 
 **Masih terbuka / perlu keputusan user:** (1) rotasi Cloudinary API Secret & EmailJS Private Key; (2) rules tahap 2 (batasi BACA, privasi log tamu publik); (3) halaman Hari Libur untuk cek validasi karyawan; (4) foto after SBO wajib atau tidak; (5) kandidat limit: log pergerakan per kendaraan di admin/kendaraan.
+
+## 71. Halaman Admin Hari Libur (2 Oktober 2026)
+Commit `f6220b5`, SUDAH DI-DEPLOY. Item terbuka §70 nomor 3.
+- `/admin/hari-libur` (menu "Alat & Master", ikon baru `calendar` di AdminIcon): tambah tanggal tunggal / rentang maks. 31 hari (cuti bersama) + keterangan; tombol cepat libur nasional bertanggal tetap (1 Jan, 1 Mei, 1 Jun, 17 Agu, 25 Des) untuk tahun ini & depan -- libur keagamaan & cuti bersama diisi manual sesuai SKB 3 Menteri (tanggal berubah tiap tahun, sengaja tidak di-hardcode); daftar mendatang / sudah lewat; hapus dengan konfirmasi.
+- Data: `settings/validasi_karyawan` { `hari_libur`: string[] (format yang sudah dibaca cron §59), `keterangan_libur`: map }.
+- Cron: bila hari ini libur, kartu `belum_input` berstatus menunggu yang terlanjur dibuat ditutup -> status baru `libur` (tipe `StatusValidasi`), hilang dari halaman Validasi & banner Security. Lembur (18:00) & pemantauan QHSE tetap berjalan di hari libur.
