@@ -52,10 +52,9 @@ interface AparUnit {
   terakhir_inspeksi: TerakhirInspeksi | null;
 }
 
-const bulanTahunSekarang = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
+// Bulan inspeksi dalam WITA (§63) -- dulu jam perangkat; HP dengan zona waktu lain bisa mencatat
+// inspeksi tgl 1 dini hari ke bulan sebelumnya.
+const bulanTahunSekarang = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()).slice(0, 7);
 
 const KONDISI_TABUNG_OPSI = ["Baik", "Berkarat", "Bocor / Rusak"];
 const TEKANAN_OPSI = ["Normal", "Kurang", "Habis"];

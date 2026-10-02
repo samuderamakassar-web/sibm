@@ -2,14 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, query, where, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useFcmSetup } from "@/hooks/useFcmSetup";
 import { logoutWithConfirm, useAuthGuard } from "@/hooks/useAuthGuard";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
-import { useToast } from "@/components/ui/ToastProvider";
 import AbsensiCard from "@/components/AbsensiCard";
-import { daftarPeriodeLembur, periodeLemburAktif } from "../../lib/periodeLembur";
+import KlaimLemburModal from "../KlaimLemburModal";
 import AdminShell from "../admin/AdminShell";
 import Tile from "../admin/Tile";
 
@@ -73,14 +72,6 @@ interface DeepCleaningTask {
 }
 
 // Interface Baru untuk Item Lembur Kolektif
-interface OvertimeItemRequest {
-  tanggal: string;
-  jam_mulai: string;
-  jam_selesai: string;
-  area_ruangan: string;
-  alasan: string;
-}
-
 // ==========================================
 // FIX TIMEZONE: "hari ini" harus dihitung berdasarkan WITA (Asia/Makassar, UTC+8),
 // bukan new Date().toISOString() yang formatnya UTC. Kalau pakai toISOString(),
@@ -107,7 +98,6 @@ function isWeekend(dateISO: string): boolean {
 export default function DashboardOBPage() {
   const router = useRouter();
   const confirm = useConfirm();
-  const showToast = useToast();
   const todayISO = getTodayISOLocal();
   const { session, isReady: isAuthReady } = useAuthGuard({
     depts: ["OB & CS"],
@@ -124,11 +114,6 @@ export default function DashboardOBPage() {
 
   // 💡 STATE BARU: PERIODE & MULTI-ROW OVERTIME
   const [activeModal, setActiveModal] = useState<"none" | "lembur">("none");
-  const [isLemburLoading, setIsLemburLoading] = useState(false);
-  const [periodeLembur, setPeriodeLembur] = useState(periodeLemburAktif);
-  const [formLemburItems, setFormLemburItems] = useState<OvertimeItemRequest[]>([
-    { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "", alasan: "" }
-  ]);
 
   const picName = session?.nama || "";
   const picRole = session?.role || "";
@@ -192,54 +177,6 @@ export default function DashboardOBPage() {
 
   const handleKeluar = () => logoutWithConfirm(confirm, router);
 
-  // 💡 MULTI-ROW OVERTIME LOGIC HANDLERS
-  const handleAddLemburRow = () => {
-    setFormLemburItems([...formLemburItems, { tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "", alasan: "" }]);
-  };
-
-  const handleRemoveLemburRow = (index: number) => {
-    const newItems = [...formLemburItems];
-    newItems.splice(index, 1);
-    setFormLemburItems(newItems);
-  };
-
-  const handleLemburRowChange = (index: number, field: keyof OvertimeItemRequest, value: string) => {
-    const newItems = [...formLemburItems];
-    newItems[index][field] = value;
-    setFormLemburItems(newItems);
-  };
-
-  const handleSubmitLemburKolektif = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formLemburItems.some(i => !i.tanggal || !i.jam_mulai || !i.jam_selesai || !i.area_ruangan || !i.alasan)) {
-      return showToast("Mohon lengkapi seluruh kolom tanggal, jam, dan lokasi lembur yang Anda tambahkan!", "warning");
-    }
-
-    setIsLemburLoading(true);
-
-    try {
-      const dept = localStorage.getItem("pic_dept") || "OB & CS";
-
-      // Mengirimkan satu dokumen bundle lemburan periode ke koleksi Firebase
-      await addDoc(collection(db, "ga_overtime_requests"), {
-        nama_pemohon: picName,
-        departemen: dept,
-        periode: periodeLembur, // Siklus Buku (Cth: 11 Juni - 10 Juli 2026)
-        items: formLemburItems,  // Array berisi daftar tanggal lemburan
-        status: "Menunggu Approval GA",
-        waktu_request: serverTimestamp()
-      });
-
-      showToast(`Berhasil! ${formLemburItems.length} klaim lembur Anda untuk periode ${periodeLembur} telah dikirim ke Admin GA.`, "success");
-      setFormLemburItems([{ tanggal: todayISO, jam_mulai: "", jam_selesai: "", area_ruangan: "", alasan: "" }]);
-      setActiveModal("none");
-    } catch (error) {
-      console.error(error);
-      showToast("Gagal mengirim rekapan klaim lembur.", "error");
-    } finally {
-      setIsLemburLoading(false);
-    }
-  };
 
   // MENU UTAMA OB & CS — warna dipetakan ke token desain (lihat tokenColors di bawah)
   const menuOB = [
@@ -258,7 +195,6 @@ export default function DashboardOBPage() {
     accent: { bg: "#f5f3ff", color: "var(--accent)" },
   };
 
-  const sharedInputStyle = { width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", outline: "none", boxSizing: "border-box" as const, transition: "all 0.2s" };
 
   if (!isAuthReady || !session || !isReady) return null;
 
@@ -520,91 +456,8 @@ export default function DashboardOBPage() {
 
       {/* 📱 BOTTOM NAVIGATION EKSKLUSIF LAPANGAN (HANYA MUNCUL DI HP) */}
 
-      {/* ========================================== */}
-      {/* 💡 MODAL PENGAJUAN LEMBUR MULTI-ROW BERDASARKAN PERIODE */}
-      {/* (tampilan modal sengaja tidak disentuh — konsisten dengan keputusan redesign portal §8B) */}
-      {/* ========================================== */}
-      {activeModal === "lembur" && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 100, display: "flex", justifyContent: "center", alignItems: "center", padding: "15px" }}>
-          <div style={{ background: "var(--surface)", width: "100%", maxWidth: "650px", borderRadius: "24px", padding: "25px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box" }}>
-
-            <button onClick={() => setActiveModal("none")} style={{ position: "absolute", top: "15px", right: "15px", background: "var(--hover)", border: "none", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", color: "var(--ink-soft)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", zIndex: 10 }}>✖</button>
-
-            <div style={{ marginBottom: "20px", borderBottom: "2px solid var(--line)", paddingBottom: "15px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "18px", fontWeight: "800", display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{background:"#fffff0", padding:"8px", borderRadius:"12px"}}>⏱️</span> Klaim Overtime
-              </h2>
-              <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: "12px", lineHeight: "1.4" }}>Karyawan dapat memasukkan beberapa tanggal lembur sekaligus dalam satu siklus payroll.</p>
-            </div>
-
-            <form onSubmit={handleSubmitLemburKolektif} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-
-              {/* Pilihan Periode Cut-Off Gaji */}
-              <div className="input-grid-mobile">
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Nama Pemohon</label>
-                  <input type="text" readOnly value={picName} style={{...sharedInputStyle, background: "var(--hover)"}} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Siklus / Periode Buku *</label>
-                  <select value={periodeLembur} onChange={(e) => setPeriodeLembur(e.target.value)} style={{...sharedInputStyle, cursor: "pointer", background: "var(--surface)", fontWeight: "bold", color: "var(--ink)"}}>
-                    {daftarPeriodeLembur().map((p) => <option key={p.value} value={p.value}>{p.value} ({p.keterangan})</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ fontWeight: "bold", fontSize: "13px", color: "#b7791f", marginTop: "10px" }}>📍 Daftar Tanggal Kerja Overtime:</div>
-
-              {/* Loop Form Dinamis */}
-              {formLemburItems.map((item, index) => (
-                <div key={index} style={{ border: "1px solid var(--line)", padding: "20px 15px 15px", borderRadius: "16px", background: "var(--bg)", position: "relative" }}>
-                  {index > 0 && (
-                    <button type="button" onClick={() => handleRemoveLemburRow(index)} style={{ position: "absolute", top: "10px", right: "10px", background: "var(--surface)", color: "#e53e3e", border: "1px solid #fed7d7", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: "bold", cursor: "pointer", zIndex: 5 }}>Hapus ✖</button>
-                  )}
-
-                  <span style={{ position: "absolute", top: "10px", left: "15px", fontSize: "11px", fontWeight: "900", color: "#d69e2e", background: "#fffff0", padding: "2px 8px", borderRadius: "4px", border: "1px solid #fefcbf" }}>DATA KLAIM #{index + 1}</span>
-
-                  <div className="input-grid-mobile" style={{ marginTop: "15px", marginBottom: "10px" }}>
-                    <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Tanggal Lembur *</label>
-                      <input type="date" required value={item.tanggal} onChange={(e) => handleLemburRowChange(index, "tanggal", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Area / Lokasi Ruangan *</label>
-                      <input type="text" required placeholder="Cth: Lt. 2 R. Rapat" value={item.area_ruangan} onChange={(e) => handleLemburRowChange(index, "area_ruangan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
-                    </div>
-                  </div>
-
-                  <div className="input-grid-mobile" style={{ marginBottom: "10px" }}>
-                    <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Jam Mulai *</label>
-                      <input type="time" required value={item.jam_mulai} onChange={(e) => handleLemburRowChange(index, "jam_mulai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Jam Selesai *</label>
-                      <input type="time" required value={item.jam_selesai} onChange={(e) => handleLemburRowChange(index, "jam_selesai", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px", display: "block" }}>Detail Tugas / Pekerjaan yang Diselesaikan *</label>
-                    <input type="text" required placeholder="Cth: Pembersihan karpet koridor utama pasca rapat besar" value={item.alasan} onChange={(e) => handleLemburRowChange(index, "alasan", e.target.value)} style={{...sharedInputStyle, padding: "10px 12px", background: "var(--surface)"}} />
-                  </div>
-                </div>
-              ))}
-
-              <button type="button" onClick={handleAddLemburRow} style={{ background: "var(--surface)", color: "#d69e2e", border: "2px dashed #feccbf", padding: "12px", borderRadius: "12px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>
-                ➕ Tambah Tanggal Lembur Lain
-              </button>
-
-              <button type="submit" disabled={isLemburLoading} style={{ width: "100%", padding: "16px", background: isLemburLoading ? "#a0aec0" : "#d69e2e", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", marginTop: "10px", cursor: isLemburLoading ? "not-allowed" : "pointer", boxShadow: isLemburLoading ? "none" : "0 4px 6px rgba(214,158,46,0.3)" }}>
-                {isLemburLoading ? "Sedang Mengirim..." : "Kirim Semua Klaim Overtime"}
-              </button>
-            </form>
-
-          </div>
-        </div>
-      )}
+      {/* Klaim lembur tim -- komponen bersama Security/OB/Driver (§63) */}
+      <KlaimLemburModal open={activeModal === "lembur"} onClose={() => setActiveModal("none")} picName={picName} departemen="OB & CS" judul="Klaim Lembur OB & CS" labelArea="Area / Lokasi Ruangan" placeholderArea="Cth: Lt. 2 R. Rapat" placeholderAlasan="Cth: Persiapan acara kantor" />
 
     </AdminShell>
   );

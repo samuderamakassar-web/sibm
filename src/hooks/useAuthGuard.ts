@@ -25,6 +25,11 @@ import { useToast } from "../components/ui/ToastProvider";
 // Kalau nanti ada perubahan aturan role (misal nambah role baru), cukup diubah di sini.
 // =============================================================================
 
+// Logout yang disengaja (§63): signOut() memicu onAuthStateChanged di halaman yang MASIH terbuka
+// sebelum navigasi selesai -> guard mengira user tak berhak & memunculkan toast "Akses Ditolak!"
+// tiap kali logout (semua halaman ber-guard). Flag ini membuat guard diam selama logout berlangsung.
+let sedangLogout = false;
+
 export interface AuthSession {
   nama: string;
   role: string;
@@ -126,6 +131,7 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
       const deptOk = !options.depts || options.depts.length === 0 || options.depts.includes(dept) || adminBypass;
       const sudahLogin = !!firebaseUser && nama.trim().length > 0;
 
+      if (!sudahLogin && sedangLogout) return; // logout disengaja -- navigasi sudah diurus logout()
       if (!sudahLogin || !roleOk || !deptOk) {
         showToast(options.deniedMessage || "Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman ini.", "error");
         redirectTimer = setTimeout(() => router.push(options.redirectTo || "/"), 1200);
@@ -154,9 +160,12 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
 /** Hapus sesi login & redirect ke halaman login. Dipakai untuk tombol Keluar/Logout —
  *  disentralkan juga supaya tidak ada lagi redirect ke rute yang tidak ada fisiknya (404). */
 export function logout(router: { push: (path: string) => void }, redirectTo: string = "/") {
+  sedangLogout = true;
   localStorage.clear();
-  signOut(auth).catch((err) => console.error("[logout] Gagal signOut Firebase Auth:", err));
   router.push(redirectTo);
+  signOut(auth)
+    .catch((err) => console.error("[logout] Gagal signOut Firebase Auth:", err))
+    .finally(() => setTimeout(() => { sedangLogout = false; }, 3000));
 }
 
 /** Opsi dialog konfirmasi, cocok dengan bentuk yang diminta useConfirm() (ConfirmProvider.tsx). */
