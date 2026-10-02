@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, getDoc, getDocs, doc, Timestamp, where, limit } from "firebase/firestore";
+import { daftarTahunSejak, rentangBulanTahun } from "../../../lib/rentangFilter";
 import { db } from "../../../lib/firebase";
 import { MINIMUM_SESI_PER_SHIFT } from "../../../lib/shift";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -164,15 +165,12 @@ export default function MonitorSecurityPage() {
   useEffect(() => {
     if (!isReady || !session) return;
 
-    const unsubPatrol = onSnapshot(query(collection(db, "security_patrols"), orderBy("waktu_laporan", "desc")), (snap) => {
-      setPatrols(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as PatroliLog[]);
-    });
-
-    const unsubVisitor = onSnapshot(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc")), (snap) => {
+    // §61: tamu & paket dibatasi 500 terakhir (dulu SELURUH koleksi); patroli dimuat per rentang filter (efek di bawah).
+    const unsubVisitor = onSnapshot(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc"), limit(500)), (snap) => {
       setVisitors(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as VisitorLog[]);
     });
 
-    const unsubPackage = onSnapshot(query(collection(db, "packages"), orderBy("waktu_diterima", "desc")), (snap) => {
+    const unsubPackage = onSnapshot(query(collection(db, "packages"), orderBy("waktu_diterima", "desc"), limit(500)), (snap) => {
       setPackages(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as PackageLog[]);
     });
 
@@ -181,8 +179,21 @@ export default function MonitorSecurityPage() {
       setRosterDocsTersedia(snap.docs.map((d) => d.id).sort().reverse());
     }).catch((e) => console.error(e));
 
-    return () => { unsubPatrol(); unsubVisitor(); unsubPackage(); };
+    return () => { unsubVisitor(); unsubPackage(); };
   }, [isReady, session]);
+
+  // Log patroli sesuai filter bulan/tahun (default 60 hari terakhir), bukan seluruh histori.
+  const rentangPatroli = rentangBulanTahun(filterBulanPatroli, filterTahunPatroli, "SEMUA");
+  useEffect(() => {
+    if (!isReady || !session) return;
+    const syarat = [where("waktu_laporan", ">=", Timestamp.fromDate(rentangPatroli.dari))];
+    if (rentangPatroli.sampai) syarat.push(where("waktu_laporan", "<", Timestamp.fromDate(rentangPatroli.sampai)));
+    const unsub = onSnapshot(query(collection(db, "security_patrols"), ...syarat, orderBy("waktu_laporan", "desc")), (snap) => {
+      setPatrols(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as PatroliLog[]);
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rentangPatroli.kunci mewakili rentang
+  }, [isReady, session, rentangPatroli.kunci]);
 
   // Muat ulang data roster tiap kali periode yang dipilih berubah (default: siklus yang aktif hari ini)
   useEffect(() => {
@@ -216,9 +227,7 @@ export default function MonitorSecurityPage() {
     return d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  const tahunTersediaPatroli = Array.from(
-    new Set(patrols.map((p) => getTahunBulanPatroli(p)?.tahun).filter((y): y is number => !!y))
-  ).sort((a, b) => b - a);
+  const tahunTersediaPatroli = daftarTahunSejak();
   const fPatrols = patrols.filter((p) => {
     const tb = getTahunBulanPatroli(p);
     const matchBulan = filterBulanPatroli === "SEMUA" || tb?.bulan === Number(filterBulanPatroli);

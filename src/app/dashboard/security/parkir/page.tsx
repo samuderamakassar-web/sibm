@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp, where, limit } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useToast } from "../../../../components/ui/ToastProvider";
 import { normalizePlat } from "../../../../lib/platUtils";
@@ -201,7 +201,7 @@ export default function LogOperasionalPage() {
     const unsubEmployees = onSnapshot(collection(db, "employees_directory"), (snap) => {
       setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee)));
     });
-    const unsubVisitorLogs = onSnapshot(collection(db, "security_visitor_logs"), (snap) => {
+    const unsubVisitorLogs = onSnapshot(query(collection(db, "security_visitor_logs"), where("status", "==", "Di Dalam Area")), (snap) => {
       setVisitorLogs(snap.docs.map((d) => {
         const data = d.data();
         return { jenis: data.jenis || "", nama: data.nama || "", status: data.status || "" };
@@ -247,7 +247,9 @@ export default function LogOperasionalPage() {
 
   // 2. Tarik Data Real-time (Log Mobil & Status Driver)
   useEffect(() => {
-    const qMobil = query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"));
+    // §61: dulu tanpa limit (seluruh histori dibaca ulang tiap halaman dibuka & tiap ada log baru).
+    // 300 log terakhir (~1-2 minggu) cukup untuk status terkini per kendaraan + riwayat di layar.
+    const qMobil = query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"), limit(300));
     const unsubMobil = onSnapshot(qMobil, (snapshot) => {
       const logsArr: KendaraanLog[] = [];
       snapshot.forEach((docSnap) => {
@@ -266,7 +268,7 @@ export default function LogOperasionalPage() {
       setDaftarLogMobil(logsArr);
     });
 
-    const qDriver = query(collection(db, "driver_status_logs"), orderBy("waktu_ubah", "desc"));
+    const qDriver = query(collection(db, "driver_status_logs"), orderBy("waktu_ubah", "desc"), limit(100));
     const unsubDriver = onSnapshot(qDriver, (snapshot) => {
       const statusMap: Record<string, DriverStatusLog> = {};
       snapshot.forEach((docSnap) => {

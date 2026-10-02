@@ -115,7 +115,10 @@ export default function BukuTamuSecurity() {
 
   const [picName, setPicName] = useState("");
   const [activeTab, setActiveTab] = useState<"input" | "aktif" | "riwayat">("input");
-  const [visitorLogs, setVisitorLogs] = useState<VisitorLog[]>([]);
+  // §61: dulu 1 listener SELURUH security_visitor_logs (semua riwayat sejak awal, dibaca ulang tiap
+  // ada tamu masuk/keluar). Sekarang: yang di dalam area (live) + riwayat sesuai rentang filter.
+  const [logsAktif, setLogsAktif] = useState<VisitorLog[]>([]);
+  const [logsRiwayat, setLogsRiwayat] = useState<VisitorLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showInvalidKaryawanModal, setShowInvalidKaryawanModal] = useState(false);
 
@@ -128,6 +131,32 @@ export default function BukuTamuSecurity() {
   const [filterBulanRiwayat, setFilterBulanRiwayat] = useState<string>("Semua");
   const [filterTahunRiwayat, setFilterTahunRiwayat] = useState<string>("Semua");
   const [filterPTRiwayat, setFilterPTRiwayat] = useState<string>("Semua");
+
+  // Rentang riwayat yang dimuat: tanggal yang dicari > bulan/tahun yang difilter > 30 hari terakhir.
+  const rentangRiwayat = (() => {
+    if (searchTanggalTamu) {
+      const [y, m, d] = searchTanggalTamu.split("-").map(Number);
+      return { dari: new Date(y, m - 1, d), sampai: new Date(y, m - 1, d + 1), label: "tanggal dipilih" };
+    }
+    const tahun = filterTahunRiwayat !== "Semua" ? Number(filterTahunRiwayat) : null;
+    const bulan = filterBulanRiwayat !== "Semua" ? Number(filterBulanRiwayat) : null;
+    if (tahun !== null || bulan !== null) {
+      const th = tahun ?? new Date().getFullYear();
+      return bulan !== null
+        ? { dari: new Date(th, bulan, 1), sampai: new Date(th, bulan + 1, 1), label: "bulan dipilih" }
+        : { dari: new Date(th, 0, 1), sampai: new Date(th + 1, 0, 1), label: "tahun dipilih" };
+    }
+    const dari = new Date(); dari.setHours(0, 0, 0, 0); dari.setDate(dari.getDate() - 30);
+    return { dari, sampai: null as Date | null, label: "30 hari terakhir" };
+  })();
+  const kunciRentang = `${rentangRiwayat.dari.getTime()}-${rentangRiwayat.sampai?.getTime() ?? "kini"}`;
+
+  // Gabungan (dedupe by id), urut terbaru dulu -- dipakai semua filter & aksi di bawah apa adanya.
+  const visitorLogs: VisitorLog[] = (() => {
+    const map = new Map<string, VisitorLog>();
+    [...logsRiwayat, ...logsAktif].forEach((l) => map.set(l.id, l));
+    return Array.from(map.values()).sort((a, b) => (b.waktu_masuk?.toMillis() || 0) - (a.waktu_masuk?.toMillis() || 0));
+  })();
 
   // State untuk Autocomplete Karyawan
   const [karyawanDB, setKaryawanDB] = useState<EmployeeData[]>([]);
@@ -175,14 +204,8 @@ export default function BukuTamuSecurity() {
     }
     setTimeout(() => setPicName(nama), 0);
 
-    const logsRef = collection(db, "security_visitor_logs");
-    const q = query(logsRef, orderBy("waktu_masuk", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const logs: VisitorLog[] = [];
-      snapshot.forEach(docSnap => {
-        logs.push({ ...docSnap.data(), id: docSnap.id } as VisitorLog);
-      });
-      setVisitorLogs(logs);
+    const unsubscribe = onSnapshot(query(collection(db, "security_visitor_logs"), where("status", "==", "Di Dalam Area")), (snapshot) => {
+      setLogsAktif(snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as VisitorLog)));
     });
 
     const fetchKaryawan = async () => {
@@ -236,6 +259,17 @@ export default function BukuTamuSecurity() {
       }
     };
   }, [router]);
+
+  // Riwayat sesuai rentang filter (lihat rentangRiwayat). Filter 1 field (waktu_masuk) -> tanpa index komposit.
+  useEffect(() => {
+    const syarat = [where("waktu_masuk", ">=", Timestamp.fromDate(rentangRiwayat.dari))];
+    if (rentangRiwayat.sampai) syarat.push(where("waktu_masuk", "<", Timestamp.fromDate(rentangRiwayat.sampai)));
+    const unsub = onSnapshot(query(collection(db, "security_visitor_logs"), ...syarat, orderBy("waktu_masuk", "desc")), (snapshot) => {
+      setLogsRiwayat(snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as VisitorLog)));
+    }, (err) => console.error("[buku-tamu] Gagal memuat riwayat:", err));
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- kunciRentang mewakili rentangRiwayat
+  }, [kunciRentang]);
 
   // 💡 SINKRON OTOMATIS: karyawan check-in yang PUNYA kendaraan terdaftar (plat_kendaraan di
   // Master Data Karyawan cocok dengan plat di Master Data Kendaraan) -> kendaraannya otomatis
@@ -565,9 +599,8 @@ export default function BukuTamuSecurity() {
     return matchName && matchDate && matchJenis && matchBulanTahun && matchPT;
   });
 
-  const tahunTersediaRiwayat = Array.from(new Set(
-    visitorLogs.filter(l => l.status === "Selesai / Keluar" && l.waktu_masuk).map(l => l.waktu_masuk!.toDate().getFullYear())
-  )).sort((a, b) => b - a);
+  // Data riwayat kini dimuat per rentang, jadi daftar tahun tidak bisa lagi diturunkan dari data.
+  const tahunTersediaRiwayat = Array.from({ length: new Date().getFullYear() - 2024 + 1 }, (_, i) => new Date().getFullYear() - i);
 
   const ptTersediaRiwayat = Array.from(new Set(
     visitorLogs.filter(l => l.status === "Selesai / Keluar" && l.instansi_dept).map(l => l.instansi_dept)
@@ -984,6 +1017,8 @@ export default function BukuTamuSecurity() {
                 <option value="Semua">Semua PT / Instansi</option>
                 {ptTersediaRiwayat.map(pt => <option key={pt} value={pt}>{pt}</option>)}
               </select>
+
+              <span style={{ fontSize: "11.5px", color: "var(--muted)", alignSelf: "center" }}>Menampilkan {rentangRiwayat.label}{rentangRiwayat.label === "30 hari terakhir" ? " — pilih bulan/tahun untuk data lama" : ""}</span>
 
               <button onClick={handleExportExcelRiwayatFiltered} className="export-btn" style={{ padding: "9px 16px", marginLeft: "auto" }}>
                 <IconDownload size={14} /> Export Sesuai Filter ({riwayatPengunjung.length})

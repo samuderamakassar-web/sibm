@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp, where, limit } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
@@ -166,7 +166,7 @@ export default function DriverArmadaPage() {
     const unsubEmployees = onSnapshot(collection(db, "employees_directory"), (snap) => {
       setEmployees(snap.docs.map((d) => d.data() as EmployeeMini));
     });
-    const unsubVisitorLogs = onSnapshot(collection(db, "security_visitor_logs"), (snap) => {
+    const unsubVisitorLogs = onSnapshot(query(collection(db, "security_visitor_logs"), where("status", "==", "Di Dalam Area")), (snap) => {
       setVisitorLogs(snap.docs.map((d) => {
         const data = d.data();
         return { jenis: data.jenis || "", nama: data.nama || "", status: data.status || "" };
@@ -210,7 +210,9 @@ export default function DriverArmadaPage() {
   };
 
   useEffect(() => {
-    const qMobil = query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"));
+    // §61: dulu tanpa limit (seluruh histori dibaca ulang tiap halaman dibuka & tiap ada log baru).
+    // 300 log terakhir (~1-2 minggu) cukup untuk status terkini per kendaraan + riwayat di layar.
+    const qMobil = query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"), limit(300));
     const unsub = onSnapshot(qMobil, (snapshot) => {
       const logsArr: KendaraanLog[] = [];
       snapshot.forEach((docSnap) => {

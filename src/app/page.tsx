@@ -25,7 +25,7 @@ import AdminShell from "../components/admin/AdminShell";
 // ==========================================
 // INTERFACES
 // ==========================================
-interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; _riwayatTerakhir?: KendaraanLog; }
+interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; petugas_security?: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; _riwayatTerakhir?: KendaraanLog; }
 interface DriverStatusLog { nama_driver: string; status: string; waktu_ubah?: Timestamp | null; }
 interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: string; waktu_masuk?: Timestamp | null; waktu_keluar?: Timestamp | null; }
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
@@ -778,7 +778,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     }
     setIsSearchingHelpdesk(true);
     try {
-      const snap = await getDocs(collection(db, "helpdesk_tickets"));
+      // §61: dulu getDocs SELURUH helpdesk_tickets tiap klik "Cari" -> 300 laporan terbaru cukup
+      // (yang dicari pelapor hampir selalu laporannya yang masih baru).
+      const snap = await getDocs(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(BATAS_PENCARIAN)));
       const rawData = snap.docs.map(d => ({ id: d.id, ...d.data() } as HelpdeskTicket));
       const filtered = rawData.filter(t => String(t.nama_pelapor).toLowerCase().includes(searchHelpdeskName.toLowerCase().trim()));
       filtered.sort((a, b) => getTime(b.waktu_lapor) - getTime(a.waktu_lapor));
@@ -1333,6 +1335,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .armada-log-atas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink); }
         .armada-pil { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
         .armada-log-detail { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+        .armada-log-pencatat { font-size: 11px; opacity: 0.85; }
+        .armada-pemakai { font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .list-row {
           display: flex; gap: 12px; padding: 13px 15px; border-radius: 13px; background: var(--bg);
           border-left: 3px solid var(--line);
@@ -1806,6 +1810,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       </span>
                       <span className="armada-plat">{k.kendaraan}</span>
                       <span className="armada-status" style={{ color: info.fg }}><span className="armada-titik" style={{ background: info.fg }} />{info.label}</span>
+                      {k.driver_bertugas && k.driver_bertugas !== "-" && <span className="armada-pemakai">{k.driver_bertugas.replace("Standby: ", "")}</span>}
                     </button>
                   );
                 })}
@@ -1827,7 +1832,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       const info = INFO_KATEGORI_ARMADA[kat];
                       const driver = log.driver_bertugas?.replace("Standby: ", "");
                       const tujuan = log.tujuan_keperluan && log.tujuan_keperluan !== "-" ? log.tujuan_keperluan : "";
-                      const detail = [driver && driver !== "-" ? driver : "", kat === "keluar" && tujuan ? `ke ${tujuan}` : ""].filter(Boolean).join(" · ");
+                      // Keluar = yang membawa; Tiba/Pulang = pemakai terakhir (dibawa dari log sebelumnya). §58U-b
+                      const pemakai = driver && driver !== "-" ? `${kat === "keluar" ? "Dibawa" : "Pemakai terakhir"}: ${driver}` : "";
+                      const detail = [pemakai, kat === "keluar" && tujuan ? `ke ${tujuan}` : ""].filter(Boolean).join(" · ");
+                      const pencatat = (log.petugas_security || "").replace(" (Auto-Sync Buku Tamu)", " · otomatis dari Buku Tamu");
                       return (
                         <div key={`${g.tanggal}-${idx}`} className="armada-log">
                           <span className="armada-jam">{log.waktu_catat ? jamTimWITA(log.waktu_catat) : "-"}</span>
@@ -1838,6 +1846,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                               <span className="armada-pil" style={{ color: info.fg, background: info.bg }}>{kat === "siap" ? "Tiba / standby" : info.label}</span>
                             </span>
                             {detail && <span className="armada-log-detail">{detail}</span>}
+                            {pencatat && <span className="armada-log-detail armada-log-pencatat">Diupdate oleh {pencatat}</span>}
                           </span>
                         </div>
                       );

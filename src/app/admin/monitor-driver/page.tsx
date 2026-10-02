@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, Timestamp, where } from "firebase/firestore";
+import { daftarTahunSejak, rentangBulanTahun } from "../../../lib/rentangFilter";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/EvaluasiManualButton";
@@ -42,22 +43,25 @@ export default function MonitorDriverPage() {
   const [filterBulan, setFilterBulan] = useState<string>("SEMUA");
   const [filterTahun, setFilterTahun] = useState<string>("SEMUA");
 
+  // §61: muat rentang sesuai filter bulan/tahun (default 60 hari), bukan seluruh histori.
+  const rentang = rentangBulanTahun(filterBulan, filterTahun, "SEMUA");
   useEffect(() => {
     if (!isReady || !session) return;
-    const unsub = onSnapshot(query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc")), (snap) => {
+    const syarat = [where("waktu_catat", ">=", Timestamp.fromDate(rentang.dari))];
+    if (rentang.sampai) syarat.push(where("waktu_catat", "<", Timestamp.fromDate(rentang.sampai)));
+    const unsub = onSnapshot(query(collection(db, "operational_vehicle_logs"), ...syarat, orderBy("waktu_catat", "desc")), (snap) => {
       setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as KendaraanLog)));
     });
     return () => unsub();
-  }, [isReady, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rentang.kunci mewakili rentang
+  }, [isReady, session, rentang.kunci]);
 
   const formatWaktu = (ts: Timestamp | null) => {
     if (!ts) return "-";
     return ts.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  const tahunTersedia = Array.from(
-    new Set(logs.map((l) => l.waktu_catat?.toDate().getFullYear()).filter((y): y is number => !!y))
-  ).sort((a, b) => b - a);
+  const tahunTersedia = daftarTahunSejak();
 
   const fLogs = logs.filter((l) => {
     const d = l.waktu_catat?.toDate();

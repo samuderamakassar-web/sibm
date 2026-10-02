@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs, where, limit, type QuerySnapshot } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { kirimEmail } from "../../../..//lib/notify";
 import { buildPaketEmailHtml } from "../../../../lib/emailTemplates";
@@ -97,7 +97,15 @@ export default function PaketPage() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const [searchTabel, setSearchTabel] = useState("");
-  const [daftarPaket, setDaftarPaket] = useState<TipePaket[]>([]);
+  // §61: dulu 1 listener SELURUH packages. Sekarang paket "Belum Diambil" (selalu tampil berapa pun
+  // umurnya) + 300 paket terbaru untuk riwayat, digabung tanpa dobel.
+  const [paketMenunggu, setPaketMenunggu] = useState<TipePaket[]>([]);
+  const [paketTerbaru, setPaketTerbaru] = useState<TipePaket[]>([]);
+  const daftarPaket: TipePaket[] = (() => {
+    const map = new Map<string, TipePaket>();
+    [...paketTerbaru, ...paketMenunggu].forEach((p) => map.set(p.id, p));
+    return Array.from(map.values()).sort((a, b) => (b.waktu_diterima?.toMillis?.() || 0) - (a.waktu_diterima?.toMillis?.() || 0));
+  })();
 
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraMode, setCameraMode] = useState<"input" | "serahkan">("input");
@@ -128,8 +136,7 @@ export default function PaketPage() {
   }, [router]);
 
   useEffect(() => {
-    const q = query(collection(db, "packages"), orderBy("waktu_diterima", "desc"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const keDaftar = (querySnapshot: QuerySnapshot) => {
       const paketArr: TipePaket[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
@@ -148,8 +155,11 @@ export default function PaketPage() {
           petugas_ambil: data.petugas_ambil || "-",
         });
       });
-      setDaftarPaket(paketArr);
-    });
+      return paketArr;
+    };
+    const unsubMenunggu = onSnapshot(query(collection(db, "packages"), where("status", "==", "Belum Diambil")), (s) => setPaketMenunggu(keDaftar(s)));
+    const unsubTerbaru = onSnapshot(query(collection(db, "packages"), orderBy("waktu_diterima", "desc"), limit(300)), (s) => setPaketTerbaru(keDaftar(s)));
+    const unsubscribe = () => { unsubMenunggu(); unsubTerbaru(); };
 
     const fetchKaryawan = async () => {
       try {
