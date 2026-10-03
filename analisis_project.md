@@ -2915,3 +2915,6 @@ SUDAH DI-DEPLOY (hosting); cron baru aktif di main. Keputusan user: semua 4 krit
 
 ## 83. Hub Admin: Ruang Kosong di Samping "Perlu tindakan" (3 Oktober 2026)
 SUDAH DI-DEPLOY. Dilaporkan user via screenshot: 8 kolom kosong di kanan kartu Perlu tindakan (span4). Panel Kehadiran & lembur karyawan (§67) dipindah dari baris penuh ke `.span8` di sampingnya (tablet/HP span 12). Dry run Jadwal Otomatis (§82) oleh user: Security 3 staf 0 sel, OB pelayanan Syahrullah Ramadhan + 3 cleaning 0 hari -> jadwal s.d. 2026-12-02 sudah terisi (generate manual sebelumnya); cron mulai menambah 1 hari per hari di ujung jendela 60 hari.
+
+## 84. Modal Login Portal Dirapikan + Logo Samudera (3 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user (screenshot): ganti emoji gedung dengan logo `/logo-samudera.png` di kartu putih (teks logo hitam tetap terbaca di mode gelap), judul "Masuk Staf Internal" + keterangan SIBM, input berlabel + ikon (email/gembok), tombol tampil/sembunyikan kata sandi, `autoComplete` username/current-password, fokus ring warna brand, tombol brand penuh, info "Lupa kata sandi? Hubungi Admin GA", lebar modal login 440px. Logika `handleLogin` tidak berubah.
