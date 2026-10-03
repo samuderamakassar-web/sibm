@@ -264,6 +264,7 @@ export default function PortalSIBM() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [lihatSandi, setLihatSandi] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [daftarAdminGA, setDaftarAdminGA] = useState<KontakAdmin[]>([]);
   const [daftarQHSE, setDaftarQHSE] = useState<KontakAdmin[]>([]);
@@ -1989,16 +1990,59 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       <Modal
         open={activeModal !== "none"}
         onClose={() => setActiveModal("none")}
-        maxWidth={(activeModal === "tamu" || activeModal === "paket" || activeModal === "sbo") ? "800px" : "550px"}
+        maxWidth={(activeModal === "tamu" || activeModal === "paket" || activeModal === "sbo") ? "800px" : activeModal === "login" ? "440px" : "550px"}
       >
         {/* MODAL 1: LOGIN */}
         {activeModal === "login" && (
           <>
-            <div style={{ textAlign: "center", marginBottom: "25px", marginTop: "10px" }}><div style={{ fontSize: "45px", marginBottom: "15px" }}>🏢</div><h2 style={{ margin: "0 0 5px 0", color: "var(--ink)", fontSize: "22px", fontWeight: "800" }}>Akses Staf Internal</h2></div>
-            <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email Anda" />
-              <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Kata Sandi" />
-              <Button type="submit" loading={isLoginLoading} loadingText="Memeriksa..." variant="primary">Masuk Dashboard</Button>
+            {/* §84: modal login dirapikan -- logo Samudera (kartu putih: teks logo hitam tetap terbaca di mode gelap) */}
+            <style dangerouslySetInnerHTML={{ __html: `
+              .lg-logo { display: flex; justify-content: center; margin: 4px 0 18px; }
+              .lg-logo span { background: #fff; padding: 12px 18px; border-radius: 16px; box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 8px 24px -12px rgba(0,0,0,0.25); }
+              .lg-logo img { height: 34px; width: auto; display: block; }
+              .lg-field { display: flex; flex-direction: column; gap: 6px; }
+              .lg-field label { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+              .lg-box { position: relative; display: flex; align-items: center; }
+              .lg-box svg.lg-ik { position: absolute; left: 14px; color: var(--muted); pointer-events: none; }
+              .lg-input { width: 100%; height: 50px; padding: 0 46px 0 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-family: inherit; font-size: 15px; box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
+              .lg-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); background: var(--surface); }
+              .lg-mata { position: absolute; right: 8px; width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+              .lg-mata:hover { background: var(--hover); color: var(--ink); }
+              .lg-tombol { height: 50px; border: none; border-radius: 14px; background: var(--brand); color: #fff; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 6px; transition: filter .15s, transform .1s; }
+              .lg-tombol:hover { filter: brightness(1.08); }
+              .lg-tombol:active { transform: scale(0.99); }
+              .lg-tombol:disabled { opacity: .65; cursor: progress; }
+            `}} />
+            <div className="lg-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element -- static export, aset lokal */}
+              <span><img src="/logo-samudera.png" alt="Samudera" /></span>
+            </div>
+            <div style={{ textAlign: "center", marginBottom: "22px" }}>
+              <h2 style={{ margin: "0 0 6px", color: "var(--ink)", fontSize: "22px", fontWeight: 800, letterSpacing: "-0.01em" }}>Masuk Staf Internal</h2>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "13px", lineHeight: 1.5 }}>SIBM · Sistem Informasi Bangunan &amp; Manajemen<br />Gunakan email &amp; kata sandi akun Anda.</p>
+            </div>
+            <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div className="lg-field">
+                <label htmlFor="lg-email">Email</label>
+                <div className="lg-box">
+                  <svg className="lg-ik" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+                  <input id="lg-email" className="lg-input" type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nama@samudera.id" />
+                </div>
+              </div>
+              <div className="lg-field">
+                <label htmlFor="lg-sandi">Kata sandi</label>
+                <div className="lg-box">
+                  <svg className="lg-ik" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                  <input id="lg-sandi" className="lg-input" type={lihatSandi ? "text" : "password"} required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Kata sandi" />
+                  <button type="button" className="lg-mata" onClick={() => setLihatSandi((v) => !v)} aria-label={lihatSandi ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}>
+                    {lihatSandi
+                      ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l18 18" /><path d="M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.6M6.6 6.6A17 17 0 0 0 3 12s4 6 9 6a9.6 9.6 0 0 0 4.4-1.1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z" /><circle cx="12" cy="12" r="3" /></svg>}
+                  </button>
+                </div>
+              </div>
+              <button type="submit" className="lg-tombol" disabled={isLoginLoading}>{isLoginLoading ? "Memeriksa..." : "Masuk Dashboard"}</button>
+              <p style={{ margin: "4px 0 0", textAlign: "center", fontSize: "12px", color: "var(--muted)" }}>Lupa kata sandi? Hubungi Admin GA untuk reset.</p>
             </form>
           </>
         )}
