@@ -35,6 +35,10 @@
 .span4 {
   grid-column: span 4;
 }
+/* §83: panel lebar di samping "Perlu tindakan" (dulu ruang kosong 8 kolom) */
+.span8 {
+  grid-column: span 8;
+}
 
 /* ---- Kotak sapaan (merah) ---- */
 .hero {
@@ -239,6 +243,9 @@
   .span4 {
     grid-column: span 6;
   }
+  .span8 {
+    grid-column: span 12;
+  }
 }
 
 /* ---- HP ---- */
@@ -246,7 +253,8 @@
   .grid {
     gap: 12px;
   }
-  .span4 {
+  .span4,
+  .span8 {
     grid-column: span 12;
   }
   .heroTitle {

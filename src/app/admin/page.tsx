@@ -388,7 +388,7 @@ export default function AdminDashboardPage() {
           </Tile>
 
           {/* §67 Kehadiran & lembur karyawan (versi lengkap: foto & alasan -- khusus login) */}
-          <Tile style={{ gridColumn: "1 / -1" }}>
+          <Tile className={styles.span8}>
             <KehadiranKaryawanPanel />
           </Tile>
 
