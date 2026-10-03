@@ -11,10 +11,16 @@ import { db } from "./firebase";
 
 export interface PertanyaanItem { id: string; teks: string; }
 export interface SegmentConfig { id: string; nama: string; pertanyaan: PertanyaanItem[]; aktif?: boolean; }
-export interface AreaChecklist { area: string; segmen: SegmentConfig[]; }
+/** paket = nomor pembagian plotting OB (§82): area dgn nomor sama dipegang 1 orang yang sama.
+ *  Area Pelayanan tidak ikut rotasi (dipegang OB Pelayanan Tetap). */
+export interface AreaChecklist { area: string; segmen: SegmentConfig[]; paket?: number; }
 export interface TugasTambahan { nama_staf: string; segmen: SegmentConfig; }
 export interface ItemSederhana { nama: string; aktif: boolean; }
 export interface ItemInspeksiDriver { key: string; label: string; aktif: boolean; }
+/** Jenis servis kendaraan (§82). wajib_foto=false -> tidak perlu foto terpisah (mis. Ganti Oli).
+ *  "Servis Berkala" punya 3 foto khusus (kendaraan, KM, buku servis) & selalu tersedia. */
+export interface JenisServis { nama: string; wajib_foto: boolean; aktif: boolean; }
+export const JENIS_SERVIS_BERKALA = "Servis Berkala";
 
 export const ID_SEGMENT_PELAYANAN = "pelayanan";
 export const NAMA_STAF_MUSHALLAH_TETAP = "Zainal";
@@ -214,18 +220,29 @@ const SEGMENTS_PELAYANAN: SegmentConfig[] = [
 ];
 
 export const CHECKLIST_OB_BAWAAN: AreaChecklist[] = [
-  { area: "Basement", segmen: SEGMENTS_BASEMENT },
-  { area: "Lantai 1", segmen: SEGMENTS_LANTAI1 },
-  { area: "Lantai 2", segmen: buatSegmenLantai(2) },
-  { area: "Lantai 3", segmen: buatSegmenLantai(3) },
-  { area: "Lantai 4", segmen: buatSegmenLantai(4) },
-  { area: "Lantai 5", segmen: SEGMENTS_LANTAI5 },
+  // paket bawaan = GRUP_TUGAS lama di PlottingOBPage: [Basement+L1], [L2], [L3+L4], [L5]
+  { area: "Basement", segmen: SEGMENTS_BASEMENT, paket: 1 },
+  { area: "Lantai 1", segmen: SEGMENTS_LANTAI1, paket: 1 },
+  { area: "Lantai 2", segmen: buatSegmenLantai(2), paket: 2 },
+  { area: "Lantai 3", segmen: buatSegmenLantai(3), paket: 3 },
+  { area: "Lantai 4", segmen: buatSegmenLantai(4), paket: 3 },
+  { area: "Lantai 5", segmen: SEGMENTS_LANTAI5, paket: 4 },
   { area: "Pelayanan", segmen: SEGMENTS_PELAYANAN },
 ];
 export const TUGAS_TAMBAHAN_BAWAAN: TugasTambahan[] = [{ nama_staf: NAMA_STAF_MUSHALLAH_TETAP, segmen: SEGMENT_MUSHALLAH_L4 }];
 
 // ---------- Bawaan inspeksi fasilitas OB & inspeksi kendaraan Driver ----------
 export const FASILITAS_OB_BAWAAN: ItemSederhana[] = ["Kulkas", "Dispenser Pantry Lantai 1", "Dispenser Pantry Lantai 2", "Genset (Tugas Khusus)"].map((nama) => ({ nama, aktif: true }));
+export const JENIS_SERVIS_BAWAAN: JenisServis[] = [
+  { nama: "Ganti Oli", wajib_foto: false, aktif: true },
+  { nama: "Ganti Ban Luar", wajib_foto: true, aktif: true },
+  { nama: "Ganti Ban Dalam", wajib_foto: true, aktif: true },
+  { nama: "Tubles", wajib_foto: true, aktif: true },
+  { nama: "Uji Emisi", wajib_foto: true, aktif: true },
+  { nama: JENIS_SERVIS_BERKALA, wajib_foto: true, aktif: true },
+  { nama: "Rem", wajib_foto: true, aktif: true },
+  { nama: "Lainnya", wajib_foto: true, aktif: true },
+];
 export const INSPEKSI_DRIVER_BAWAAN: ItemInspeksiDriver[] = [
   { key: "ban", label: "Ban & Tekanan Angin", aktif: true },
   { key: "rem", label: "Rem", aktif: true },
@@ -236,6 +253,20 @@ export const INSPEKSI_DRIVER_BAWAAN: ItemInspeksiDriver[] = [
   { key: "ac", label: "AC", aktif: true },
   { key: "kebersihan", label: "Kebersihan Interior/Eksterior", aktif: true },
 ];
+
+/** Paket plotting OB: [[Basement, Lantai 1], [Lantai 2], ...] -- urut nomor paket; area Pelayanan dikecualikan,
+ *  area tanpa nomor menjadi paket sendiri. DIDUPLIKASI di scripts/jadwal-otomatis.mjs. */
+export function paketPlottingDari(area: AreaChecklist[]): string[][] {
+  const grup = new Map<number, string[]>();
+  let nomorBebas = 1000;
+  area.filter((a) => !a.area.toLowerCase().includes("pelayanan")).forEach((a) => {
+    // Data tersimpan sebelum §82 belum punya paket -> pakai paket bawaan sesuai nama area.
+    const bawaan = CHECKLIST_OB_BAWAAN.find((b) => b.area === a.area)?.paket;
+    const no = typeof a.paket === "number" && a.paket > 0 ? a.paket : bawaan ?? nomorBebas++;
+    grup.set(no, [...(grup.get(no) || []), a.area]);
+  });
+  return Array.from(grup.entries()).sort((x, y) => x[0] - y[0]).map(([, v]) => v);
+}
 
 /** Segmen checklist untuk area plot (logika pencocokan sama dengan versi lama) + tugas tambahan per staf. */
 export function getSegmenUntukArea(master: AreaChecklist[], tugasTambahan: TugasTambahan[], area: string, picName?: string): SegmentConfig[] {
@@ -277,6 +308,9 @@ export function useChecklistOB() {
 }
 export function useFasilitasOB() {
   return useDokumen<ItemSederhana[]>("fasilitas_ob", FASILITAS_OB_BAWAAN, (d) => (Array.isArray(d.daftar) && d.daftar.length ? (d.daftar as ItemSederhana[]) : null));
+}
+export function useJenisServis() {
+  return useDokumen<JenisServis[]>("jenis_servis", JENIS_SERVIS_BAWAAN, (d) => (Array.isArray(d.daftar) && d.daftar.length ? (d.daftar as JenisServis[]) : null));
 }
 export function useInspeksiDriver() {
   return useDokumen<ItemInspeksiDriver[]>("inspeksi_driver", INSPEKSI_DRIVER_BAWAAN, (d) => (Array.isArray(d.daftar) && d.daftar.length ? (d.daftar as ItemInspeksiDriver[]) : null));

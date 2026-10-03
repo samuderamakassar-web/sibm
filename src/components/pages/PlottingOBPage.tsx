@@ -18,14 +18,13 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
+import { paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
 
 // ==========================================
 // KONSTANTA
 // ==========================================
 const NAMA_HARI_SINGKAT = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
-const DAFTAR_LANTAI = ["Basement", "Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Lantai 5"];
 const AREA_PELAYANAN = "Pelayanan Khusus OB";
-const SEMUA_AREA = [...DAFTAR_LANTAI, AREA_PELAYANAN];
 
 interface StaffOB {
   id: string;
@@ -75,33 +74,22 @@ function shuffle<T>(arr: T[]): T[] {
 // Total 3 paket tugas cleaning (Basement+L1, L2, L3+L4) — pas untuk 3 staff cleaning;
 // kalau staff cleaning lebih/kurang dari 3, sisa/kekurangan dibagi rata via idx % staffAcak.length
 // ==========================================
-const GRUP_TUGAS: string[][] = [
-  ["Basement", "Lantai 1"],
-  ["Lantai 2"],
-  ["Lantai 3", "Lantai 4"],
-];
-const AREA_BERSAMA = "Lantai 5";
+// §82: paket kini diatur Admin GA di /admin/sop-checklist (nomor paket per area) -> paketPlottingDari().
+const AREA_BERSAMA = "Lantai 5"; // hanya untuk opsi legacy "Semua / All" di dropdown
 // Nilai lama "Semua / All" dipertahankan cuma sebagai pilihan manual legacy di dropdown
 // (kalau koordinator memang mau balik ke mode dikerjakan bersama buat 1 hari tertentu),
 // TAPI generate otomatis sekarang selalu isi nama orang, bukan nilai ini lagi.
 const NILAI_BERSAMA = "Semua / All";
 
 // Bagi grup tugas ke staff cleaning yang tersedia, urutan staff diacak tiap kali dipanggil
-function buatRotasiCleaning(cleaningStaff: string[]): Record<string, string> {
+function buatRotasiCleaning(cleaningStaff: string[], paket: string[][]): Record<string, string> {
   const hasil: Record<string, string> = {};
   if (cleaningStaff.length === 0) return hasil;
-
   const staffAcak = shuffle(cleaningStaff);
-  GRUP_TUGAS.forEach((grup, idx) => {
+  paket.forEach((grup, idx) => {
     const orang = staffAcak[idx % staffAcak.length];
-    grup.forEach((lantai) => {
-      hasil[lantai] = orang;
-    });
+    grup.forEach((area) => { hasil[area] = orang; });
   });
-
-  // Lantai 5 lanjut rotasi round-robin yang sama (index ke-4) -- staffAcak sudah CS-only
-  hasil[AREA_BERSAMA] = staffAcak[GRUP_TUGAS.length % staffAcak.length];
-
   return hasil;
 }
 
@@ -117,6 +105,11 @@ export default function PlottingOBPage() {
   });
 
   const [staffList, setStaffList] = useState<StaffOB[]>([]);
+  // Area & paket plotting dari master SOP Checklist (§82)
+  const { nilai: masterOB } = useChecklistOB();
+  const PAKET = paketPlottingDari(masterOB.area);
+  const DAFTAR_LANTAI = PAKET.flat();
+  const SEMUA_AREA = [...DAFTAR_LANTAI, AREA_PELAYANAN];
   const [pelayananTetap, setPelayananTetap] = useState("");
 
   const [selectedDate, setSelectedDate] = useState(toISO(new Date()));
@@ -296,7 +289,7 @@ export default function PlottingOBPage() {
       cleaningPool = cleaningPool.slice(1);
     }
 
-    const rotasi = buatRotasiCleaning(cleaningPool);
+    const rotasi = buatRotasiCleaning(cleaningPool, PAKET);
     const plotBaru: PlotHarian = { ...rotasi, [AREA_PELAYANAN]: pelayananHariIni };
     // Area yang tidak tercover (kalau cleaning pool kosong) dikosongkan, bukan dihapus
     DAFTAR_LANTAI.forEach((lantai) => {
@@ -338,7 +331,7 @@ export default function PlottingOBPage() {
 
       for (let i = 0; i < 30; i++) {
         if (i % ukuranBlok === 0) {
-          rotasiAktif = buatRotasiCleaning(cleaningStaff);
+          rotasiAktif = buatRotasiCleaning(cleaningStaff, PAKET);
         }
         const tgl = new Date(tglMulai);
         tgl.setDate(tglMulai.getDate() + i);

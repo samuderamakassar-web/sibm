@@ -46,6 +46,10 @@ interface Kendaraan {
   foto_url?: string;
   status_kepemilikan?: "Aset" | "Sewa";
   tanggal_akhir_sewa?: string; // YYYY-MM-DD, hanya relevan kalau status_kepemilikan === "Sewa"
+  // §82 penilaian Driver: kendaraan operasional yang dirawat tim Driver (wajib inspeksi mingguan &
+  // servis tepat waktu -> dasar potongan poin otomatis). Mobil pribadi karyawan: biarkan false.
+  dikelola_driver?: boolean;
+  tanggal_servis_berikutnya?: string; // YYYY-MM-DD
 }
 
 interface OdometerLog {
@@ -149,6 +153,8 @@ const FORM_KENDARAAN_KOSONG = {
   foto_url: "",
   status_kepemilikan: "Aset" as "Aset" | "Sewa",
   tanggal_akhir_sewa: "",
+  dikelola_driver: false,
+  tanggal_servis_berikutnya: "",
 };
 
 function buildKendaraanId(plat: string, pic: string, unit: string): string {
@@ -614,6 +620,8 @@ export default function ManajemenKendaraanPage() {
       foto_url: formData.foto_url || "",
       status_kepemilikan: formData.status_kepemilikan,
       tanggal_akhir_sewa: formData.status_kepemilikan === "Sewa" ? formData.tanggal_akhir_sewa : "",
+      dikelola_driver: !!formData.dikelola_driver,
+      tanggal_servis_berikutnya: formData.tanggal_servis_berikutnya || "",
     };
 
     try {
@@ -700,6 +708,8 @@ export default function ManajemenKendaraanPage() {
       foto_url: k.foto_url || "",
       status_kepemilikan: k.status_kepemilikan || "Aset",
       tanggal_akhir_sewa: k.tanggal_akhir_sewa || "",
+      dikelola_driver: !!k.dikelola_driver,
+      tanggal_servis_berikutnya: k.tanggal_servis_berikutnya || "",
     });
     setShowKendaraanModal(true);
   };
@@ -1330,6 +1340,15 @@ export default function ManajemenKendaraanPage() {
             <Input containerStyle={{ flex: 1 }} label="No. Mesin" name="no_mesin" value={formData.no_mesin} onChange={handleInputChange} placeholder="Nomor mesin (opsional)" />
           </div>
           <Input label="Pajak/STNK Berlaku Sampai" name="tanggal_pajak" type="date" value={formData.tanggal_pajak} onChange={handleInputChange} />
+
+          {/* §82 penilaian kinerja Driver */}
+          <label style={{ display: "flex", gap: "10px", alignItems: "flex-start", padding: "12px 14px", borderRadius: "12px", background: "var(--info-50)", cursor: "pointer", fontSize: "13px", color: "var(--ink)" }}>
+            <input type="checkbox" checked={!!formData.dikelola_driver} onChange={(e) => setFormData({ ...formData, dikelola_driver: e.target.checked })} style={{ marginTop: "3px", width: "16px", height: "16px" }} />
+            <span><b>Kendaraan operasional — dikelola tim Driver</b><br /><span style={{ fontSize: "12px", color: "var(--muted)" }}>Wajib inspeksi mingguan & servis tepat waktu; jadi dasar penilaian poin Driver. Jangan dicentang untuk mobil pribadi karyawan.</span></span>
+          </label>
+          {formData.dikelola_driver && (
+            <Input label="Jadwal Servis Berikutnya" name="tanggal_servis_berikutnya" type="date" value={formData.tanggal_servis_berikutnya} onChange={handleInputChange} />
+          )}
 
           <div style={{ display: "flex", gap: "10px" }}>
             <div style={{ flex: 1 }}>

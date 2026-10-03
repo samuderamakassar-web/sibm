@@ -4,19 +4,14 @@ import { useState } from "react";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import AdminShell from "../../../components/admin/AdminShell";
 import { useTitikPatroli } from "../../../lib/titikPatroli";
+import { useChecklistOB } from "../../../lib/sopChecklist";
 
 
 // ==============================================================
 // 1. DATA MASTER OB & CS (DARI KODE ANDA)
 // ==============================================================
-const DATA_OB = [
-  { lantai: "Area Basement", area: ["Toilet", "Taman Parkir"] },
-  { lantai: "Lantai 1", area: ["Lobby", "Ruang Meeting", "Ruang Tamu", "Tenant Asbin", "Toilet", "Pantry", "Meja & Kursi"] },
-  { lantai: "Lantai 2", area: ["Toilet", "Pantry", "Ruang Kerja SAI", "Ruang Kerja Besar", "Ruang Pimpinan", "Ruang GM", "Ruang Server", "Meja & Kursi"] },
-  { lantai: "Lantai 3", area: ["Toilet", "Ruang Kerja PPNP", "Teras", "Meja & Kursi"] },
-  { lantai: "Lantai 4", area: ["Toilet", "Ruang Kerja Kosong", "Mushallah", "Gudang"] },
-  { lantai: "Lantai 5", area: ["Gudang", "Rooftop", "Tandon"] },
-];
+// §82: label QR area OB & CS dibuat dari master SOP Checklist (/admin/sop-checklist): 1 label per segmen
+// aktif di tiap area. QR OB hanya label cetak (tidak dipindai aplikasi), jadi aman mengikuti master.
 
 // ==============================================================
 // 2. DATA SECURITY PATROLI -- dari master /admin/titik-patroli (src/lib/titikPatroli.ts, §79).
@@ -42,6 +37,9 @@ export default function AdminQRManagerPage() {
 
   const { daftar: masterTitik } = useTitikPatroli();
   const DATA_SECURITY = masterTitik.map((l) => ({ lantai: l.lantai, area: l.titik.map((x) => ({ id: x.id, nama: x.aktif === false ? `${x.nama} (nonaktif)` : x.nama })) }));
+  const { nilai: masterOB } = useChecklistOB();
+  const DATA_OB = masterOB.area.filter((a) => !a.area.toLowerCase().includes("pelayanan"))
+    .map((a) => ({ lantai: a.area, area: a.segmen.filter((s) => s.aktif !== false).map((s) => s.nama) }));
   const currentData = activeTab === "OB" ? DATA_OB : DATA_SECURITY;
 
   if (!isReady || !session) return null;

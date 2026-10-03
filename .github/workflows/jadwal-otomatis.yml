@@ -1,0 +1,31 @@
+name: Jadwal Otomatis (Security & OB, 60 hari ke depan)
+
+# §82: tiap hari 00:30 WITA mengisi tanggal/sel jadwal yang masih KOSONG sampai 60 hari ke depan.
+# Jadwal manual tidak pernah ditimpa. Bisa dijalankan manual (dry_run=true hanya menghitung).
+on:
+  schedule:
+    - cron: "30 16 * * *" # 00:30 WITA
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = hanya hitung, false = tulis"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+jobs:
+  jadwal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # firebase-admin mensyaratkan Node >= 22 (insiden §53)
+      - name: Install dependencies
+        run: npm ci
+      - name: Isi jadwal otomatis
+        run: node scripts/jadwal-otomatis.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}

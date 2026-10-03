@@ -8,6 +8,7 @@ import { useToast } from "../../ui/ToastProvider";
 import { handleFotoUpload } from "../../../lib/uploadFoto";
 import AdminShell from "../../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { JENIS_SERVIS_BERKALA, useJenisServis } from "@/lib/sopChecklist";
 
 
 interface KendaraanMaster {
@@ -18,9 +19,7 @@ interface KendaraanMaster {
 // Jenis servis yang bisa dipilih (multi-select). "Ganti Oli" dianggap sudah termasuk bagian
 // Servis Berkala jadi tidak butuh foto sendiri. Selain itu & "Servis Berkala" (yang punya aturan
 // foto khusus 3 lembar), tiap jenis yang dipilih wajib lampirkan 1 foto buktinya masing-masing.
-const JENIS_OPSI = ["Ganti Oli", "Ganti Ban Luar", "Ganti Ban Dalam", "Tubles", "Uji Emisi", "Servis Berkala", "Rem", "Lainnya"];
-const JENIS_TANPA_FOTO = "Ganti Oli";
-const JENIS_SERVIS_BERKALA = "Servis Berkala";
+// Jenis servis diatur Admin GA di /admin/sop-checklist (§82) -- lihat useJenisServis() di komponen.
 
 const sharedInputStyle = {
   width: "100%", padding: "16px", borderRadius: "14px", border: "1px solid var(--line)",
@@ -72,6 +71,9 @@ export default function DriverServisPage() {
 
   // 📸 1 foto wajib per jenis (kecuali Ganti Oli & Servis Berkala yang punya aturan sendiri)
   const [fotoPerJenis, setFotoPerJenis] = useState<Record<string, string>>({});
+  const { nilai: masterJenis } = useJenisServis();
+  const JENIS_OPSI = masterJenis.filter((j) => j.aktif !== false).map((j) => j.nama);
+  const tanpaFoto = (j: string) => masterJenis.some((x) => x.nama === j && x.wajib_foto === false);
   const [uploadingPerJenis, setUploadingPerJenis] = useState<Record<string, boolean>>({});
 
   // 📸 3 foto wajib khusus Servis Berkala: foto kendaraan, foto KM, foto buku servis
@@ -138,7 +140,7 @@ export default function DriverServisPage() {
 
   const adaUploadBerjalan = Object.values(uploadingPerJenis).some(Boolean) || Object.values(uploadingBerkala).some(Boolean);
   const isServisBerkalaDipilih = servisJenisTerpilih.includes(JENIS_SERVIS_BERKALA);
-  const jenisButuhFotoSendiri = servisJenisTerpilih.filter((j) => j !== JENIS_TANPA_FOTO && j !== JENIS_SERVIS_BERKALA);
+  const jenisButuhFotoSendiri = servisJenisTerpilih.filter((j) => !tanpaFoto(j) && j !== JENIS_SERVIS_BERKALA);
 
   const handleSubmitServis = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,8 +253,8 @@ export default function DriverServisPage() {
                     );
                   })}
                 </div>
-                {servisJenisTerpilih.includes(JENIS_TANPA_FOTO) && (
-                  <div style={{ fontSize: "10px", color: "var(--ink-soft)", marginTop: "6px" }}>Info: Ganti Oli tidak perlu foto terpisah — sudah termasuk bagian Servis Berkala.</div>
+                {servisJenisTerpilih.some(tanpaFoto) && (
+                  <div style={{ fontSize: "10px", color: "var(--ink-soft)", marginTop: "6px" }}>Info: {servisJenisTerpilih.filter(tanpaFoto).join(", ")} tidak perlu foto terpisah.</div>
                 )}
               </div>
 

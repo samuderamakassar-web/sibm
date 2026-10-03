@@ -241,6 +241,21 @@ export default function MonitorPoinPage() {
           </button>
         </Tile>
 
+        {/* §82: aturan potongan -- sinkron dengan POTONGAN di scripts/points-deduction.mjs */}
+        <details style={{ background: "var(--tile)", borderRadius: "20px", padding: "14px 18px", marginBottom: "16px" }}>
+          <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: "14px", color: "var(--ink)" }}>Aturan potongan poin (otomatis, dihitung tiap pagi untuk hari kemarin)</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginTop: "12px", fontSize: "12.5px", color: "var(--ink-soft)", lineHeight: 1.6 }}>
+            <div><b style={{ color: "var(--ink)" }}>OB & CS</b><br />−5 per sesi checklist (Pagi/Siang/Sore) yang tidak dilaporkan sesuai plot.</div>
+            <div><b style={{ color: "var(--ink)" }}>Security</b><br />−10 per shift di bawah minimum 2 sesi patroli.<br />−5 per jendela Siram Tanaman yang tidak diselesaikan.</div>
+            <div><b style={{ color: "var(--ink)" }}>Driver</b> <span style={{ fontSize: "11px" }}>(hanya kendaraan bertanda &quot;dikelola tim Driver&quot; di Master Kendaraan)</span><br />
+              −3 per trip &quot;Keluar&quot; yang tidak dicatat tiba/pulang dalam 12 jam (driver pembawa).<br />
+              −2 per catatan keluar tanpa tujuan / tanpa KM (driver pembawa).<br />
+              −5 per kendaraan tidak diinspeksi minggu lalu (semua driver, dicek tiap Senin).<br />
+              −5 per kendaraan lewat jadwal servis tanpa catatan servis (semua driver, tiap Senin).</div>
+            <div><b style={{ color: "var(--ink)" }}>Semua departemen</b><br />Evaluasi manual Admin GA (tombol Evaluasi di halaman Monitor) untuk temuan lain.</div>
+          </div>
+        </details>
+
         {periode !== "bulanan" && (
           <div style={{ background: "var(--info-50)", color: "var(--info)", padding: "12px 16px", borderRadius: "16px", fontSize: "12.5px", fontWeight: 600, marginBottom: "16px" }}>
             Rata-rata poin bulanan {periode === "6bulan" ? "6 bulan" : "1 tahun"} terakhir (sampai {formatBulanLabel(filterBulan)}). Bulan tanpa data dianggap 100 poin.

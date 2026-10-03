@@ -162,7 +162,13 @@ const POTONGAN = {
   ob_sesi_terlewat: 5, // per sesi (Pagi/Siang/Sore) yang gak dilaporkan
   security_shift_tidak_patuh: 10, // per shift (Shift 1 / Shift 2) yang gak memenuhi minimum sesi
   security_dadakan_terlewat: 5, // per jendela (Pagi / Malam) yang gak diselesaikan
+  // §82 Driver (keputusan user 3 Okt 2026) -- hanya kendaraan master ber-dikelola_driver = true
+  driver_inspeksi_terlewat: 5, // per kendaraan yang tidak diinspeksi minggu lalu (semua driver; dicek tiap Senin)
+  driver_status_lupa: 3, // per trip "Keluar" yang tidak dicatat tiba/pulang dalam 12 jam (driver pembawa)
+  driver_log_tidak_lengkap: 2, // per catatan keluar tanpa tujuan / tanpa KM (driver pembawa)
+  driver_servis_terlambat: 5, // per kendaraan lewat jadwal servis tanpa catatan servis (semua driver; tiap Senin)
 };
+const AMBANG_JAM_KELUAR = 12;
 const MINIMUM_SESI_PATROLI = 2;
 
 const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
@@ -331,6 +337,65 @@ async function cekNotifikasiDadakan() {
   return jendelaTerlewat;
 }
 
+// ==========================================
+// 4. DRIVER (§82)
+// ==========================================
+async function cekDriver() {
+  const driver = (await db.collection("users_master").where("departemen", "==", "Driver").get()).docs.map((d) => d.data().nama).filter(Boolean);
+  if (driver.length === 0) { console.log("Driver: tidak ada akun departemen Driver, skip."); return []; }
+  const temuan = [];
+  const platDari = (k) => String(k || "").split(" - ")[0].trim().toUpperCase().replace(/\s+/g, "");
+
+  // a) Log kendaraan KEMARIN: status lupa diperbarui & data keluar tidak lengkap (driver pembawa)
+  const awalKemarin = new Date(`${kemarin}T00:00:00+08:00`);
+  const logs = (await db.collection("operational_vehicle_logs").where("waktu_catat", ">=", awalKemarin).get()).docs
+    .map((d) => d.data()).filter((l) => l.waktu_catat).sort((a, b) => a.waktu_catat.toMillis() - b.waktu_catat.toMillis());
+  const tglWITA = (ts) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(ts.toDate());
+  for (let i = 0; i < logs.length; i++) {
+    const l = logs[i];
+    if (l.status_kendaraan !== "Keluar Beroperasi" || tglWITA(l.waktu_catat) !== kemarin) continue;
+    const nama = l.driver_bertugas;
+    if (!driver.includes(nama)) continue; // karyawan biasa yang membawa mobil -> bukan penilaian Driver
+    const berikut = logs.slice(i + 1).find((x) => platDari(x.kendaraan) === platDari(l.kendaraan));
+    const batas = l.waktu_catat.toMillis() + AMBANG_JAM_KELUAR * 3600000;
+    if (!berikut ? Date.now() > batas : berikut.waktu_catat.toMillis() > batas) {
+      await potongPoin(nama, "Driver", `${platDari(l.kendaraan)} keluar ${kemarin} tidak dicatat tiba/pulang dalam ${AMBANG_JAM_KELUAR} jam`, POTONGAN.driver_status_lupa);
+      temuan.push(`${nama}: status ${platDari(l.kendaraan)} lupa diperbarui`);
+    }
+    const tanpaTujuan = !l.tujuan_keperluan || l.tujuan_keperluan === "-";
+    const tanpaKm = !l.kilometer_kendaraan || l.kilometer_kendaraan === "Tidak dicatat" || l.kilometer_kendaraan === "-";
+    if (tanpaTujuan || tanpaKm) {
+      await potongPoin(nama, "Driver", `Catatan keluar ${platDari(l.kendaraan)} (${kemarin}) tanpa ${[tanpaTujuan && "tujuan", tanpaKm && "KM"].filter(Boolean).join(" & ")}`, POTONGAN.driver_log_tidak_lengkap);
+      temuan.push(`${nama}: log keluar ${platDari(l.kendaraan)} tidak lengkap`);
+    }
+  }
+
+  // b) Mingguan (dicek tiap Senin untuk minggu Senin-Minggu sebelumnya): inspeksi & servis
+  const hariSenin = new Date(`${hariIni}T12:00:00+08:00`).getUTCDay() === 1;
+  if (hariSenin) {
+    const kendaraan = (await db.collection("master_kendaraan").get()).docs.map((d) => ({ id: d.id, ...d.data() })).filter((k) => k.dikelola_driver);
+    const geser = (iso, n) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const seninLalu = geser(hariIni, -7);
+    for (const k of kendaraan) {
+      const nama = platDari(k.kendaraan) || k.plat_nomor;
+      const insp = await db.collection("kendaraan_inspeksi_logs").where("kendaraan_id", "==", k.id).where("minggu_of", "==", seninLalu).limit(1).get();
+      if (insp.empty) {
+        for (const d of driver) await potongPoin(d, "Driver", `${nama} tidak diinspeksi minggu ${seninLalu}`, POTONGAN.driver_inspeksi_terlewat);
+        temuan.push(`${nama}: tidak diinspeksi minggu lalu`);
+      }
+      if (k.tanggal_servis_berikutnya && k.tanggal_servis_berikutnya < hariIni) {
+        const servis = (await db.collection("kendaraan_service_logs").where("kendaraan_id", "==", k.id).get()).docs.filter((d) => (d.data().tanggal || "") >= k.tanggal_servis_berikutnya);
+        if (servis.length === 0) {
+          for (const d of driver) await potongPoin(d, "Driver", `${nama} lewat jadwal servis (${k.tanggal_servis_berikutnya}) tanpa catatan servis`, POTONGAN.driver_servis_terlambat);
+          temuan.push(`${nama}: servis terlambat sejak ${k.tanggal_servis_berikutnya}`);
+        }
+      }
+    }
+    console.log(`Driver mingguan: ${kendaraan.length} kendaraan dikelola Driver diperiksa.`);
+  }
+  return temuan;
+}
+
 async function jalankan() {
   // Anti-double-proses: 1x per tanggal kemarin (kalau cron re-run/telat, gak dobel potong).
   // PENTING: guard ini ditulis SETELAH ketiga cek sukses, BUKAN sebelum -- kalau ditulis duluan
@@ -348,6 +413,7 @@ async function jalankan() {
   }
 
   const obTidakLengkap = await cekOB();
+  const driverTemuan = await cekDriver();
   const securityTidakPatuh = await cekSecurityPatroli();
   const dadakanTerlewat = await cekNotifikasiDadakan();
 
@@ -397,6 +463,10 @@ async function jalankan() {
         `Jendela ${d.jendela} (${d.tanggal}) tidak diselesaikan oleh Security Shift 2 yang bertugas: ${d.petugas.join(", ")}.`
       );
     }
+  }
+
+  if (driverTemuan.length > 0) {
+    await kirimPushAdminGA("🚐 Penilaian Driver", `${driverTemuan.length} temuan Driver (${kemarin}): ${driverTemuan.slice(0, 5).join("; ")}${driverTemuan.length > 5 ? "; ..." : ""}.`);
   }
 
   await logRef.set({ diproses_pada: FieldValue.serverTimestamp() });

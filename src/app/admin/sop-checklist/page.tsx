@@ -19,11 +19,11 @@ import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import {
-  idBaru, useChecklistOB, useFasilitasOB, useInspeksiDriver,
-  type AreaChecklist, type ItemInspeksiDriver, type ItemSederhana, type SegmentConfig, type TugasTambahan,
+  idBaru, JENIS_SERVIS_BERKALA, useChecklistOB, useFasilitasOB, useInspeksiDriver, useJenisServis,
+  type AreaChecklist, type ItemInspeksiDriver, type ItemSederhana, type JenisServis, type SegmentConfig, type TugasTambahan,
 } from "../../../lib/sopChecklist";
 
-type Tab = "ob" | "fasilitas" | "driver" | "patroli";
+type Tab = "ob" | "fasilitas" | "driver" | "servis" | "patroli";
 const salin = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 /** Draft lokal yang mengikuti data tersimpan selama belum diubah. */
@@ -98,6 +98,8 @@ export default function SopChecklistPage() {
   const ob = useChecklistOB();
   const fas = useFasilitasOB();
   const drv = useInspeksiDriver();
+  const srv = useJenisServis();
+  const dSrv = useDraft<JenisServis[]>(srv.nilai, srv.dimuat);
   const dOb = useDraft<{ area: AreaChecklist[]; tugas_tambahan: TugasTambahan[] }>(ob.nilai, ob.dimuat);
   const dFas = useDraft<ItemSederhana[]>(fas.nilai, fas.dimuat);
   const dDrv = useDraft<ItemInspeksiDriver[]>(drv.nilai, drv.dimuat);
@@ -107,7 +109,8 @@ export default function SopChecklistPage() {
   const simpan = async (id: string, data: Record<string, unknown>, selesai: () => void) => {
     setMenyimpan(true);
     try {
-      await setDoc(doc(db, "settings", id), { ...data, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
+      // JSON round-trip membuang nilai undefined (mis. paket dikosongkan) yang ditolak Firestore.
+      await setDoc(doc(db, "settings", id), { ...salin(data), diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
       selesai();
       showToast("Tersimpan. Halaman staf langsung memakai daftar baru.", "success");
     } catch (err) {
@@ -125,12 +128,13 @@ export default function SopChecklistPage() {
   const aktifTab = tab === "ob" ? { d: dOb, bawaan: ob.dariBawaan, simpan: () => simpan("checklist_ob", dOb.draft as unknown as Record<string, unknown>, dOb.selesai) }
     : tab === "fasilitas" ? { d: dFas, bawaan: fas.dariBawaan, simpan: () => simpan("fasilitas_ob", { daftar: dFas.draft.filter((x) => x.nama.trim()) }, dFas.selesai) }
     : tab === "driver" ? { d: dDrv, bawaan: drv.dariBawaan, simpan: () => simpan("inspeksi_driver", { daftar: dDrv.draft.filter((x) => x.label.trim()) }, dDrv.selesai) }
+    : tab === "servis" ? { d: dSrv, bawaan: srv.dariBawaan, simpan: () => simpan("jenis_servis", { daftar: dSrv.draft.filter((x) => x.nama.trim()) }, dSrv.selesai) }
     : null;
 
   return (
     <AdminShell
       title="SOP Checklist"
-      subtitle="Atur isi checklist OB & CS, inspeksi fasilitas, dan inspeksi kendaraan — tanpa ubah kode"
+      subtitle="Atur area & checklist OB & CS, inspeksi fasilitas, inspeksi & jenis servis kendaraan — tanpa ubah kode"
       userName={session?.nama || "Admin"}
       actions={aktifTab ? (
         <div style={{ display: "flex", gap: "8px" }}>
@@ -143,7 +147,7 @@ export default function SopChecklistPage() {
     >
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="sa-tabs" role="tablist" aria-label="Jenis checklist" style={{ width: "fit-content", maxWidth: "100%" }}>
-        {([["fasilitas", "Inspeksi Fasilitas OB"], ["ob", "Checklist Harian OB & CS"], ["driver", "Inspeksi Kendaraan Driver"], ["patroli", "Titik Patroli Security"]] as [Tab, string][]).map(([k, l]) => (
+        {([["fasilitas", "Inspeksi Fasilitas OB"], ["ob", "Checklist Harian OB & CS"], ["driver", "Inspeksi Kendaraan Driver"], ["servis", "Jenis Servis Kendaraan"], ["patroli", "Titik Patroli Security"]] as [Tab, string][]).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sa-tab${tab === k ? " is-active" : ""}`}
             onClick={() => { if (aktifTab?.d.berubah) { showToast("Simpan atau batalkan perubahan di tab ini dulu.", "warning"); return; } setTab(k); }}>{l}</button>
         ))}
@@ -200,7 +204,17 @@ export default function SopChecklistPage() {
           <div className="sc-grid">
             {dOb.draft.area.map((a, ai) => (
               <Tile key={a.area}>
-                <h2 style={{ margin: "0 0 10px", fontSize: "16px", fontWeight: 800 }}>{a.area}</h2>
+                <div className="sc-baris" style={{ marginBottom: "10px" }}>
+                  <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 800, flex: 1 }}>{a.area}</h2>
+                  {!a.area.toLowerCase().includes("pelayanan") && (
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }} title="Area dengan nomor paket sama dipegang 1 orang yang sama saat plotting otomatis">
+                      Paket
+                      <input type="number" min={1} max={20} className="sc-input" style={{ width: "56px", flex: "none" }} value={a.paket ?? ""}
+                        onChange={(e) => dOb.ubah((d) => { d.area[ai].paket = e.target.value ? Number(e.target.value) : undefined; })} />
+                    </label>
+                  )}
+                  <TombolHapus label={`Hapus area ${a.area}`} onClick={async () => { if (await yakinHapus(`area ${a.area} (beserta checklist & plotting-nya)`)) dOb.ubah((d) => { d.area.splice(ai, 1); }); }} />
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   {a.segmen.map((s, si) => (
                     <EditorSegmen key={s.id} s={s}
@@ -221,6 +235,24 @@ export default function SopChecklistPage() {
             ))}
           </div>
           <Tile style={{ marginTop: "16px" }}>
+            <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Tambah area OB & CS</h2>
+            <p style={{ margin: "0 0 10px", fontSize: "12.5px", color: "var(--muted)" }}>
+              Area baru langsung muncul di Plotting OB (jadwal otomatis ikut membaginya) & di Checklist Harian. Isi <b>Paket</b> di tiap area:
+              area dengan nomor paket sama dipegang 1 orang (mis. Lantai 3 & 4 = paket 3).
+            </p>
+            <div className="sc-baris">
+              <input className="sc-input" placeholder="Nama area baru, mis. Lantai 6 / Area Parkir Belakang" value={itemBaru} onChange={(e) => setItemBaru(e.target.value)} />
+              <button type="button" className="sa-btn is-soft" style={{ height: "34px" }} onClick={() => {
+                const nama = itemBaru.trim();
+                if (!nama) return;
+                if (dOb.draft.area.some((x) => x.area.toLowerCase() === nama.toLowerCase())) { showToast("Area itu sudah ada.", "warning"); return; }
+                const maks = Math.max(0, ...dOb.draft.area.map((x) => x.paket || 0));
+                dOb.ubah((d) => { d.area.push({ area: nama, segmen: [], paket: maks + 1 }); });
+                setItemBaru("");
+              }}>+ Tambah area</button>
+            </div>
+          </Tile>
+          <Tile style={{ marginTop: "16px" }}>
             <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Tugas tambahan per staf</h2>
             <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>Segmen yang selalu ditambahkan ke checklist staf tertentu, apa pun area plotnya (mis. Mushallah Lt 4).</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -238,6 +270,37 @@ export default function SopChecklistPage() {
             </div>
           </Tile>
         </>
+      )}
+
+      {tab === "servis" && (
+        <Tile>
+          <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Jenis servis yang bisa dipilih driver</h2>
+          <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>
+            &quot;Wajib foto&quot; = driver harus melampirkan foto bukti untuk jenis itu. &quot;{JENIS_SERVIS_BERKALA}&quot; selalu meminta 3 foto khusus (kendaraan, KM, buku servis).
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {dSrv.draft.map((x, i) => {
+              const berkala = x.nama === JENIS_SERVIS_BERKALA;
+              return (
+                <div key={i} className="sc-baris">
+                  <input className="sc-input" value={x.nama} readOnly={berkala} aria-label={`Jenis servis ${i + 1}`} onChange={(e) => dSrv.ubah((d) => { d[i].nama = e.target.value; })} />
+                  {!berkala && (
+                    <button type="button" className="sc-pil" onClick={() => dSrv.ubah((d) => { d[i].wajib_foto = !x.wajib_foto; })}
+                      style={x.wajib_foto ? { background: "var(--info-50)", color: "var(--info)" } : { background: "var(--hover)", color: "var(--muted)" }}>
+                      {x.wajib_foto ? "Wajib foto" : "Tanpa foto"}
+                    </button>
+                  )}
+                  <TombolAktif aktif={x.aktif !== false} onClick={() => dSrv.ubah((d) => { d[i].aktif = !(x.aktif !== false); })} />
+                  {!berkala && <TombolHapus label={`Hapus ${x.nama}`} onClick={async () => { if (await yakinHapus(x.nama)) dSrv.ubah((d) => { d.splice(i, 1); }); }} />}
+                </div>
+              );
+            })}
+            <div className="sc-baris" style={{ marginTop: "6px" }}>
+              <input className="sc-input" placeholder="Jenis servis baru, mis. Spooring & Balancing" value={itemBaru} onChange={(e) => setItemBaru(e.target.value)} />
+              <button type="button" className="sa-btn is-soft" style={{ height: "34px" }} onClick={() => { if (!itemBaru.trim()) return; dSrv.ubah((d) => { d.push({ nama: itemBaru.trim(), wajib_foto: true, aktif: true }); }); setItemBaru(""); }}>+ Tambah</button>
+            </div>
+          </div>
+        </Tile>
       )}
 
       {tab === "patroli" && (
