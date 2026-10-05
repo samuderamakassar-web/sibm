@@ -2918,3 +2918,6 @@ SUDAH DI-DEPLOY. Dilaporkan user via screenshot: 8 kolom kosong di kanan kartu P
 
 ## 84. Modal Login Portal Dirapikan + Logo Samudera (3 Oktober 2026)
 SUDAH DI-DEPLOY. Permintaan user (screenshot): ganti emoji gedung dengan logo `/logo-samudera.png` di kartu putih (teks logo hitam tetap terbaca di mode gelap), judul "Masuk Staf Internal" + keterangan SIBM, input berlabel + ikon (email/gembok), tombol tampil/sembunyikan kata sandi, `autoComplete` username/current-password, fokus ring warna brand, tombol brand penuh, info "Lupa kata sandi? Hubungi Admin GA", lebar modal login 440px. Logika `handleLogin` tidak berubah.
+
+## 85. Portal: Menu Lembur AC Dihapus (5 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: lembur sudah tercatat lewat Validasi Karyawan oleh Security (§59) -> kartu "Lembur AC" (Menu Cepat) & tombol "+ Catat" (kartu Lembur Gedung Minggu Ini) dihapus agar tidak dobel. Kartu tampilan Lembur Gedung Minggu Ini & baris Lembur Hari Ini di Status Operasional TETAP (membaca ga_overtime_requests yang kini diisi validasi Security). Menu Cepat desktop repeat(6); aturan HP kartu Booking selebar baris dihapus (Tamu/Paket/Booking pas 3 kolom). Kode modal overtime portal (`activeModal === "overtime"`, `handleSubmitOvertime`) masih ada tapi tidak bisa dibuka -- bisa dihapus kelak.
