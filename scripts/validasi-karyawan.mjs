@@ -28,7 +28,7 @@ const messaging = getMessaging();
 const EMAILJS = { service_id: "service_0e8e85u", template_id: "template_oriy1nw", user_id: "TCk2X3epWHvsVcTWX" };
 
 const JAM_MULAI_LEMBUR = "18:00";
-const MENIT_TAMPIL_KARTU_LEMBUR = 30; // = src/lib/validasiKaryawan.ts
+const MENIT_TAMPIL_KARTU_LEMBUR = 0; // = src/lib/validasiKaryawan.ts (tampil sejak 18:00)
 const BATAS_LEMBUR_JAM = 4;
 const BATAS_DI_GEDUNG_JAM = 12;
 const MENIT_TANYA_ULANG_PULANG = 45;
@@ -182,7 +182,7 @@ async function cekLembur() {
   let menungguTotal = 0;
   for (const s of sesiTerbuka) {
     const masuk = s.waktu_masuk.toDate();
-    if (now < mulaiLembur(masuk).getTime() + MENIT_TAMPIL_KARTU_LEMBUR * 60000) continue; // tampil 18:30 (§92)
+    if (now < mulaiLembur(masuk).getTime() + MENIT_TAMPIL_KARTU_LEMBUR * 60000) continue; // tampil sejak 18:00 (§93)
     const tgl = tanggalWITA(masuk);
     const ref = db.collection("validasi_karyawan").doc(`${tgl}_lembur_${s.id}`);
     const snap = await ref.get();

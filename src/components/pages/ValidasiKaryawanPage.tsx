@@ -6,7 +6,7 @@
  *   - Belum tercatat masuk (09:00 & 13:00 hari kerja): Lupa diinput (check-in susulan, jam diatur) /
  *     Tidak masuk (alasan + foto wajib, datangi mejanya).
  * Logika simpan ada di src/lib/validasiKaryawan.ts.
- * §92: kartu lembur juga dihitung LANGSUNG di halaman dari Buku Tamu (sesi "Di Dalam Area" lewat 18:30),
+ * §92: kartu lembur juga dihitung LANGSUNG di halaman dari Buku Tamu (sesi "Di Dalam Area" sejak 18:00),
  * karena cron GitHub kenyataannya jalan tiap ~3 jam. Kartu "virtual" disimpan saat Security menjawab.
  */
 
@@ -207,9 +207,11 @@ export default function ValidasiKaryawanPage() {
     if ((tgl !== hariIni && tgl !== kemarin) || adaKartu.has(id) || sekarang < tampilKartuLembur(masuk).getTime()) return [];
     return [{ id, virtual: true, jenis: "lembur", tanggal: tgl, nama: s.nama, departemen: s.instansi_dept || "-", status: "menunggu", visitor_log_id: s.id, waktu_masuk: s.waktu_masuk }];
   });
-  const lemburMenunggu: KartuTampil[] = [...semua.filter((v) => v.jenis === "lembur" && v.status === "menunggu"), ...kartuVirtual]
+  // "Akan pulang" yang 45 menit kemudian belum check-out -> ditanya ulang langsung di halaman (tidak menunggu cron)
+  const tanyaUlang = (v: ValidasiKaryawan) => v.status === "akan_pulang" && !!v.waktu_validasi && sekarang - v.waktu_validasi.toMillis() >= MENIT_TANYA_ULANG_PULANG * 60000;
+  const lemburMenunggu: KartuTampil[] = [...semua.filter((v) => v.jenis === "lembur" && (v.status === "menunggu" || tanyaUlang(v))), ...kartuVirtual]
     .sort((a, b) => a.nama.localeCompare(b.nama));
-  const lemburBerjalan = semua.filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || v.status === "akan_pulang"));
+  const lemburBerjalan = semua.filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || (v.status === "akan_pulang" && !tanyaUlang(v))));
   const belumInput = semua
     .filter((v) => v.jenis === "belum_input" && v.tanggal === hariIni && v.status === "menunggu" && !sudahMasuk.has(normalNama(v.nama)))
     .sort((a, b) => a.nama.localeCompare(b.nama));
@@ -251,7 +253,7 @@ export default function ValidasiKaryawanPage() {
               {lemburMenunggu.length === 0 ? <div className="vk-kosong">Tidak ada yang perlu dicek.</div> : lemburMenunggu.map((v) => (
                 <div key={v.id} className="vk-kartu">
                   <div className="vk-info">
-                    <div className="vk-nama">{v.nama}{(v.ditanya_ulang || 0) > 0 && <span className="vk-badge">Belum check-out</span>}</div>
+                    <div className="vk-nama">{v.nama}{((v.ditanya_ulang || 0) > 0 || v.status === "akan_pulang") && <span className="vk-badge">Belum check-out</span>}</div>
                     <div className="vk-sub">{v.departemen} · masuk {jamDari(v.waktu_masuk)}{v.tanggal !== hariIni ? " (kemarin)" : ""}</div>
                   </div>
                   <div className="vk-aksi">
