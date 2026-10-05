@@ -7,7 +7,7 @@
  * PETUGAS KELUAR (jadwal shift yang baru berakhir 08:00/20:00):
  *   layar terkunci, QR serah terima tampil OTOMATIS + hitungan "pengganti belum datang".
  *   Satu-satunya pilihan: EXTEND n menit -> menu dibuka sampai waktu habis, lalu terkunci lagi.
- *   Lepas bila serah terima selesai (pengganti scan) atau extend permanen (EskalasiShiftModal).
+ *   Lepas bila serah terima selesai (pengganti scan) atau extend permanen (EskalasiShiftModal). Tanpa batas jam (§95).
  * PETUGAS MASUK (jadwal shift berikutnya):
  *   15 menit sebelum jam jaga: hitung mundur. Saat jam jaga: tombol "Scan QR" (manual) & menu terkunci
  *   sampai serah terima selesai. Jalan darurat: "Mulai jaga tanpa serah terima" (alasan wajib) ->
@@ -29,6 +29,7 @@ import { logout } from "../hooks/useAuthGuard";
 export const idHandover = (tanggal: string, shift: string) => `HO_${tanggal}_${shift.replace(" ", "")}`;
 const idExtend = (tanggal: string, shift: string) => `${tanggal}_${shift.replace(" ", "")}`;
 const MENIT_SEBELUM = 15;
+const MENIT_DARURAT = 30; // §95: "mulai jaga tanpa serah terima" saat QR sudah ada baru boleh setelah menit ini
 const pad = (n: number) => String(n).padStart(2, "0");
 const fmtDurasi = (detik: number) => {
   const d = Math.max(0, Math.floor(detik));
@@ -130,7 +131,7 @@ export default function SerahTerimaGuard() {
   }, [perluBuatQR, kunciBatas]);
 
   if (!siap || !b || !roster) return null;
-  if (pathname?.startsWith("/dashboard/security/tukar-shift")) return null;
+  const diHalamanTukarShift = !!pathname?.startsWith("/dashboard/security/tukar-shift");
 
   const sayaKeluar = jadwal(b.prev.tanggal) === b.prev.shift && jadwal(b.cur.tanggal) !== b.cur.shift; // shift lama saya baru berakhir
   const sayaMasuk = jadwal(b.cur.tanggal) === b.cur.shift && jadwal(b.prev.tanggal) !== b.prev.shift;   // shift baru saya sudah mulai
@@ -142,10 +143,13 @@ export default function SerahTerimaGuard() {
 
   type Mode = "keluar" | "masuk" | "pra" | null;
   let mode: Mode = null;
-  // Petugas keluar dikunci maks. 4 jam sejak jam ganti (mis. sudah pulang tanpa serah terima -- tetap tercatat belum selesai).
-  if (sayaKeluar && !selesai && !extendPermanen && !extendBerjalan && b.detikSejakAwal < 4 * 3600) mode = "keluar";
+  // §95: scan / discan WAJIB -- petugas keluar terkunci sampai serah terima selesai (tanpa batas jam; hanya Extend yang membuka sementara).
+  if (sayaKeluar && !selesai && !extendPermanen && !extendBerjalan) mode = "keluar";
   else if (sayaMasuk && !selesai) mode = "masuk";
   else if (sayaMasukNanti && hoNext?.status !== "selesai") mode = "pra";
+
+  // Di halaman Tukar Shift: petugas masuk perlu pemindai (overlay disembunyikan); petugas keluar tetap melihat layar QR.
+  if (diHalamanTukarShift && mode !== "keluar") return null;
 
   // Banner kecil saat extend berjalan (menu terbuka)
   if (!mode) {
@@ -246,7 +250,12 @@ export default function SerahTerimaGuard() {
             <div style={{ fontSize: "36px", fontWeight: 800, color: b.detikSejakAwal >= (AMBANG_TELAT_SERAH_TERIMA_MENIT + 1) * 60 ? "var(--red-600)" : "var(--ok)", fontVariantNumeric: "tabular-nums", marginBottom: "12px" }}>{fmtDurasi(b.detikSejakAwal)}</div>
             <p style={{ margin: "0 0 16px", fontSize: "13px", color: "var(--ink-soft)" }}>Scan QR dari petugas sebelumnya untuk membuka menu. Lewat 10 menit tercatat terlambat.</p>
             <button type="button" className="sa-btn is-primary" style={{ width: "100%", height: "50px", fontSize: "15px" }} onClick={() => router.push("/dashboard/security/tukar-shift")}>Scan QR Serah Terima</button>
-            <button type="button" className="sa-btn is-soft" style={{ width: "100%", marginTop: "10px" }} onClick={() => setModeDarurat(true)}>Petugas sebelumnya tidak ada?</button>
+            {/* §95: darurat hanya bila QR belum dibuat (petugas lama tidak membuka SIBM) atau sudah lewat 30 menit */}
+            {!hoCur || b.detikSejakAwal >= MENIT_DARURAT * 60 ? (
+              <button type="button" className="sa-btn is-soft" style={{ width: "100%", marginTop: "10px" }} onClick={() => setModeDarurat(true)}>Petugas sebelumnya tidak ada?</button>
+            ) : (
+              <p style={{ margin: "10px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>QR sudah dibuat petugas {hoCur.petugas_keluar || "sebelumnya"} — temui dan scan. Opsi darurat tersedia mulai menit ke-{MENIT_DARURAT}.</p>
+            )}
           </>
         )}
 

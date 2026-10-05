@@ -125,7 +125,8 @@ export default function AdminShell({
       </header>
 
       {/* §87 Mode serah terima shift Security (hanya aktif untuk akun Security non-magang) */}
-      {userName && <SerahTerimaGuard />}
+      {/* §95: selalu dipasang -- guard sendiri yang mengecek akun Security dari localStorage */}
+      <SerahTerimaGuard />
 
       <main className={`sa-main${bottomNav ? " has-bottom-nav" : ""}`}>
         {(title || actions) && (

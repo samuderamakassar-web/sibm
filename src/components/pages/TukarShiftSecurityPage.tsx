@@ -101,6 +101,15 @@ export default function TukarShiftSecurityPage() {
     return () => unsub();
   }, [info.tanggal_shift, info.shift]);
 
+  // §95: petugas yang terjadwal MASUK di shift ini tidak boleh membuat QR (ia yang harus scan).
+  const [sayaMasukRoster, setSayaMasukRoster] = useState(false);
+  useEffect(() => {
+    if (!myName) return;
+    getDoc(doc(db, "security_monthly_schedules", info.tanggal_shift.slice(0, 7)))
+      .then((s) => setSayaMasukRoster(String((s.exists() && s.data().data_hari?.[info.tanggal_shift]?.[myName]) || "").includes(info.shift)))
+      .catch(() => setSayaMasukRoster(false));
+  }, [myName, info.tanggal_shift, info.shift]);
+
   const handleMulaiSerahTerima = async () => {
     if (!myName) return;
     setIsSaving(true);
@@ -199,7 +208,14 @@ export default function TukarShiftSecurityPage() {
         {!handover ? (
           <div style={{ textAlign: "center", padding: "30px 20px", background: "var(--surface)", borderRadius: "18px", border: "1px dashed var(--line)" }}>
             <div style={{ color: "var(--muted)", marginBottom: "12px" }}><IconQrCode size={40} /></div>
-            {bolehBuatQR ? (
+            {bolehBuatQR && sayaMasukRoster ? (
+              <>
+                <h3 style={{ margin: "0 0 8px 0", color: "var(--ink)" }}>Menunggu QR Petugas Sebelumnya</h3>
+                <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.6, margin: 0 }}>
+                  Anda petugas pengganti {info.shift}. QR muncul otomatis di HP petugas yang selesai jaga begitu ia membuka SIBM — minta ia membukanya, lalu pemindai muncul di sini.
+                </p>
+              </>
+            ) : bolehBuatQR ? (
               <>
                 <h3 style={{ margin: "0 0 8px 0", color: "var(--ink)" }}>Belum Ada Serah Terima</h3>
                 <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.6, margin: "0 0 18px 0" }}>
