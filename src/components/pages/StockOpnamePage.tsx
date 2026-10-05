@@ -272,8 +272,15 @@ export default function StockOpnamePage() {
         .icon-btn { background: transparent; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid; }
         .form-col, .right-col { min-width: 0; }
         @media (max-width: 900px) {
-          .stok-wrapper { flex-direction: column; }
+          /* §86: align-items flex-start (inline) membuat kartu selebar isinya -> tabel nowrap mendorong
+             kartu keluar layar HP. Di mode kolom kartu dipaksa selebar layar. */
+          .stok-wrapper { flex-direction: column; align-items: stretch !important; }
+          .form-col, .right-col { width: 100%; flex-basis: auto !important; }
           .form-col { position: static !important; }
+        }
+        @media (max-width: 520px) {
+          .card { padding: 18px; }
+          .stock-row { padding: 12px 14px; }
         }
       `}} />
 
