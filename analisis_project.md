@@ -2921,3 +2921,6 @@ SUDAH DI-DEPLOY. Permintaan user (screenshot): ganti emoji gedung dengan logo `/
 
 ## 85. Portal: Menu Lembur AC Dihapus (5 Oktober 2026)
 SUDAH DI-DEPLOY. Permintaan user: lembur sudah tercatat lewat Validasi Karyawan oleh Security (§59) -> kartu "Lembur AC" (Menu Cepat) & tombol "+ Catat" (kartu Lembur Gedung Minggu Ini) dihapus agar tidak dobel. Kartu tampilan Lembur Gedung Minggu Ini & baris Lembur Hari Ini di Status Operasional TETAP (membaca ga_overtime_requests yang kini diisi validasi Security). Menu Cepat desktop repeat(6); aturan HP kartu Booking selebar baris dihapus (Tamu/Paket/Booking pas 3 kolom). Kode modal overtime portal (`activeModal === "overtime"`, `handleSubmitOvertime`) masih ada tapi tidak bisa dibuka -- bisa dihapus kelak.
+
+## 86. Stock Opname OB: Kartu Melebar Keluar Layar HP (5 Oktober 2026)
+SUDAH DI-DEPLOY. Dilaporkan user via screenshot HP. Root cause: `.stok-wrapper` (inline `alignItems: "flex-start"`) di <=900px diubah ke `flex-direction: column` -> kartu tidak stretch, lebarnya = max-content, tabel `.data-table td { white-space: nowrap }` mendorong kartu & form keluar layar. Perbaikan media query: `align-items: stretch !important`, `.form-col, .right-col { width: 100%; flex-basis: auto }`; <=520px padding kartu 18px. Dicek pola serupa: DeepCleaningPage memakai flex-wrap baris (bukan kolom) -> aman.
