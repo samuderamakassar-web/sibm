@@ -149,6 +149,46 @@ const menitSejakBatas = shiftAktif === "Shift 1"
   ? menitSekarang - 480
   : (menitSekarang >= 1200 ? menitSekarang - 1200 : menitSekarang + 1440 - 1200);
 
+// ==========================================
+// §94 REKAP BULANAN (1 email ke Admin GA) -- pengganti email per kejadian. Dikirim run pertama
+// setelah tgl 1 pukul 08:30 WITA (Shift 2 hari terakhir bulan lalu sudah selesai) untuk BULAN LALU.
+// Guard: reminder_validasi_log/rekap_tukar_shift_{YYYY-MM} supaya hanya sekali.
+// ==========================================
+async function rekapBulanan() {
+  if (now.getDate() === 1 && now.getHours() * 60 + now.getMinutes() < 510) return;
+  const lalu = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const kunci = `${lalu.getFullYear()}-${String(lalu.getMonth() + 1).padStart(2, "0")}`;
+  const guard = db.collection("reminder_validasi_log").doc(`rekap_tukar_shift_${kunci}`);
+  if ((await guard.get()).exists) return;
+  const awal = `${kunci}-01`;
+  const akhir = formatTanggal(new Date(now.getFullYear(), now.getMonth(), 1));
+  const ho = (await db.collection("security_shift_handover").where("tanggal_shift", ">=", awal).where("tanggal_shift", "<", akhir).get()).docs.map((d) => d.data());
+  const ext = (await db.collection("security_shift_extend").where("tanggal_shift", ">=", awal).where("tanggal_shift", "<", akhir).get()).docs.map((d) => d.data());
+  const selesai = ho.filter((h) => h.status === "selesai");
+  const telat = selesai.filter((h) => h.terlambat);
+  const tanpaQR = selesai.filter((h) => h.tanpa_serah_terima);
+  const perPetugas = {};
+  telat.forEach((h) => { const n = h.petugas_masuk || "-"; perPetugas[n] ??= { kali: 0, menit: 0 }; perPetugas[n].kali++; perPetugas[n].menit += h.menit_terlambat || 0; });
+  const namaBulan = lalu.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  const sel = "padding:8px 0;border-bottom:1px solid #f0f0ef;font-size:13px;";
+  const kepala = (k) => `<tr>${k.map((x) => `<td style="padding:6px 0;font-size:11px;color:#71717a;font-weight:800;text-transform:uppercase;">${x}</td>`).join("")}</tr>`;
+  const ringkas = [["Serah terima selesai", selesai.length], ["Tepat waktu", selesai.length - telat.length], ["Telat (> 10 menit)", telat.length], ["Tanpa QR (darurat)", tanpaQR.length], ["Kejadian extend jaga", ext.length]]
+    .map(([l, v]) => `<tr><td style="${sel}color:#71717a;font-weight:700;">${l}</td><td style="${sel}color:#18181b;font-weight:800;text-align:right;">${v}</td></tr>`).join("");
+  const tabelPetugas = Object.entries(perPetugas).sort((a, b) => b[1].kali - a[1].kali)
+    .map(([n, v]) => `<tr><td style="${sel}font-weight:700;">${n}</td><td style="${sel}">${v.kali}x</td><td style="${sel}color:#dc2626;font-weight:700;">${v.menit} menit</td></tr>`).join("");
+  const daftar = [...telat, ...tanpaQR.filter((h) => !h.terlambat)].sort((a, b) => `${a.tanggal_shift}${a.shift}`.localeCompare(`${b.tanggal_shift}${b.shift}`))
+    .map((h) => `<tr><td style="${sel}">${h.tanggal_shift} &middot; ${h.shift}</td><td style="${sel}font-weight:700;">${h.petugas_keluar || "-"} &rarr; ${h.petugas_masuk || "-"}</td><td style="${sel}color:#dc2626;font-weight:700;">${h.terlambat ? `${h.menit_terlambat} mnt` : ""}${h.tanpa_serah_terima ? " tanpa QR" : ""}</td><td style="${sel}color:#3f3f46;font-style:italic;">${h.alasan_telat || "-"}</td></tr>`).join("");
+  const body = `
+    <p style="margin:0 0 14px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">Rekap serah terima shift Security bulan <b>${namaBulan}</b>.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:18px;">${ringkas}</table>
+    ${tabelPetugas ? `<p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#18181b;">Keterlambatan per petugas</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:18px;">${kepala(["Petugas", "Jumlah", "Total"])}${tabelPetugas}</table>` : ""}
+    ${daftar ? `<p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#18181b;">Rincian</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${kepala(["Shift", "Petugas", "Telat", "Alasan"])}${daftar}</table>` : `<p style="font-size:13px;color:#16a34a;font-weight:700;">Tidak ada keterlambatan bulan ini.</p>`}`;
+  await kirimEmailKeAdminGA(`Rekap Tukar Shift Security ${namaBulan}`, emailShellSederhana(`📊 Rekap Tukar Shift ${namaBulan}`, body));
+  await guard.set({ waktu: FieldValue.serverTimestamp(), selesai: selesai.length, telat: telat.length, tanpa_qr: tanpaQR.length, extend: ext.length });
+  console.log(`Rekap bulanan ${kunci} terkirim: ${selesai.length} selesai, ${telat.length} telat, ${tanpaQR.length} tanpa QR.`);
+}
+try { await rekapBulanan(); } catch (e) { console.error("Rekap bulanan gagal:", e); }
+
 if (menitSejakBatas < AMBANG_ESKALASI_MENIT) {
   console.log(`Baru ${menitSejakBatas} menit sejak batas shift terakhir (ambang ${AMBANG_ESKALASI_MENIT} menit), skip.`);
   process.exit(0);
@@ -237,7 +277,8 @@ async function cekHandoverTelatBelumDinotif() {
       ${baris}
     </table>
   `;
-  await kirimEmailKeAdminGA("Serah Terima Shift Security Tercatat Telat", emailShellSederhana("⏰ Serah Terima Telat Scan", bodyHtml));
+  // §94: email per kejadian DIHAPUS (permintaan user) -- cukup push; email hanya rekap bulanan (rekapBulanan()).
+  void bodyHtml;
 
   const pesanPush = daftar.length === 1
     ? `${daftar[0].petugas_masuk} ${daftar[0].tanpa_serah_terima ? "mulai jaga TANPA serah terima QR" : `telat ${daftar[0].menit_terlambat} menit scan serah terima`} (${daftar[0].tanggal_shift} ${daftar[0].shift}). Alasan: ${daftar[0].alasan_telat || "-"}`
@@ -322,10 +363,7 @@ async function jalankan() {
     // "extra time" karena keterlambatan, bukan cuma Danru/Koordinator Security.
     const pesanAdmin = `Serah terima ${shiftKeluar} (${tanggalKeluar}) &rarr; ${shiftAktif} belum selesai ${menitSejakBatas} menit. Petugas terkait: ${daftarNamaTerkait.join(", ") || "-"}. Cek menu Pantau Tukar Shift untuk detail.`;
     await kirimPushAdminGA("🔔 Serah Terima Shift Security Terlambat", pesanAdmin.replace(/&rarr;/, "->"));
-    await kirimEmailKeAdminGA(
-      "Serah Terima Shift Security Terlambat",
-      emailShellSederhana("⚠️ Serah Terima Shift Terlambat", `<p style="margin:0 0 12px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">${pesanAdmin}</p>`)
-    );
+    // §94: email eskalasi DIHAPUS -- rekap 1x sebulan lewat rekapBulanan().
     return;
   }
 

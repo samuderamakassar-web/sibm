@@ -32,7 +32,9 @@ const MENIT_TAMPIL_KARTU_LEMBUR = 0; // = src/lib/validasiKaryawan.ts (tampil se
 const BATAS_LEMBUR_JAM = 4;
 const BATAS_DI_GEDUNG_JAM = 12;
 const MENIT_TANYA_ULANG_PULANG = 45;
-const SLOT_CEK_MASUK = ["09", "13"];
+// §94: push "belum tercatat masuk" TIAP JAM 09:00-17:00 selama masih ada yang menunggu (dulu 09:00 & 13:00 saja).
+const JAM_PUSH_MASUK_AWAL = 9;
+const JAM_PUSH_MASUK_AKHIR = 17;
 const DAERAH_DEFAULT = "Makassar"; // §78: penanda daerah dokumen (tahap 1, sebelum cron per daerah)
 
 // ---------- waktu WITA ----------
@@ -166,8 +168,8 @@ async function cekBelumInput() {
   }
   console.log(`A. ${karyawan.length} karyawan, ${sudahMasuk.size} sudah check-in, ${menunggu.length} menunggu validasi.`);
 
-  const slot = [...SLOT_CEK_MASUK].reverse().find((s) => jamSekarang >= Number(s));
-  const guard = db.collection("reminder_validasi_log").doc(`${hariIni}_masuk_${slot}`);
+  if (jamSekarang < JAM_PUSH_MASUK_AWAL || jamSekarang > JAM_PUSH_MASUK_AKHIR) return;
+  const guard = db.collection("reminder_validasi_log").doc(`${hariIni}_masuk_${String(jamSekarang).padStart(2, "0")}`); // 1 push per jam
   if (menunggu.length === 0 || (await guard.get()).exists) return;
   await kirimPush(await securityJaga(), "Security", "📋 Karyawan Belum Tercatat Masuk",
     `${menunggu.length} karyawan belum check-in hari ini${menunggu.length <= 3 ? `: ${menunggu.join(", ")}` : ""}. Cek: lupa diinput atau tidak masuk?`,
