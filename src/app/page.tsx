@@ -1379,9 +1379,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .armada-log-detail { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
         .armada-log-pencatat { font-size: 11px; opacity: 0.85; }
         .armada-booking { font-size: 10px; font-weight: 800; color: #fff; background: var(--accent-solid); padding: 1px 7px; border-radius: 8px; }
-        /* §80: di HP kartu Booking Ruangan selebar 1 baris (3 kartu lain sudah 1 baris penuh). */
-        @media (max-width: 639px) { .menu-cepat-grid { grid-auto-flow: row dense; } .qa-card-booking { grid-column: 1 / -1; flex-direction: row !important; text-align: left; } .qa-card-booking .qa-sub { display: block; } }
-        .armada-pemakai { font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .armada-pemakai { font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .list-row {
           display: flex; gap: 12px; padding: 13px 15px; border-radius: 13px; background: var(--bg);
           border-left: 3px solid var(--line);
@@ -1497,7 +1495,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         .list-row { background: var(--bg) !important; border-radius: 14px !important; }
         .status-op-row { border-bottom-color: var(--line) !important; }
         @media (min-width: 1000px) {
-          .menu-cepat-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+          .menu-cepat-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
           .qa-card { flex-direction: column !important; align-items: flex-start !important; }
           .qa-badge { margin-left: 0; }
         }
@@ -1599,10 +1597,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 <span className="qa-teks"><span className="qa-judul">Request ATK</span><span className="qa-sub">Minta barang kantor ke GA</span></span>
               </button>
             </div>
-            <button type="button" className="qa-card" onClick={() => setActiveModal("overtime")}>
-              <span className="qa-icon-chip"><IconClock size={20} /></span>
-              <span className="qa-teks"><span className="qa-judul">Lembur AC</span><span className="qa-sub">AC/listrik di luar jam kerja</span></span>
-            </button>
+            {/* §85: "Lembur AC" dihapus dari portal -- lembur kini dicatat lewat Validasi Karyawan oleh Security (§59), agar tidak dobel. */}
             <div className="desktop-only-hide">
               <button type="button" className="qa-card" onClick={() => { setActiveModal("helpdesk"); setHelpdeskTab("LAPOR"); }}>
                 <span className="qa-icon-chip"><IconWrench size={20} /></span>
@@ -1938,7 +1933,6 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   {lemburAktif.length > 0 && <> · {lemburAktif.length} pengajuan · {formatDurasi(totalMenitLembur)}</>}
                 </p>
               </div>
-              <button type="button" className="sa-btn is-soft" style={{ height: "34px", padding: "0 12px", fontSize: "12px", flexShrink: 0 }} onClick={() => setActiveModal("overtime")}>+ Catat</button>
             </div>
             {lemburAktif.length === 0 ? (
               <div className="tim-kosong" style={{ textAlign: "center", padding: "24px 14px" }}>Belum ada lembur tercatat minggu ini.</div>
