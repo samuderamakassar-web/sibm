@@ -147,7 +147,9 @@ service cloud.firestore {
           // §59 Validasi Karyawan (Security) & Pemantauan Jam Kerja (QHSE)
           'validasi_karyawan', 'pemantauan_jam_kerja',
           // §80 Booking kendaraan & ruangan
-          'booking'
+          'booking',
+          // §88 Okupansi gedung, §89 Anggaran & realisasi (khusus akun staf, tidak dibaca publik)
+          'okupansi_gedung', 'anggaran', 'realisasi_biaya'
         ];
     }
 

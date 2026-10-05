@@ -12,7 +12,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, doc, getDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, setDoc, doc, getDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, Timestamp } from "firebase/firestore";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
@@ -20,6 +20,7 @@ import { useToast } from "../ui/ToastProvider";
 import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, menitSejakBatasShift, AMBANG_TELAT_SERAH_TERIMA_MENIT, TOLERANSI_JENDELA_TUKAR_JAGA_MENIT, ShiftLabel } from "../../lib/shift";
 import AdminShell from "../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { idHandover } from "../SerahTerimaGuard";
 
 type IconProps = { size?: number; color?: string };
 const IconQrCode = ({ size = 36, color = "currentColor" }: IconProps) => (
@@ -103,7 +104,8 @@ export default function TukarShiftSecurityPage() {
     if (!myName) return;
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "security_shift_handover"), { daerah: daerahTulis(),
+      // §87: ID deterministik (sama dengan SerahTerimaGuard) supaya 1 shift = 1 QR serah terima.
+      await setDoc(doc(db, "security_shift_handover", idHandover(info.tanggal_shift, info.shift)), { daerah: daerahTulis(),
         tanggal_shift: info.tanggal_shift,
         shift: info.shift,
         petugas_keluar: myName,

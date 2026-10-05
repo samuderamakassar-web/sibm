@@ -21,6 +21,7 @@ import type { ReactNode } from "react";
 import NotifikasiBellButton from "../NotifikasiBellButton";
 import AdminIcon from "./AdminIcon";
 import PemilihWilayah from "./PemilihWilayah";
+import SerahTerimaGuard from "../SerahTerimaGuard";
 import { useAdminTheme } from "./useAdminTheme";
 
 interface AdminShellProps {
@@ -122,6 +123,9 @@ export default function AdminShell({
           )}
         </div>
       </header>
+
+      {/* §87 Mode serah terima shift Security (hanya aktif untuk akun Security non-magang) */}
+      {userName && <SerahTerimaGuard />}
 
       <main className={`sa-main${bottomNav ? " has-bottom-nav" : ""}`}>
         {(title || actions) && (

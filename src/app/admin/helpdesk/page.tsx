@@ -35,6 +35,7 @@ interface HelpdeskTicket {
   foto_proses?: string;
   waktu_lapor?: Timestamp | null;
   waktu_selesai?: Timestamp | null;
+  biaya?: number;
 }
 
 type StatusFilterType = "Semua" | "Menunggu" | "Sedang Dikerjakan" | "Selesai";
@@ -66,6 +67,8 @@ export default function AdminHelpdeskPage() {
 
   const [selectedTicket, setSelectedTicket] = useState<HelpdeskTicket | null>(null);
   const [statusUbah, setStatusUbah] = useState<string>("");
+  // §89 biaya perbaikan (opsional) -> realisasi kategori "Perbaikan Gedung" di /admin/anggaran
+  const [biayaPerbaikan, setBiayaPerbaikan] = useState("");
   const [fotoHasil, setFotoHasil] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -132,6 +135,7 @@ export default function AdminHelpdeskPage() {
     setSelectedTicket(tiket);
     setStatusUbah(tiket.status);
     setFotoHasil(tiket.foto_proses || "");
+    setBiayaPerbaikan(typeof tiket.biaya === "number" && tiket.biaya > 0 ? String(tiket.biaya) : "");
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,6 +181,7 @@ export default function AdminHelpdeskPage() {
       await updateDoc(ref, {
         status: statusUbah,
         foto_proses: (await dataUrlKeCloudinary(fotoHasil, "sibm/helpdesk")) || null,
+        ...(statusUbah === "Selesai" ? { biaya: Number(biayaPerbaikan.replace(/D/g, "")) || 0 } : {}),
         ...(baruTertutup ? { waktu_selesai: serverTimestamp() } : {}),
       });
 
@@ -465,6 +470,15 @@ export default function AdminHelpdeskPage() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {statusUbah === "Selesai" && (
+                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)" }}>
+                  Biaya perbaikan (opsional, Rp)
+                  <input inputMode="numeric" value={biayaPerbaikan} onChange={(e) => setBiayaPerbaikan(e.target.value.replace(/[^d]/g, ""))} placeholder="Kosongkan bila tanpa biaya (teknisi internal)"
+                    style={{ padding: "11px 12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "14px", fontFamily: "inherit" }} />
+                  <span style={{ fontWeight: 500, fontSize: "11.5px", color: "var(--muted)" }}>Tercatat otomatis sebagai realisasi anggaran &quot;Perbaikan Gedung&quot;.</span>
+                </label>
               )}
 
               <Button type="submit" loading={isUpdating} loadingText="Menyimpan & Mengirim Notifikasi..." style={{ marginTop: "10px", background: isUpdating ? undefined : "var(--ink)" }}>
