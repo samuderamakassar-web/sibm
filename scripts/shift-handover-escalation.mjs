@@ -212,10 +212,13 @@ async function kirimPush(namaList, judul, pesan) {
 // dalam beberapa run terakhir -- query langsung ke flag notif_terlambat_terkirim, bukan
 // terikat ke 1 shift tertentu.
 async function cekHandoverTelatBelumDinotif() {
-  const snap = await db.collection("security_shift_handover")
-    .where("terlambat", "==", true)
-    .where("notif_terlambat_terkirim", "==", false)
-    .get();
+  // + "Mulai jaga tanpa serah terima" (SerahTerimaGuard): selalu dinotif walau belum lewat 10 menit
+  const [snapTelat, snapTanpa] = await Promise.all([
+    db.collection("security_shift_handover").where("terlambat", "==", true).where("notif_terlambat_terkirim", "==", false).get(),
+    db.collection("security_shift_handover").where("tanpa_serah_terima", "==", true).where("notif_terlambat_terkirim", "==", false).get(),
+  ]);
+  const unik = new Map([...snapTelat.docs, ...snapTanpa.docs].map((d) => [d.id, d]));
+  const snap = { empty: unik.size === 0, docs: [...unik.values()] };
   if (snap.empty) {
     console.log("Tidak ada serah terima telat yang belum dinotifikasi.");
     return;
@@ -225,7 +228,7 @@ async function cekHandoverTelatBelumDinotif() {
   console.log(`Ditemukan ${daftar.length} serah terima telat yang belum dinotifikasi ke Admin GA.`);
 
   const baris = daftar.map((h) =>
-    `<tr><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#18181b;font-weight:700;">${h.petugas_keluar} &rarr; ${h.petugas_masuk}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#71717a;">${h.tanggal_shift} &middot; ${h.shift}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;font-weight:700;color:#dc2626;">${h.menit_terlambat} menit</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#3f3f46;font-style:italic;">${h.alasan_telat || "-"}</td></tr>`
+    `<tr><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#18181b;font-weight:700;">${h.petugas_keluar} &rarr; ${h.petugas_masuk}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#71717a;">${h.tanggal_shift} &middot; ${h.shift}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;font-weight:700;color:#dc2626;">${h.menit_terlambat ? `${h.menit_terlambat} menit` : "tepat waktu"}${h.tanpa_serah_terima ? "<br>tanpa QR" : ""}</td><td style="padding:9px 0;border-bottom:1px solid #f0f0ef;font-size:13px;color:#3f3f46;font-style:italic;">${h.alasan_telat || "-"}</td></tr>`
   ).join("");
   const bodyHtml = `
     <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">${daftar.length} serah terima shift Security tercatat TELAT scan QR. Detail & alasan yang diisi petugas:</p>
@@ -237,7 +240,7 @@ async function cekHandoverTelatBelumDinotif() {
   await kirimEmailKeAdminGA("Serah Terima Shift Security Tercatat Telat", emailShellSederhana("⏰ Serah Terima Telat Scan", bodyHtml));
 
   const pesanPush = daftar.length === 1
-    ? `${daftar[0].petugas_masuk} telat ${daftar[0].menit_terlambat} menit scan serah terima (${daftar[0].tanggal_shift} ${daftar[0].shift}). Alasan: ${daftar[0].alasan_telat || "-"}`
+    ? `${daftar[0].petugas_masuk} ${daftar[0].tanpa_serah_terima ? "mulai jaga TANPA serah terima QR" : `telat ${daftar[0].menit_terlambat} menit scan serah terima`} (${daftar[0].tanggal_shift} ${daftar[0].shift}). Alasan: ${daftar[0].alasan_telat || "-"}`
     : `${daftar.length} serah terima tercatat telat scan. Cek menu Pantau Tukar Shift untuk detail & alasan.`;
   await kirimPushAdminGA("⏰ Serah Terima Shift Security Telat", pesanPush);
 

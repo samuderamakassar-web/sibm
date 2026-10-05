@@ -21,7 +21,8 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { hitungShiftSesi, waktuWITASekarang, type ShiftLabel } from "../lib/shift";
+import { hitungShiftSesi, waktuWITASekarang, AMBANG_TELAT_SERAH_TERIMA_MENIT, type ShiftLabel } from "../lib/shift";
+import QrLokal from "./QrLokal";
 import { daerahTulis } from "../lib/daerah";
 import { logout } from "../hooks/useAuthGuard";
 
@@ -114,7 +115,8 @@ export default function SerahTerimaGuard() {
   }, [nama, kunciBatas]);
 
   const siap = !!(nama && b && roster && hoCur !== undefined && hoNext !== undefined);
-  const jadwal = (tgl: string) => (roster && nama ? roster[tgl]?.[nama] || "" : "");
+  const jadwalMentah = (tgl: string) => (roster && nama ? String(roster[tgl]?.[nama] || "") : "");
+  const jadwal = (tgl: string) => { const l = jadwalMentah(tgl); return l.includes("Shift 1") ? "Shift 1" : l.includes("Shift 2") ? "Shift 2" : l; };
   const sayaKeluarAwal = siap && b ? jadwal(b.prev.tanggal) === b.prev.shift && jadwal(b.cur.tanggal) !== b.cur.shift : false;
   const perluBuatQR = sayaKeluarAwal && hoCur === null;
   useEffect(() => {
@@ -185,7 +187,8 @@ export default function SerahTerimaGuard() {
       const ref = doc(db, "security_shift_handover", idHandover(b.cur.tanggal, b.cur.shift));
       const isi = {
         petugas_masuk: nama, status: "selesai", waktu_scan: serverTimestamp(), tanpa_serah_terima: true,
-        terlambat: true, menit_terlambat: menitTelat, alasan_telat: `TANPA SERAH TERIMA QR: ${alasan.trim()}`, notif_terlambat_terkirim: false,
+        terlambat: menitTelat > AMBANG_TELAT_SERAH_TERIMA_MENIT, menit_terlambat: menitTelat > AMBANG_TELAT_SERAH_TERIMA_MENIT ? menitTelat : null,
+        alasan_telat: `TANPA SERAH TERIMA QR: ${alasan.trim()}`, notif_terlambat_terkirim: false, // cron kirim notif utk terlambat ATAU tanpa_serah_terima
       };
       if (hoCur) await updateDoc(ref, isi);
       else await setDoc(ref, { ...isi, daerah: daerahTulis(), tanggal_shift: b.cur.tanggal, shift: b.cur.shift, petugas_keluar: "(tidak ada)", waktu_generate: serverTimestamp() });
@@ -196,7 +199,7 @@ export default function SerahTerimaGuard() {
     finally { setSibuk(false); }
   };
 
-  const qr = hoCur && hoCur.status === "menunggu_scan" ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(idHandover(b.cur.tanggal, b.cur.shift))}` : "";
+  const qr = hoCur && hoCur.status === "menunggu_scan" ? idHandover(b.cur.tanggal, b.cur.shift) : "";
   const keluarApp = () => logout(router);
 
   return (
@@ -210,8 +213,7 @@ export default function SerahTerimaGuard() {
             <div style={{ fontSize: "12px", color: "var(--muted)" }}>Pengganti belum datang</div>
             <div style={{ fontSize: "36px", fontWeight: 800, color: "var(--red-600)", fontVariantNumeric: "tabular-nums", marginBottom: "12px" }}>{fmtDurasi(b.detikSejakAwal)}</div>
             {qr ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qr} alt="QR serah terima" width={220} height={220} style={{ background: "#fff", padding: "10px", borderRadius: "16px", margin: "0 auto 16px", display: "block" }} />
+              <QrLokal data={qr} style={{ padding: "10px", borderRadius: "16px", marginBottom: "16px" }} />
             ) : <div style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "16px" }}>Menyiapkan QR...</div>}
             <div style={{ textAlign: "left", fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)", marginBottom: "6px" }}>Pengganti belum datang? Extend jaga:</div>
             <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
@@ -241,7 +243,7 @@ export default function SerahTerimaGuard() {
             <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: ".08em", color: "var(--ok)" }}>WAKTUNYA JAGA</div>
             <h2 style={{ margin: "6px 0 4px", fontSize: "21px", fontWeight: 800 }}>{b.cur.shift} sudah dimulai</h2>
             <div style={{ fontSize: "12px", color: "var(--muted)" }}>Berjalan sejak jam ganti</div>
-            <div style={{ fontSize: "36px", fontWeight: 800, color: b.detikSejakAwal > 600 ? "var(--red-600)" : "var(--ok)", fontVariantNumeric: "tabular-nums", marginBottom: "12px" }}>{fmtDurasi(b.detikSejakAwal)}</div>
+            <div style={{ fontSize: "36px", fontWeight: 800, color: b.detikSejakAwal >= (AMBANG_TELAT_SERAH_TERIMA_MENIT + 1) * 60 ? "var(--red-600)" : "var(--ok)", fontVariantNumeric: "tabular-nums", marginBottom: "12px" }}>{fmtDurasi(b.detikSejakAwal)}</div>
             <p style={{ margin: "0 0 16px", fontSize: "13px", color: "var(--ink-soft)" }}>Scan QR dari petugas sebelumnya untuk membuka menu. Lewat 10 menit tercatat terlambat.</p>
             <button type="button" className="sa-btn is-primary" style={{ width: "100%", height: "50px", fontSize: "15px" }} onClick={() => router.push("/dashboard/security/tukar-shift")}>Scan QR Serah Terima</button>
             <button type="button" className="sa-btn is-soft" style={{ width: "100%", marginTop: "10px" }} onClick={() => setModeDarurat(true)}>Petugas sebelumnya tidak ada?</button>

@@ -2940,3 +2940,12 @@ SUDAH DI-DEPLOY. `/admin/anggaran` (Admin GA). Pagu tahunan per kategori di `ang
 
 ## 90. Okupansi: Input Luas Total Gedung (5 Oktober 2026)
 SUDAH DI-DEPLOY. Permintaan user: ada tempat mengisi luas total gedung, lalu luas tiap tenant -> okupansi. Ditambah `gedung { luas_total, luas_bersama }` di `okupansi_gedung/data` (kartu "Data gedung" saat mode ubah). Bila diisi, angka gedung mengalahkan jumlah per lantai; kosong = pakai jumlah per lantai. Okupansi = luas terisi tenant / (luas gedung - area bersama); area kosong = luas bisa disewa - terisi; peringatan merah bila tenant + bersama > luas gedung. Persen per tenant juga memakai luas bisa disewa tingkat gedung. Tombol Batal kini memuat ulang data tersimpan (sebelumnya perubahan yang belum disimpan tetap tampil).
+
+## 91. Audit Ketepatan Waktu Serah Terima Security (5 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: pastikan mode serah terima (§87) tidak membuat Security telat. Simulasi batas shift (19:45, 19:59:59, 20:00, 20:10:59, 20:11, 00:30, 07:59:59, 08:00, akhir bulan): pergantian tepat 08:00:00/20:00:00, scan s.d. menit ke-10 (20:10:59) tepat waktu, telat mulai 20:11 -- sama dengan AMBANG_TELAT_SERAH_TERIMA_MENIT (10) & cron. Perbaikan:
+- QR kini digambar di perangkat (`src/components/QrLokal.tsx`, paket `qrcode` + deklarasi `src/types/qrcode.d.ts`), tidak lagi dari api.qrserver.com -> QR tetap muncul saat sinyal lemah/layanan luar down. Dipakai SerahTerimaGuard & TukarShiftSecurityPage.
+- Jalur darurat "Mulai jaga tanpa serah terima": `terlambat` hanya bila > 10 menit (sebelumnya selalu true -> petugas masuk tepat waktu ikut tercatat telat). Notif Admin GA tetap: cron shift-handover-escalation kini juga mengirim untuk `tanpa_serah_terima == true` (email/push menulis "tanpa QR"). Pantau Tukar Shift menampilkan label "TANPA QR".
+- TukarShiftSecurityPage memperbarui shift tiap 5 dtk (sebelumnya 30 dtk) -> halaman yang dibuka sebelum 20:00 langsung mencari QR shift baru.
+- Label jadwal dicocokkan longgar (`includes("Shift 1")`), sama seperti PengaturanJadwalSecurity.
+- Timer petugas masuk berubah merah mulai menit ke-11 (sesuai ambang telat), bukan menit ke-10.
+Catatan sisa: QR petugas keluar hanya tampil bila SIBM terbuka di HP-nya saat jam ganti (jam HP dipakai untuk hitungan; jam HP yang meleset ikut menggeser).

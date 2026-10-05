@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, setDoc, doc, getDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, Timestamp } from "firebase/firestore";
 import { Html5QrcodeScanner } from "html5-qrcode";
+import QrLokal from "../QrLokal";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
@@ -70,7 +71,7 @@ export default function TukarShiftSecurityPage() {
       const now = waktuWITASekarang();
       setInfo(hitungShiftSesi(now));
       setBolehBuatQR(dalamJendelaTukarJaga(now));
-    }, 30000);
+    }, 5000); // 5 dtk: begitu 08:00/20:00 lewat, shift & QR yang dicari langsung ikut berganti
     return () => clearInterval(t);
   }, []);
 
@@ -185,9 +186,7 @@ export default function TukarShiftSecurityPage() {
   if (!isReady || handover === undefined) return null;
 
   const sayaPetugasKeluar = !!handover && handover.petugas_keluar === myName;
-  const qrUrl = handover && handover.status === "menunggu_scan"
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(handover.id)}`
-    : "";
+  const qrData = handover && handover.status === "menunggu_scan" ? handover.id : "";
 
   return (
     <AdminShell title="Tukar Shift / Jaga" subtitle="Serah terima jaga lewat scan QR antar petugas" userName={myName || "Staf"} backHref="/" backLabel="Kembali" onBack={() => router.back()}>
@@ -226,8 +225,7 @@ export default function TukarShiftSecurityPage() {
           sayaPetugasKeluar ? (
             <div style={{ textAlign: "center", padding: "24px 20px", background: "var(--surface)", borderRadius: "18px", border: "1px solid var(--line)" }}>
               <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--warn)", marginBottom: "12px" }}>⏳ Menunggu Discan Petugas Pengganti</div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrUrl} alt="QR Serah Terima" style={{ width: "220px", height: "220px", margin: "0 auto", display: "block", borderRadius: "12px", border: "1px solid var(--line)" }} />
+              {qrData && <QrLokal data={qrData} style={{ borderRadius: "12px", border: "1px solid var(--line)", padding: "8px" }} />}
               <p style={{ color: "var(--muted)", fontSize: "12.5px", marginTop: "14px" }}>Tunjukkan QR ini ke petugas pengganti untuk discan dari halaman Tukar Shift mereka.</p>
             </div>
           ) : (

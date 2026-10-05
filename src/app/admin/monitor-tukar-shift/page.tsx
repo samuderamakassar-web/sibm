@@ -20,6 +20,7 @@ interface HandoverLog {
   waktu_scan: Timestamp | null;
   terlambat?: boolean;
   menit_terlambat?: number | null;
+  tanpa_serah_terima?: boolean;
   alasan_telat?: string | null;
 }
 
@@ -234,6 +235,11 @@ export default function MonitorTukarShiftPage() {
                         {h.terlambat ? (
                           <div>
                             <span style={{ background: "var(--red-50)", color: "var(--red-600)", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: 800 }}>TELAT {h.menit_terlambat}M</span>
+                            {h.alasan_telat && <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "5px", fontStyle: "italic" }}>&ldquo;{h.alasan_telat}&rdquo;</div>}
+                          </div>
+                        ) : h.tanpa_serah_terima ? (
+                          <div>
+                            <span style={{ background: "var(--warn-50, #fff4e5)", color: "var(--warn)", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: 800 }}>TANPA QR</span>
                             {h.alasan_telat && <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "5px", fontStyle: "italic" }}>&ldquo;{h.alasan_telat}&rdquo;</div>}
                           </div>
                         ) : h.status === "selesai" ? (
