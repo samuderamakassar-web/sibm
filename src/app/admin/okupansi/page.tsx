@@ -5,11 +5,13 @@
  * Data: okupansi_gedung/data { lantai: [{ nama, luas_total, unit: [{ id, nama, tenant, luas, status }] }] }.
  * status: "terisi" (disewa tenant) | "kosong" (siap disewa) | "bersama" (koridor/toilet/tangga, tidak disewakan).
  * Luas lantai yang belum dipetakan ke unit dihitung sebagai area kosong.
- * Okupansi % = luas terisi / (luas total - area bersama). Khusus Admin (keputusan user).
+ * gedung { luas_total, luas_bersama }: luas total gedung & area bersama tingkat gedung (opsional). Bila diisi, angka ini
+ * mengalahkan jumlah per lantai -> admin cukup isi luas gedung + luas tiap tenant, rincian lantai opsional.
+ * Okupansi % = luas terisi tenant / (luas total - area bersama). Khusus Admin (keputusan user).
  */
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -20,6 +22,7 @@ import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
 type Status = "terisi" | "kosong" | "bersama";
 interface Unit { id: string; nama: string; tenant: string; luas: number; status: Status }
 interface Lantai { nama: string; luas_total: number; unit: Unit[] }
+interface Gedung { luas_total: number; luas_bersama: number }
 
 const BAWAAN: Lantai[] = ["Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4"].map((nama) => ({ nama, luas_total: 0, unit: [] }));
 const REF = () => doc(db, "okupansi_gedung", "data"); // privat (bukan settings yang bisa dibaca publik)
@@ -56,13 +59,22 @@ export default function OkupansiPage() {
   const [menyimpan, setMenyimpan] = useState(false);
   const [edit, setEdit] = useState(false);
   const [lantaiBaru, setLantaiBaru] = useState("");
+  const [gedung, setGedung] = useState<Gedung>({ luas_total: 0, luas_bersama: 0 });
+
+  const terapkan = (x: Record<string, unknown> | undefined) => {
+    const l = x?.lantai as Lantai[] | undefined;
+    setData(Array.isArray(l) && l.length ? l : BAWAAN);
+    const g = x?.gedung as Partial<Gedung> | undefined;
+    setGedung({ luas_total: Number(g?.luas_total) || 0, luas_bersama: Number(g?.luas_bersama) || 0 });
+  };
+  const batal = async () => {
+    setEdit(false); setBerubah(false);
+    try { terapkan((await getDoc(REF())).data()); } catch (e) { console.error(e); }
+  };
 
   useEffect(() => {
     if (!isReady) return;
-    const unsub = onSnapshot(REF(), (s) => {
-      const l = s.data()?.lantai as Lantai[] | undefined;
-      if (!berubah) setData(Array.isArray(l) && l.length ? l : BAWAAN);
-    });
+    const unsub = onSnapshot(REF(), (s) => { if (!berubah) terapkan(s.data()); });
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
@@ -71,7 +83,7 @@ export default function OkupansiPage() {
   const simpan = async () => {
     setMenyimpan(true);
     try {
-      await setDoc(REF(), { lantai: JSON.parse(JSON.stringify(data)), diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
+      await setDoc(REF(), { lantai: JSON.parse(JSON.stringify(data)), gedung, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
       setBerubah(false); setEdit(false);
       showToast("Data okupansi tersimpan.", "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
@@ -89,12 +101,19 @@ export default function OkupansiPage() {
     perTenant[u.tenant].lantai.add(l.nama);
   }));
   const daftarTenant = Object.entries(perTenant).sort((a, b) => b[1].luas - a[1].luas);
+  // Angka tingkat gedung (bila diisi) mengalahkan jumlah per lantai
+  const totalGedung = gedung.luas_total > 0 ? gedung.luas_total : tot.total;
+  const bersamaGedung = gedung.luas_bersama > 0 ? gedung.luas_bersama : tot.bersama;
+  const sewaGedung = Math.max(0, totalGedung - bersamaGedung);
+  const kosongGedung = Math.max(0, sewaGedung - tot.terisi);
+  const lebihGedung = gedung.luas_total > 0 && tot.terisi + bersamaGedung > gedung.luas_total;
+  const ubahGedung = (k: keyof Gedung, v: string) => { setGedung((g) => ({ ...g, [k]: Number(v) || 0 })); setBerubah(true); };
 
 
   return (
     <AdminShell title="Okupansi Gedung" subtitle="Luas gedung, luas sewa per tenant, dan area kosong per lantai" userName={session?.nama || "Admin"}
       actions={edit
-        ? <div style={{ display: "flex", gap: "8px" }}><button type="button" className="sa-btn is-soft" onClick={() => { setEdit(false); setBerubah(false); }}>Batal</button><button type="button" className="sa-btn is-primary" onClick={simpan} disabled={menyimpan || !berubah}>{menyimpan ? "Menyimpan..." : "Simpan"}</button></div>
+        ? <div style={{ display: "flex", gap: "8px" }}><button type="button" className="sa-btn is-soft" onClick={batal}>Batal</button><button type="button" className="sa-btn is-primary" onClick={simpan} disabled={menyimpan || !berubah}>{menyimpan ? "Menyimpan..." : "Simpan"}</button></div>
         : <button type="button" className="sa-btn is-dark" onClick={() => setEdit(true)}>Ubah data luas & tenant</button>}>
       <style dangerouslySetInnerHTML={{ __html: `
         .ok-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
@@ -105,13 +124,28 @@ export default function OkupansiPage() {
       `}} />
 
       <Tile style={{ marginBottom: "16px" }}>
+        <h2 style={{ margin: "0 0 10px", fontSize: "16px", fontWeight: 800 }}>Data gedung</h2>
+        {edit ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px", marginBottom: "14px" }}>
+            <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)", display: "flex", flexDirection: "column", gap: "4px" }}>
+              Luas total gedung (m²)
+              <input type="number" min={0} className="ok-in" placeholder={tot.total ? `kosong = jumlah lantai (${fmt(tot.total)})` : "mis. 4800"} value={gedung.luas_total || ""} onChange={(e) => ubahGedung("luas_total", e.target.value)} />
+            </label>
+            <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)", display: "flex", flexDirection: "column", gap: "4px" }}>
+              Area bersama / tidak disewakan (m², opsional)
+              <input type="number" min={0} className="ok-in" placeholder={tot.bersama ? `kosong = jumlah per lantai (${fmt(tot.bersama)})` : "lobi, koridor, toilet, tangga"} value={gedung.luas_bersama || ""} onChange={(e) => ubahGedung("luas_bersama", e.target.value)} />
+            </label>
+            <div style={{ fontSize: "11.5px", color: "var(--muted)", alignSelf: "end" }}>Luas tiap tenant diisi di kartu lantai di bawah (+ Tambah unit, pilih PT, isi m²). Luas lantai boleh dikosongkan.</div>
+          </div>
+        ) : null}
         <div className="ok-kpi">
-          <Kpi label="Okupansi" nilai={`${persen(tot.terisi, tot.sewa)}%`} sub="luas terisi / luas yang bisa disewa" warna="var(--ok)" />
-          <Kpi label="Luas total" nilai={`${fmt(tot.total)} m²`} sub={`${data.length} lantai`} />
+          <Kpi label="Okupansi" nilai={`${persen(tot.terisi, sewaGedung)}%`} sub={`${fmt(tot.terisi)} ÷ ${fmt(sewaGedung)} m² bisa disewa`} warna="var(--ok)" />
+          <Kpi label="Luas total gedung" nilai={`${fmt(totalGedung)} m²`} sub={gedung.luas_total > 0 ? "diisi manual" : `jumlah ${data.length} lantai`} />
           <Kpi label="Luas terisi tenant" nilai={`${fmt(tot.terisi)} m²`} sub={`${daftarTenant.length} tenant`} />
-          <Kpi label="Area kosong" nilai={`${fmt(tot.kosong)} m²`} sub="siap disewa / belum dipetakan" warna="var(--warn)" />
-          <Kpi label="Area bersama" nilai={`${fmt(tot.bersama)} m²`} sub="koridor, toilet, tangga" />
+          <Kpi label="Area kosong" nilai={`${fmt(kosongGedung)} m²`} sub="bisa disewa, belum terisi" warna="var(--warn)" />
+          <Kpi label="Area bersama" nilai={`${fmt(bersamaGedung)} m²`} sub="lobi, koridor, toilet, tangga" />
         </div>
+        {lebihGedung && <div style={{ marginTop: "10px", fontSize: "12.5px", fontWeight: 700, color: "var(--red-600)" }}>Luas tenant + area bersama melebihi luas total gedung, periksa angka.</div>}
         <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginTop: "12px", fontSize: "12px", color: "var(--ink-soft)" }}>
           {([["terisi", "Terisi tenant"], ["kosong", "Kosong"], ["bersama", "Area bersama"]] as [Status, string][]).map(([k, l]) => (
             <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: WARNA[k] }} />{l}</span>
@@ -195,9 +229,9 @@ export default function OkupansiPage() {
               <div key={nama}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", gap: "8px" }}>
                   <span style={{ fontWeight: 700 }}>{nama} <span style={{ fontWeight: 500, color: "var(--muted)" }}>· {Array.from(v.lantai).join(", ")}</span></span>
-                  <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmt(v.luas)} m² · {persen(v.luas, tot.sewa)}%</span>
+                  <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmt(v.luas)} m² · {persen(v.luas, sewaGedung)}%</span>
                 </div>
-                <div className="ok-bar" style={{ height: "8px", marginTop: "4px" }}><span style={{ width: `${persen(v.luas, tot.sewa)}%`, background: WARNA.terisi }} /></div>
+                <div className="ok-bar" style={{ height: "8px", marginTop: "4px" }}><span style={{ width: `${persen(v.luas, sewaGedung)}%`, background: WARNA.terisi }} /></div>
               </div>
             ))}
           </div>
