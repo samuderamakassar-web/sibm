@@ -2970,3 +2970,9 @@ SUDAH DI-DEPLOY. Permintaan user: tanpa scan (atau discan) saat tukar jaga, menu
 - Jalur darurat "Mulai jaga tanpa serah terima" hanya tersedia bila QR belum dibuat (petugas lama tidak membuka SIBM) atau sudah >= 30 menit sejak jam ganti (`MENIT_DARURAT`); sebelumnya bisa langsung dipakai walau QR sudah ada.
 - AdminShell memasang SerahTerimaGuard tanpa syarat `userName` (guard mengecek akun Security sendiri). Semua halaman staf memakai AdminShell (dicek; pengecualian hanya halaman publik qr-apar & survei).
 Batasan tetap: kunci hanya di dalam SIBM; bergantung roster bulanan (petugas yang tidak ada di roster tidak dikunci); akun magang tidak dikunci.
+
+## 96. Validasi Kehadiran: Lewat 17:00 Otomatis Tidak Hadir (5 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: kartu "Belum tercatat masuk" yang belum divalidasi sampai 17:00 otomatis tercatat tidak hadir. Konstanta `JAM_BATAS_VALIDASI_MASUK = "17:00"`, `ALASAN_TIDAK_HADIR_OTOMATIS` di src/lib/validasiKaryawan.ts (diduplikasi di script).
+- ValidasiKaryawanPage: begitu jam >= 17:00 WITA, kartu belum_input "menunggu" (hari ini & kemarin; kecuali yang sudah check-in) di-update batch -> `status: "tidak_masuk"`, `alasan: "Tidak divalidasi s.d. 17:00"`, `otomatis: true`, `divalidasi_oleh: "Sistem (lewat 17:00)"`. Muncul di "Sudah divalidasi hari ini" & panel Kehadiran/portal sebagai tidak masuk. Teks keterangan seksi menyebut aturan ini.
+- Cron validasi-karyawan.mjs (cadangan): kartu belum_input hari sebelumnya yang masih menunggu -> tidak hadir otomatis; run >= 17:00 menutup semua yang menunggu hari itu (kartu baru langsung dibuat berstatus tidak hadir). Push belum input kini 09:00-16:00 (JAM_PUSH_MASUK_AKHIR 16).
+- Tidak ada email ke karyawan untuk penandaan otomatis (email "Tercatat Tidak Masuk" tetap hanya untuk penandaan manual Security dengan foto).

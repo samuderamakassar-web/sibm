@@ -12,7 +12,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
-import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { daerahTulis } from "../../lib/daerah";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
@@ -24,7 +24,7 @@ import { handleFotoUpload } from "../../lib/uploadFoto";
 import { kirimEmail } from "../../lib/notify";
 import { buildTidakMasukEmailHtml } from "../../lib/emailTemplates";
 import {
-  ALASAN_TIDAK_MASUK, catatLanjutLembur, checkInSusulan, idValidasiLembur, jamWITA, MENIT_TANYA_ULANG_PULANG, normalNama, tanggalWITA, tampilKartuLembur,
+  ALASAN_TIDAK_HADIR_OTOMATIS, ALASAN_TIDAK_MASUK, JAM_BATAS_VALIDASI_MASUK, waktuWITA, catatLanjutLembur, checkInSusulan, idValidasiLembur, jamWITA, MENIT_TANYA_ULANG_PULANG, normalNama, tanggalWITA, tampilKartuLembur,
   type ValidasiKaryawan,
 } from "../../lib/validasiKaryawan";
 
@@ -107,6 +107,20 @@ export default function ValidasiKaryawanPage() {
     });
     return () => unsub();
   }, [hariIni]);
+
+  // §96: lewat 17:00 kartu "belum tercatat masuk" yang belum dijawab -> otomatis tidak hadir (cron = cadangan).
+  useEffect(() => {
+    if (!kartu || sekarang < waktuWITA(hariIni, JAM_BATAS_VALIDASI_MASUK).getTime()) return;
+    const target = kartu.filter((v) => v.jenis === "belum_input" && v.status === "menunggu" && v.tanggal <= hariIni
+      && !(v.tanggal === hariIni && sudahMasuk.has(normalNama(v.nama))));
+    if (target.length === 0) return;
+    const batch = writeBatch(db);
+    target.slice(0, 450).forEach((v) => batch.update(doc(db, "validasi_karyawan", v.id), {
+      status: "tidak_masuk", alasan: ALASAN_TIDAK_HADIR_OTOMATIS, keterangan: "", otomatis: true,
+      divalidasi_oleh: "Sistem (lewat 17:00)", waktu_validasi: serverTimestamp(),
+    }));
+    batch.commit().catch((err) => console.error("[validasi] gagal menandai tidak hadir otomatis:", err));
+  }, [kartu, sekarang, hariIni, sudahMasuk]);
 
   // Karyawan yang masih di dalam gedung (belum check-out) -> sumber kartu lembur langsung (§92).
   useEffect(() => {
@@ -266,7 +280,7 @@ export default function ValidasiKaryawanPage() {
 
             <section className="vk-seksi">
               <h2 className="vk-judul">Belum tercatat masuk <span>{belumInput.length}</span></h2>
-              <p className="vk-ket">Karyawan Master Data yang belum check-in hari ini. Lupa diinput → catat susulan dengan jam yang sesuai. Tidak masuk → datangi mejanya dan foto.</p>
+              <p className="vk-ket">Karyawan Master Data yang belum check-in hari ini. Lupa diinput → catat susulan dengan jam yang sesuai. Tidak masuk → datangi mejanya dan foto. Belum divalidasi sampai {JAM_BATAS_VALIDASI_MASUK} → otomatis tercatat tidak hadir.</p>
               {belumInput.length > 6 && (
                 <input className="vk-input" style={{ marginBottom: "10px" }} placeholder="Cari nama / departemen..." value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari karyawan" />
               )}

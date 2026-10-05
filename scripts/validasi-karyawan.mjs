@@ -34,7 +34,9 @@ const BATAS_DI_GEDUNG_JAM = 12;
 const MENIT_TANYA_ULANG_PULANG = 45;
 // §94: push "belum tercatat masuk" TIAP JAM 09:00-17:00 selama masih ada yang menunggu (dulu 09:00 & 13:00 saja).
 const JAM_PUSH_MASUK_AWAL = 9;
-const JAM_PUSH_MASUK_AKHIR = 17;
+const JAM_PUSH_MASUK_AKHIR = 16; // 17:00 kartu ditutup otomatis (§96)
+const JAM_BATAS_VALIDASI_MASUK = 17; // = src/lib/validasiKaryawan.ts
+const TIDAK_HADIR_OTOMATIS = { status: "tidak_masuk", alasan: "Tidak divalidasi s.d. 17:00", keterangan: "", otomatis: true, divalidasi_oleh: "Sistem (lewat 17:00)" };
 const DAERAH_DEFAULT = "Makassar"; // §78: penanda daerah dokumen (tahap 1, sebelum cron per daerah)
 
 // ---------- waktu WITA ----------
@@ -121,6 +123,15 @@ const sesiTerbuka = (await db.collection("security_visitor_logs").where("status"
 
 // ============ A. BELUM DIINPUT ============
 async function cekBelumInput() {
+  // §96: kartu hari-hari sebelumnya yang masih "menunggu" (cron/halaman tidak sempat menutup) -> tidak hadir
+  const lama = (await db.collection("validasi_karyawan").where("status", "==", "menunggu").get())
+    .docs.filter((d) => d.data().jenis === "belum_input" && d.data().tanggal < hariIni);
+  for (let i = 0; i < lama.length; i += 400) {
+    const batch = db.batch();
+    lama.slice(i, i + 400).forEach((d) => batch.update(d.ref, { ...TIDAK_HADIR_OTOMATIS, waktu_validasi: FieldValue.serverTimestamp() }));
+    await batch.commit();
+  }
+  if (lama.length) console.log(`A. ${lama.length} kartu belum_input hari sebelumnya -> tidak hadir otomatis.`);
   if (!hariKerja || jamSekarang < 9) return;
   const libur = (await db.collection("settings").doc("validasi_karyawan").get()).data()?.hari_libur || [];
   if (libur.includes(hariIni)) {
@@ -161,9 +172,23 @@ async function cekBelumInput() {
     }, "set"]);
     menunggu.push(e.nama);
   }
+  // §96: lewat 17:00 semua yang masih menunggu langsung tercatat tidak hadir (kartu baru pun dibuat dalam status itu)
+  const lewatBatas = jamSekarang >= JAM_BATAS_VALIDASI_MASUK;
+  if (lewatBatas && menunggu.length) {
+    const idTutup = new Set(menunggu.map((n) => `${hariIni}_masuk_${slugNama(n)}`));
+    for (let i = tulis.length - 1; i >= 0; i--) if (idTutup.has(tulis[i][0].id)) tulis.splice(i, 1);
+    for (const e of karyawan.filter((x) => menunggu.includes(x.nama))) {
+      tulis.push([db.collection("validasi_karyawan").doc(`${hariIni}_masuk_${slugNama(e.nama)}`), {
+        jenis: "belum_input", tanggal: hariIni, nama: e.nama, departemen: e.departemen || "-", daerah: e.daerah || DAERAH_DEFAULT,
+        ...TIDAK_HADIR_OTOMATIS, waktu_validasi: FieldValue.serverTimestamp(),
+      }, "merge"]);
+    }
+    console.log(`A. Lewat ${JAM_BATAS_VALIDASI_MASUK}:00 -> ${menunggu.length} karyawan tercatat tidak hadir otomatis.`);
+    menunggu.length = 0;
+  }
   for (let i = 0; i < tulis.length; i += 400) {
     const batch = db.batch();
-    tulis.slice(i, i + 400).forEach(([ref, data, op]) => (op === "set" ? batch.set(ref, data) : batch.update(ref, data)));
+    tulis.slice(i, i + 400).forEach(([ref, data, op]) => (op === "set" ? batch.set(ref, data) : op === "merge" ? batch.set(ref, data, { merge: true }) : batch.update(ref, data)));
     await batch.commit();
   }
   console.log(`A. ${karyawan.length} karyawan, ${sudahMasuk.size} sudah check-in, ${menunggu.length} menunggu validasi.`);

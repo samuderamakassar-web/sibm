@@ -26,6 +26,9 @@ export const MENIT_TANYA_ULANG_PULANG = 45;
 /** Kartu "lembur" tampil sejak jam mulai lembur (18:00, keputusan user §93) sampai dijawab Security.
  *  Bisa diberi jeda (menit) bila kelak perlu. */
 export const MENIT_TAMPIL_KARTU_LEMBUR = 0;
+/** §96: kartu "belum_input" yang belum dijawab sampai jam ini otomatis tercatat tidak hadir. */
+export const JAM_BATAS_VALIDASI_MASUK = "17:00";
+export const ALASAN_TIDAK_HADIR_OTOMATIS = "Tidak divalidasi s.d. 17:00";
 export const ALASAN_TIDAK_MASUK = ["Izin", "Sakit", "Cuti", "Dinas luar", "Tanpa kabar"] as const;
 
 export type JenisValidasi = "belum_input" | "lembur";
