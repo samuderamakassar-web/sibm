@@ -23,6 +23,9 @@ export const JAM_MULAI_LEMBUR = "18:00";
 export const BATAS_LEMBUR_JAM = 4; // PP 35/2021: lembur maks. 4 jam/hari
 export const BATAS_DI_GEDUNG_JAM = 12;
 export const MENIT_TANYA_ULANG_PULANG = 45;
+/** Kartu "lembur" baru DITAMPILKAN 30 menit setelah jam mulai lembur (18:30) -- beri waktu karyawan
+ *  yang memang pulang 18:00-an. Jam lembur tetap dihitung sejak 18:00 (keputusan user, §92). */
+export const MENIT_TAMPIL_KARTU_LEMBUR = 30;
 export const ALASAN_TIDAK_MASUK = ["Izin", "Sakit", "Cuti", "Dinas luar", "Tanpa kabar"] as const;
 
 export type JenisValidasi = "belum_input" | "lembur";
@@ -69,6 +72,9 @@ export function mulaiLembur(waktuMasuk: Date): Date {
   const batas = waktuWITA(tanggalWITA(waktuMasuk), JAM_MULAI_LEMBUR);
   return waktuMasuk > batas ? waktuMasuk : batas;
 }
+
+/** Waktu kartu lembur sesi ini mulai tampil ke Security. */
+export const tampilKartuLembur = (waktuMasuk: Date) => new Date(mulaiLembur(waktuMasuk).getTime() + MENIT_TAMPIL_KARTU_LEMBUR * 60000);
 
 /** Jam tagih: dibulatkan ke ATAS per jam (keputusan user). 0 kalau belum melewati jam mulai. */
 export function jamTagihLembur(mulai: Date, selesai: Date): number {

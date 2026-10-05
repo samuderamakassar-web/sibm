@@ -6,11 +6,14 @@
  *   - Belum tercatat masuk (09:00 & 13:00 hari kerja): Lupa diinput (check-in susulan, jam diatur) /
  *     Tidak masuk (alasan + foto wajib, datangi mejanya).
  * Logika simpan ada di src/lib/validasiKaryawan.ts.
+ * §92: kartu lembur juga dihitung LANGSUNG di halaman dari Buku Tamu (sesi "Di Dalam Area" lewat 18:30),
+ * karena cron GitHub kenyataannya jalan tiap ~3 jam. Kartu "virtual" disimpan saat Security menjawab.
  */
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
-import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where } from "firebase/firestore";
+import { daerahTulis } from "../../lib/daerah";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
@@ -21,7 +24,7 @@ import { handleFotoUpload } from "../../lib/uploadFoto";
 import { kirimEmail } from "../../lib/notify";
 import { buildTidakMasukEmailHtml } from "../../lib/emailTemplates";
 import {
-  ALASAN_TIDAK_MASUK, catatLanjutLembur, checkInSusulan, jamWITA, MENIT_TANYA_ULANG_PULANG, normalNama, tanggalWITA,
+  ALASAN_TIDAK_MASUK, catatLanjutLembur, checkInSusulan, idValidasiLembur, jamWITA, MENIT_TANYA_ULANG_PULANG, normalNama, tanggalWITA, tampilKartuLembur,
   type ValidasiKaryawan,
 } from "../../lib/validasiKaryawan";
 
@@ -36,6 +39,17 @@ type Aksi =
   | { jenis: "tidak_masuk"; v: ValidasiKaryawan };
 
 const jamDari = (ts?: Timestamp | null) => (ts ? jamWITA(ts.toDate()) : "-");
+type KartuTampil = ValidasiKaryawan & { virtual?: boolean };
+interface SesiTerbuka { id: string; nama: string; instansi_dept?: string; daerah?: string; waktu_masuk: Timestamp }
+
+/** Kartu virtual (belum ada di Firestore) disimpan dulu sebelum dijawab -- id sama dengan buatan cron. */
+async function pastikanKartu(v: KartuTampil) {
+  if (!v.virtual) return;
+  await setDoc(doc(db, "validasi_karyawan", v.id), {
+    daerah: daerahTulis(), jenis: "lembur", tanggal: v.tanggal, nama: v.nama, departemen: v.departemen || "-", status: "menunggu",
+    visitor_log_id: v.visitor_log_id || "", waktu_masuk: v.waktu_masuk || null, dibuat_pada: serverTimestamp(), dibuat_dari: "halaman_validasi",
+  }, { merge: true });
+}
 
 export default function ValidasiKaryawanPage() {
   const router = useRouter();
@@ -57,6 +71,12 @@ export default function ValidasiKaryawanPage() {
 
   const [kartu, setKartu] = useState<ValidasiKaryawan[] | null>(null);
   const [sudahMasuk, setSudahMasuk] = useState<Set<string>>(new Set());
+  const [sesiTerbuka, setSesiTerbuka] = useState<SesiTerbuka[]>([]);
+  const [sekarang, setSekarang] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setSekarang(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
   const [cari, setCari] = useState("");
   const [aksi, setAksi] = useState<Aksi | null>(null);
   const [foto, setFoto] = useState("");
@@ -88,6 +108,14 @@ export default function ValidasiKaryawanPage() {
     return () => unsub();
   }, [hariIni]);
 
+  // Karyawan yang masih di dalam gedung (belum check-out) -> sumber kartu lembur langsung (§92).
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, "security_visitor_logs"), where("status", "==", "Di Dalam Area")), (snap) => {
+      setSesiTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SesiTerbuka & { jenis?: string })).filter((x) => x.jenis === "Karyawan" && x.waktu_masuk));
+    }, (err) => console.error("[validasi] sesi terbuka:", err));
+    return () => unsub();
+  }, []);
+
   const bukaAksi = (a: Aksi) => {
     setAksi(a); setFoto(""); setArea(""); setJamMasuk("08:00"); setPlat(""); setAlasan(ALASAN_TIDAK_MASUK[0]); setKeterangan("");
   };
@@ -114,6 +142,7 @@ export default function ValidasiKaryawanPage() {
     setMenyimpan(true);
     try {
       if (aksi.jenis === "lanjut") {
+        await pastikanKartu(aksi.v);
         await catatLanjutLembur(aksi.v, { area: area.trim(), fotoUrl: foto, petugas });
         showToast(`Lembur ${aksi.v.nama} dicatat. Jam selesai terisi otomatis saat check-out.`, "success");
       } else if (aksi.jenis === "susulan") {
@@ -149,7 +178,7 @@ export default function ValidasiKaryawanPage() {
     }
   };
 
-  const akanPulang = async (v: ValidasiKaryawan) => {
+  const akanPulang = async (v: KartuTampil) => {
     const ok = await confirm({
       title: "Akan Pulang",
       message: `${v.nama} akan segera pulang? Tidak perlu aksi lain -- tinggal check-out di Buku Tamu saat keluar. Kalau ${MENIT_TANYA_ULANG_PULANG} menit lagi belum check-out, Anda akan ditanya ulang.`,
@@ -157,6 +186,7 @@ export default function ValidasiKaryawanPage() {
     });
     if (!ok) return;
     try {
+      await pastikanKartu(v);
       await updateDoc(doc(db, "validasi_karyawan", v.id), { status: "akan_pulang", divalidasi_oleh: petugas, waktu_validasi: serverTimestamp() });
       showToast(`${v.nama}: menunggu check-out.`, "success");
     } catch (err) {
@@ -169,7 +199,16 @@ export default function ValidasiKaryawanPage() {
 
   const semua = kartu || [];
   const cocok = (v: ValidasiKaryawan) => !cari.trim() || normalNama(v.nama).includes(normalNama(cari)) || normalNama(v.departemen || "").includes(normalNama(cari));
-  const lemburMenunggu = semua.filter((v) => v.jenis === "lembur" && v.status === "menunggu");
+  const adaKartu = new Set(semua.map((v) => v.id));
+  const kartuVirtual: KartuTampil[] = sesiTerbuka.flatMap((s) => {
+    const masuk = s.waktu_masuk.toDate();
+    const tgl = tanggalWITA(masuk);
+    const id = idValidasiLembur(tgl, s.id);
+    if ((tgl !== hariIni && tgl !== kemarin) || adaKartu.has(id) || sekarang < tampilKartuLembur(masuk).getTime()) return [];
+    return [{ id, virtual: true, jenis: "lembur", tanggal: tgl, nama: s.nama, departemen: s.instansi_dept || "-", status: "menunggu", visitor_log_id: s.id, waktu_masuk: s.waktu_masuk }];
+  });
+  const lemburMenunggu: KartuTampil[] = [...semua.filter((v) => v.jenis === "lembur" && v.status === "menunggu"), ...kartuVirtual]
+    .sort((a, b) => a.nama.localeCompare(b.nama));
   const lemburBerjalan = semua.filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || v.status === "akan_pulang"));
   const belumInput = semua
     .filter((v) => v.jenis === "belum_input" && v.tanggal === hariIni && v.status === "menunggu" && !sudahMasuk.has(normalNama(v.nama)))
