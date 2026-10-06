@@ -49,6 +49,39 @@ interface StockItem {
   nama_barang: string;
   qty: number;
   batas_minimum: number;
+  kategori?: Kategori; // §97 -- kosong (data lama) = ditebak dari nama
+}
+
+// ==========================================
+// §97 KATEGORI BARANG -- Chemical / Utilitas Gedung / Dapur & Rumah Tangga.
+// Barang lama tanpa field kategori ditebak dari namanya (bisa dikoreksi lewat Edit).
+// ==========================================
+const KATEGORI = ["Chemical", "Utilitas Gedung", "Dapur & Rumah Tangga"] as const;
+type Kategori = (typeof KATEGORI)[number];
+const WARNA_KAT: Record<Kategori, { bg: string; fg: string }> = {
+  "Chemical": { bg: "var(--info-50)", fg: "var(--info)" },
+  "Utilitas Gedung": { bg: "var(--warn-50)", fg: "var(--warn)" },
+  "Dapur & Rumah Tangga": { bg: "var(--ok-50)", fg: "var(--ok)" },
+};
+const POLA_DAPUR = /cuci piring|sunlight|mama lemon|gula|kopi|^teh|teh|susu|creamer|air mineral|galon|aqua|gelas|piring|sendok|tisu|tissue|kantong|plastik|kresek|kanebo|spons|sponge|sapu|pel|lap|serbet|ember|sikat|keset|sarung tangan|masker/i;
+const POLA_UTILITAS = /lampu|tl|led|bohlam|watt|kabel|stop ?kontak|terminal|baterai|batre|fitting|saklar|kran|keran|selang|kunci|gembok|filter|lem|isolasi|lakban|paku|sekring|mcb|starter|ballast|klep|pipa|engsel|obeng/i;
+const POLA_CHEMICAL = /sabun|vixal|wipol|porstex|karbol|kamper|kapur barus|pengharum|pewangi|stella|glade|baygon|hit|cairan|deterjen|detergen|rinso|soklin|so klin|desinfektan|disinfektan|alkohol|sanitizer|cleaner|cling|superpell|super pell|bayclin|molto|kispray|chemical|pembersih|semir|polish|lilin|wax|asam|soda|clorox|lysol|dettol|lifeboy|lifebuoy|hand ?soap/i;
+function tebakKategori(nama: string): Kategori {
+  if (POLA_DAPUR.test(nama)) return "Dapur & Rumah Tangga";
+  if (POLA_UTILITAS.test(nama)) return "Utilitas Gedung";
+  if (POLA_CHEMICAL.test(nama)) return "Chemical";
+  return "Dapur & Rumah Tangga";
+}
+const kategoriOf = (item: StockItem): Kategori => (item.kategori && KATEGORI.includes(item.kategori) ? item.kategori : tebakKategori(item.nama_barang));
+
+function BadgeKat({ k }: { k: Kategori }) {
+  return <span className="badge" style={{ background: WARNA_KAT[k].bg, color: WARNA_KAT[k].fg, marginLeft: "6px", fontWeight: 700 }}>{k}</span>;
+}
+/** Baris pemisah kelompok di tabel (hanya saat filter "Semua"). */
+function BarisKelompok({ k, n, kolom }: { k: Kategori; n: number; kolom: number }) {
+  return (
+    <tr><td colSpan={kolom} style={{ background: WARNA_KAT[k].bg, color: WARNA_KAT[k].fg, fontWeight: 800, fontSize: "12px", padding: "7px 12px", letterSpacing: ".02em" }}>{k} · {n}</td></tr>
+  );
 }
 
 interface StockLog {
@@ -134,7 +167,8 @@ export default function StockOpnamePage() {
   // Form States
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ nama_barang: "", qty: 0, batas_minimum: 5 });
+  const [formData, setFormData] = useState({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" as Kategori | "" });
+  const [filterKat, setFilterKat] = useState<Kategori | "Semua">("Semua");
   const [isLoading, setIsLoading] = useState(false);
 
   const picRef = useRef("");
@@ -176,9 +210,9 @@ export default function StockOpnamePage() {
   // ==========================================
   // FUNGSI HANDLER
   // ==========================================
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: name === "nama_barang" ? value : Number(value) }));
+    setFormData(prev => ({ ...prev, [name]: name === "nama_barang" || name === "kategori" ? value : Number(value) }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -186,17 +220,18 @@ export default function StockOpnamePage() {
     if (!formData.nama_barang.trim()) return showToast("Nama barang wajib diisi!", "warning");
 
     setIsLoading(true);
+    const kategori: Kategori = formData.kategori || tebakKategori(formData.nama_barang);
     try {
       if (isEditMode && editId) {
         await updateDoc(doc(db, "ob_stock", editId), {
-          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
+          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, kategori, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       } else {
         await addDoc(collection(db, "ob_stock"), { daerah: daerahTulis(),
-          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
+          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, kategori, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       }
-      setFormData({ nama_barang: "", qty: 0, batas_minimum: 5 });
+      setFormData({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" });
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
@@ -236,7 +271,7 @@ export default function StockOpnamePage() {
   const handleEdit = (item: StockItem) => {
     setIsEditMode(true);
     setEditId(item.id);
-    setFormData({ nama_barang: item.nama_barang, qty: item.qty, batas_minimum: item.batas_minimum });
+    setFormData({ nama_barang: item.nama_barang, qty: item.qty, batas_minimum: item.batas_minimum, kategori: kategoriOf(item) });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -246,7 +281,19 @@ export default function StockOpnamePage() {
   };
 
   // Analisa per barang — dasar buat 3 section baru (Urgent, Belanja Bulan Depan, Analisa Pemakaian).
-  const analisaSemuaBarang = items.map((item) => hitungAnalisaPemakaian(item, riwayatLogs));
+  const urutKat = (a: StockItem, b: StockItem) => KATEGORI.indexOf(kategoriOf(a)) - KATEGORI.indexOf(kategoriOf(b)) || a.nama_barang.localeCompare(b.nama_barang);
+  const itemTampil = items.filter((i) => filterKat === "Semua" || kategoriOf(i) === filterKat).sort(urutKat);
+  const jumlahPerKat = (k: Kategori) => items.filter((i) => kategoriOf(i) === k).length;
+  const analisaSemuaBarang = itemTampil.map((item) => hitungAnalisaPemakaian(item, riwayatLogs));
+  const ambilItem = (a: AnalisaPemakaian) => a.item;
+  /** Sisipkan baris kelompok kategori di tabel saat filter "Semua". */
+  const denganKelompok = (daftar: AnalisaPemakaian[], baris: (x: AnalisaPemakaian) => React.ReactNode, kolom: number) => {
+    if (filterKat !== "Semua") return daftar.map(baris);
+    return KATEGORI.flatMap((k) => {
+      const isi = daftar.filter((x) => kategoriOf(ambilItem(x)) === k);
+      return isi.length ? [<BarisKelompok key={`kel-${k}`} k={k} n={isi.length} kolom={kolom} />, ...isi.map(baris)] : [];
+    });
+  };
   const daftarUrgent = analisaSemuaBarang.filter((a) => a.isUrgent);
   const daftarBulanDepan = analisaSemuaBarang.filter((a) => a.isPerluBulanDepan);
 
@@ -271,6 +318,8 @@ export default function StockOpnamePage() {
         .qty-btn { width: 34px; height: 34px; border-radius: 10px; font-size: 17px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid; }
         .icon-btn { background: transparent; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid; }
         .form-col, .right-col { min-width: 0; }
+        .kat-filter { display: flex; gap: 8px; flex-wrap: wrap; }
+        .kat-chip { border: 1px solid; border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
         @media (max-width: 900px) {
           /* §86: align-items flex-start (inline) membuat kartu selebar isinya -> tabel nowrap mendorong
              kartu keluar layar HP. Di mode kolom kartu dipaksa selebar layar. */
@@ -303,6 +352,14 @@ export default function StockOpnamePage() {
                 <input type="text" name="nama_barang" value={formData.nama_barang} onChange={handleInputChange} required placeholder="Contoh: Sabun Lantai" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", outline: "none", background: "var(--bg)" }} />
               </div>
 
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Kategori</label>
+                <select name="kategori" value={formData.kategori} onChange={handleInputChange} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", outline: "none", background: "var(--bg)", color: "var(--ink)" }}>
+                  <option value="">Otomatis{formData.nama_barang.trim() ? ` (${tebakKategori(formData.nama_barang)})` : " dari nama barang"}</option>
+                  {KATEGORI.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </div>
+
               <div style={{ display: "flex", gap: "15px" }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Stok (Qty)</label>
@@ -319,7 +376,7 @@ export default function StockOpnamePage() {
                   {isLoading ? "Memproses..." : (isEditMode ? "Simpan Perubahan" : "+ Tambahkan")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama_barang: "", qty: 0, batas_minimum: 5 }); }} style={{ padding: "15px 20px", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", color: "var(--ink-soft)", transition: "0.2s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" }); }} style={{ padding: "15px 20px", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", color: "var(--ink-soft)", transition: "0.2s" }}>
                     Batal
                   </button>
                 )}
@@ -331,6 +388,20 @@ export default function StockOpnamePage() {
           {/* KOLOM KANAN                              */}
           {/* ======================================= */}
           <div className="right-col" style={{ flex: "2 1 500px", display: "flex", flexDirection: "column", gap: "25px" }}>
+
+            {/* §97 FILTER KATEGORI */}
+            <div className="kat-filter" role="tablist" aria-label="Filter kategori barang">
+              {(["Semua", ...KATEGORI] as const).map((k) => {
+                const aktif = filterKat === k;
+                const warnaAktif = k === "Semua" ? "var(--ink)" : WARNA_KAT[k].fg;
+                return (
+                  <button key={k} type="button" role="tab" aria-selected={aktif} onClick={() => setFilterKat(k)} className="kat-chip"
+                    style={{ background: aktif ? warnaAktif : "var(--surface)", color: aktif ? (k === "Semua" ? "var(--surface)" : "#fff") : "var(--ink-soft)", borderColor: aktif ? "transparent" : "var(--line)" }}>
+                    {k} <span style={{ opacity: 0.75 }}>{k === "Semua" ? items.length : jumlahPerKat(k)}</span>
+                  </button>
+                );
+              })}
+            </div>
 
             {/* 🚨 PENGADAAN URGENT */}
             <div className="card" style={{ borderTop: "5px solid var(--red-600)" }}>
@@ -354,7 +425,7 @@ export default function StockOpnamePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {daftarUrgent.map((a) => (
+                      {denganKelompok(daftarUrgent, (a) => (
                         <tr key={a.item.id}>
                           <td style={{ fontWeight: "bold", color: "var(--ink)" }}>{a.item.nama_barang}</td>
                           <td style={{ color: "var(--red-600)", fontWeight: "bold" }}>{a.item.qty}</td>
@@ -364,7 +435,7 @@ export default function StockOpnamePage() {
                             <span className="badge" style={{ background: "var(--brand)", color: "#fff" }}>Beli {a.jumlahDisarankan} pcs</span>
                           </td>
                         </tr>
-                      ))}
+                      ), 5)}
                     </tbody>
                   </table>
                 </div>
@@ -398,7 +469,7 @@ export default function StockOpnamePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {daftarBulanDepan.map((a) => (
+                      {denganKelompok(daftarBulanDepan, (a) => (
                         <tr key={a.item.id}>
                           <td style={{ fontWeight: "bold", color: "var(--ink)" }}>{a.item.nama_barang}</td>
                           <td style={{ color: "var(--ink-soft)" }}>{a.item.qty}</td>
@@ -410,7 +481,7 @@ export default function StockOpnamePage() {
                             <span className="badge" style={{ background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.3)" }}>Beli {a.jumlahDisarankan} pcs</span>
                           </td>
                         </tr>
-                      ))}
+                      ), 5)}
                     </tbody>
                   </table>
                 </div>
@@ -428,7 +499,7 @@ export default function StockOpnamePage() {
                   <p style={{ margin: "2px 0 0 0", color: "var(--muted)", fontSize: "12px" }}>Rata-rata pemakaian & proyeksi habis semua barang, dihitung dari histori transaksi.</p>
                 </div>
               </div>
-              {items.length > 0 ? (
+              {itemTampil.length > 0 ? (
                 <div style={{ overflowX: "auto", marginTop: "15px" }}>
                   <table className="data-table">
                     <thead>
@@ -441,7 +512,7 @@ export default function StockOpnamePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {analisaSemuaBarang.map((a) => (
+                      {denganKelompok(analisaSemuaBarang, (a) => (
                         <tr key={a.item.id}>
                           <td style={{ fontWeight: "bold", color: "var(--ink)" }}>{a.item.nama_barang}</td>
                           <td style={{ color: "var(--ink-soft)" }}>{a.item.qty}</td>
@@ -459,7 +530,7 @@ export default function StockOpnamePage() {
                             )}
                           </td>
                         </tr>
-                      ))}
+                      ), 5)}
                     </tbody>
                   </table>
                 </div>
@@ -472,21 +543,25 @@ export default function StockOpnamePage() {
             <div className="card">
               <h2 style={{ margin: "0 0 15px 0", color: "var(--ink)", fontSize: "18px", borderBottom: "2px solid var(--bg)", paddingBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><IconClipboard size={17} color="var(--warn)" /> Kondisi Stok Gudang</span>
-                <span style={{ fontSize: "12px", background: "var(--bg)", color: "var(--ink-soft)", padding: "4px 10px", borderRadius: "20px" }}>{items.length} Item</span>
+                <span style={{ fontSize: "12px", background: "var(--bg)", color: "var(--ink-soft)", padding: "4px 10px", borderRadius: "20px" }}>{itemTampil.length} Item</span>
               </h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                {items.length > 0 ? items.map((item) => {
+                {itemTampil.length > 0 ? itemTampil.map((item, idx) => {
                   const isLowStock = item.qty <= item.batas_minimum;
+                  const kat = kategoriOf(item);
+                  const judulKelompok = filterKat === "Semua" && (idx === 0 || kategoriOf(itemTampil[idx - 1]) !== kat);
                   return (
-                    <div key={item.id} className="stock-row" style={{ border: isLowStock ? "2px solid rgba(220,38,38,0.3)" : "1px solid var(--line)", background: isLowStock ? "var(--red-50)" : "var(--bg)" }}>
+                    <div key={item.id} style={{ display: "contents" }}>
+                    {judulKelompok && <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[kat].fg, marginTop: idx === 0 ? 0 : "8px", letterSpacing: ".02em" }}>{kat} · {jumlahPerKat(kat)}</div>}
+                    <div className="stock-row" style={{ border: isLowStock ? "2px solid rgba(220,38,38,0.3)" : "1px solid var(--line)", background: isLowStock ? "var(--red-50)" : "var(--bg)" }}>
 
                       <div style={{ flex: "1 1 200px" }}>
                         <div style={{ fontWeight: "bold", fontSize: "16px", color: isLowStock ? "var(--red-700)" : "var(--ink)", display: "flex", alignItems: "center", gap: "8px" }}>
                           {item.nama_barang} {isLowStock && <IconAlertTriangle size={14} color="var(--red-600)" />}
                         </div>
                         <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>
-                          Batas minimum: <strong style={{ color: "var(--ink-soft)" }}>{item.batas_minimum}</strong>
+                          Batas minimum: <strong style={{ color: "var(--ink-soft)" }}>{item.batas_minimum}</strong>{filterKat === "Semua" ? null : <BadgeKat k={kat} />}
                         </div>
                       </div>
 
@@ -506,9 +581,10 @@ export default function StockOpnamePage() {
                         <button onClick={() => handleDelete(item.id, item.nama_barang)} className="icon-btn" style={{ color: "var(--red-600)", borderColor: "var(--red-600)" }} title="Hapus"><IconTrash size={14} /></button>
                       </div>
                     </div>
+                    </div>
                   );
                 }) : (
-                  <div className="empty-state">Gudang masih kosong.</div>
+                  <div className="empty-state">{items.length ? `Belum ada barang kategori ${filterKat}.` : "Gudang masih kosong."}</div>
                 )}
               </div>
             </div>
