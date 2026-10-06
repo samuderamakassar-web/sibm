@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { daerahTulis } from "@/lib/daerah";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy,
-  where, Timestamp, serverTimestamp
+  where, Timestamp, serverTimestamp, limit, getDocs
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
@@ -238,6 +238,7 @@ interface RiwayatEntry {
   kendaraanLabel: string;
   tanggal: string; // YYYY-MM-DD
   jenis: JenisRiwayat;
+  label?: string; // §99: label badge yang lebih jelas (Keluar / Tiba / Bengkel / Temuan inspeksi)
   tone: BadgeTone;
   utama: string;
   sub?: string;
@@ -264,6 +265,35 @@ function getPergerakanTone(status: string): BadgeTone {
 // sudah kelihatan di keterangan sebelahnya, "Beroperasi" jadi berlebihan). Nilai ASLI di
 // Firestore ("Keluar Beroperasi") SENGAJA TIDAK diubah -- dipakai di banyak perbandingan
 // logic di seluruh app, cuma tampilannya yang dipersingkat di sini.
+/** §99: badge riwayat pergerakan menyebut arah gerak, bukan sekadar "Pergerakan". */
+function labelPergerakan(status: string): string {
+  if (status.includes("Service") || status.includes("Bengkel")) return "Masuk bengkel";
+  if (status.includes("Keluar")) return "Keluar";
+  if (status.includes("Pulang")) return "Pulang";
+  if (status.includes("Tiba")) return "Tiba di kantor";
+  return status || "Pergerakan";
+}
+
+// ==========================================
+// §99 KONDISI SEKARANG per kendaraan (tab Daftar) -- digabung dari log pergerakan terakhir,
+// servis 14 hari terakhir, inspeksi terakhir (30 hari), jadwal servis, pajak & sewa.
+// ==========================================
+type FilterKondisi = "SEMUA" | "KELUAR" | "BENGKEL" | "NON_DRIVER" | "TEMUAN" | "SERVIS_BARU" | "TINDAKAN";
+interface KondisiKendaraan {
+  posisi: { label: string; tone: BadgeTone; sub?: string };
+  keluar: boolean;
+  bengkel: boolean;
+  pemakai: string;
+  bukanDriver: boolean;
+  temuan: string[];
+  tglInspeksi?: string;
+  servisBaru: ServiceLog | null;
+  servisJatuhTempo: "lewat" | "segera" | null;
+  dokumenBermasalah: string[];
+}
+const hariSejak = (iso: string) => Math.floor((Date.now() - new Date(`${iso}T00:00:00+08:00`).getTime()) / 86400000);
+const isoMundur = (hari: number) => new Date(Date.now() - hari * 86400000).toISOString().slice(0, 10);
+
 function formatStatusLabel(status: string): string {
   return status === "Keluar Beroperasi" ? "Keluar" : status;
 }
@@ -284,6 +314,7 @@ function buildRiwayatEntries(kendaraanId: string, kendaraanLabel: string, data: 
     kendaraanId, kendaraanLabel,
     tanggal: tglDariTimestamp(l.waktu_catat),
     jenis: "Pergerakan",
+    label: labelPergerakan(l.status_kendaraan || ""),
     tone: getPergerakanTone(l.status_kendaraan || ""),
     utama: [formatStatusLabel(l.status_kendaraan), (l.tujuan_keperluan && l.tujuan_keperluan !== "-") ? l.tujuan_keperluan : ""].filter(Boolean).join(" — "),
     sub: [
@@ -312,6 +343,7 @@ function buildRiwayatEntries(kendaraanId: string, kendaraanLabel: string, data: 
     return {
       id: `${kendaraanId}-insp-${l.id}`, kendaraanId, kendaraanLabel, tanggal: l.tanggal, jenis: "Inspeksi" as const,
       tone: (bermasalah.length === 0 ? "success" : "danger") as BadgeTone,
+      label: bermasalah.length === 0 ? "Inspeksi" : `Temuan inspeksi (${bermasalah.length})`,
       utama: bermasalah.length === 0 ? "Semua item kondisi Baik" : bermasalah.map(([k, v]) => `${l.label_checklist?.[k] || CHECKLIST_LABELS[k] || k}: ${v}`).join("; "),
       sub: l.catatan,
       pic: l.driver,
@@ -448,6 +480,13 @@ export default function ManajemenKendaraanPage() {
   const [formService, setFormService] = useState({ tanggal: todayISO(), jenis_service: "", deskripsi: "", biaya: "", foto_emisi_url: "" });
   const [riwayatFilterBulan, setRiwayatFilterBulan] = useState<string>("Semua");
   const [riwayatFilterTahun, setRiwayatFilterTahun] = useState<string>("Semua");
+  const [riwayatFilterJenis, setRiwayatFilterJenis] = useState<string>("Semua");
+  // §99 data ringkasan kondisi semua kendaraan
+  const [logGerakTerbaru, setLogGerakTerbaru] = useState<PergerakanLog[]>([]);
+  const [servisTerbaru, setServisTerbaru] = useState<ServiceLog[]>([]);
+  const [inspeksiTerbaru, setInspeksiTerbaru] = useState<InspeksiLog[]>([]);
+  const [driverResmi, setDriverResmi] = useState<Set<string>>(new Set());
+  const [filterKondisi, setFilterKondisi] = useState<FilterKondisi>("SEMUA");
   const [isSavingOdometer, setIsSavingOdometer] = useState(false);
   const [isSavingService, setIsSavingService] = useState(false);
   const [isUploadingEmisi, setIsUploadingEmisi] = useState(false);
@@ -482,8 +521,50 @@ export default function ManajemenKendaraanPage() {
       setEmployees(list);
     });
 
-    return () => { unsubscribe(); unsubEmployees(); };
+    // §99: ringkasan kondisi -- 400 log pergerakan terbaru (posisi terakhir tiap kendaraan),
+    // servis 14 hari & inspeksi 30 hari terakhir, plus daftar driver resmi (users_master departemen Driver).
+    const unsubGerak = onSnapshot(query(collection(db, "operational_vehicle_logs"), orderBy("waktu_catat", "desc"), limit(400)),
+      (s) => setLogGerakTerbaru(s.docs.map((x) => ({ id: x.id, ...x.data() } as PergerakanLog))), (e) => console.error("[kendaraan] gerak:", e));
+    const unsubServis = onSnapshot(query(collection(db, "kendaraan_service_logs"), where("tanggal", ">=", isoMundur(14))),
+      (s) => setServisTerbaru(s.docs.map((x) => ({ id: x.id, ...x.data() } as ServiceLog))), (e) => console.error("[kendaraan] servis:", e));
+    const unsubInspeksi = onSnapshot(query(collection(db, "kendaraan_inspeksi_logs"), where("tanggal", ">=", isoMundur(30))),
+      (s) => setInspeksiTerbaru(s.docs.map((x) => ({ id: x.id, ...x.data() } as InspeksiLog))), (e) => console.error("[kendaraan] inspeksi:", e));
+    getDocs(query(collection(db, "users_master"), where("departemen", "==", "Driver")))
+      .then((s) => setDriverResmi(new Set(s.docs.map((d) => String(d.data().nama || "").trim().toLowerCase()).filter(Boolean))))
+      .catch((e) => console.error("[kendaraan] driver:", e));
+
+    return () => { unsubscribe(); unsubEmployees(); unsubGerak(); unsubServis(); unsubInspeksi(); };
   }, [isReady, session]);
+
+  const namaPemakai = (s?: string) => (s || "").replace("Standby: ", "").trim();
+  const adalahBukanDriver = (nama: string) => !!nama && nama !== "-" && driverResmi.size > 0 && !driverResmi.has(nama.toLowerCase());
+
+  const hitungKondisi = (k: Kendaraan): KondisiKendaraan => {
+    const plat = (k.plat_nomor || "").trim();
+    const log = plat ? logGerakTerbaru.find((l) => (l.kendaraan || "").startsWith(plat)) : undefined;
+    const st = log?.status_kendaraan || "";
+    const bengkel = st.includes("Bengkel") || st.includes("Service");
+    const keluar = !bengkel && st.includes("Keluar");
+    const pemakai = namaPemakai(log?.driver_bertugas);
+    const bukanDriver = (keluar || bengkel) && adalahBukanDriver(pemakai);
+    const posisi = !log ? { label: "Belum ada data", tone: "neutral" as BadgeTone }
+      : bengkel ? { label: "Di bengkel", tone: "warning" as BadgeTone, sub: `sejak ${jamDariTimestamp(log.waktu_catat)}${pemakai && pemakai !== "-" ? ` · ${pemakai}` : ""}` }
+      : keluar ? { label: "Sedang keluar", tone: "info" as BadgeTone, sub: [pemakai && pemakai !== "-" ? pemakai : "", log.tujuan_keperluan && log.tujuan_keperluan !== "-" ? log.tujuan_keperluan : "", `sejak ${jamDariTimestamp(log.waktu_catat)}`].filter(Boolean).join(" · ") }
+      : { label: "Di kantor", tone: "success" as BadgeTone, sub: `sejak ${jamDariTimestamp(log.waktu_catat)}` };
+    const insp = inspeksiTerbaru.filter((l) => l.kendaraan_id === k.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
+    const temuan = insp ? Object.entries(insp.checklist || {}).filter(([, v]) => v !== "Baik").map(([key, v]) => `${insp.label_checklist?.[key] || CHECKLIST_LABELS[key] || key}: ${v}`) : [];
+    const servisBaru = servisTerbaru.filter((l) => l.kendaraan_id === k.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0] || null;
+    const jt = k.tanggal_servis_berikutnya ? -hariSejak(k.tanggal_servis_berikutnya) : null;
+    const servisJatuhTempo = jt === null ? null : jt < 0 ? "lewat" : jt <= 7 ? "segera" : null;
+    const dokumenBermasalah: string[] = [];
+    const pajak = getPajakStatus(k.tanggal_pajak);
+    if (pajak.tone === "danger") dokumenBermasalah.push("Pajak kadaluarsa");
+    else if (pajak.tone === "warning") dokumenBermasalah.push(`Pajak ${pajak.label}`);
+    const sewa = getKepemilikanInfo(k);
+    if (sewa.tone === "danger") dokumenBermasalah.push("Sewa berakhir");
+    else if (sewa.tone === "warning") dokumenBermasalah.push("Sewa segera berakhir");
+    return { posisi, keluar, bengkel, pemakai, bukanDriver, temuan, tglInspeksi: insp?.tanggal, servisBaru, servisJatuhTempo, dokumenBermasalah };
+  };
 
   // TARIK RIWAYAT UNTUK SETIAP KENDARAAN YANG DIPILIH (bisa lebih dari 1)
   useEffect(() => {
@@ -739,6 +820,7 @@ export default function ManajemenKendaraanPage() {
     setPageTab("RIWAYAT");
     setRiwayatFilterBulan("Semua");
     setRiwayatFilterTahun("Semua");
+    setRiwayatFilterJenis("Semua");
   };
 
   const openLogModal = (tab: "ODOMETER" | "SERVICE") => {
@@ -844,9 +926,22 @@ export default function ManajemenKendaraanPage() {
 
   // 🔹 FILTER DAFTAR KENDARAAN — cari teks + dropdown checklist kendaraan mana yang mau ditampilkan
   const daftarEffectiveIds = daftarSelectedIds.length > 0 ? daftarSelectedIds : kendaraanList.map((k) => k.id);
+  const kondisiMap = new Map(kendaraanList.map((k) => [k.id, hitungKondisi(k)]));
+  const cocokKondisi = (k: Kendaraan, fk: FilterKondisi) => {
+    const c = kondisiMap.get(k.id)!;
+    switch (fk) {
+      case "KELUAR": return c.keluar;
+      case "BENGKEL": return c.bengkel;
+      case "NON_DRIVER": return c.bukanDriver;
+      case "TEMUAN": return c.temuan.length > 0;
+      case "SERVIS_BARU": return !!c.servisBaru;
+      case "TINDAKAN": return !!c.servisJatuhTempo || c.dokumenBermasalah.length > 0;
+      default: return true;
+    }
+  };
   const filteredKendaraan = kendaraanList.filter(
     (k) =>
-      daftarEffectiveIds.includes(k.id) &&
+      daftarEffectiveIds.includes(k.id) && cocokKondisi(k, filterKondisi) &&
       (
         k.kendaraan.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (k.plat_nomor || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -875,7 +970,10 @@ export default function ManajemenKendaraanPage() {
     buildRiwayatEntries(k.id, k.kendaraan, riwayatDataMap[k.id] || KOSONG_RIWAYAT_DATA)
   );
   const riwayatEntries = semuaEntriRiwayat
-    .filter((e) => cocokRiwayatFilter(e.tanggal))
+    .filter((e) => cocokRiwayatFilter(e.tanggal) && (riwayatFilterJenis === "Semua"
+      || (riwayatFilterJenis === "Temuan" ? e.jenis === "Inspeksi" && e.tone === "danger"
+        : riwayatFilterJenis === "NonDriver" ? e.jenis === "Pergerakan" && adalahBukanDriver(e.pic || "")
+        : e.jenis === riwayatFilterJenis)))
     .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
 
   const tahunTersediaRiwayat = Array.from(new Set(semuaEntriRiwayat.filter((e) => e.tanggal).map((e) => e.tanggal.split("-")[0]))).sort().reverse();
@@ -920,6 +1018,13 @@ export default function ManajemenKendaraanPage() {
     >
       <style dangerouslySetInnerHTML={{__html: `
         .print-only { display: none; }
+        /* §99 ringkasan kondisi armada */
+        .kd-ringkas { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px; }
+        .kd-kotak { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-family: inherit; text-align: left; }
+        .kd-kotak.is-aktif { border-color: var(--kd); box-shadow: inset 0 0 0 1px var(--kd); }
+        .kd-n { font-size: 22px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .kd-l { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); }
+        .kd-chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; white-space: nowrap; }
         @media print {
           @page { margin: 12mm; size: A4 portrait; }
           body { background: #fff !important; }
@@ -974,13 +1079,32 @@ export default function ManajemenKendaraanPage() {
               </div>
             </div>
 
+            {/* §99 RINGKASAN KONDISI -- klik untuk menyaring */}
+            <div className="kd-ringkas" role="tablist" aria-label="Saring kondisi kendaraan">
+              {([
+                ["SEMUA", "Semua", kendaraanList.length, "var(--ink)"],
+                ["KELUAR", "Sedang keluar", kendaraanList.filter((k) => cocokKondisi(k, "KELUAR")).length, "var(--info)"],
+                ["BENGKEL", "Di bengkel", kendaraanList.filter((k) => cocokKondisi(k, "BENGKEL")).length, "var(--warn)"],
+                ["NON_DRIVER", "Dibawa bukan driver", kendaraanList.filter((k) => cocokKondisi(k, "NON_DRIVER")).length, "var(--warn)"],
+                ["TEMUAN", "Temuan inspeksi", kendaraanList.filter((k) => cocokKondisi(k, "TEMUAN")).length, "var(--red-600)"],
+                ["SERVIS_BARU", "Servis 14 hari", kendaraanList.filter((k) => cocokKondisi(k, "SERVIS_BARU")).length, "var(--ok)"],
+                ["TINDAKAN", "Perlu tindakan", kendaraanList.filter((k) => cocokKondisi(k, "TINDAKAN")).length, "var(--red-600)"],
+              ] as [FilterKondisi, string, number, string][]).map(([key, label, n, warna]) => (
+                <button key={key} type="button" role="tab" aria-selected={filterKondisi === key} onClick={() => setFilterKondisi(key)}
+                  className={`kd-kotak${filterKondisi === key ? " is-aktif" : ""}`} style={{ ["--kd" as string]: warna }}>
+                  <span className="kd-n" style={{ color: n > 0 || key === "SEMUA" ? warna : "var(--muted)" }}>{n}</span>
+                  <span className="kd-l">{label}</span>
+                </button>
+              ))}
+            </div>
+
             <Table>
               <THead>
                 <Tr>
                   <Th>Kendaraan</Th>
+                  <Th>Kondisi Sekarang</Th>
                   <Th>PIC / Unit Bisnis</Th>
-                  <Th>Status Kepemilikan</Th>
-                  <Th>Pajak/STNK</Th>
+                  <Th>Sewa &amp; Pajak</Th>
                   <Th style={{ textAlign: "center" }}>Aksi</Th>
                 </Tr>
               </THead>
@@ -989,6 +1113,7 @@ export default function ManajemenKendaraanPage() {
                   filteredKendaraan.map((k) => {
                     const pajak = getPajakStatus(k.tanggal_pajak);
                     const kepemilikan = getKepemilikanInfo(k);
+                    const c = kondisiMap.get(k.id)!;
                     return (
                     <Tr key={k.id}>
                       <Td>
@@ -997,8 +1122,8 @@ export default function ManajemenKendaraanPage() {
                             <VehicleIcon3D jenis={k.kategori} warna={k.warna} size={36} />
                           </div>
                           <div>
-                            <div style={{ fontWeight: "bold", color: "var(--info)" }}>{k.kendaraan}</div>
-                            <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.plat_nomor || "-"} {k.jenis ? `• ${k.jenis}` : ""}</div>
+                            <div style={{ fontWeight: 800, color: "var(--ink)", fontSize: "15px", whiteSpace: "nowrap" }}>{k.plat_nomor || k.kendaraan}</div>
+                            <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.jenis || "-"}{k.dikelola_driver ? " • armada driver" : ""}</div>
                             {(k.no_rangka || k.no_mesin) && (
                               <div style={{ fontSize: "11px", color: "var(--muted)" }}>
                                 {k.no_rangka ? `Rangka: ${k.no_rangka}` : ""}{k.no_rangka && k.no_mesin ? " • " : ""}{k.no_mesin ? `Mesin: ${k.no_mesin}` : ""}
@@ -1007,17 +1132,23 @@ export default function ManajemenKendaraanPage() {
                           </div>
                         </div>
                       </Td>
+                      <Td style={{ minWidth: "220px" }}>
+                        <Badge tone={c.posisi.tone}>{c.posisi.label}</Badge>
+                        {c.bukanDriver && <span className="kd-chip" style={{ background: "var(--warn-50)", color: "var(--warn)" }}>Bukan driver</span>}
+                        {c.posisi.sub && <div style={{ fontSize: "11.5px", color: "var(--ink-soft)", marginTop: "4px" }}>{c.posisi.sub}</div>}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
+                          {c.temuan.length > 0 && <span className="kd-chip" title={c.temuan.join("; ")} style={{ background: "var(--red-50)", color: "var(--red-600)" }}>⚠ Temuan inspeksi {c.temuan.length}{c.tglInspeksi ? ` · ${c.tglInspeksi.split("-").reverse().slice(0, 2).join("/")}` : ""}</span>}
+                          {c.servisBaru && <span className="kd-chip" title={c.servisBaru.deskripsi} style={{ background: "var(--ok-50)", color: "var(--ok)" }}>🔧 Servis {c.servisBaru.tanggal.split("-").reverse().slice(0, 2).join("/")}: {(c.servisBaru.jenis_service || "").slice(0, 28)}</span>}
+                          {c.servisJatuhTempo && <span className="kd-chip" style={{ background: c.servisJatuhTempo === "lewat" ? "var(--red-50)" : "var(--warn-50)", color: c.servisJatuhTempo === "lewat" ? "var(--red-600)" : "var(--warn)" }}>Servis {c.servisJatuhTempo === "lewat" ? "lewat jadwal" : "≤ 7 hari"}</span>}
+                        </div>
+                      </Td>
                       <Td style={{ color: "var(--ink-soft)", fontSize: "13px" }}>
                         <div>{k.pic_kendaraan || <span style={{ opacity: 0.5 }}>PIC belum diisi</span>}</div>
                         <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.unit_bisnis || "-"}</div>
                       </Td>
                       <Td style={{ fontSize: "12px" }}>
-                        <Badge tone={kepemilikan.tone}>{kepemilikan.label}</Badge>
-                        {kepemilikan.sub && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>{kepemilikan.sub}</div>}
-                      </Td>
-                      <Td style={{ fontSize: "12px" }}>
-                        <Badge tone={pajak.tone}>{pajak.label}</Badge>
-                        {k.tanggal_pajak && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>{k.tanggal_pajak.split("-").reverse().join("/")}</div>}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}><Badge tone={kepemilikan.tone}>{kepemilikan.label}</Badge><span style={{ fontSize: "11px", color: "var(--muted)" }}>{kepemilikan.sub || ""}</span></div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}><span style={{ fontSize: "11px", color: "var(--muted)" }}>Pajak</span><Badge tone={pajak.tone}>{pajak.label}</Badge>{k.tanggal_pajak && <span style={{ fontSize: "11px", color: "var(--muted)" }}>{k.tanggal_pajak.split("-").reverse().join("/")}</span>}</div>
                       </Td>
                       <Td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                         <button
@@ -1046,7 +1177,7 @@ export default function ManajemenKendaraanPage() {
                   <Tr>
                     <Td colSpan={5} style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)" }}>
                       <div style={{ fontSize: "30px", marginBottom: "10px" }}>🚗</div>
-                      {kendaraanList.length === 0 ? "Belum ada kendaraan terdaftar." : "Tidak ada kendaraan yang cocok dengan filter/pencarian ini."}
+                      {kendaraanList.length === 0 ? "Belum ada kendaraan terdaftar." : filterKondisi !== "SEMUA" ? "Tidak ada kendaraan pada kondisi ini." : "Tidak ada kendaraan yang cocok dengan filter/pencarian ini."}
                     </Td>
                   </Tr>
                 )}
@@ -1181,6 +1312,16 @@ export default function ManajemenKendaraanPage() {
                         <option value="Semua">Semua Bulan</option>
                         {NAMA_BULAN_RIWAYAT.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
                       </select>
+                      <select value={riwayatFilterJenis} onChange={(e) => setRiwayatFilterJenis(e.target.value)} aria-label="Jenis riwayat" style={{ padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "12px", fontWeight: "bold", background: "var(--bg)", cursor: "pointer" }}>
+                        <option value="Semua">Semua Jenis</option>
+                        <option value="Pergerakan">Pergerakan</option>
+                        <option value="NonDriver">Dibawa bukan driver</option>
+                        <option value="Servis">Servis</option>
+                        <option value="Inspeksi">Inspeksi</option>
+                        <option value="Temuan">Temuan inspeksi</option>
+                        <option value="Odometer">Odometer</option>
+                        <option value="Uji Emisi">Uji Emisi</option>
+                      </select>
                       <select value={riwayatFilterTahun} onChange={(e) => setRiwayatFilterTahun(e.target.value)} style={{ padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "12px", fontWeight: "bold", background: "var(--bg)", cursor: "pointer" }}>
                         <option value="Semua">Semua Tahun</option>
                         {tahunTersediaRiwayat.map(th => <option key={th} value={th}>{th}</option>)}
@@ -1217,13 +1358,20 @@ export default function ManajemenKendaraanPage() {
                       {riwayatEntries.length > 0 ? riwayatEntries.map((entry) => (
                         <Tr key={entry.id}>
                           <Td style={{ whiteSpace: "nowrap", fontSize: "12px", color: "var(--muted)" }}>{entry.tanggal.split("-").reverse().join("/")}</Td>
-                          {!isSatuKendaraan && <Td style={{ fontSize: "12px", fontWeight: "bold", color: "var(--info)" }}>{entry.kendaraanLabel}</Td>}
-                          <Td><Badge tone={entry.tone}>{JENIS_ICON[entry.jenis]} {entry.jenis}</Badge></Td>
+                          {!isSatuKendaraan && <Td style={{ fontSize: "13px", fontWeight: 800, color: "var(--ink)", whiteSpace: "nowrap" }}>{kendaraanList.find((k) => k.id === entry.kendaraanId)?.plat_nomor || entry.kendaraanLabel}</Td>}
+                          <Td style={{ whiteSpace: "nowrap" }}><Badge tone={entry.tone}>{JENIS_ICON[entry.jenis]} {entry.label || entry.jenis}</Badge></Td>
                           <Td>
                             <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{entry.utama}</div>
                             {entry.sub && <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>{entry.sub}</div>}
                           </Td>
-                          <Td style={{ fontSize: "12px", color: "var(--ink-soft)" }}>{entry.pic || "-"}</Td>
+                          <Td style={{ fontSize: "12px", color: "var(--ink-soft)" }}>
+                            <div style={{ fontWeight: 600, color: "var(--ink)" }}>{entry.pic || "-"}</div>
+                            {entry.jenis === "Pergerakan" && entry.pic && entry.pic !== "-" && driverResmi.size > 0 && (
+                              adalahBukanDriver(entry.pic)
+                                ? <span className="kd-chip" style={{ background: "var(--warn-50)", color: "var(--warn)", marginLeft: 0, marginTop: "3px" }}>Bukan driver</span>
+                                : <span style={{ fontSize: "11px", color: "var(--muted)" }}>Driver</span>
+                            )}
+                          </Td>
                           <Td style={{ textAlign: "center" }}>
                             {entry.foto ? (
                               <a href={entry.foto} target="_blank" rel="noopener noreferrer">
