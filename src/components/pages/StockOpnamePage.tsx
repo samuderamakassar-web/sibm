@@ -74,9 +74,6 @@ function tebakKategori(nama: string): Kategori {
 }
 const kategoriOf = (item: StockItem): Kategori => (item.kategori && KATEGORI.includes(item.kategori) ? item.kategori : tebakKategori(item.nama_barang));
 
-function BadgeKat({ k }: { k: Kategori }) {
-  return <span className="badge" style={{ background: WARNA_KAT[k].bg, color: WARNA_KAT[k].fg, marginLeft: "6px", fontWeight: 700 }}>{k}</span>;
-}
 /** Baris pemisah kelompok di tabel (hanya saat filter "Semua"). */
 function BarisKelompok({ k, n, kolom }: { k: Kategori; n: number; kolom: number }) {
   return (
@@ -314,9 +311,17 @@ export default function StockOpnamePage() {
         .data-table tr:last-child td { border-bottom: none; }
         .badge { font-size: 10.5px; font-weight: 800; padding: 4px 9px; border-radius: 20px; white-space: nowrap; display: inline-block; }
         .empty-state { padding: 30px 20px; text-align: center; color: var(--muted); border: 2px dashed var(--line); border-radius: 16px; font-size: 13px; }
-        .stock-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-radius: 16px; flex-wrap: wrap; gap: 15px; transition: 0.2s; }
-        .qty-btn { width: 34px; height: 34px; border-radius: 10px; font-size: 17px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid; }
-        .icon-btn { background: transparent; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid; }
+        /* §98: 1 baris per barang (dulu kartu ~220px tinggi di HP) */
+        .stock-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 9px 10px 9px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+        .stock-row.is-low { border-left: 4px solid var(--red-600); padding-left: 11px; }
+        .sr-nama { font-weight: 700; font-size: 14px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sr-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+        .sr-qty { display: flex; align-items: center; gap: 4px; }
+        .sr-angka { min-width: 30px; text-align: center; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .sr-aksi { display: flex; gap: 2px; }
+        .qty-btn { width: 30px; height: 30px; border-radius: 9px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid; font-family: inherit; }
+        .icon-btn { background: transparent; width: 30px; height: 30px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; border: none; }
+        .icon-btn:hover { background: var(--surface); }
         .form-col, .right-col { min-width: 0; }
         .kat-filter { display: flex; gap: 8px; flex-wrap: wrap; }
         .kat-chip { border: 1px solid; border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
@@ -329,7 +334,6 @@ export default function StockOpnamePage() {
         }
         @media (max-width: 520px) {
           .card { padding: 18px; }
-          .stock-row { padding: 12px 14px; }
         }
       `}} />
 
@@ -546,39 +550,27 @@ export default function StockOpnamePage() {
                 <span style={{ fontSize: "12px", background: "var(--bg)", color: "var(--ink-soft)", padding: "4px 10px", borderRadius: "20px" }}>{itemTampil.length} Item</span>
               </h2>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 {itemTampil.length > 0 ? itemTampil.map((item, idx) => {
                   const isLowStock = item.qty <= item.batas_minimum;
                   const kat = kategoriOf(item);
                   const judulKelompok = filterKat === "Semua" && (idx === 0 || kategoriOf(itemTampil[idx - 1]) !== kat);
                   return (
                     <div key={item.id} style={{ display: "contents" }}>
-                    {judulKelompok && <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[kat].fg, marginTop: idx === 0 ? 0 : "8px", letterSpacing: ".02em" }}>{kat} · {jumlahPerKat(kat)}</div>}
-                    <div className="stock-row" style={{ border: isLowStock ? "2px solid rgba(220,38,38,0.3)" : "1px solid var(--line)", background: isLowStock ? "var(--red-50)" : "var(--bg)" }}>
-
-                      <div style={{ flex: "1 1 200px" }}>
-                        <div style={{ fontWeight: "bold", fontSize: "16px", color: isLowStock ? "var(--red-700)" : "var(--ink)", display: "flex", alignItems: "center", gap: "8px" }}>
-                          {item.nama_barang} {isLowStock && <IconAlertTriangle size={14} color="var(--red-600)" />}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>
-                          Batas minimum: <strong style={{ color: "var(--ink-soft)" }}>{item.batas_minimum}</strong>{filterKat === "Semua" ? null : <BadgeKat k={kat} />}
-                        </div>
+                    {judulKelompok && <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[kat].fg, marginTop: idx === 0 ? 0 : "6px", letterSpacing: ".02em" }}>{kat} · {jumlahPerKat(kat)}</div>}
+                    <div className={`stock-row${isLowStock ? " is-low" : ""}`}>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="sr-nama" title={item.nama_barang}>{item.nama_barang}</div>
+                        <div className="sr-sub">min. {item.batas_minimum}{isLowStock && <b style={{ color: "var(--red-600)" }}> · perlu beli</b>}</div>
                       </div>
-
-                      {/* Kontrol Kuantitas */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "15px", background: "var(--surface)", padding: "8px 12px", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                        <button onClick={() => handleQuickUpdate(item.id, item.nama_barang, item.qty, -1)} className="qty-btn" style={{ background: "var(--red-50)", borderColor: "rgba(220,38,38,0.25)", color: "var(--red-600)" }}>−</button>
-                        <div style={{ textAlign: "center", minWidth: "50px" }}>
-                          <span style={{ display: "block", fontSize: "22px", fontWeight: "900", color: isLowStock ? "var(--red-600)" : "var(--warn)", lineHeight: "1" }}>{item.qty}</span>
-                          <span style={{ fontSize: "9px", color: "var(--muted)", textTransform: "uppercase", fontWeight: "bold", letterSpacing: "1px" }}>Sisa</span>
-                        </div>
-                        <button onClick={() => handleQuickUpdate(item.id, item.nama_barang, item.qty, 1)} className="qty-btn" style={{ background: "var(--ok-50)", borderColor: "rgba(22,163,74,0.25)", color: "var(--ok)" }}>+</button>
+                      <div className="sr-qty">
+                        <button onClick={() => handleQuickUpdate(item.id, item.nama_barang, item.qty, -1)} className="qty-btn" aria-label={`Kurangi ${item.nama_barang}`} style={{ background: "var(--red-50)", borderColor: "rgba(220,38,38,0.25)", color: "var(--red-600)" }}>−</button>
+                        <span className="sr-angka" style={{ color: isLowStock ? "var(--red-600)" : "var(--ink)" }}>{item.qty}</span>
+                        <button onClick={() => handleQuickUpdate(item.id, item.nama_barang, item.qty, 1)} className="qty-btn" aria-label={`Tambah ${item.nama_barang}`} style={{ background: "var(--ok-50)", borderColor: "rgba(22,163,74,0.25)", color: "var(--ok)" }}>+</button>
                       </div>
-
-                      {/* Tombol Aksi */}
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <button onClick={() => handleEdit(item)} className="icon-btn" style={{ color: "var(--accent)", borderColor: "var(--accent)" }} title="Edit"><IconEdit size={14} /></button>
-                        <button onClick={() => handleDelete(item.id, item.nama_barang)} className="icon-btn" style={{ color: "var(--red-600)", borderColor: "var(--red-600)" }} title="Hapus"><IconTrash size={14} /></button>
+                      <div className="sr-aksi">
+                        <button onClick={() => handleEdit(item)} className="icon-btn" style={{ color: "var(--accent)" }} title="Edit" aria-label={`Edit ${item.nama_barang}`}><IconEdit size={15} /></button>
+                        <button onClick={() => handleDelete(item.id, item.nama_barang)} className="icon-btn" style={{ color: "var(--red-600)" }} title="Hapus" aria-label={`Hapus ${item.nama_barang}`}><IconTrash size={15} /></button>
                       </div>
                     </div>
                     </div>
