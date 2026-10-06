@@ -985,12 +985,10 @@ export default function ManajemenKendaraanPage() {
     if (riwayatKendaraanTerpilih.length === 0) return;
     if (riwayatEntries.length === 0) return showToast("Tidak ada data pada filter ini untuk diexport.", "warning");
 
-    const headers = isSatuKendaraan
-      ? ["Tanggal", "Jenis", "Detail", "Keterangan", "Karyawan/Driver"]
-      : ["Tanggal", "Kendaraan", "Jenis", "Detail", "Keterangan", "Karyawan/Driver"];
-    const rows = riwayatEntries.map((e) => isSatuKendaraan
-      ? [e.tanggal.split("-").reverse().join("/"), e.jenis, e.utama, e.sub || "-", e.pic || "-"]
-      : [e.tanggal.split("-").reverse().join("/"), e.kendaraanLabel, e.jenis, e.utama, e.sub || "-", e.pic || "-"]
+    // §100: kolom Kendaraan selalu ada (juga saat hanya 1 kendaraan dipilih)
+    const headers = ["Tanggal", "Kendaraan", "Jenis", "Detail", "Keterangan", "Karyawan/Driver"];
+    const rows = riwayatEntries.map((e) =>
+      [e.tanggal.split("-").reverse().join("/"), kendaraanList.find((k) => k.id === e.kendaraanId)?.plat_nomor || e.kendaraanLabel, e.label || e.jenis, e.utama, e.sub || "-", e.pic || "-"]
     );
 
     const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -1347,7 +1345,7 @@ export default function ManajemenKendaraanPage() {
                     <THead>
                       <Tr>
                         <Th>Tanggal</Th>
-                        {!isSatuKendaraan && <Th>Kendaraan</Th>}
+                        <Th>Kendaraan</Th>
                         <Th>Jenis</Th>
                         <Th>Detail</Th>
                         <Th>Karyawan / Driver</Th>
@@ -1358,7 +1356,7 @@ export default function ManajemenKendaraanPage() {
                       {riwayatEntries.length > 0 ? riwayatEntries.map((entry) => (
                         <Tr key={entry.id}>
                           <Td style={{ whiteSpace: "nowrap", fontSize: "12px", color: "var(--muted)" }}>{entry.tanggal.split("-").reverse().join("/")}</Td>
-                          {!isSatuKendaraan && <Td style={{ fontSize: "13px", fontWeight: 800, color: "var(--ink)", whiteSpace: "nowrap" }}>{kendaraanList.find((k) => k.id === entry.kendaraanId)?.plat_nomor || entry.kendaraanLabel}</Td>}
+                          <Td style={{ fontSize: "13px", fontWeight: 800, color: "var(--ink)", whiteSpace: "nowrap" }}>{kendaraanList.find((k) => k.id === entry.kendaraanId)?.plat_nomor || entry.kendaraanLabel}</Td>
                           <Td style={{ whiteSpace: "nowrap" }}><Badge tone={entry.tone}>{JENIS_ICON[entry.jenis]} {entry.label || entry.jenis}</Badge></Td>
                           <Td>
                             <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{entry.utama}</div>
@@ -1383,7 +1381,7 @@ export default function ManajemenKendaraanPage() {
                         </Tr>
                       )) : (
                         <Tr>
-                          <Td colSpan={isSatuKendaraan ? 5 : 6} style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)" }}>
+                          <Td colSpan={6} style={{ padding: "50px 20px", textAlign: "center", color: "var(--muted)" }}>
                             <div style={{ fontSize: "30px", marginBottom: "10px" }}>📭</div>
                             Belum ada riwayat pada filter ini.
                           </Td>
