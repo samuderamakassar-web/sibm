@@ -36,14 +36,26 @@ interface HelpdeskTicket {
   waktu_lapor?: Timestamp | null;
   waktu_selesai?: Timestamp | null;
   biaya?: number;
+  // §105 tidak dijalankan / dihapus (arsip)
+  alasan_tidak_dijalankan?: string;
+  alasan_hapus?: string;
+  dihapus_oleh?: string;
+  status_sebelum_hapus?: string;
 }
 
-type StatusFilterType = "Semua" | "Menunggu" | "Sedang Dikerjakan" | "Selesai";
+type StatusFilterType = "Semua" | "Menunggu" | "Sedang Dikerjakan" | "Selesai" | "Tidak Dijalankan" | "Dihapus";
+// §105: "Tidak Dijalankan" = ditutup tanpa perbaikan (alasan wajib, pelapor dikabari);
+// "Dihapus" = arsip (laporan ganda/salah input) -- disembunyikan dari daftar & portal, bisa dipulihkan.
+const STATUS_TIDAK_DIJALANKAN = "Tidak Dijalankan";
+const STATUS_DIHAPUS = "Dihapus";
+const STATUS_TERBUKA = ["Menunggu", "Sedang Dikerjakan"];
 
-const STATUS_TONE: Record<string, "warning" | "info" | "success"> = {
+const STATUS_TONE: Record<string, "warning" | "info" | "success" | "danger" | "neutral"> = {
   Menunggu: "warning",
   "Sedang Dikerjakan": "info",
   Selesai: "success",
+  [STATUS_TIDAK_DIJALANKAN]: "danger",
+  [STATUS_DIHAPUS]: "neutral",
 };
 
 export default function AdminHelpdeskPage() {
@@ -71,6 +83,9 @@ export default function AdminHelpdeskPage() {
   const [biayaPerbaikan, setBiayaPerbaikan] = useState("");
   const [fotoHasil, setFotoHasil] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [alasanTutup, setAlasanTutup] = useState("");
+  const [modeHapus, setModeHapus] = useState(false);
+  const [alasanHapus, setAlasanHapus] = useState("");
 
   const [filterStatus, setFilterStatus] = useState<StatusFilterType>("Semua");
   const [previewFoto, setPreviewFoto] = useState<string | null>(null);
@@ -94,7 +109,7 @@ export default function AdminHelpdeskPage() {
   useEffect(() => {
     if (!isAuthReady || !session) return;
 
-    const unsubscribe = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "!=", "Selesai")), (snap) => {
+    const unsubscribe = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "in", STATUS_TERBUKA)), (snap) => {
       setTiketTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HelpdeskTicket)));
       setIsReady(true);
     });
@@ -136,6 +151,32 @@ export default function AdminHelpdeskPage() {
     setStatusUbah(tiket.status);
     setFotoHasil(tiket.foto_proses || "");
     setBiayaPerbaikan(typeof tiket.biaya === "number" && tiket.biaya > 0 ? String(tiket.biaya) : "");
+    setAlasanTutup(tiket.alasan_tidak_dijalankan || "");
+    setModeHapus(false);
+    setAlasanHapus("");
+  };
+
+  // §105 hapus = arsip (soft delete) dengan alasan; bisa dipulihkan dari filter "Arsip"
+  const handleHapus = async () => {
+    if (!selectedTicket) return;
+    if (!alasanHapus.trim()) return showToast("Isi alasan penghapusan.", "warning");
+    setIsUpdating(true);
+    try {
+      await updateDoc(doc(db, "helpdesk_tickets", selectedTicket.id), {
+        status: STATUS_DIHAPUS, status_sebelum_hapus: selectedTicket.status, alasan_hapus: alasanHapus.trim(),
+        dihapus_oleh: session?.nama || "-", waktu_hapus: serverTimestamp(),
+      });
+      showToast("Laporan dipindahkan ke Arsip.", "success");
+      setSelectedTicket(null);
+    } catch (e) { console.error(e); showToast("Gagal menghapus laporan.", "error"); }
+    finally { setIsUpdating(false); }
+  };
+  const handlePulihkan = async (tiket: HelpdeskTicket) => {
+    try {
+      await updateDoc(doc(db, "helpdesk_tickets", tiket.id), { status: tiket.status_sebelum_hapus || "Menunggu", alasan_hapus: null, dihapus_oleh: null, waktu_hapus: null });
+      showToast("Laporan dipulihkan.", "success");
+      setSelectedTicket(null);
+    } catch (e) { console.error(e); showToast("Gagal memulihkan.", "error"); }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,6 +210,9 @@ export default function AdminHelpdeskPage() {
     if (statusUbah === "Selesai" && !fotoHasil && !selectedTicket.foto_proses) {
       return showToast("Untuk menutup tiket (Selesai), Anda WAJIB melampirkan Foto Hasil Perbaikan!", "warning");
     }
+    if (statusUbah === STATUS_TIDAK_DIJALANKAN && !alasanTutup.trim()) {
+      return showToast("Isi alasan kenapa laporan tidak dijalankan.", "warning");
+    }
 
     const statusBerubah = statusUbah !== selectedTicket.status;
     // Rekam waktu_selesai cuma sekali, pas pertama kali tiket ditutup (Selesai) -- supaya kalau admin buka lagi
@@ -181,12 +225,14 @@ export default function AdminHelpdeskPage() {
       await updateDoc(ref, {
         status: statusUbah,
         foto_proses: (await dataUrlKeCloudinary(fotoHasil, "sibm/helpdesk")) || null,
-        ...(statusUbah === "Selesai" ? { biaya: Number(biayaPerbaikan.replace(/D/g, "")) || 0 } : {}),
+        // §105 perbaikan bug: dulu /D/g (bukan \D) -> biaya selalu 0
+        ...(statusUbah === "Selesai" ? { biaya: Number(biayaPerbaikan.replace(/\D/g, "")) || 0 } : {}),
+        ...(statusUbah === STATUS_TIDAK_DIJALANKAN ? { alasan_tidak_dijalankan: alasanTutup.trim(), ditutup_oleh: session?.nama || "-", waktu_ditutup: serverTimestamp() } : {}),
         ...(baruTertutup ? { waktu_selesai: serverTimestamp() } : {}),
       });
 
       if (statusBerubah) {
-        await kirimNotifikasiHelpdesk(selectedTicket, statusUbah);
+        await kirimNotifikasiHelpdesk(selectedTicket, statusUbah === STATUS_TIDAK_DIJALANKAN ? `${statusUbah} — ${alasanTutup.trim()}` : statusUbah);
       }
 
       showToast("Status tiket berhasil diperbarui!", "success");
@@ -231,7 +277,7 @@ export default function AdminHelpdeskPage() {
   const tahunTersedia = daftarTahunSejak().map(String);
 
   const filteredTickets = tickets.filter((t) => {
-    const matchStatus = filterStatus === "Semua" || t.status === filterStatus;
+    const matchStatus = filterStatus === "Semua" ? t.status !== STATUS_DIHAPUS : t.status === filterStatus;
     const tglLapor = t.waktu_lapor?.toDate();
     const matchBulan = filterBulan === "SEMUA" || (tglLapor && String(tglLapor.getMonth()) === filterBulan);
     const matchTahun = filterTahun === "SEMUA" || (tglLapor && String(tglLapor.getFullYear()) === filterTahun);
@@ -269,7 +315,7 @@ export default function AdminHelpdeskPage() {
 
   return (
     <AdminShell title="Helpdesk & Tiket Kerusakan" subtitle="Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung" userName={adminName}>
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{__html: `
 
         .helpdesk-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
         .helpdesk-table th { padding: 12px 15px; font-weight: bold; }
@@ -297,8 +343,8 @@ export default function AdminHelpdeskPage() {
         <Card style={{ marginBottom: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px" }}>
-              {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai"] as StatusFilterType[]).map((status) => {
-                const count = status === "Semua" ? tickets.length : tickets.filter((t) => t.status === status).length;
+              {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai", STATUS_TIDAK_DIJALANKAN, STATUS_DIHAPUS] as StatusFilterType[]).map((status) => {
+                const count = status === "Semua" ? tickets.filter((t) => t.status !== STATUS_DIHAPUS).length : tickets.filter((t) => t.status === status).length;
                 const active = filterStatus === status;
                 return (
                   <button
@@ -306,7 +352,7 @@ export default function AdminHelpdeskPage() {
                     onClick={() => setFilterStatus(status)}
                     style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: active ? "var(--info)" : "var(--bg)", color: active ? "var(--surface)" : "var(--ink-soft)", fontSize: "13px" }}
                   >
-                    {status} ({count})
+                    {status === STATUS_DIHAPUS ? "Arsip" : status} ({count})
                   </button>
                 );
               })}
@@ -368,6 +414,8 @@ export default function AdminHelpdeskPage() {
                       <td data-label="Tanggal">{formatTanggal(tiket.waktu_lapor)}</td>
                       <td data-label="Keluhan">
                         <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>&quot;{tiket.deskripsi}&quot;</span>
+                        {tiket.status === STATUS_TIDAK_DIJALANKAN && tiket.alasan_tidak_dijalankan && <div style={{ fontSize: "11.5px", color: "var(--red-600)", fontWeight: 700, marginTop: "4px" }}>Tidak dijalankan: {tiket.alasan_tidak_dijalankan}</div>}
+                        {tiket.status === STATUS_DIHAPUS && <div style={{ fontSize: "11.5px", color: "var(--muted)", fontWeight: 700, marginTop: "4px" }}>Dihapus{tiket.dihapus_oleh ? ` oleh ${tiket.dihapus_oleh}` : ""}: {tiket.alasan_hapus || "-"}</div>}
                       </td>
                       <td data-label="Foto Laporan">
                         {tiket.foto_awal ? (
@@ -388,9 +436,13 @@ export default function AdminHelpdeskPage() {
                         <Badge tone={STATUS_TONE[tiket.status] || "neutral"}>{tiket.status}</Badge>
                       </td>
                       <td data-label="Aksi">
-                        <Button variant="primary" onClick={() => handleBukaModal(tiket)} style={{ fontSize: "12px", padding: "8px 12px" }}>
-                          {tiket.status === "Selesai" ? "Lihat Detail" : "Tindak Lanjuti"}
-                        </Button>
+                        {tiket.status === STATUS_DIHAPUS ? (
+                          <Button variant="secondary" onClick={() => handlePulihkan(tiket)} style={{ fontSize: "12px", padding: "8px 12px" }}>Pulihkan</Button>
+                        ) : (
+                          <Button variant="primary" onClick={() => handleBukaModal(tiket)} style={{ fontSize: "12px", padding: "8px 12px" }}>
+                            {STATUS_TERBUKA.includes(tiket.status) ? "Tindak Lanjuti" : "Lihat Detail"}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -449,8 +501,21 @@ export default function AdminHelpdeskPage() {
                   <option value="Menunggu">⏳ Menunggu (Belum direspon)</option>
                   <option value="Sedang Dikerjakan">🧑‍🔧 Sedang Dikerjakan (In Progress)</option>
                   <option value="Selesai">✅ Selesai (Closed)</option>
+                  <option value={STATUS_TIDAK_DIJALANKAN}>⛔ Tidak Dijalankan (dengan alasan)</option>
                 </Select>
               </div>
+
+              {statusUbah === STATUS_TIDAK_DIJALANKAN && (
+                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)" }}>
+                  Alasan tidak dijalankan *
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {["Bukan kerusakan / sesuai fungsi", "Tanggung jawab tenant / vendor", "Menunggu anggaran / CER", "Sudah ditangani di tiket lain"].map((a) => (
+                      <button key={a} type="button" onClick={() => setAlasanTutup(a)} style={{ padding: "5px 10px", borderRadius: "999px", border: "1px solid var(--line)", background: alasanTutup === a ? "var(--ink)" : "var(--bg)", color: alasanTutup === a ? "var(--surface)" : "var(--ink-soft)", fontSize: "12px", cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>{a}</button>
+                    ))}
+                  </div>
+                  <textarea value={alasanTutup} onChange={(e) => setAlasanTutup(e.target.value)} placeholder="Tulis alasan (dikirim ke pelapor lewat email)" style={{ minHeight: "70px", padding: "10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", fontSize: "13px" }} />
+                </label>
+              )}
 
               {statusUbah === "Selesai" && (
                 <div style={{ background: fotoHasil ? "var(--ok-50)" : "var(--surface)", border: fotoHasil ? "2px solid var(--ok)" : "2px dashed var(--line)", padding: "20px", borderRadius: "12px", textAlign: "center" }}>
@@ -475,7 +540,7 @@ export default function AdminHelpdeskPage() {
               {statusUbah === "Selesai" && (
                 <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)" }}>
                   Biaya perbaikan (opsional, Rp)
-                  <input inputMode="numeric" value={biayaPerbaikan} onChange={(e) => setBiayaPerbaikan(e.target.value.replace(/[^d]/g, ""))} placeholder="Kosongkan bila tanpa biaya (teknisi internal)"
+                  <input inputMode="numeric" value={biayaPerbaikan ? new Intl.NumberFormat("id-ID").format(Number(biayaPerbaikan)) : ""} onChange={(e) => setBiayaPerbaikan(e.target.value.replace(/\D/g, ""))} placeholder="Kosongkan bila tanpa biaya (teknisi internal)"
                     style={{ padding: "11px 12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "14px", fontFamily: "inherit" }} />
                   <span style={{ fontWeight: 500, fontSize: "11.5px", color: "var(--muted)" }}>Tercatat otomatis sebagai realisasi anggaran &quot;Perbaikan Gedung&quot;.</span>
                 </label>
@@ -485,6 +550,27 @@ export default function AdminHelpdeskPage() {
                 💾 Simpan Pembaruan Tiket
               </Button>
             </form>
+
+            {/* §105 HAPUS (ARSIP) */}
+            <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px dashed var(--line)" }}>
+              {!modeHapus ? (
+                <button type="button" onClick={() => setModeHapus(true)} style={{ background: "none", border: "none", color: "var(--red-600)", fontWeight: 700, fontSize: "12.5px", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>🗑 Hapus laporan ini (pindah ke Arsip)</button>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)" }}>Alasan hapus * <span style={{ fontWeight: 500, color: "var(--muted)" }}>— laporan disembunyikan dari daftar & portal, tetap tersimpan di Arsip.</span></div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {["Laporan ganda", "Salah input", "Laporan uji coba"].map((a) => (
+                      <button key={a} type="button" onClick={() => setAlasanHapus(a)} style={{ padding: "5px 10px", borderRadius: "999px", border: "1px solid var(--line)", background: alasanHapus === a ? "var(--ink)" : "var(--bg)", color: alasanHapus === a ? "var(--surface)" : "var(--ink-soft)", fontSize: "12px", cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>{a}</button>
+                    ))}
+                  </div>
+                  <input value={alasanHapus} onChange={(e) => setAlasanHapus(e.target.value)} placeholder="Tulis alasan..." style={{ padding: "10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px", fontFamily: "inherit" }} />
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setModeHapus(false)} disabled={isUpdating}>Batal</button>
+                    <button type="button" onClick={handleHapus} disabled={isUpdating} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", background: "var(--red-600)", color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{isUpdating ? "Menghapus..." : "Hapus ke Arsip"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
       </Modal>

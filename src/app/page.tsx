@@ -67,7 +67,7 @@ function simpanCacheHarian(data: Record<string, NilaiSeri>) {
 }
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
-interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
+interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; alasan_tidak_dijalankan?: string; }
 interface MasterAtk { id: string; nama_barang: string; foto_url?: string; satuan?: string[]; }
 interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; satuan?: string; }
 /** §103 "2 rim" -- data lama tanpa satuan cukup angkanya. */
@@ -550,7 +550,7 @@ export default function PortalSIBM() {
   // melihat tiket "Sedang Dikerjakan" di 20 tiket terakhir, jadi tiket "Menunggu" tidak pernah terhitung.
   const [tiketTerbuka, setTiketTerbuka] = useState<HelpdeskTicket[]>([]);
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "!=", "Selesai")), (snap) => {
+    const unsub = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "in", ["Menunggu", "Sedang Dikerjakan"])), (snap) => { // §105
       setTiketTerbuka(snap.docs.map((d) => d.data() as HelpdeskTicket));
     });
     return () => unsub();
@@ -826,7 +826,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       // (yang dicari pelapor hampir selalu laporannya yang masih baru).
       const snap = await getDocs(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(BATAS_PENCARIAN)));
       const rawData = snap.docs.map(d => ({ id: d.id, ...d.data() } as HelpdeskTicket));
-      const filtered = rawData.filter(t => String(t.nama_pelapor).toLowerCase().includes(searchHelpdeskName.toLowerCase().trim()));
+      const filtered = rawData.filter(t => t.status !== "Dihapus" && String(t.nama_pelapor).toLowerCase().includes(searchHelpdeskName.toLowerCase().trim())); // §105 arsip disembunyikan
       filtered.sort((a, b) => getTime(b.waktu_lapor) - getTime(a.waktu_lapor));
       setHasilHelpdesk(filtered.slice(0, 15));
       if (filtered.length === 0) showToast(`Belum ada laporan dari: "${searchHelpdeskName}"`, "info");
@@ -2466,9 +2466,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                     <div key={tiket.id} style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "15px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
                         <span style={{ fontWeight: "800", fontSize: "14px" }}>📍 {tiket.lokasi}</span>
-                        <Badge tone="warning">{tiket.status}</Badge>
+                        <Badge tone={tiket.status === "Selesai" ? "success" : tiket.status === "Tidak Dijalankan" ? "danger" : tiket.status === "Sedang Dikerjakan" ? "info" : "warning"}>{tiket.status}</Badge>
                       </div>
                       <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}>{tiket.deskripsi}</div>
+                      {tiket.status === "Tidak Dijalankan" && tiket.alasan_tidak_dijalankan && <div style={{ fontSize: "12px", color: "var(--red-600)", fontWeight: 700, marginTop: "6px" }}>Alasan: {tiket.alasan_tidak_dijalankan}</div>}
                     </div>
                   )) : <div style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>Hasil pencarian tiket akan muncul di sini.</div>}
                 </div>

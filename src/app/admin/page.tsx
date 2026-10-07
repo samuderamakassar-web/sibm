@@ -189,7 +189,7 @@ async function muatHitungan(): Promise<Hitungan> {
       }).length;
     },
     overtime: () => hitung(query(collection(db, "ga_overtime_requests"), where("status", "==", "Menunggu Approval GA"))),
-    helpdesk: () => hitung(query(collection(db, "helpdesk_tickets"), where("status", "!=", "Selesai"))),
+    helpdesk: () => hitung(query(collection(db, "helpdesk_tickets"), where("status", "in", ["Menunggu", "Sedang Dikerjakan"]))), // §105
     atk: () => hitung(query(collection(db, "ga_atk_requests"), where("status", "==", "Menunggu Disiapkan"))),
     legalitas: () => hitung(query(collection(db, "master_legalitas"), where("tanggal_berakhir_aktif", "<=", isoTambahHari(hariIni, 60)))),
     laptop: async () => {

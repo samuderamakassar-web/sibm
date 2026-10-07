@@ -3013,3 +3013,10 @@ SUDAH DI-DEPLOY. Permintaan user: master data barang lebih rapi (tabel), bisa ed
 
 ## 104. ATK: Pilihan Satuan untuk Barang yang Belum Diatur (7 Oktober 2026)
 SUDAH DI-DEPLOY. Dilaporkan user: dropdown satuan di keranjang portal hanya "PCS" (barang lama belum punya field `satuan`). Kini bila master belum mengatur satuan, pilihan = semua satuan standar (PCS, RIM, PACK, LUSIN, BOX, DUS KECIL, DUS BESAR, ROLL, SET) di portal (`SATUAN_ATK_STANDAR`) & modal Ubah Barang admin (`pilihanSatuan`); setelah admin mengatur satuan barang, pilihan dibatasi sesuai master. Tabel master menampilkan "Belum diatur · semua satuan" untuk barang tersebut. Default saat masuk keranjang tetap PCS.
+
+## 105. Laporan Kerusakan: Tidak Dijalankan & Hapus (Arsip) + Perbaikan Bug Biaya (7 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user (keputusan: hapus = arsip + alasan).
+- Status baru "Tidak Dijalankan": pilihan di modal Eksekusi Tiket, alasan wajib (chip: Bukan kerusakan / Tanggung jawab tenant/vendor / Menunggu anggaran/CER / Sudah ditangani di tiket lain) -> `alasan_tidak_dijalankan`, `ditutup_oleh`, `waktu_ditutup`; email ke pelapor menyertakan alasan. Alasan tampil merah di tabel admin & hasil cari portal.
+- "Hapus" = arsip: tombol "🗑 Hapus laporan ini" di modal, alasan wajib (Laporan ganda / Salah input / Laporan uji coba) -> `status: "Dihapus"`, `status_sebelum_hapus`, `alasan_hapus`, `dihapus_oleh`, `waktu_hapus`. Disembunyikan dari filter Semua & pencarian portal; filter "Arsip" + tombol Pulihkan (kembali ke status sebelumnya).
+- Tiket terbuka kini `status in [Menunggu, Sedang Dikerjakan]` (bukan `!= Selesai`) di admin helpdesk, dashboard admin & portal -> tiket Tidak Dijalankan/Dihapus tidak dihitung terbuka.
+- BUG: kolom biaya perbaikan (§89) tidak pernah tersimpan -- input memakai `/[^d]/g` (membuang semua angka) & simpan `/D/g` (backslash hilang saat edit lewat node -e). Diperbaiki ke `\D`; input kini tampil berformat ribuan. Realisasi "Perbaikan Gedung" di Anggaran baru terisi dari tiket yang ditutup setelah perbaikan ini.
