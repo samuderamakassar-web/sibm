@@ -11,7 +11,6 @@ import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import Button from "../../../components/ui/Button";
-import Card from "../../../components/ui/Card";
 import Modal from "../../../components/ui/Modal";
 import Badge from "../../../components/ui/Badge";
 import Select from "../../../components/ui/Select";
@@ -128,6 +127,13 @@ export default function AdminHelpdeskPage() {
   const formatJam = (ts: Timestamp | null | undefined) => {
     if (!ts) return "-";
     return new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  // §109 "2 Okt 2026 · 14.38" (kartu tiket)
+  const waktuRingkas = (ts: Timestamp | null | undefined) => {
+    if (!ts) return "-";
+    const d = ts.toDate();
+    return `${d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })} · ${d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`;
   };
 
   const formatTanggal = (ts: Timestamp | null | undefined) => {
@@ -316,144 +322,107 @@ export default function AdminHelpdeskPage() {
   return (
     <AdminShell title="Helpdesk & Tiket Kerusakan" subtitle="Kelola dan tindak lanjuti laporan kerusakan fasilitas gedung" userName={adminName}>
       <style dangerouslySetInnerHTML={{__html: `
-
-        .helpdesk-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; table-layout: fixed; }
-        .helpdesk-table th { padding: 12px 15px; font-weight: bold; }
-        .helpdesk-table td { padding: 12px 15px; vertical-align: top; border-bottom: 1px solid var(--line); word-wrap: break-word; }
-        .helpdesk-table tbody tr:hover td { filter: brightness(0.98); }
-        .helpdesk-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
-
-        @media (max-width: 900px) {
-          .helpdesk-table, .helpdesk-table tbody { display: block; width: 100%; }
-          .helpdesk-table thead { display: none; }
-          .helpdesk-table tr {
-            display: block; width: 100%; margin-bottom: 15px;
-            border: 1px solid var(--line); border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden;
-          }
-          .helpdesk-table td {
-            display: block; width: 100%; padding: 12px 15px !important;
-            border-bottom: 1px dashed var(--line) !important;
-          }
-          .helpdesk-table td:last-child { border-bottom: none !important; }
-          .helpdesk-table td::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+        /* §109 daftar tiket berbentuk kartu (tabel 10 kolom dulu membuat teks patah-patah) */
+        .hd-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .hd-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .hd-chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 999px; padding: 8px 13px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .hd-chip span { opacity: .65; margin-left: 4px; }
+        .hd-chip.is-on { background: var(--ink); color: var(--surface); border-color: transparent; }
+        .hd-alat { display: flex; gap: 6px; flex-wrap: wrap; }
+        .hd-alat select { height: 38px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; cursor: pointer; }
+        .hd-list { display: flex; flex-direction: column; gap: 10px; }
+        .hd-card { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); }
+        .hd-card.is-done { background: var(--bg); }
+        .hd-foto { width: 76px; height: 76px; object-fit: cover; border-radius: 12px; cursor: zoom-in; display: block; background: var(--line); }
+        .hd-foto.is-kosong { display: grid; place-items: center; font-size: 22px; cursor: default; }
+        .hd-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .hd-lokasi { font-weight: 800; color: var(--ink); font-size: 14px; }
+        .hd-waktu { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+        .hd-tag { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--info-50); color: var(--info); white-space: nowrap; }
+        .hd-keluhan { margin: 6px 0 0; font-size: 13.5px; color: var(--ink); line-height: 1.45; }
+        .hd-meta { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+        .hd-meta b { color: var(--ink-soft); }
+        .hd-info { margin-top: 8px; display: inline-block; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 8px; }
+        .hd-aksi { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+        .hd-hasil { width: 44px; height: 44px; object-fit: cover; border-radius: 10px; cursor: zoom-in; border: 2px solid var(--ok); }
+        @media (max-width: 640px) {
+          .hd-card { grid-template-columns: 60px minmax(0, 1fr); }
+          .hd-foto { width: 60px; height: 60px; }
+          .hd-aksi { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; }
+          .hd-waktu { margin-left: 0; width: 100%; }
         }
       `}} />
       <div>
-        <Card style={{ marginBottom: "20px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "5px" }}>
-              {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai", STATUS_TIDAK_DIJALANKAN, STATUS_DIHAPUS] as StatusFilterType[]).map((status) => {
-                const count = status === "Semua" ? tickets.filter((t) => t.status !== STATUS_DIHAPUS).length : tickets.filter((t) => t.status === status).length;
-                const active = filterStatus === status;
-                return (
-                  <button
-                    key={status}
-                    onClick={() => setFilterStatus(status)}
-                    style={{ flexShrink: 0, padding: "10px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: active ? "var(--info)" : "var(--bg)", color: active ? "var(--surface)" : "var(--ink-soft)", fontSize: "13px" }}
-                  >
-                    {status === STATUS_DIHAPUS ? "Arsip" : status} ({count})
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <select
-                value={filterBulan}
-                onChange={(e) => setFilterBulan(e.target.value)}
-                style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}
-              >
-                <option value="SEMUA">Semua Bulan</option>
-                {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
-              </select>
-              <select
-                value={filterTahun}
-                onChange={(e) => setFilterTahun(e.target.value)}
-                style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "13px", background: "var(--bg)", outline: "none", cursor: "pointer" }}
-              >
-                <option value="SEMUA">Semua Tahun</option>
-                {tahunTersedia.map((th) => <option key={th} value={th}>{th}</option>)}
-              </select>
-              <button
-                onClick={handleExportExcel}
-                style={{ padding: "10px 16px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", background: "var(--ok-solid)", color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}
-              >
-                📊 Export ke Excel
-              </button>
-            </div>
+        <div className="hd-bar">
+          <div className="hd-chips" role="tablist" aria-label="Filter status tiket">
+            {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai", STATUS_TIDAK_DIJALANKAN, STATUS_DIHAPUS] as StatusFilterType[]).map((status) => {
+              const count = status === "Semua" ? tickets.filter((t) => t.status !== STATUS_DIHAPUS).length : tickets.filter((t) => t.status === status).length;
+              return (
+                <button key={status} type="button" role="tab" aria-selected={filterStatus === status} className={`hd-chip${filterStatus === status ? " is-on" : ""}`} onClick={() => setFilterStatus(status)}>
+                  {status === STATUS_DIHAPUS ? "Arsip" : status}<span>{count}</span>
+                </button>
+              );
+            })}
           </div>
-        </Card>
+          <div className="hd-alat">
+            <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} aria-label="Bulan">
+              <option value="SEMUA">Semua bulan</option>
+              {NAMA_BULAN.map((nama, idx) => <option key={nama} value={String(idx)}>{nama}</option>)}
+            </select>
+            <select value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} aria-label="Tahun">
+              <option value="SEMUA">Semua tahun</option>
+              {tahunTersedia.map((th) => <option key={th} value={th}>{th}</option>)}
+            </select>
+            <button type="button" onClick={handleExportExcel} className="sa-btn is-soft" style={{ height: "38px" }}>Export Excel</button>
+          </div>
+        </div>
 
-        <div style={{ background: "var(--surface)", borderRadius: "16px", border: "1px solid var(--line)", overflow: "hidden" }}>
-          {filteredTickets.length > 0 ? (
-            <div style={{ overflowX: "auto" }}>
-              <table className="helpdesk-table">
-                <thead style={{ background: "var(--bg)" }}>
-                  <tr>
-                    <th style={{ width: "14%" }}>Pelapor</th>
-                    <th style={{ width: "10%" }}>Tanggal</th>
-                    <th style={{ width: "18%" }}>Keluhan</th>
-                    <th style={{ width: "9%" }}>Foto Laporan</th>
-                    <th style={{ width: "11%" }}>Waktu Lapor</th>
-                    <th style={{ width: "11%" }}>Waktu Selesai</th>
-                    <th style={{ width: "8%" }}>Durasi</th>
-                    <th style={{ width: "8%" }}>Foto Selesai</th>
-                    <th style={{ width: "7%" }}>Status</th>
-                    <th style={{ width: "9%" }}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTickets.map((tiket) => (
-                    <tr key={tiket.id}>
-                      <td data-label="Pelapor">
-                        <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{tiket.nama_pelapor}</div>
-                        <div style={{ fontSize: "11px", color: "var(--muted)" }}>{tiket.departemen}</div>
-                        <div style={{ fontSize: "11px", color: "var(--muted)" }}>📍 {tiket.lokasi}</div>
-                      </td>
-                      <td data-label="Tanggal">{formatTanggal(tiket.waktu_lapor)}</td>
-                      <td data-label="Keluhan">
-                        <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>&quot;{tiket.deskripsi}&quot;</span>
-                        {tiket.status === STATUS_TIDAK_DIJALANKAN && tiket.alasan_tidak_dijalankan && <div style={{ fontSize: "11.5px", color: "var(--red-600)", fontWeight: 700, marginTop: "4px" }}>Tidak dijalankan: {tiket.alasan_tidak_dijalankan}</div>}
-                        {tiket.status === STATUS_DIHAPUS && <div style={{ fontSize: "11.5px", color: "var(--muted)", fontWeight: 700, marginTop: "4px" }}>Dihapus{tiket.dihapus_oleh ? ` oleh ${tiket.dihapus_oleh}` : ""}: {tiket.alasan_hapus || "-"}</div>}
-                      </td>
-                      <td data-label="Foto Laporan">
-                        {tiket.foto_awal ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={tiket.foto_awal} alt="Foto Laporan" className="helpdesk-thumb" onClick={() => setPreviewFoto(tiket.foto_awal!)} />
-                        ) : <span style={{ color: "var(--muted)", fontSize: "12px" }}>-</span>}
-                      </td>
-                      <td data-label="Waktu Lapor" style={{ fontSize: "12px" }}>{formatJam(tiket.waktu_lapor)}</td>
-                      <td data-label="Waktu Selesai" style={{ fontSize: "12px" }}>{formatJam(tiket.waktu_selesai)}</td>
-                      <td data-label="Durasi" style={{ fontSize: "12px", fontWeight: "bold", color: tiket.waktu_selesai ? "var(--ink)" : "var(--muted)" }}>{hitungDurasiHari(tiket.waktu_lapor, tiket.waktu_selesai)}</td>
-                      <td data-label="Foto Selesai">
-                        {tiket.foto_proses ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={tiket.foto_proses} alt="Foto Selesai" className="helpdesk-thumb" onClick={() => setPreviewFoto(tiket.foto_proses!)} />
-                        ) : <span style={{ color: "var(--muted)", fontSize: "12px" }}>-</span>}
-                      </td>
-                      <td data-label="Status">
-                        <Badge tone={STATUS_TONE[tiket.status] || "neutral"}>{tiket.status}</Badge>
-                      </td>
-                      <td data-label="Aksi">
-                        {tiket.status === STATUS_DIHAPUS ? (
-                          <Button variant="secondary" onClick={() => handlePulihkan(tiket)} style={{ fontSize: "12px", padding: "8px 12px" }}>Pulihkan</Button>
-                        ) : (
-                          <Button variant="primary" onClick={() => handleBukaModal(tiket)} style={{ fontSize: "12px", padding: "8px 12px" }}>
-                            {STATUS_TERBUKA.includes(tiket.status) ? "Tindak Lanjuti" : "Lihat Detail"}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--muted)" }}>
-              <div style={{ fontSize: "40px", marginBottom: "10px" }}>🎉</div>
-              <h3 style={{ margin: "0 0 5px 0", color: "var(--ink-soft)" }}>Tidak ada tiket di kategori ini!</h3>
-              <p style={{ margin: 0, fontSize: "13px" }}>Tim GA sedang bersantai atau semua fasilitas dalam kondisi prima.</p>
+        <div className="hd-list">
+          {filteredTickets.length > 0 ? filteredTickets.map((tiket) => {
+            const terbuka = STATUS_TERBUKA.includes(tiket.status);
+            const tag = tiket.deskripsi?.match(/^\[([^\]]+)\]\s*/);
+            const keluhan = tag ? tiket.deskripsi.slice(tag[0].length) : tiket.deskripsi;
+            return (
+              <article key={tiket.id} className={`hd-card${terbuka ? "" : " is-done"}`}>
+                {tiket.foto_awal ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={tiket.foto_awal} alt="Foto laporan" className="hd-foto" onClick={() => setPreviewFoto(tiket.foto_awal!)} />
+                ) : <div className="hd-foto is-kosong" aria-hidden="true">📷</div>}
+                <div style={{ minWidth: 0 }}>
+                  <div className="hd-head">
+                    <Badge tone={STATUS_TONE[tiket.status] || "neutral"}>{tiket.status}</Badge>
+                    <span className="hd-lokasi">{tiket.lokasi}</span>
+                    {tag && <span className="hd-tag">{tag[1]}</span>}
+                    <span className="hd-waktu">{waktuRingkas(tiket.waktu_lapor)}</span>
+                  </div>
+                  <p className="hd-keluhan">{keluhan}</p>
+                  <div className="hd-meta">
+                    Pelapor <b>{tiket.nama_pelapor}</b> · {tiket.departemen}
+                    {tiket.waktu_selesai && <> · Selesai <b>{waktuRingkas(tiket.waktu_selesai)}</b> ({hitungDurasiHari(tiket.waktu_lapor, tiket.waktu_selesai)})</>}
+                    {typeof tiket.biaya === "number" && tiket.biaya > 0 && <> · Biaya <b>Rp {new Intl.NumberFormat("id-ID").format(tiket.biaya)}</b></>}
+                  </div>
+                  {tiket.status === STATUS_TIDAK_DIJALANKAN && tiket.alasan_tidak_dijalankan && <div className="hd-info" style={{ background: "var(--red-50)", color: "var(--red-600)" }}>Tidak dijalankan: {tiket.alasan_tidak_dijalankan}</div>}
+                  {tiket.status === STATUS_DIHAPUS && <div className="hd-info" style={{ background: "var(--line)", color: "var(--ink-soft)" }}>Dihapus{tiket.dihapus_oleh ? ` oleh ${tiket.dihapus_oleh}` : ""}: {tiket.alasan_hapus || "-"}</div>}
+                </div>
+                <div className="hd-aksi">
+                  {tiket.foto_proses ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={tiket.foto_proses} alt="Foto hasil perbaikan" title="Foto hasil perbaikan" className="hd-hasil" onClick={() => setPreviewFoto(tiket.foto_proses!)} />
+                  ) : <span />}
+                  {tiket.status === STATUS_DIHAPUS ? (
+                    <button type="button" className="sa-btn is-soft" onClick={() => handlePulihkan(tiket)}>Pulihkan</button>
+                  ) : (
+                    <button type="button" className={`sa-btn ${terbuka ? "is-primary" : "is-soft"}`} onClick={() => handleBukaModal(tiket)} style={{ whiteSpace: "nowrap" }}>
+                      {terbuka ? "Tindak lanjuti" : "Lihat detail"}
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          }) : (
+            <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px" }}>
+              <div style={{ fontSize: "36px", marginBottom: "8px" }}>🎉</div>
+              <b style={{ color: "var(--ink-soft)" }}>Tidak ada tiket di kategori ini.</b>
             </div>
           )}
         </div>
