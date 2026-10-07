@@ -59,6 +59,8 @@ interface MasterAtk {
   harga?: Record<string, number>; // §103 harga per satuan (opsional)
 }
 const satuanDari = (m?: MasterAtk) => (m?.satuan && m.satuan.length ? m.satuan : ["PCS"]);
+/** §104 pilihan satuan saat memesan: bila master belum mengatur satuan -> semua satuan standar. */
+const pilihanSatuan = (m?: MasterAtk) => (m?.satuan && m.satuan.length ? m.satuan : SATUAN_ATK);
 /** "2 RIM" -- data lama tanpa satuan cukup angkanya. */
 const jumlahLabel = (it: AtkItemRequest) => `${it.jumlah}${it.satuan ? ` ${it.satuan.toLowerCase()}` : ""}`;
 
@@ -599,7 +601,8 @@ export default function AdminAtkPage() {
                         <td style={{ fontWeight: 700, color: "var(--ink)" }}>{item.nama_barang}</td>
                         <td>
                           <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                            {sat.map((s, i) => <span key={s} className="mst-satuan" style={i === 0 ? { background: "var(--info-50)", color: "var(--info)" } : undefined} title={i === 0 ? "Satuan default" : undefined}>{s}</span>)}
+                            {item.satuan?.length ? sat.map((s, i) => <span key={s} className="mst-satuan" style={i === 0 ? { background: "var(--info-50)", color: "var(--info)" } : undefined} title={i === 0 ? "Satuan default" : undefined}>{s}</span>)
+                              : <span style={{ fontSize: "11.5px", color: "var(--muted)" }} title="Karyawan bisa memilih semua satuan standar">Belum diatur · semua satuan</span>}
                           </div>
                         </td>
                         <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-soft)" }}>
@@ -714,7 +717,7 @@ export default function AdminAtkPage() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <select value={it.satuan || satuanDari(masterPerNama.get(it.nama_barang))[0]} onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, satuan: e.target.value } : x)))} aria-label="Satuan" style={{ padding: "5px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "12px", fontWeight: 700 }}>
-                      {Array.from(new Set([...satuanDari(masterPerNama.get(it.nama_barang)), ...(it.satuan ? [it.satuan] : [])])).map((s) => <option key={s} value={s}>{s}</option>)}
+                      {Array.from(new Set([...pilihanSatuan(masterPerNama.get(it.nama_barang)), ...(it.satuan ? [it.satuan] : [])])).map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <button type="button" aria-label="Kurangi" onClick={() => ubahJumlah(idx, -1)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", cursor: "pointer", fontWeight: 800 }}>−</button>
                     <input value={it.jumlah} inputMode="numeric" aria-label="Jumlah" onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, jumlah: e.target.value.replace(/\D/g, "") } : x)))} style={{ width: "44px", textAlign: "center", padding: "5px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 800 }} />

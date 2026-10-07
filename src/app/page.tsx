@@ -71,6 +71,8 @@ interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; des
 interface MasterAtk { id: string; nama_barang: string; foto_url?: string; satuan?: string[]; }
 interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; satuan?: string; }
 /** §103 "2 rim" -- data lama tanpa satuan cukup angkanya. */
+/** §104 satuan standar -- dipakai bila barang belum diatur satuannya di master (sama dengan SATUAN_ATK admin). */
+const SATUAN_ATK_STANDAR = ["PCS", "RIM", "PACK", "LUSIN", "BOX", "DUS KECIL", "DUS BESAR", "ROLL", "SET"];
 const jumlahAtkLabel = (it: AtkItemRequest) => `${it.jumlah}${it.satuan ? ` ${it.satuan.toLowerCase()}` : ""}`;
 interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; alasan_batal?: string; diubah_admin?: boolean; catatan_admin?: string; }
 interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; tanggal: string; jam_mulai: string; jam_selesai: string; status: string; }
@@ -2149,7 +2151,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                           {/* §103 pilih satuan sesuai master (rim / pcs / dus ...) */}
                           <select value={item.satuan || "PCS"} onChange={(e) => handleAtkItemChange(index, "satuan", e.target.value)} aria-label="Satuan"
                             style={{ padding: "7px 4px", borderRadius: "7px", border: "1px solid var(--line)", fontSize: "12px", background: "var(--surface)", color: "var(--ink)", outline: "none", maxWidth: "96px" }}>
-                            {Array.from(new Set([...(masterAtkList.find((m) => m.nama_barang === item.nama_barang)?.satuan || ["PCS"]), item.satuan || "PCS"])).map((s) => <option key={s} value={s}>{s}</option>)}
+                            {Array.from(new Set([...(masterAtkList.find((m) => m.nama_barang === item.nama_barang)?.satuan?.length ? masterAtkList.find((m) => m.nama_barang === item.nama_barang)!.satuan! : SATUAN_ATK_STANDAR), item.satuan || "PCS"])).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                           <input
                             type="text" placeholder="Catatan (opsional)"
