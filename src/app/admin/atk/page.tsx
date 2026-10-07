@@ -81,6 +81,8 @@ export default function AdminAtkPage() {
   const [catatanUbah, setCatatanUbah] = useState("");
   const [barangBaru, setBarangBaru] = useState("");
   const [jumlahBaru, setJumlahBaru] = useState("1");
+  const [noteBaru, setNoteBaru] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"AKTIF" | "SELESAI" | "BATAL" | "SEMUA">("AKTIF");
   const [menyimpanAksi, setMenyimpanAksi] = useState(false);
 
   useEffect(() => {
@@ -185,7 +187,7 @@ export default function AdminAtkPage() {
   };
 
   const bukaUbah = (req: AtkRequest) => {
-    setUbahReq(req); setItemsEdit((req.items || []).map((i) => ({ ...i }))); setCatatanUbah(""); setBarangBaru(""); setJumlahBaru("1");
+    setUbahReq(req); setItemsEdit((req.items || []).map((i) => ({ ...i }))); setCatatanUbah(""); setBarangBaru(""); setJumlahBaru("1"); setNoteBaru("");
   };
   const ubahJumlah = (idx: number, delta: number) => setItemsEdit((l) => l.map((it, i) => {
     if (i !== idx) return it;
@@ -198,21 +200,21 @@ export default function AdminAtkPage() {
     const jml = String(Math.max(1, parseInt(jumlahBaru, 10) || 1));
     setItemsEdit((l) => {
       const ada = l.findIndex((x) => x.nama_barang.toLowerCase() === nama.toLowerCase());
-      if (ada >= 0) return l.map((x, i) => (i === ada ? { ...x, jumlah: String((parseInt(x.jumlah, 10) || 0) + Number(jml)) } : x));
-      return [...l, { nama_barang: nama.toUpperCase(), jumlah: jml, deskripsi: "" }];
+      if (ada >= 0) return l.map((x, i) => (i === ada ? { ...x, jumlah: String((parseInt(x.jumlah, 10) || 0) + Number(jml)), deskripsi: noteBaru.trim() || x.deskripsi } : x));
+      return [...l, { nama_barang: nama.toUpperCase(), jumlah: jml, deskripsi: noteBaru.trim() }];
     });
-    setBarangBaru(""); setJumlahBaru("1");
+    setBarangBaru(""); setJumlahBaru("1"); setNoteBaru("");
   };
   const simpanUbah = async () => {
     if (!ubahReq) return;
-    const bersih = itemsEdit.filter((i) => i.nama_barang.trim()).map((i) => ({ ...i, jumlah: String(Math.max(1, parseInt(i.jumlah, 10) || 1)) }));
+    const bersih = itemsEdit.filter((i) => i.nama_barang.trim()).map((i) => ({ ...i, jumlah: String(Math.max(1, parseInt(i.jumlah, 10) || 1)), deskripsi: (i.deskripsi || "").trim() }));
     if (bersih.length === 0) return showToast("Minimal 1 barang. Untuk menolak semua, pakai Batalkan.", "warning");
-    const ringkas = (l: AtkItemRequest[]) => l.map((i) => `${i.nama_barang} x${i.jumlah}`).join(", ");
+    const ringkas = (l: AtkItemRequest[]) => l.map((i) => `${i.nama_barang} x${i.jumlah}${i.deskripsi ? ` (${i.deskripsi})` : ""}`).join(", ");
     if (ringkas(bersih) === ringkas(ubahReq.items || []) && !catatanUbah.trim()) { setUbahReq(null); return; }
     setMenyimpanAksi(true);
     try {
       await updateDoc(doc(db, "ga_atk_requests", ubahReq.id), {
-        items: bersih, diubah_admin: true, catatan_admin: catatanUbah.trim() || "Jumlah / daftar barang disesuaikan Admin GA",
+        items: bersih, diubah_admin: true, catatan_admin: catatanUbah.trim(),
         riwayat_ubah: arrayUnion({ oleh: adminName, waktu: Timestamp.now(), sebelum: ringkas(ubahReq.items || []), sesudah: ringkas(bersih), catatan: catatanUbah.trim() }),
       });
       showToast(`Barang pesanan ${ubahReq.resi} diperbarui.`, "success");
@@ -367,13 +369,48 @@ export default function AdminAtkPage() {
   const formatJam = (ts: Timestamp | null | undefined) => ts ? new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
 
   // Filtering
-  const filteredRequests = atkRequests.filter(req => req.resi.toLowerCase().includes(searchQuery.toLowerCase()) || req.nama_pemohon.toLowerCase().includes(searchQuery.toLowerCase()));
+  const kelompokStatus = (s: string) => (s === STATUS_BATAL ? "BATAL" : s === STATUS_SELESAI ? "SELESAI" : "AKTIF");
+  const jumlahStatus = (k: string) => atkRequests.filter((r) => k === "SEMUA" || kelompokStatus(r.status) === k).length;
+  const filteredRequests = atkRequests.filter(req => (filterStatus === "SEMUA" || kelompokStatus(req.status) === filterStatus)
+    && (req.resi.toLowerCase().includes(searchQuery.toLowerCase()) || req.nama_pemohon.toLowerCase().includes(searchQuery.toLowerCase()) || (req.departemen || "").toLowerCase().includes(searchQuery.toLowerCase())));
+  // catatan default versi lama tidak perlu ditampilkan ulang
+  const catatanTampil = (c?: string) => (c && c !== "Jumlah / daftar barang disesuaikan Admin GA" ? c : "");
 
   if (!isReady) return null;
 
   return (
     <AdminShell title="Gudang ATK" subtitle="Pemenuhan permintaan alat tulis kantor dan master data logistik SIBM" userName={adminName || "Admin"}>
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{__html: `
+        /* §102 daftar pesanan ATK berbentuk kartu */
+        .atk-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+        .atk-filter { display: flex; gap: 6px; flex-wrap: wrap; }
+        .atk-chip { border: 1px solid var(--line); background: var(--bg); color: var(--ink-soft); border-radius: 999px; padding: 8px 13px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .atk-chip span { opacity: .7; margin-left: 3px; }
+        .atk-chip.is-on { background: var(--ink); color: var(--surface); border-color: transparent; }
+        .atk-cari { height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px; outline: none; flex: 1 1 200px; max-width: 300px; min-width: 0; }
+        .atk-card { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 16px; align-items: start; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--bg); }
+        .atk-card.is-done { grid-template-columns: minmax(0, 1fr); opacity: .85; }
+        .atk-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .atk-resi { font-weight: 900; color: var(--accent); letter-spacing: .3px; white-space: nowrap; font-size: 14px; }
+        .atk-status { font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; white-space: nowrap; }
+        .atk-waktu { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+        .atk-pemohon { font-size: 13px; color: var(--ink); margin-top: 4px; }
+        .atk-pemohon span { color: var(--muted); }
+        .atk-items { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+        .atk-items li { display: flex; gap: 10px; align-items: baseline; }
+        .atk-qty { min-width: 30px; text-align: right; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; font-size: 13px; }
+        .atk-nama { display: block; font-weight: 700; font-size: 13px; color: var(--ink); }
+        .atk-note { display: block; font-size: 11.5px; color: var(--muted); font-style: italic; }
+        .atk-info { margin-top: 10px; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 8px; display: inline-block; }
+        .atk-aksi { display: flex; flex-direction: column; gap: 6px; }
+        .atk-btn { height: 34px; border-radius: 10px; border: 1px solid var(--line); font-weight: 800; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        @media (max-width: 640px) {
+          .atk-card { grid-template-columns: minmax(0, 1fr); }
+          .atk-aksi { flex-direction: row; flex-wrap: wrap; }
+          .atk-aksi .atk-btn { flex: 1 1 auto; }
+          .atk-waktu { margin-left: 0; width: 100%; }
+          .atk-cari { max-width: none; }
+        }
       `}} />
       <div>
 
@@ -405,89 +442,72 @@ export default function AdminAtkPage() {
         {activeTab === "REQUEST" && (
           <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)" }}>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-              <input
-                type="text"
-                placeholder="🔍 Cari Resi / Nama Pemohon..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ padding: "12px 16px", borderRadius: "12px", border: "1px solid var(--line)", width: "100%", maxWidth: "300px", fontSize: "14px", background: "var(--bg)", outline: "none" }}
-              />
-              <button onClick={handleExportExcel} style={{ background: "var(--ok-solid)", color: "#fff", padding: "12px 18px", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 6px rgba(22,163,74,0.2)" }}>
-                <span>📊</span> Export Excel
-              </button>
+            <div className="atk-toolbar">
+              <div className="atk-filter" role="tablist" aria-label="Filter status pesanan">
+                {([["AKTIF", "Aktif"], ["SELESAI", "Selesai"], ["BATAL", "Dibatalkan"], ["SEMUA", "Semua"]] as const).map(([k, l]) => (
+                  <button key={k} type="button" role="tab" aria-selected={filterStatus === k} className={`atk-chip${filterStatus === k ? " is-on" : ""}`} onClick={() => setFilterStatus(k)}>
+                    {l} <span>{jumlahStatus(k)}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", flex: "1 1 260px", justifyContent: "flex-end" }}>
+                <input type="text" placeholder="Cari resi, pemohon, PT..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="atk-cari" aria-label="Cari pesanan" />
+                <button onClick={handleExportExcel} className="sa-btn is-soft" style={{ height: "40px" }}>📊 Export Excel</button>
+              </div>
             </div>
 
-            <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
-                <thead style={{ background: "var(--accent-50)", color: "var(--accent)" }}>
-                  <tr>
-                    <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)", whiteSpace: "nowrap" }}>No. Resi</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)" }}>Pemohon</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)", minWidth: "250px" }}>Daftar Barang Diminta</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)" }}>Waktu Request</th>
-                    <th style={{ padding: "15px", borderBottom: "2px solid rgba(124,58,237,0.35)", textAlign: "center" }}>Status & Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRequests.length > 0 ? filteredRequests.map((req) => {
-                    const isBatal = req.status === STATUS_BATAL;
-                    const isSelesai = req.status === STATUS_SELESAI || isBatal;
-                    const isProses = req.status === "Sedang Disiapkan";
-                    return (
-                      <tr key={req.id} style={{ borderBottom: "1px solid var(--line)", background: isSelesai ? "var(--bg)" : "var(--surface)" }}>
-                        <td style={{ padding: "15px", fontWeight: "900", color: "var(--accent)", letterSpacing: "0.5px" }}>{req.resi}</td>
-                        <td style={{ padding: "15px" }}>
-                          <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{req.nama_pemohon}</div>
-                          <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px", background: "var(--line)", padding: "2px 6px", borderRadius: "4px", display: "inline-block" }}>{req.departemen}</div>
-                        </td>
-                        <td style={{ padding: "15px", opacity: isBatal ? 0.6 : 1, textDecoration: isBatal ? "line-through" : "none" }}>
-                          {req.diubah_admin && !isBatal && <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--warn)", marginBottom: "6px" }}>✎ Disesuaikan admin{req.catatan_admin ? `: ${req.catatan_admin}` : ""}</div>}
-                          <ul style={{ margin: 0, paddingLeft: "15px", color: "var(--ink-soft)" }}>
-                            {req.items?.map((item, idx) => (
-                              <li key={idx} style={{ marginBottom: "5px" }}>
-                                <b>{item.nama_barang}</b> ({item.jumlah})
-                                {item.deskripsi && <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>Note: {item.deskripsi}</div>}
-                              </li>
-                            ))}
-                          </ul>
-                        </td>
-                        <td style={{ padding: "15px", color: "var(--muted)" }}>{formatJam(req.waktu_request)}</td>
-                        <td style={{ padding: "15px", textAlign: "center" }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center" }}>
-                            <span style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", background: isBatal ? "var(--line)" : isSelesai ? "var(--ok-50)" : isProses ? "var(--info-50)" : "var(--red-50)", color: isBatal ? "var(--ink-soft)" : isSelesai ? "var(--ok)" : isProses ? "var(--info)" : "var(--red-600)", whiteSpace: "nowrap" }}>
-                              {req.status.toUpperCase()}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {filteredRequests.length > 0 ? filteredRequests.map((req) => {
+                const isBatal = req.status === STATUS_BATAL;
+                const isSelesai = req.status === STATUS_SELESAI || isBatal;
+                const isProses = req.status === "Sedang Disiapkan";
+                const tone = isBatal ? { bg: "var(--line)", fg: "var(--ink-soft)" } : req.status === STATUS_SELESAI ? { bg: "var(--ok-50)", fg: "var(--ok)" } : isProses ? { bg: "var(--info-50)", fg: "var(--info)" } : { bg: "var(--red-50)", fg: "var(--red-600)" };
+                const catatan = catatanTampil(req.catatan_admin);
+                return (
+                  <article key={req.id} className={`atk-card${isSelesai ? " is-done" : ""}`}>
+                    <div className="atk-main">
+                      <div className="atk-head">
+                        <span className="atk-resi">{req.resi}</span>
+                        <span className="atk-status" style={{ background: tone.bg, color: tone.fg }}>{req.status}</span>
+                        <span className="atk-waktu">{formatJam(req.waktu_request)}</span>
+                      </div>
+                      <div className="atk-pemohon"><b>{req.nama_pemohon}</b><span> · {req.departemen}</span></div>
+                      <ul className="atk-items" style={{ opacity: isBatal ? 0.55 : 1, textDecoration: isBatal ? "line-through" : "none" }}>
+                        {req.items?.map((item, idx) => (
+                          <li key={idx}>
+                            <span className="atk-qty">{item.jumlah}×</span>
+                            <span style={{ minWidth: 0 }}>
+                              <span className="atk-nama">{item.nama_barang}</span>
+                              {item.deskripsi && <span className="atk-note">{item.deskripsi}</span>}
                             </span>
-                            {isBatal && <div style={{ fontSize: "11px", color: "var(--muted)", maxWidth: "180px" }}>{req.alasan_batal}{req.dibatalkan_oleh ? ` — ${req.dibatalkan_oleh}` : ""}</div>}
-                            {!isSelesai && (
-                              <button
-                                onClick={() => handleUpdateStatus(req.id, req.status)}
-                                disabled={sedangUpdateId === req.id}
-                                style={{ padding: "6px 12px", background: sedangUpdateId === req.id ? "var(--muted-solid)" : (isProses ? "var(--ok-solid)" : "var(--info-solid)"), color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: sedangUpdateId === req.id ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
-                              >
-                                {sedangUpdateId === req.id ? "Mengirim notifikasi..." : (isProses ? "Tandai Selesai ✓" : "Mulai Siapkan ➔")}
-                              </button>
-                            )}
-                            {!isSelesai && (
-                              <div style={{ display: "flex", gap: "6px" }}>
-                                <button type="button" onClick={() => bukaUbah(req)} style={{ padding: "5px 10px", background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.25)", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>✎ Ubah Barang</button>
-                                <button type="button" onClick={() => { setBatalReq(req); setAlasanBatal(""); }} style={{ padding: "5px 10px", background: "var(--red-50)", color: "var(--red-600)", border: "1px solid rgba(220,38,38,0.25)", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>✕ Batalkan</button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  }) : (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: "center", padding: "50px 20px", color: "var(--muted)" }}>
-                        <div style={{ fontSize: "35px", marginBottom: "10px" }}>📭</div>
-                        {searchQuery ? "Data tidak ditemukan." : "Belum ada pesanan ATK yang masuk."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                          </li>
+                        ))}
+                      </ul>
+                      {req.diubah_admin && !isBatal && <div className="atk-info" style={{ color: "var(--warn)", background: "var(--warn-50)" }}>✎ Disesuaikan admin{catatan ? ` — ${catatan}` : ""}</div>}
+                      {isBatal && <div className="atk-info" style={{ color: "var(--ink-soft)", background: "var(--line)" }}>Dibatalkan{req.dibatalkan_oleh ? ` oleh ${req.dibatalkan_oleh}` : ""}: {req.alasan_batal || "-"}</div>}
+                    </div>
+                    {!isSelesai && (
+                      <div className="atk-aksi">
+                        <button
+                          onClick={() => handleUpdateStatus(req.id, req.status)}
+                          disabled={sedangUpdateId === req.id}
+                          className="atk-btn"
+                          style={{ background: sedangUpdateId === req.id ? "var(--muted-solid)" : (isProses ? "var(--ok-solid)" : "var(--info-solid)"), color: "#fff", borderColor: "transparent" }}
+                        >
+                          {sedangUpdateId === req.id ? "Mengirim notifikasi..." : (isProses ? "Tandai Selesai ✓" : "Mulai Siapkan ➔")}
+                        </button>
+                        <button type="button" onClick={() => bukaUbah(req)} className="atk-btn" style={{ background: "var(--warn-50)", color: "var(--warn)" }}>✎ Ubah Barang</button>
+                        <button type="button" onClick={() => { setBatalReq(req); setAlasanBatal(""); }} className="atk-btn" style={{ background: "transparent", color: "var(--red-600)" }}>✕ Batalkan</button>
+                      </div>
+                    )}
+                  </article>
+                );
+              }) : (
+                <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px" }}>
+                  <div style={{ fontSize: "35px", marginBottom: "10px" }}>📭</div>
+                  {searchQuery ? "Data tidak ditemukan." : filterStatus === "AKTIF" ? "Tidak ada pesanan yang perlu diproses." : "Belum ada pesanan pada filter ini."}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -610,7 +630,7 @@ export default function AdminAtkPage() {
                 <div key={idx} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gap: "8px", alignItems: "center", padding: "8px 10px", borderRadius: "10px", background: "var(--bg)", border: "1px solid var(--line)" }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.nama_barang}</div>
-                    {it.deskripsi && <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>{it.deskripsi}</div>}
+                    <input value={it.deskripsi || ""} onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, deskripsi: e.target.value } : x)))} placeholder="Catatan barang (opsional)" aria-label={`Catatan ${it.nama_barang}`} style={{ width: "100%", marginTop: "4px", padding: "5px 8px", borderRadius: "7px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "11.5px", boxSizing: "border-box" }} />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                     <button type="button" aria-label="Kurangi" onClick={() => ubahJumlah(idx, -1)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", cursor: "pointer", fontWeight: 800 }}>−</button>
@@ -627,8 +647,9 @@ export default function AdminAtkPage() {
               <datalist id="atk-master-list">{masterAtkList.map((m) => <option key={m.id} value={m.nama_barang} />)}</datalist>
               <input value={jumlahBaru} inputMode="numeric" onChange={(e) => setJumlahBaru(e.target.value.replace(/\D/g, ""))} aria-label="Jumlah barang baru" style={{ padding: "9px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", textAlign: "center" }} />
               <button type="button" onClick={tambahItemEdit} className="sa-btn is-soft">+ Tambah</button>
+              <input value={noteBaru} onChange={(e) => setNoteBaru(e.target.value)} placeholder="Catatan barang baru (opsional), mis. share KEJS, SML" aria-label="Catatan barang baru" style={{ gridColumn: "1 / -1", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "12.5px", minWidth: 0 }} />
             </div>
-            <input value={catatanUbah} onChange={(e) => setCatatanUbah(e.target.value)} placeholder="Catatan untuk pemohon (opsional), mis. stok map bening tinggal 1" style={{ width: "100%", marginTop: "10px", padding: "9px 10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px", boxSizing: "border-box" }} />
+            <input value={catatanUbah} onChange={(e) => setCatatanUbah(e.target.value)} placeholder="Catatan umum untuk pemohon (opsional), mis. stok map bening tinggal 1" style={{ width: "100%", marginTop: "10px", padding: "9px 10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
               <button type="button" onClick={() => setUbahReq(null)} disabled={menyimpanAksi} className="sa-btn is-soft" style={{ flex: 1 }}>Batal</button>
               <button type="button" onClick={simpanUbah} disabled={menyimpanAksi} className="sa-btn is-primary" style={{ flex: 1 }}>{menyimpanAksi ? "Menyimpan..." : "Simpan perubahan"}</button>
