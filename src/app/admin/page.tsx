@@ -91,7 +91,9 @@ const MENU_GROUPS: MenuGroup[] = [
     tone: "teal",
     items: [
       { title: "Okupansi Gedung", desc: "Luas lantai, tenant & area kosong", path: "/admin/okupansi", icon: "building" },
-      { title: "Anggaran & Realisasi", desc: "Pagu vs biaya aktual + perbaikan", path: "/admin/anggaran", icon: "chart" },
+      { title: "Anggaran & Realisasi", desc: "RAB CAPEX/OPEX vs biaya aktual", path: "/admin/anggaran", icon: "chart" },
+      { title: "Project Tracker", desc: "Target, kuartal, task & review mingguan", path: "/admin/project-tracker", icon: "clipboardList" },
+      { title: "Dashboard Eksekutif", desc: "Pratinjau tampilan Eksekutif Tenant", path: "/dashboard/eksekutif", icon: "activity" },
       { title: "Laporan Eksekutif", desc: "Rekap bulanan PDF/print", path: "/admin/report", icon: "fileText" },
       { title: "Kesehatan Notifikasi", desc: "Status cron reminder", path: "/admin/monitor-cron", icon: "activity" },
     ],

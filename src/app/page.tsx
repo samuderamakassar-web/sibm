@@ -125,6 +125,7 @@ function pathDashboardUntukDept(dept: string): string | null {
   if (dept === "Security") return "/dashboard/security";
   if (dept === "Driver") return "/dashboard/driver";
   if (dept === "QHSE") return "/dashboard/qhse";
+  if (dept === "Eksekutif Tenant") return "/dashboard/eksekutif"; // §108
   return null;
 }
 
@@ -917,6 +918,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       localStorage.setItem("pic_dept", uData.departemen);
       localStorage.setItem("pic_role", uData.role);
       localStorage.setItem("pic_daerah", uData.daerah || "");
+      localStorage.setItem("pic_unit", uData.unit_bisnis || ""); // §108 PT Eksekutif Tenant
 
       const tujuan = pathDashboardUntukDept(uData.departemen);
       if (tujuan) router.push(tujuan);

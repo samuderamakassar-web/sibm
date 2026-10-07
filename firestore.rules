@@ -77,6 +77,16 @@ service cloud.firestore {
       return isAdmin() && myDaerah() == 'PUSAT';
     }
 
+    // §108 Eksekutif Tenant (pihak tenant/eksternal): lihat saja, terbatas.
+    function isEksekutif() {
+      return hasProfile() && myProfile().get('departemen', '') == 'Eksekutif Tenant';
+    }
+
+    // Koleksi non-publik yang boleh dibaca Eksekutif Tenant (dashboard/eksekutif).
+    function koleksiBacaEksekutif() {
+      return ['okupansi_gedung', 'project_tracker'];
+    }
+
     // --------------------------------------------------------------------
     // users_master -- read PUBLIC (dipakai portal utama tanpa login buat
     // foto profil staf & kontak Admin GA/QHSE -- data ini sendiri sudah
@@ -149,7 +159,9 @@ service cloud.firestore {
           // §80 Booking kendaraan & ruangan
           'booking',
           // §88 Okupansi gedung, §89 Anggaran & realisasi (khusus akun staf, tidak dibaca publik)
-          'okupansi_gedung', 'anggaran', 'realisasi_biaya'
+          'okupansi_gedung', 'anggaran', 'realisasi_biaya',
+          // §106 RAB, §107 Project Tracker
+          'anggaran_rab', 'project_tracker'
         ];
     }
 
@@ -180,9 +192,10 @@ service cloud.firestore {
     match /{col}/{docId} {
       // §72 Tahap 2: BACA collection non-publik (patroli, SBO, poin, token FCM, survei, laptop,
       // legalitas, pemantauan jam kerja, notifikasi pribadi, dst.) wajib akun staf terdaftar.
-      allow read: if col in koleksiOperasional() && (col in koleksiBacaPublik() || hasProfile());
-      allow create: if col in koleksiOperasional() && (col in koleksiFormPublik() || hasProfile());
-      allow update, delete: if col in koleksiOperasional() && hasProfile();
+      // §108 Eksekutif Tenant: akun read-only -- hanya koleksi publik + koleksiBacaEksekutif(), tanpa hak tulis.
+      allow read: if col in koleksiOperasional() && (col in koleksiBacaPublik() || (hasProfile() && (!isEksekutif() || col in koleksiBacaEksekutif())));
+      allow create: if col in koleksiOperasional() && (col in koleksiFormPublik() || (hasProfile() && !isEksekutif()));
+      allow update, delete: if col in koleksiOperasional() && hasProfile() && !isEksekutif();
     }
 
     // --------------------------------------------------------------------
