@@ -70,7 +70,7 @@ interface SecurityShift { current: string[]; next: string[]; currentName: string
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
 interface MasterAtk { id: string; nama_barang: string; foto_url?: string; }
 interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; }
-interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; }
+interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; alasan_batal?: string; diubah_admin?: boolean; catatan_admin?: string; }
 interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; tanggal: string; jam_mulai: string; jam_selesai: string; status: string; }
 
 // ==========================================
@@ -2199,7 +2199,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                   <div style={{ background: "#fdf4ff", border: "1px solid #fbb6ce", padding: "20px", borderRadius: "16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px", borderBottom: "1px solid #fed7e2", paddingBottom: "10px" }}>
                       <span style={{ fontWeight: "900", color: "#97266d", fontSize: "18px" }}>📦 {hasilAtk.resi}</span>
-                      <Badge tone={hasilAtk.status.includes("Selesai") ? "success" : "warning"}>{hasilAtk.status.toUpperCase()}</Badge>
+                      <Badge tone={hasilAtk.status.includes("Selesai") ? "success" : hasilAtk.status === "Dibatalkan" ? "danger" : "warning"}>{hasilAtk.status.toUpperCase()}</Badge>
                     </div>
                     <div style={{ fontSize: "13px", color: "var(--ink-soft)", lineHeight: "1.8", marginBottom: "15px" }}>
                       <div>Pemohon: <b>{hasilAtk.nama_pemohon}</b> ({hasilAtk.departemen})</div>
@@ -2215,6 +2215,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       ))}
                     </ul>
                     {hasilAtk.status === "Menunggu Disiapkan" && <div style={{ fontSize: "12px", color: "#dd6b20", marginTop: "15px", fontStyle: "italic" }}>* Silakan tunggu info lebih lanjut, GA sedang memproses.</div>}
+                    {hasilAtk.status === "Dibatalkan" && <div style={{ fontSize: "12.5px", color: "#c53030", marginTop: "15px", fontWeight: 700 }}>Pesanan dibatalkan Admin GA{hasilAtk.alasan_batal ? `: ${hasilAtk.alasan_batal}` : "."}</div>}
+                    {hasilAtk.diubah_admin && hasilAtk.status !== "Dibatalkan" && <div style={{ fontSize: "12px", color: "#b7791f", marginTop: "10px" }}>✎ Daftar barang disesuaikan Admin GA{hasilAtk.catatan_admin ? `: ${hasilAtk.catatan_admin}` : "."}</div>}
                   </div>
                 ) : (
                   <div style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Masukkan kode resi yang Anda dapatkan saat request untuk melacak barang.</div>

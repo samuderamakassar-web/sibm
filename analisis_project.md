@@ -2991,3 +2991,10 @@ SUDAH DI-DEPLOY. Keluhan user: sulit membaca mana yang sedang servis/laporan ser
 
 ## 100. Riwayat Kendaraan: Kolom Kendaraan Selalu Tampil (6 Oktober 2026)
 SUDAH DI-DEPLOY. Permintaan user: tabel Riwayat Aktivitas tetap menampilkan kolom Kendaraan (plat) walau hanya 1 kendaraan dipilih (sebelumnya disembunyikan bila 1). Export Excel juga selalu menyertakan kolom Kendaraan (plat) dan memakai label jenis baru (§99).
+
+## 101. Gudang ATK: Batalkan Pesanan & Ubah Barang (7 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: pesanan ATK masuk bisa dibatalkan (tidak diproses) dan item bisa ditambah/dikurangi admin.
+- /admin/atk Pesanan Masuk: pesanan yang belum selesai punya tombol "✎ Ubah Barang" & "✕ Batalkan".
+- Batalkan: modal alasan wajib (chip cepat: Stok kosong / Permintaan ganda / Tidak sesuai ketentuan / Dibatalkan pemohon) -> `status: "Dibatalkan"`, `alasan_batal`, `dibatalkan_oleh`, `waktu_batal`; email `buildAtkDibatalkanEmailHtml` ke pemohon (lookup employees_directory, bila ada email). Baris dicoret & badge abu-abu; tidak dihitung di badge Pesanan Masuk (yang lain: dashboard admin hanya menghitung "Menunggu Disiapkan" -> aman).
+- Ubah Barang: modal daftar item dengan −/+ / ketik jumlah / Hapus, tambah barang dari master_atk (datalist, nama sama -> jumlah digabung), catatan opsional untuk pemohon. Simpan -> `items`, `diubah_admin: true`, `catatan_admin`, `riwayat_ubah` (arrayUnion {oleh, waktu, sebelum, sesudah, catatan}). Minimal 1 barang (menolak semua = Batalkan). Tabel admin menampilkan "✎ Disesuaikan admin: catatan"; email "Siap Diambil" otomatis memakai daftar barang terbaru.
+- Portal lacak resi: badge merah "DIBATALKAN" + alasan; catatan "Daftar barang disesuaikan Admin GA".

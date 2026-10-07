@@ -2,11 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, updateDoc, doc, addDoc, deleteDoc, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, updateDoc, doc, addDoc, deleteDoc, Timestamp, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { isAdministrator } from "../../../hooks/useAuthGuard";
 import { db } from "../../../lib/firebase";
 import { kirimEmail } from "../../../lib/notify";
-import { buildAtkSiapEmailHtml } from "../../../lib/emailTemplates";
+import { buildAtkDibatalkanEmailHtml, buildAtkSiapEmailHtml } from "../../../lib/emailTemplates";
+import Modal from "../../../components/ui/Modal";
+
+// §101: status akhir tambahan -- pesanan tidak diproses
+const STATUS_BATAL = "Dibatalkan";
+const STATUS_SELESAI = "Selesai / Diambil";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
@@ -36,6 +41,10 @@ interface AtkRequest {
   items: AtkItemRequest[];
   status: string;
   waktu_request: Timestamp | null;
+  alasan_batal?: string;
+  dibatalkan_oleh?: string;
+  diubah_admin?: boolean;
+  catatan_admin?: string;
 }
 
 interface MasterAtk {
@@ -64,6 +73,15 @@ export default function AdminAtkPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [daftarKontak, setDaftarKontak] = useState<KontakKaryawan[]>([]);
   const [sedangUpdateId, setSedangUpdateId] = useState<string | null>(null);
+  // §101 batal & ubah barang
+  const [batalReq, setBatalReq] = useState<AtkRequest | null>(null);
+  const [alasanBatal, setAlasanBatal] = useState("");
+  const [ubahReq, setUbahReq] = useState<AtkRequest | null>(null);
+  const [itemsEdit, setItemsEdit] = useState<AtkItemRequest[]>([]);
+  const [catatanUbah, setCatatanUbah] = useState("");
+  const [barangBaru, setBarangBaru] = useState("");
+  const [jumlahBaru, setJumlahBaru] = useState("1");
+  const [menyimpanAksi, setMenyimpanAksi] = useState(false);
 
   useEffect(() => {
     // 1. Verifikasi Auth
@@ -141,6 +159,66 @@ export default function AdminAtkPage() {
         setSedangUpdateId(null);
       }
     }
+  };
+
+  // ==========================================
+  // §101 BATALKAN & UBAH BARANG
+  // ==========================================
+  const simpanBatal = async () => {
+    if (!batalReq) return;
+    if (!alasanBatal.trim()) return showToast("Isi alasan pembatalan.", "warning");
+    setMenyimpanAksi(true);
+    try {
+      await updateDoc(doc(db, "ga_atk_requests", batalReq.id), {
+        status: STATUS_BATAL, alasan_batal: alasanBatal.trim(), dibatalkan_oleh: adminName, waktu_batal: serverTimestamp(),
+      });
+      showToast(`Pesanan ${batalReq.resi} dibatalkan.`, "success");
+      const kontak = cariKontakKaryawan(batalReq.nama_pemohon);
+      if (kontak?.email) {
+        kirimEmail(kontak.email, `Permintaan ATK Dibatalkan - Resi ${batalReq.resi}`, buildAtkDibatalkanEmailHtml({
+          namaPemohon: batalReq.nama_pemohon, kodeResi: batalReq.resi, departemen: batalReq.departemen, alasan: alasanBatal.trim(), items: batalReq.items || [],
+        }), batalReq.nama_pemohon).catch((e) => console.error("[notify] email batal ATK:", e));
+      }
+      setBatalReq(null); setAlasanBatal("");
+    } catch (e) { console.error(e); showToast("Gagal membatalkan pesanan.", "error"); }
+    finally { setMenyimpanAksi(false); }
+  };
+
+  const bukaUbah = (req: AtkRequest) => {
+    setUbahReq(req); setItemsEdit((req.items || []).map((i) => ({ ...i }))); setCatatanUbah(""); setBarangBaru(""); setJumlahBaru("1");
+  };
+  const ubahJumlah = (idx: number, delta: number) => setItemsEdit((l) => l.map((it, i) => {
+    if (i !== idx) return it;
+    const n = Math.max(1, (parseInt(it.jumlah, 10) || 1) + delta);
+    return { ...it, jumlah: String(n) };
+  }));
+  const tambahItemEdit = () => {
+    const nama = barangBaru.trim();
+    if (!nama) return showToast("Pilih / ketik nama barang.", "warning");
+    const jml = String(Math.max(1, parseInt(jumlahBaru, 10) || 1));
+    setItemsEdit((l) => {
+      const ada = l.findIndex((x) => x.nama_barang.toLowerCase() === nama.toLowerCase());
+      if (ada >= 0) return l.map((x, i) => (i === ada ? { ...x, jumlah: String((parseInt(x.jumlah, 10) || 0) + Number(jml)) } : x));
+      return [...l, { nama_barang: nama.toUpperCase(), jumlah: jml, deskripsi: "" }];
+    });
+    setBarangBaru(""); setJumlahBaru("1");
+  };
+  const simpanUbah = async () => {
+    if (!ubahReq) return;
+    const bersih = itemsEdit.filter((i) => i.nama_barang.trim()).map((i) => ({ ...i, jumlah: String(Math.max(1, parseInt(i.jumlah, 10) || 1)) }));
+    if (bersih.length === 0) return showToast("Minimal 1 barang. Untuk menolak semua, pakai Batalkan.", "warning");
+    const ringkas = (l: AtkItemRequest[]) => l.map((i) => `${i.nama_barang} x${i.jumlah}`).join(", ");
+    if (ringkas(bersih) === ringkas(ubahReq.items || []) && !catatanUbah.trim()) { setUbahReq(null); return; }
+    setMenyimpanAksi(true);
+    try {
+      await updateDoc(doc(db, "ga_atk_requests", ubahReq.id), {
+        items: bersih, diubah_admin: true, catatan_admin: catatanUbah.trim() || "Jumlah / daftar barang disesuaikan Admin GA",
+        riwayat_ubah: arrayUnion({ oleh: adminName, waktu: Timestamp.now(), sebelum: ringkas(ubahReq.items || []), sesudah: ringkas(bersih), catatan: catatanUbah.trim() }),
+      });
+      showToast(`Barang pesanan ${ubahReq.resi} diperbarui.`, "success");
+      setUbahReq(null);
+    } catch (e) { console.error(e); showToast("Gagal menyimpan perubahan.", "error"); }
+    finally { setMenyimpanAksi(false); }
   };
 
   // Cari kontak (no_wa/email) karyawan berdasarkan nama_pemohon (cocok tanpa peduli besar/kecil huruf)
@@ -307,7 +385,7 @@ export default function AdminAtkPage() {
           >
             📋 Pesanan Masuk
             <span style={{ background: activeTab === "REQUEST" ? "var(--accent-50)" : "var(--line)", color: activeTab === "REQUEST" ? "var(--accent)" : "var(--ink-soft)", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>
-              {atkRequests.filter(r => r.status !== "Selesai / Diambil").length}
+              {atkRequests.filter(r => r.status !== STATUS_SELESAI && r.status !== STATUS_BATAL).length}
             </span>
           </button>
           <button
@@ -353,7 +431,8 @@ export default function AdminAtkPage() {
                 </thead>
                 <tbody>
                   {filteredRequests.length > 0 ? filteredRequests.map((req) => {
-                    const isSelesai = req.status === "Selesai / Diambil";
+                    const isBatal = req.status === STATUS_BATAL;
+                    const isSelesai = req.status === STATUS_SELESAI || isBatal;
                     const isProses = req.status === "Sedang Disiapkan";
                     return (
                       <tr key={req.id} style={{ borderBottom: "1px solid var(--line)", background: isSelesai ? "var(--bg)" : "var(--surface)" }}>
@@ -362,7 +441,8 @@ export default function AdminAtkPage() {
                           <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{req.nama_pemohon}</div>
                           <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px", background: "var(--line)", padding: "2px 6px", borderRadius: "4px", display: "inline-block" }}>{req.departemen}</div>
                         </td>
-                        <td style={{ padding: "15px" }}>
+                        <td style={{ padding: "15px", opacity: isBatal ? 0.6 : 1, textDecoration: isBatal ? "line-through" : "none" }}>
+                          {req.diubah_admin && !isBatal && <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--warn)", marginBottom: "6px" }}>✎ Disesuaikan admin{req.catatan_admin ? `: ${req.catatan_admin}` : ""}</div>}
                           <ul style={{ margin: 0, paddingLeft: "15px", color: "var(--ink-soft)" }}>
                             {req.items?.map((item, idx) => (
                               <li key={idx} style={{ marginBottom: "5px" }}>
@@ -375,9 +455,10 @@ export default function AdminAtkPage() {
                         <td style={{ padding: "15px", color: "var(--muted)" }}>{formatJam(req.waktu_request)}</td>
                         <td style={{ padding: "15px", textAlign: "center" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center" }}>
-                            <span style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", background: isSelesai ? "var(--ok-50)" : isProses ? "var(--info-50)" : "var(--red-50)", color: isSelesai ? "var(--ok)" : isProses ? "var(--info)" : "var(--red-600)", whiteSpace: "nowrap" }}>
+                            <span style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", fontWeight: "bold", background: isBatal ? "var(--line)" : isSelesai ? "var(--ok-50)" : isProses ? "var(--info-50)" : "var(--red-50)", color: isBatal ? "var(--ink-soft)" : isSelesai ? "var(--ok)" : isProses ? "var(--info)" : "var(--red-600)", whiteSpace: "nowrap" }}>
                               {req.status.toUpperCase()}
                             </span>
+                            {isBatal && <div style={{ fontSize: "11px", color: "var(--muted)", maxWidth: "180px" }}>{req.alasan_batal}{req.dibatalkan_oleh ? ` — ${req.dibatalkan_oleh}` : ""}</div>}
                             {!isSelesai && (
                               <button
                                 onClick={() => handleUpdateStatus(req.id, req.status)}
@@ -386,6 +467,12 @@ export default function AdminAtkPage() {
                               >
                                 {sedangUpdateId === req.id ? "Mengirim notifikasi..." : (isProses ? "Tandai Selesai ✓" : "Mulai Siapkan ➔")}
                               </button>
+                            )}
+                            {!isSelesai && (
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <button type="button" onClick={() => bukaUbah(req)} style={{ padding: "5px 10px", background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.25)", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>✎ Ubah Barang</button>
+                                <button type="button" onClick={() => { setBatalReq(req); setAlasanBatal(""); }} style={{ padding: "5px 10px", background: "var(--red-50)", color: "var(--red-600)", border: "1px solid rgba(220,38,38,0.25)", borderRadius: "8px", fontWeight: "bold", fontSize: "11px", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>✕ Batalkan</button>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -490,6 +577,65 @@ export default function AdminAtkPage() {
         )}
 
       </div>
+
+      {/* §101 MODAL BATALKAN */}
+      <Modal open={!!batalReq} onClose={() => !menyimpanAksi && setBatalReq(null)} maxWidth="440px">
+        {batalReq && (
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>Batalkan pesanan {batalReq.resi}?</h3>
+            <p style={{ margin: "0 0 14px", fontSize: "13px", color: "var(--muted)" }}>{batalReq.nama_pemohon} · {batalReq.departemen}. Pemohon diberi tahu lewat email (bila terdaftar) beserta alasannya.</p>
+            <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Alasan pembatalan *</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "6px 0 8px" }}>
+              {["Stok kosong", "Permintaan ganda", "Tidak sesuai ketentuan", "Dibatalkan pemohon"].map((a) => (
+                <button key={a} type="button" onClick={() => setAlasanBatal(a)} style={{ padding: "5px 10px", borderRadius: "999px", border: "1px solid var(--line)", background: alasanBatal === a ? "var(--ink)" : "var(--bg)", color: alasanBatal === a ? "var(--surface)" : "var(--ink-soft)", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>{a}</button>
+              ))}
+            </div>
+            <textarea value={alasanBatal} onChange={(e) => setAlasanBatal(e.target.value)} placeholder="Tulis alasan..." style={{ width: "100%", minHeight: "80px", padding: "10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", fontSize: "13px", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
+              <button type="button" onClick={() => setBatalReq(null)} disabled={menyimpanAksi} className="sa-btn is-soft" style={{ flex: 1 }}>Kembali</button>
+              <button type="button" onClick={simpanBatal} disabled={menyimpanAksi} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", background: "var(--red-600)", color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{menyimpanAksi ? "Menyimpan..." : "Batalkan pesanan"}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* §101 MODAL UBAH BARANG */}
+      <Modal open={!!ubahReq} onClose={() => !menyimpanAksi && setUbahReq(null)} maxWidth="520px">
+        {ubahReq && (
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>Ubah barang · {ubahReq.resi}</h3>
+            <p style={{ margin: "0 0 14px", fontSize: "13px", color: "var(--muted)" }}>{ubahReq.nama_pemohon} · {ubahReq.departemen}. Atur jumlah, hapus, atau tambah barang.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {itemsEdit.map((it, idx) => (
+                <div key={idx} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gap: "8px", alignItems: "center", padding: "8px 10px", borderRadius: "10px", background: "var(--bg)", border: "1px solid var(--line)" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.nama_barang}</div>
+                    {it.deskripsi && <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>{it.deskripsi}</div>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <button type="button" aria-label="Kurangi" onClick={() => ubahJumlah(idx, -1)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", cursor: "pointer", fontWeight: 800 }}>−</button>
+                    <input value={it.jumlah} inputMode="numeric" aria-label="Jumlah" onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, jumlah: e.target.value.replace(/\D/g, "") } : x)))} style={{ width: "44px", textAlign: "center", padding: "5px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 800 }} />
+                    <button type="button" aria-label="Tambah" onClick={() => ubahJumlah(idx, 1)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", cursor: "pointer", fontWeight: 800 }}>+</button>
+                  </div>
+                  <button type="button" aria-label={`Hapus ${it.nama_barang}`} onClick={() => setItemsEdit((l) => l.filter((_, i) => i !== idx))} style={{ border: "none", background: "transparent", color: "var(--red-600)", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}>Hapus</button>
+                </div>
+              ))}
+              {itemsEdit.length === 0 && <div style={{ fontSize: "12.5px", color: "var(--muted)", padding: "10px", textAlign: "center", border: "1px dashed var(--line)", borderRadius: "10px" }}>Belum ada barang.</div>}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 64px auto", gap: "6px", marginTop: "10px" }}>
+              <input list="atk-master-list" value={barangBaru} onChange={(e) => setBarangBaru(e.target.value)} placeholder="Tambah barang (pilih dari master)" style={{ padding: "9px 10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px", minWidth: 0 }} />
+              <datalist id="atk-master-list">{masterAtkList.map((m) => <option key={m.id} value={m.nama_barang} />)}</datalist>
+              <input value={jumlahBaru} inputMode="numeric" onChange={(e) => setJumlahBaru(e.target.value.replace(/\D/g, ""))} aria-label="Jumlah barang baru" style={{ padding: "9px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", textAlign: "center" }} />
+              <button type="button" onClick={tambahItemEdit} className="sa-btn is-soft">+ Tambah</button>
+            </div>
+            <input value={catatanUbah} onChange={(e) => setCatatanUbah(e.target.value)} placeholder="Catatan untuk pemohon (opsional), mis. stok map bening tinggal 1" style={{ width: "100%", marginTop: "10px", padding: "9px 10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
+              <button type="button" onClick={() => setUbahReq(null)} disabled={menyimpanAksi} className="sa-btn is-soft" style={{ flex: 1 }}>Batal</button>
+              <button type="button" onClick={simpanUbah} disabled={menyimpanAksi} className="sa-btn is-primary" style={{ flex: 1 }}>{menyimpanAksi ? "Menyimpan..." : "Simpan perubahan"}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </AdminShell>
   );
 }

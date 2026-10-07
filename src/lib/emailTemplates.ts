@@ -336,6 +336,30 @@ export function buildAtkSiapEmailHtml(p: {
   return emailShell("&#128230; ATK Siap Diambil", body);
 }
 
+/** §101: notifikasi ke pemohon saat permintaan ATK dibatalkan Admin GA. */
+export function buildAtkDibatalkanEmailHtml(p: {
+  namaPemohon: string;
+  kodeResi: string;
+  departemen?: string;
+  alasan: string;
+  items: { nama_barang: string; jumlah: string; deskripsi?: string }[];
+}): string {
+  const rows = [
+    fieldRow("Nama Pemohon", escapeHtml(p.namaPemohon)),
+    ...(p.departemen ? [fieldRow("Departemen", escapeHtml(p.departemen))] : []),
+    fieldRow("Kode Resi", `<b>${escapeHtml(p.kodeResi)}</b>`),
+    fieldRow("Alasan", escapeHtml(p.alasan)),
+  ].join("");
+  const tabel = simpleTable(["Barang", "Jumlah"], p.items.map((it) => [escapeHtml(it.nama_barang), escapeHtml(it.jumlah)]));
+  const body = `
+    <div style="margin-bottom:16px;">${statusBadge("&#10005; DIBATALKAN", "danger")}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+    ${tabel}
+    <p style="margin:16px 0 0 0;font-size:13px;color:#3f3f46;">Permintaan ini tidak diproses. Hubungi Admin GA bila ada pertanyaan, atau ajukan permintaan baru lewat portal SIBM.</p>
+  `;
+  return emailShell("&#128230; Permintaan ATK Dibatalkan", body);
+}
+
 /** Notifikasi ke pelapor saat status tiket helpdesk berubah. */
 export function buildHelpdeskUpdateEmailHtml(p: {
   namaPelapor: string;
