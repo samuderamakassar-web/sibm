@@ -165,6 +165,7 @@ export default function AdminHelpdeskPage() {
   // §105 hapus = arsip (soft delete) dengan alasan; bisa dipulihkan dari filter "Arsip"
   const handleHapus = async () => {
     if (!selectedTicket) return;
+    if (!STATUS_TERBUKA.includes(selectedTicket.status)) return showToast("Tiket sudah ditutup, tidak bisa dihapus.", "warning");
     if (!alasanHapus.trim()) return showToast("Isi alasan penghapusan.", "warning");
     setIsUpdating(true);
     try {
@@ -212,6 +213,8 @@ export default function AdminHelpdeskPage() {
   const handleSimpanPerubahan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicket) return;
+    // §110 tiket yang sudah ditutup (Selesai / Tidak Dijalankan) terkunci
+    if (!STATUS_TERBUKA.includes(selectedTicket.status)) return showToast("Tiket sudah ditutup, status tidak bisa diubah lagi.", "warning");
 
     if (statusUbah === "Selesai" && !fotoHasil && !selectedTicket.foto_proses) {
       return showToast("Untuk menutup tiket (Selesai), Anda WAJIB melampirkan Foto Hasil Perbaikan!", "warning");
@@ -440,7 +443,7 @@ export default function AdminHelpdeskPage() {
         {selectedTicket && (
           <>
             <div style={{ marginBottom: "20px", borderBottom: "2px solid var(--line)", paddingBottom: "15px", paddingRight: "30px" }}>
-              <h2 style={{ margin: "0 0 5px 0", fontSize: "18px", fontWeight: "800", color: "var(--ink)" }}>📝 Eksekusi Tiket GA</h2>
+              <h2 style={{ margin: "0 0 5px 0", fontSize: "18px", fontWeight: "800", color: "var(--ink)" }}>{STATUS_TERBUKA.includes(selectedTicket.status) ? "📝 Eksekusi Tiket GA" : "📄 Detail Tiket"}</h2>
               <div style={{ fontSize: "12px", color: "var(--muted)" }}>Tiket ID: {selectedTicket.id.slice(0, 8).toUpperCase()}</div>
             </div>
 
@@ -464,6 +467,27 @@ export default function AdminHelpdeskPage() {
               </div>
             )}
 
+            {!STATUS_TERBUKA.includes(selectedTicket.status) ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", borderRadius: "12px", background: selectedTicket.status === "Selesai" ? "var(--ok-50)" : "var(--red-50)" }}>
+                  <span style={{ fontSize: "20px" }}>🔒</span>
+                  <div style={{ fontSize: "13px", color: "var(--ink)" }}>
+                    <b>Tiket {selectedTicket.status === "Selesai" ? "selesai" : "tidak dijalankan"}</b> — status sudah final dan tidak bisa diubah lagi.
+                    {selectedTicket.status === "Selesai" && selectedTicket.waktu_selesai && <div style={{ fontSize: "12px", color: "var(--ink-soft)" }}>Ditutup {waktuRingkas(selectedTicket.waktu_selesai)} · {hitungDurasiHari(selectedTicket.waktu_lapor, selectedTicket.waktu_selesai)}{typeof selectedTicket.biaya === "number" && selectedTicket.biaya > 0 ? ` · biaya Rp ${new Intl.NumberFormat("id-ID").format(selectedTicket.biaya)}` : ""}</div>}
+                    {selectedTicket.status === STATUS_TIDAK_DIJALANKAN && <div style={{ fontSize: "12px", color: "var(--red-600)", fontWeight: 700 }}>Alasan: {selectedTicket.alasan_tidak_dijalankan || "-"}</div>}
+                  </div>
+                </div>
+                {selectedTicket.foto_proses && (
+                  <div>
+                    <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "8px" }}>✅ Foto Hasil Perbaikan</div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedTicket.foto_proses} alt="Foto hasil" style={{ width: "100%", maxHeight: "220px", objectFit: "cover", borderRadius: "12px", border: "1px solid var(--line)" }} />
+                  </div>
+                )}
+                <Button type="button" variant="secondary" onClick={() => setSelectedTicket(null)}>Tutup</Button>
+              </div>
+            ) : (
+            <>
             <form onSubmit={handleSimpanPerubahan} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               <div style={{ background: "var(--info-50)", padding: "15px", borderRadius: "12px", border: "1px solid rgba(37,99,235,0.2)" }}>
                 <Select label="Ubah Status Pengerjaan:" value={statusUbah} onChange={(e) => setStatusUbah(e.target.value)} style={{ border: "1px solid rgba(37,99,235,0.35)" }}>
@@ -540,6 +564,8 @@ export default function AdminHelpdeskPage() {
                 </div>
               )}
             </div>
+            </>
+            )}
           </>
         )}
       </Modal>
