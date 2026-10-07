@@ -68,8 +68,10 @@ function simpanCacheHarian(data: Record<string, NilaiSeri>) {
 interface KontakAdmin { nama: string; whatsapp?: string; email?: string; }
 interface SecurityShift { current: string[]; next: string[]; currentName: string; nextName: string; }
 interface HelpdeskTicket { id: string; nama_pelapor: string; lokasi: string; deskripsi: string; status: string; foto_awal?: string; foto_proses?: string; waktu_lapor?: Timestamp | null; }
-interface MasterAtk { id: string; nama_barang: string; foto_url?: string; }
-interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; }
+interface MasterAtk { id: string; nama_barang: string; foto_url?: string; satuan?: string[]; }
+interface AtkItemRequest { nama_barang: string; jumlah: string; deskripsi: string; satuan?: string; }
+/** §103 "2 rim" -- data lama tanpa satuan cukup angkanya. */
+const jumlahAtkLabel = (it: AtkItemRequest) => `${it.jumlah}${it.satuan ? ` ${it.satuan.toLowerCase()}` : ""}`;
 interface AtkRequest { id: string; resi: string; nama_pemohon: string; departemen: string; items: AtkItemRequest[]; status: string; waktu_request?: Timestamp | null; alasan_batal?: string; diubah_admin?: boolean; catatan_admin?: string; }
 interface OvertimeLog { id: string; nama_pemohon: string; departemen: string; area_ruangan: string; tanggal: string; jam_mulai: string; jam_selesai: string; status: string; }
 
@@ -637,7 +639,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         updated[idx] = { ...updated[idx], jumlah: String(jumlahLama + 1) };
         return updated;
       }
-      return [...prev, { nama_barang: produk.nama_barang, jumlah: "1", deskripsi: "" }];
+      return [...prev, { nama_barang: produk.nama_barang, jumlah: "1", deskripsi: "", satuan: produk.satuan?.[0] || "PCS" }];
     });
     showToast(`${produk.nama_barang} ditambahkan ke keranjang`, "success");
   };
@@ -713,7 +715,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       // Notifikasi ke Admin GA (best-effort, tidak memblokir alur pemohon) — rincian per barang dalam tabel
       kirimNotifikasiAdminGA("Request ATK", formAtkPemohon.nama, formAtkPemohon.dept, [{ label: "Kode Resi", value: newResi }], {
         headers: ["Barang", "Jumlah", "Keterangan"],
-        rows: formAtkItems.map((it) => [it.nama_barang, it.jumlah, it.deskripsi || "-"]),
+        rows: formAtkItems.map((it) => [it.nama_barang, jumlahAtkLabel(it), it.deskripsi || "-"]),
       });
 
       showToast(`Request ATK berhasil! Kode Resi: ${newResi} — simpan untuk melacak barang Anda.`, "success");
@@ -2144,6 +2146,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                             onChange={(e) => handleAtkItemChange(index, "jumlah", e.target.value)}
                             style={{ width: "44px", padding: "7px 4px", borderRadius: "7px", border: "1px solid var(--line)", fontSize: "12px", textAlign: "center", background: "var(--surface)", outline: "none" }}
                           />
+                          {/* §103 pilih satuan sesuai master (rim / pcs / dus ...) */}
+                          <select value={item.satuan || "PCS"} onChange={(e) => handleAtkItemChange(index, "satuan", e.target.value)} aria-label="Satuan"
+                            style={{ padding: "7px 4px", borderRadius: "7px", border: "1px solid var(--line)", fontSize: "12px", background: "var(--surface)", color: "var(--ink)", outline: "none", maxWidth: "96px" }}>
+                            {Array.from(new Set([...(masterAtkList.find((m) => m.nama_barang === item.nama_barang)?.satuan || ["PCS"]), item.satuan || "PCS"])).map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
                           <input
                             type="text" placeholder="Catatan (opsional)"
                             value={item.deskripsi}
@@ -2209,7 +2216,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                     <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px", color: "var(--ink-soft)" }}>
                       {hasilAtk.items?.map((it, idx) => (
                         <li key={idx} style={{ marginBottom: "5px" }}>
-                          <b style={{ color: "#d53f8c" }}>{it.nama_barang}</b> ({it.jumlah})
+                          <b style={{ color: "#d53f8c" }}>{it.nama_barang}</b> ({jumlahAtkLabel(it)})
                           {it.deskripsi && <div style={{ fontSize: "11px", color: "var(--ink-soft)", fontStyle: "italic" }}>{it.deskripsi}</div>}
                         </li>
                       ))}

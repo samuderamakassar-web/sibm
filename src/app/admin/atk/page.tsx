@@ -12,6 +12,9 @@ import Modal from "../../../components/ui/Modal";
 // §101: status akhir tambahan -- pesanan tidak diproses
 const STATUS_BATAL = "Dibatalkan";
 const STATUS_SELESAI = "Selesai / Diambil";
+// §103 satuan pesan ATK (master bisa menambah satuan lain)
+const SATUAN_ATK = ["PCS", "RIM", "PACK", "LUSIN", "BOX", "DUS KECIL", "DUS BESAR", "ROLL", "SET"];
+const rupiah = (n: number) => "Rp " + new Intl.NumberFormat("id-ID").format(n);
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
@@ -31,6 +34,7 @@ interface AtkItemRequest {
   nama_barang: string;
   jumlah: string;
   deskripsi: string;
+  satuan?: string; // §103
 }
 
 interface AtkRequest {
@@ -51,7 +55,12 @@ interface MasterAtk {
   id: string;
   nama_barang: string;
   foto_url?: string;
+  satuan?: string[]; // §103 satuan yang boleh dipesan, [0] = default
+  harga?: Record<string, number>; // §103 harga per satuan (opsional)
 }
+const satuanDari = (m?: MasterAtk) => (m?.satuan && m.satuan.length ? m.satuan : ["PCS"]);
+/** "2 RIM" -- data lama tanpa satuan cukup angkanya. */
+const jumlahLabel = (it: AtkItemRequest) => `${it.jumlah}${it.satuan ? ` ${it.satuan.toLowerCase()}` : ""}`;
 
 export default function AdminAtkPage() {
   const router = useRouter();
@@ -82,6 +91,13 @@ export default function AdminAtkPage() {
   const [barangBaru, setBarangBaru] = useState("");
   const [jumlahBaru, setJumlahBaru] = useState("1");
   const [noteBaru, setNoteBaru] = useState("");
+  // §103 master barang: form modal tambah/edit
+  const [formMasterBuka, setFormMasterBuka] = useState(false);
+  const [editMasterId, setEditMasterId] = useState<string | null>(null);
+  const [satuanForm, setSatuanForm] = useState<string[]>(["PCS"]);
+  const [hargaForm, setHargaForm] = useState<Record<string, string>>({});
+  const [satuanCustom, setSatuanCustom] = useState("");
+  const [cariMaster, setCariMaster] = useState("");
   const [filterStatus, setFilterStatus] = useState<"AKTIF" | "SELESAI" | "BATAL" | "SEMUA">("AKTIF");
   const [menyimpanAksi, setMenyimpanAksi] = useState(false);
 
@@ -178,7 +194,7 @@ export default function AdminAtkPage() {
       const kontak = cariKontakKaryawan(batalReq.nama_pemohon);
       if (kontak?.email) {
         kirimEmail(kontak.email, `Permintaan ATK Dibatalkan - Resi ${batalReq.resi}`, buildAtkDibatalkanEmailHtml({
-          namaPemohon: batalReq.nama_pemohon, kodeResi: batalReq.resi, departemen: batalReq.departemen, alasan: alasanBatal.trim(), items: batalReq.items || [],
+          namaPemohon: batalReq.nama_pemohon, kodeResi: batalReq.resi, departemen: batalReq.departemen, alasan: alasanBatal.trim(), items: (batalReq.items || []).map((it) => ({ ...it, jumlah: jumlahLabel(it) })),
         }), batalReq.nama_pemohon).catch((e) => console.error("[notify] email batal ATK:", e));
       }
       setBatalReq(null); setAlasanBatal("");
@@ -201,15 +217,15 @@ export default function AdminAtkPage() {
     setItemsEdit((l) => {
       const ada = l.findIndex((x) => x.nama_barang.toLowerCase() === nama.toLowerCase());
       if (ada >= 0) return l.map((x, i) => (i === ada ? { ...x, jumlah: String((parseInt(x.jumlah, 10) || 0) + Number(jml)), deskripsi: noteBaru.trim() || x.deskripsi } : x));
-      return [...l, { nama_barang: nama.toUpperCase(), jumlah: jml, deskripsi: noteBaru.trim() }];
+      return [...l, { nama_barang: nama.toUpperCase(), jumlah: jml, deskripsi: noteBaru.trim(), satuan: satuanDari(masterPerNama.get(nama.toUpperCase()))[0] }];
     });
     setBarangBaru(""); setJumlahBaru("1"); setNoteBaru("");
   };
   const simpanUbah = async () => {
     if (!ubahReq) return;
-    const bersih = itemsEdit.filter((i) => i.nama_barang.trim()).map((i) => ({ ...i, jumlah: String(Math.max(1, parseInt(i.jumlah, 10) || 1)), deskripsi: (i.deskripsi || "").trim() }));
+    const bersih = itemsEdit.filter((i) => i.nama_barang.trim()).map((i) => ({ ...i, jumlah: String(Math.max(1, parseInt(i.jumlah, 10) || 1)), deskripsi: (i.deskripsi || "").trim(), satuan: i.satuan || satuanDari(masterPerNama.get(i.nama_barang))[0] }));
     if (bersih.length === 0) return showToast("Minimal 1 barang. Untuk menolak semua, pakai Batalkan.", "warning");
-    const ringkas = (l: AtkItemRequest[]) => l.map((i) => `${i.nama_barang} x${i.jumlah}${i.deskripsi ? ` (${i.deskripsi})` : ""}`).join(", ");
+    const ringkas = (l: AtkItemRequest[]) => l.map((i) => `${i.nama_barang} x${jumlahLabel(i)}${i.deskripsi ? ` (${i.deskripsi})` : ""}`).join(", ");
     if (ringkas(bersih) === ringkas(ubahReq.items || []) && !catatanUbah.trim()) { setUbahReq(null); return; }
     setMenyimpanAksi(true);
     try {
@@ -242,7 +258,7 @@ export default function AdminAtkPage() {
       namaPemohon: req.nama_pemohon,
       kodeResi: req.resi,
       departemen: req.departemen,
-      items: req.items,
+      items: (req.items || []).map((it) => ({ ...it, jumlah: jumlahLabel(it) })),
     });
     const hasilEmail = await kirimEmail(kontak.email, `ATK Siap Diambil - Resi ${req.resi}`, htmlEmail, req.nama_pemohon);
     if (!hasilEmail.sukses) console.error("[notify] Gagal kirim Email ATK:", hasilEmail.pesanError);
@@ -254,7 +270,7 @@ export default function AdminAtkPage() {
     const headers = ["Resi", "Tanggal", "Pemohon", "Departemen", "Detail Barang", "Status"];
     const rows = atkRequests.map(req => {
       const aman = (text: string) => `"${(text || "").replace(/"/g, '""')}"`;
-      const itemString = req.items?.map(i => `${i.nama_barang} (${i.jumlah}) - ${i.deskripsi || "-"}`).join(" | ");
+      const itemString = req.items?.map(i => `${i.nama_barang} (${jumlahLabel(i)}) - ${i.deskripsi || "-"}`).join(" | ");
       return [
         aman(req.resi),
         aman(formatJam(req.waktu_request)),
@@ -329,18 +345,32 @@ export default function AdminAtkPage() {
     reader.readAsDataURL(file);
   };
 
+  const bukaFormMaster = (m: MasterAtk | null) => {
+    setEditMasterId(m?.id || null);
+    setNewItemName(m?.nama_barang || "");
+    setNewItemFoto(m?.foto_url || "");
+    setSatuanForm(m ? satuanDari(m) : ["PCS"]);
+    setHargaForm(Object.fromEntries(Object.entries(m?.harga || {}).map(([k, v]) => [k, String(v)])));
+    setSatuanCustom("");
+    setFormMasterBuka(true);
+  };
+
   const handleAddMasterItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim()) return;
+    if (satuanForm.length === 0) return showToast("Pilih minimal 1 satuan.", "warning");
+    const harga = Object.fromEntries(satuanForm.filter((s) => Number(hargaForm[s]) > 0).map((s) => [s, Number(hargaForm[s])]));
+    const nama = newItemName.trim().toUpperCase();
+    if (masterAtkList.some((m) => m.id !== editMasterId && m.nama_barang === nama)) return showToast("Nama barang sudah ada di master.", "warning");
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "master_atk"), { daerah: daerahTulis(),
-        nama_barang: newItemName.trim().toUpperCase(),
-        foto_url: newItemFoto || null,
-      });
+      const data = { nama_barang: nama, foto_url: newItemFoto || null, satuan: satuanForm, harga };
+      if (editMasterId) await updateDoc(doc(db, "master_atk", editMasterId), data);
+      else await addDoc(collection(db, "master_atk"), { daerah: daerahTulis(), ...data });
+      setFormMasterBuka(false);
       setNewItemName("");
       setNewItemFoto("");
-      showToast("Barang berhasil ditambahkan ke database Master ATK!", "success");
+      showToast(editMasterId ? "Barang diperbarui." : "Barang berhasil ditambahkan ke Master ATK!", "success");
     } catch (error) {
       console.error(error);
       showToast("Gagal menambahkan barang.", "error");
@@ -373,6 +403,18 @@ export default function AdminAtkPage() {
   const jumlahStatus = (k: string) => atkRequests.filter((r) => k === "SEMUA" || kelompokStatus(r.status) === k).length;
   const filteredRequests = atkRequests.filter(req => (filterStatus === "SEMUA" || kelompokStatus(req.status) === filterStatus)
     && (req.resi.toLowerCase().includes(searchQuery.toLowerCase()) || req.nama_pemohon.toLowerCase().includes(searchQuery.toLowerCase()) || (req.departemen || "").toLowerCase().includes(searchQuery.toLowerCase())));
+  const masterTampil = masterAtkList.filter((m) => m.nama_barang.toLowerCase().includes(cariMaster.toLowerCase()));
+  const masterPerNama = new Map(masterAtkList.map((m) => [m.nama_barang, m]));
+  /** Estimasi biaya pesanan dari harga master (null bila tidak ada harga sama sekali). */
+  const estimasiBiaya = (items: AtkItemRequest[]) => {
+    let total = 0; let ada = false;
+    for (const it of items || []) {
+      const m = masterPerNama.get(it.nama_barang);
+      const h = m?.harga?.[it.satuan || satuanDari(m)[0]];
+      if (h) { total += h * (parseInt(it.jumlah, 10) || 0); ada = true; }
+    }
+    return ada ? total : null;
+  };
   // catatan default versi lama tidak perlu ditampilkan ulang
   const catatanTampil = (c?: string) => (c && c !== "Jumlah / daftar barang disesuaikan Admin GA" ? c : "");
 
@@ -381,6 +423,19 @@ export default function AdminAtkPage() {
   return (
     <AdminShell title="Gudang ATK" subtitle="Pemenuhan permintaan alat tulis kantor dan master data logistik SIBM" userName={adminName || "Admin"}>
       <style dangerouslySetInnerHTML={{__html: `
+        /* §103 master barang (tabel) */
+        .mst-tabel { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+        .mst-tabel th { text-align: left; padding: 11px 12px; background: var(--bg); color: var(--ink-soft); font-size: 12px; font-weight: 800; border-bottom: 1px solid var(--line); white-space: nowrap; }
+        .mst-tabel td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+        .mst-tabel tr:last-child td { border-bottom: none; }
+        .mst-tabel tbody tr:hover { background: var(--bg); }
+        .mst-satuan { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--ink-soft); white-space: nowrap; }
+        .mst-aksi { background: none; border: none; font-weight: 800; font-size: 12.5px; cursor: pointer; padding: 6px 8px; border-radius: 8px; font-family: inherit; }
+        .mst-aksi:hover { background: var(--bg); }
+        .mst-label { display: block; font-size: 12px; font-weight: 800; color: var(--ink-soft); margin-bottom: 4px; }
+        .mst-input { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13.5px; outline: none; box-sizing: border-box; font-family: inherit; min-width: 0; }
+        .mst-chip { border: 1px solid var(--line); background: var(--bg); color: var(--ink-soft); border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .atk-estimasi { margin-left: 8px; font-size: 11.5px; font-weight: 800; color: var(--ok); background: var(--ok-50); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
         /* §102 daftar pesanan ATK berbentuk kartu */
         .atk-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
         .atk-filter { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -398,7 +453,7 @@ export default function AdminAtkPage() {
         .atk-pemohon span { color: var(--muted); }
         .atk-items { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
         .atk-items li { display: flex; gap: 10px; align-items: baseline; }
-        .atk-qty { min-width: 30px; text-align: right; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; font-size: 13px; }
+        .atk-qty { min-width: 58px; text-align: right; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; font-size: 13px; }
         .atk-nama { display: block; font-weight: 700; font-size: 13px; color: var(--ink); }
         .atk-note { display: block; font-size: 11.5px; color: var(--muted); font-style: italic; }
         .atk-info { margin-top: 10px; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 8px; display: inline-block; }
@@ -471,11 +526,11 @@ export default function AdminAtkPage() {
                         <span className="atk-status" style={{ background: tone.bg, color: tone.fg }}>{req.status}</span>
                         <span className="atk-waktu">{formatJam(req.waktu_request)}</span>
                       </div>
-                      <div className="atk-pemohon"><b>{req.nama_pemohon}</b><span> · {req.departemen}</span></div>
+                      <div className="atk-pemohon"><b>{req.nama_pemohon}</b><span> · {req.departemen}</span>{estimasiBiaya(req.items) !== null && <span className="atk-estimasi">≈ {rupiah(estimasiBiaya(req.items)!)}</span>}</div>
                       <ul className="atk-items" style={{ opacity: isBatal ? 0.55 : 1, textDecoration: isBatal ? "line-through" : "none" }}>
                         {req.items?.map((item, idx) => (
                           <li key={idx}>
-                            <span className="atk-qty">{item.jumlah}×</span>
+                            <span className="atk-qty">{jumlahLabel(item)}</span>
                             <span style={{ minWidth: 0 }}>
                               <span className="atk-nama">{item.nama_barang}</span>
                               {item.deskripsi && <span className="atk-note">{item.deskripsi}</span>}
@@ -516,87 +571,112 @@ export default function AdminAtkPage() {
         {/* TAB 2: MASTER DATA ATK */}
         {/* ========================================================= */}
         {activeTab === "MASTER" && (
-          <div style={{ display: "flex", gap: "25px", flexWrap: "wrap", alignItems: "flex-start" }}>
-
-            {/* Form Tambah Item */}
-            <div style={{ flex: "1 1 300px", background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", position: "sticky", top: "80px" }}>
-              <h2 style={{ margin: "0 0 20px 0", color: "var(--ink)", fontSize: "18px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>➕</span> Tambah Item Baru
-              </h2>
-              <form onSubmit={handleAddMasterItem} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "6px", display: "block" }}>Nama Barang Lengkap *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Cth: KERTAS HVS A4 80GSM SINAR DUNIA"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    style={{ width: "100%", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--line)", fontSize: "14px", background: "var(--bg)", outline: "none", boxSizing: "border-box", textTransform: "uppercase" }}
-                  />
-                  <p style={{ margin: "8px 0 0 0", fontSize: "11px", color: "var(--muted)", lineHeight: "1.4" }}>Tuliskan nama beserta merknya agar memudahkan Karyawan saat melakukan pencarian di form utama.</p>
-                </div>
-
-                {/* UPLOAD FOTO BARANG */}
-                <div style={{ background: newItemFoto ? "var(--ok-50)" : "var(--bg)", border: newItemFoto ? "2px solid var(--ok)" : "2px dashed var(--line)", padding: "15px", borderRadius: "12px", textAlign: "center" }}>
-                  <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "24px" }}>📷</span>
-                    <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)" }}>{newItemFoto ? "Foto Terlampir ✓" : "Unggah Foto Barang (Opsional)"}</div>
-                    <input type="file" accept="image/*" onChange={handleFotoBarangUpload} style={{ display: "none" }} />
-                  </label>
-                  {isUploadingFoto ? (
-                    <div style={{ fontSize: "12px", color: "var(--warn)", marginTop: "8px" }}>⏳ Mengunggah...</div>
-                  ) : newItemFoto && (
-                    <div style={{ marginTop: "10px", position: "relative", display: "inline-block" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={newItemFoto} alt="Preview" style={{ width: "100px", height: "100px", objectFit: "cover", borderRadius: "8px" }} />
-                      <button type="button" onClick={() => setNewItemFoto("")} style={{ position: "absolute", top: "-8px", right: "-8px", background: "var(--brand)", color: "#fff", border: "none", width: "22px", height: "22px", borderRadius: "50%", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>✖</button>
-                    </div>
-                  )}
-                </div>
-
-                <button type="submit" disabled={isLoading} style={{ width: "100%", padding: "14px", background: isLoading ? "var(--muted-solid)" : "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "5px", boxShadow: isLoading ? "none" : "0 4px 6px rgba(37,99,235,0.3)" }}>
-                  {isLoading ? "Menambahkan..." : "Simpan Barang"}
-                </button>
-              </form>
-            </div>
-
-            {/* Tabel Master Data */}
-            <div style={{ flex: "2 1 500px", background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid var(--line)" }}>
-              <h2 style={{ margin: "0 0 20px 0", color: "var(--ink)", fontSize: "18px", fontWeight: "bold" }}>Daftar Master ATK SIBM</h2>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "15px" }}>
-                {masterAtkList.length > 0 ? masterAtkList.map((item) => (
-                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px", background: "var(--bg)", borderRadius: "12px", border: "1px solid var(--line)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      {item.foto_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.foto_url} alt={item.nama_barang} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "6px" }} />
-                      ) : (
-                        <div style={{ width: "36px", height: "36px", borderRadius: "6px", background: "var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>🖇️</div>
-                      )}
-                      <span style={{ fontWeight: "bold", color: "var(--ink)", fontSize: "13px" }}>{item.nama_barang}</span>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteMasterItem(item.id, item.nama_barang)}
-                      style={{ background: "var(--red-50)", color: "var(--red-600)", border: "1px solid rgba(220,38,38,0.25)", width: "28px", height: "28px", borderRadius: "6px", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "12px", fontWeight: "bold" }}
-                      title="Hapus Barang"
-                    >
-                      ✖
-                    </button>
-                  </div>
-                )) : (
-                  <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px 20px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "12px" }}>
-                    Belum ada master data barang. Silakan tambah barang pertama Anda.
-                  </div>
-                )}
+          <div style={{ background: "var(--surface)", padding: "22px", borderRadius: "20px", border: "1px solid var(--line)" }}>
+            <div className="atk-toolbar">
+              <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "18px", fontWeight: 800 }}>Daftar Master ATK <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>{masterTampil.length} / {masterAtkList.length} barang</span></h2>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", flex: "1 1 260px", justifyContent: "flex-end" }}>
+                <input type="text" placeholder="Cari nama barang..." value={cariMaster} onChange={(e) => setCariMaster(e.target.value)} className="atk-cari" aria-label="Cari master barang" />
+                <button type="button" className="sa-btn is-primary" style={{ height: "40px" }} onClick={() => bukaFormMaster(null)}>+ Tambah Barang</button>
               </div>
             </div>
 
+            <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: "14px" }}>
+              <table className="mst-tabel">
+                <thead>
+                  <tr><th style={{ width: "56px" }}>Foto</th><th>Nama Barang</th><th>Satuan Pesan</th><th>Harga / Satuan</th><th style={{ width: "120px", textAlign: "right" }}>Aksi</th></tr>
+                </thead>
+                <tbody>
+                  {masterTampil.length > 0 ? masterTampil.map((item) => {
+                    const sat = satuanDari(item);
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          {item.foto_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={item.foto_url} alt="" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "8px", display: "block", background: "#fff" }} />
+                          ) : <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "var(--line)", display: "grid", placeItems: "center", fontSize: "16px" }}>🖇️</div>}
+                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--ink)" }}>{item.nama_barang}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                            {sat.map((s, i) => <span key={s} className="mst-satuan" style={i === 0 ? { background: "var(--info-50)", color: "var(--info)" } : undefined} title={i === 0 ? "Satuan default" : undefined}>{s}</span>)}
+                          </div>
+                        </td>
+                        <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-soft)" }}>
+                          {sat.some((s) => item.harga?.[s]) ? sat.filter((s) => item.harga?.[s]).map((s) => <div key={s}>{rupiah(item.harga![s])} <span style={{ color: "var(--muted)" }}>/ {s.toLowerCase()}</span></div>) : <span style={{ color: "var(--muted)" }}>—</span>}
+                        </td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <button type="button" className="mst-aksi" onClick={() => bukaFormMaster(item)} style={{ color: "var(--accent)" }}>Edit</button>
+                          <button type="button" className="mst-aksi" onClick={() => handleDeleteMasterItem(item.id, item.nama_barang)} style={{ color: "var(--red-600)" }}>Hapus</button>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr><td colSpan={5} style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)" }}>{masterAtkList.length ? "Barang tidak ditemukan." : "Belum ada master data barang. Tekan + Tambah Barang."}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-
       </div>
+
+
+      {/* §103 MODAL TAMBAH / EDIT MASTER BARANG */}
+      <Modal open={formMasterBuka} onClose={() => !isLoading && setFormMasterBuka(false)} maxWidth="520px">
+        <form onSubmit={handleAddMasterItem}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "18px", color: "var(--ink)" }}>{editMasterId ? "Edit barang" : "Tambah barang"}</h3>
+          <label className="mst-label">Nama barang lengkap *</label>
+          <input type="text" required placeholder="Cth: KERTAS HVS A4 80GSM SINAR DUNIA" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="mst-input" style={{ textTransform: "uppercase" }} />
+          <p style={{ margin: "4px 0 12px", fontSize: "11px", color: "var(--muted)" }}>Tulis nama beserta merk agar mudah dicari karyawan.</p>
+
+          <label className="mst-label">Satuan yang bisa dipesan * <span style={{ fontWeight: 500, color: "var(--muted)" }}>(yang pertama dipilih = default)</span></label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "6px 0 8px" }}>
+            {Array.from(new Set([...SATUAN_ATK, ...satuanForm])).map((s) => {
+              const idx = satuanForm.indexOf(s);
+              return (
+                <button key={s} type="button" onClick={() => setSatuanForm((l) => (l.includes(s) ? l.filter((x) => x !== s) : [...l, s]))} className="mst-chip"
+                  style={idx >= 0 ? { background: idx === 0 ? "var(--info-solid)" : "var(--ink)", color: "#fff", borderColor: "transparent" } : undefined}>
+                  {s}{idx === 0 ? " · default" : ""}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+            <input value={satuanCustom} onChange={(e) => setSatuanCustom(e.target.value)} placeholder="Satuan lain, mis. KOTAK" className="mst-input" style={{ flex: 1 }} />
+            <button type="button" className="sa-btn is-soft" onClick={() => { const s = satuanCustom.trim().toUpperCase(); if (s && !satuanForm.includes(s)) setSatuanForm((l) => [...l, s]); setSatuanCustom(""); }}>+ Satuan</button>
+          </div>
+
+          {satuanForm.length > 0 && (
+            <>
+              <label className="mst-label">Harga per satuan <span style={{ fontWeight: 500, color: "var(--muted)" }}>(opsional, untuk estimasi biaya)</span></label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "6px", margin: "6px 0 12px" }}>
+                {satuanForm.map((s) => (
+                  <label key={s} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--ink-soft)", fontWeight: 700 }}>
+                    <span style={{ width: "64px", flexShrink: 0 }}>{s}</span>
+                    <input inputMode="numeric" placeholder="Rp" value={hargaForm[s] || ""} onChange={(e) => setHargaForm((h) => ({ ...h, [s]: e.target.value.replace(/\D/g, "") }))} className="mst-input" style={{ padding: "8px 10px" }} />
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px", borderRadius: "12px", border: "1px dashed var(--line)", background: "var(--bg)" }}>
+            {newItemFoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={newItemFoto} alt="Foto barang" style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px", background: "#fff" }} />
+            ) : <div style={{ width: "56px", height: "56px", borderRadius: "8px", background: "var(--line)", display: "grid", placeItems: "center", fontSize: "20px" }}>📷</div>}
+            <div style={{ flex: 1, fontSize: "12px", color: "var(--ink-soft)" }}>{isUploadingFoto ? "⏳ Mengunggah..." : newItemFoto ? "Foto terlampir" : "Foto barang (opsional)"}</div>
+            <label className="sa-btn is-soft" style={{ cursor: "pointer" }}>{newItemFoto ? "Ganti" : "Unggah"}<input type="file" accept="image/*" onChange={handleFotoBarangUpload} style={{ display: "none" }} /></label>
+            {newItemFoto && <button type="button" className="mst-aksi" style={{ color: "var(--red-600)" }} onClick={() => setNewItemFoto("")}>Hapus</button>}
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+            <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setFormMasterBuka(false)} disabled={isLoading}>Batal</button>
+            <button type="submit" className="sa-btn is-primary" style={{ flex: 1 }} disabled={isLoading || isUploadingFoto}>{isLoading ? "Menyimpan..." : editMasterId ? "Simpan perubahan" : "Simpan barang"}</button>
+          </div>
+        </form>
+      </Modal>
 
       {/* §101 MODAL BATALKAN */}
       <Modal open={!!batalReq} onClose={() => !menyimpanAksi && setBatalReq(null)} maxWidth="440px">
@@ -632,7 +712,10 @@ export default function AdminAtkPage() {
                     <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.nama_barang}</div>
                     <input value={it.deskripsi || ""} onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, deskripsi: e.target.value } : x)))} placeholder="Catatan barang (opsional)" aria-label={`Catatan ${it.nama_barang}`} style={{ width: "100%", marginTop: "4px", padding: "5px 8px", borderRadius: "7px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "11.5px", boxSizing: "border-box" }} />
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <select value={it.satuan || satuanDari(masterPerNama.get(it.nama_barang))[0]} onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, satuan: e.target.value } : x)))} aria-label="Satuan" style={{ padding: "5px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "12px", fontWeight: 700 }}>
+                      {Array.from(new Set([...satuanDari(masterPerNama.get(it.nama_barang)), ...(it.satuan ? [it.satuan] : [])])).map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
                     <button type="button" aria-label="Kurangi" onClick={() => ubahJumlah(idx, -1)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", cursor: "pointer", fontWeight: 800 }}>−</button>
                     <input value={it.jumlah} inputMode="numeric" aria-label="Jumlah" onChange={(e) => setItemsEdit((l) => l.map((x, i) => (i === idx ? { ...x, jumlah: e.target.value.replace(/\D/g, "") } : x)))} style={{ width: "44px", textAlign: "center", padding: "5px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 800 }} />
                     <button type="button" aria-label="Tambah" onClick={() => ubahJumlah(idx, 1)} style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", cursor: "pointer", fontWeight: 800 }}>+</button>
