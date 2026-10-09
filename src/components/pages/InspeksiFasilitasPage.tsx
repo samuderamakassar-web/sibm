@@ -10,6 +10,11 @@ import { useToast } from "@/components/ui/ToastProvider";
 import AdminShell from "../admin/AdminShell";
 import { useFasilitasOB } from "../../lib/sopChecklist";
 import { daerahTulis } from "@/lib/daerah";
+import Modal from "../ui/Modal";
+
+// §111 tiket Helpdesk yang masih terbuka untuk item fasilitas (lokasi "{area} - {nama}", format sama dgn tiket inspeksi)
+interface TiketTerbuka { id: string; lokasi: string; status: string; deskripsi: string; waktu_lapor?: Timestamp | null }
+const kodeTiket = (id: string) => id.slice(0, 8).toUpperCase();
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain
@@ -129,6 +134,9 @@ export default function InspeksiFasilitasPage() {
   // Diisi ulang tiap kali masuk step 2 (lihat tombol "Mulai Inspeksi") — daftarnya beda-beda
   // per area (getFasilitasUntukArea), jadi gak bisa di-inisialisasi sekali pas mount.
   const [hasilList, setHasilList] = useState<HasilItem[]>([]);
+  // §111 tiket terbuka & modal pemberitahuan
+  const [tiketTerbuka, setTiketTerbuka] = useState<TiketTerbuka[]>([]);
+  const [modalTiket, setModalTiket] = useState<TiketTerbuka[] | null>(null);
 
   const seninMingguIni = getSeninMingguIni();
 
@@ -184,6 +192,30 @@ export default function InspeksiFasilitasPage() {
     return () => unsub();
   }, [picName]);
 
+  // §111 tiket Helpdesk yang belum selesai -- mencegah temuan dobel & mengunci item yang sedang diperbaiki
+  useEffect(() => {
+    if (!picName) return;
+    const unsub = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "in", ["Menunggu", "Sedang Dikerjakan"])), (snap) => {
+      setTiketTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TiketTerbuka)));
+    }, (e) => console.error("[inspeksi] tiket terbuka:", e));
+    return () => unsub();
+  }, [picName]);
+  const tiketUntuk = (nama: string) => (nama.trim() ? tiketTerbuka.find((tk) => tk.lokasi === `${selectedArea} - ${nama.trim()}`) : undefined);
+  const mulaiInspeksi = () => {
+    const daftar = getFasilitasUntukArea();
+    // Item yang sedang diperbaiki: otomatis tercatat Rusak (dalam perbaikan) & terkunci -- tidak perlu dinilai ulang.
+    setHasilList(daftar.map((nama) => {
+      const tk = tiketUntuk(nama);
+      return tk?.status === "Sedang Dikerjakan"
+        ? { nama, kondisi: "Rusak" as Kondisi, catatan: `Sedang dalam perbaikan (tiket ${kodeTiket(tk.id)})`, foto: "" }
+        : { nama, kondisi: "" as const, catatan: "", foto: "" };
+    }));
+    setStep(2);
+    const terkait = daftar.map((n) => tiketUntuk(n)).filter((x): x is TiketTerbuka => !!x);
+    if (terkait.length) setModalTiket(terkait);
+  };
+  const waktuLapor = (ts?: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
+
   // Sudah ada inspeksi buat area terpilih minggu ini? (info aja, gak nge-block submit ulang)
   const sudahInspeksiMingguIni = riwayatInspeksi.find((l) => l.area === selectedArea && l.minggu_mulai === seninMingguIni);
 
@@ -237,6 +269,9 @@ export default function InspeksiFasilitasPage() {
   };
 
   const ubahKondisi = (index: number, kondisi: Kondisi) => {
+    const tk = tiketUntuk(hasilList[index]?.nama || "");
+    if (tk?.status === "Sedang Dikerjakan") { setModalTiket([tk]); return; } // §111 terkunci
+    if (tk && kondisi === "Rusak" && hasilList[index]?.kondisi !== "Rusak") setModalTiket([tk]); // §111 reminder: sudah dilaporkan
     setHasilList((prev) => { const next = [...prev]; next[index] = { ...next[index], kondisi }; return next; });
   };
   const ubahCatatan = (index: number, catatan: string) => {
@@ -290,7 +325,9 @@ export default function InspeksiFasilitasPage() {
       // Sekalian kirim email ke Admin GA (sebelumnya cuma masuk tabel, gak ada notifikasi
       // email sama sekali buat temuan dari inspeksi) supaya langsung ketahuan, bukan cuma
       // nongol diam-diam di tabel admin/helpdesk.
-      const rusak = semuaDinilai.filter((h) => h.kondisi === "Rusak");
+      // §111 item yang sudah punya tiket terbuka (Menunggu / Sedang Dikerjakan) tidak dibuatkan tiket baru (anti dobel)
+      const rusak = semuaDinilai.filter((h) => h.kondisi === "Rusak" && !tiketUntuk(h.nama));
+      const sudahAdaTiket = semuaDinilai.filter((h) => h.kondisi === "Rusak" && tiketUntuk(h.nama)).length;
       await Promise.all(rusak.map((h) => addDoc(collection(db, "helpdesk_tickets"), { daerah: daerahTulis(),
         nama_pelapor: picName,
         departemen: "OB & CS",
@@ -330,8 +367,8 @@ export default function InspeksiFasilitasPage() {
       }
 
       showToast(rusak.length > 0
-        ? `Inspeksi terkirim! ${rusak.length} temuan rusak sudah diteruskan ke Admin GA.`
-        : "Inspeksi terkirim! Semua fasilitas dalam kondisi baik.", "success");
+        ? `Inspeksi terkirim! ${rusak.length} temuan rusak baru diteruskan ke Admin GA${sudahAdaTiket ? ` (${sudahAdaTiket} sudah punya tiket berjalan)` : ""}.`
+        : sudahAdaTiket ? `Inspeksi terkirim! ${sudahAdaTiket} kerusakan sudah tercatat di tiket yang sedang berjalan.` : "Inspeksi terkirim! Semua fasilitas dalam kondisi baik.", "success");
       resetForm();
       setActiveTab("history");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -422,11 +459,19 @@ export default function InspeksiFasilitasPage() {
                       </div>
                     )}
 
+                    {(() => {
+                      const terkait = getFasilitasUntukArea().map((n) => tiketUntuk(n)).filter(Boolean) as TiketTerbuka[];
+                      if (!terkait.length) return null;
+                      const proses = terkait.filter((x) => x.status === "Sedang Dikerjakan").length;
+                      return (
+                        <div style={{ background: "var(--warn-50)", color: "var(--warn)", fontSize: "12px", fontWeight: "bold", padding: "10px 12px", borderRadius: "10px", marginBottom: "14px" }}>
+                          🔧 {terkait.length} fasilitas di area ini sudah dilaporkan rusak{proses ? ` (${proses} sedang diperbaiki)` : ""}.
+                        </div>
+                      );
+                    })()}
+
                     <button
-                      onClick={() => {
-                        setHasilList(getFasilitasUntukArea().map((nama) => ({ nama, kondisi: "", catatan: "", foto: "" })));
-                        setStep(2);
-                      }}
+                      onClick={mulaiInspeksi}
                       style={{ width: "100%", padding: "18px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
                     >
                       Mulai Inspeksi ➔
@@ -457,6 +502,18 @@ export default function InspeksiFasilitasPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {hasilList.map((h, index) => {
                     const isCustom = index >= getFasilitasUntukArea().length;
+                    const tk = tiketUntuk(h.nama);
+                    if (tk?.status === "Sedang Dikerjakan") {
+                      return (
+                        <div key={index} className="fasilitas-row" style={{ opacity: 0.85, borderStyle: "dashed" }} onClick={() => setModalTiket([tk])}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: "bold", fontSize: "15px", color: "var(--ink)" }}>{h.nama}</span>
+                            <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "5px 10px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>🔧 Sedang diperbaiki · terkunci</span>
+                          </div>
+                          <div style={{ fontSize: "12px", color: "var(--muted)" }}>Tiket {kodeTiket(tk.id)} dilaporkan {waktuLapor(tk.waktu_lapor)} — tidak perlu dinilai sampai perbaikan selesai.</div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={index} className="fasilitas-row">
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -479,6 +536,11 @@ export default function InspeksiFasilitasPage() {
                           </div>
                         </div>
 
+                        {tk && (
+                          <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--warn)", background: "var(--warn-50)", padding: "8px 10px", borderRadius: "10px" }}>
+                            ⏳ Sudah dilaporkan {waktuLapor(tk.waktu_lapor)} (tiket {kodeTiket(tk.id)}) — masih menunggu ditangani. Tandai Rusak tidak membuat tiket baru.
+                          </div>
+                        )}
                         {h.kondisi === "Rusak" && (
                           <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", background: "var(--red-50)", padding: "12px", borderRadius: "12px", border: "1px solid rgba(220,38,38,0.2)" }}>
                             <textarea
@@ -576,6 +638,36 @@ export default function InspeksiFasilitasPage() {
         )}
 
       </div>
+      {/* §111 MODAL: item sedang diperbaiki (terkunci) / sudah dilaporkan (reminder) */}
+      <Modal open={!!modalTiket} onClose={() => setModalTiket(null)} maxWidth="460px">
+        {modalTiket && (
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>
+              {modalTiket.every((x) => x.status === "Sedang Dikerjakan") ? "🔧 Sedang dalam perbaikan" : "⏳ Kerusakan sudah dilaporkan"}
+            </h3>
+            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--muted)" }}>Fasilitas berikut sudah punya laporan kerusakan yang belum selesai di area {selectedArea}.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {modalTiket.map((x) => {
+                const proses = x.status === "Sedang Dikerjakan";
+                return (
+                  <div key={x.id} style={{ padding: "10px 12px", borderRadius: "12px", background: proses ? "var(--info-50)" : "var(--warn-50)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+                      <b style={{ fontSize: "13.5px", color: "var(--ink)" }}>{x.lokasi.replace(`${selectedArea} - `, "")}</b>
+                      <span style={{ fontSize: "11px", fontWeight: 800, color: proses ? "var(--info)" : "var(--warn)", whiteSpace: "nowrap" }}>{proses ? "SEDANG DIPERBAIKI" : "MENUNGGU"}</span>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--ink-soft)", marginTop: "3px" }}>{x.deskripsi.replace(/^\[[^\]]+\]\s*/, "")}</div>
+                    <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "3px" }}>Tiket {kodeTiket(x.id)} · dilaporkan {waktuLapor(x.waktu_lapor)}</div>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: proses ? "var(--info)" : "var(--warn)", marginTop: "6px" }}>
+                      {proses ? "Item ini terkunci — tidak perlu dinilai sampai tim GA menyelesaikan perbaikan." : "Pengingat: kerusakan ini belum ditangani. Bila masih rusak, cukup tandai Rusak — tidak membuat tiket dobel."}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => setModalTiket(null)} style={{ width: "100%", marginTop: "14px", padding: "12px", borderRadius: "12px", border: "none", background: "var(--ink)", color: "var(--surface)", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Mengerti</button>
+          </div>
+        )}
+      </Modal>
     </AdminShell>
   );
 }

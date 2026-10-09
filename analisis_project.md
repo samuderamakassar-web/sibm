@@ -3047,3 +3047,12 @@ SUDAH DI-DEPLOY. Keluhan user (screenshot): tabel 10 kolom membuat teks patah-pa
 
 ## 110. Helpdesk: Tiket Selesai / Tidak Dijalankan Terkunci (7 Oktober 2026)
 SUDAH DI-DEPLOY. Permintaan user: status yang sudah final tidak bisa diubah lagi. Modal tiket berstatus Selesai / Tidak Dijalankan kini mode "📄 Detail Tiket": kotak 🔒 (waktu tutup, durasi, biaya, atau alasan tidak dijalankan), foto hasil perbaikan, tombol Tutup -- tanpa pilihan status, simpan, maupun hapus. Guard juga di handleSimpanPerubahan & handleHapus. Tiket di Arsip tetap bisa Dipulihkan (kembali ke status sebelum dihapus, yang pasti status terbuka karena hapus hanya tersedia untuk tiket terbuka). Gudang ATK sudah begitu sejak §101 (pesanan Selesai/Dibatalkan tanpa tombol aksi).
+
+## 111. Inspeksi Fasilitas OB/CS: Kunci Item yang Sedang Diperbaiki & Reminder Tiket Terbuka (9 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: item hasil inspeksi yang tiketnya "progress" tidak bisa diinput lagi (cukup modal notifikasi), yang masih "open" munculkan modal reminder.
+- InspeksiFasilitasPage memantau `helpdesk_tickets` status in [Menunggu, Sedang Dikerjakan]; dicocokkan lewat `lokasi === "{area} - {nama fasilitas}"` (format tiket inspeksi).
+- Step 1: info "🔧 N fasilitas di area ini sudah dilaporkan rusak (x sedang diperbaiki)".
+- Mulai Inspeksi: item Sedang Dikerjakan otomatis tercatat Rusak + catatan "Sedang dalam perbaikan (tiket KODE)" dan kartunya terkunci (badge "Sedang diperbaiki · terkunci", tanpa tombol Baik/Rusak/N/A; klik = modal). Bila ada item bertiket terbuka, modal langsung muncul: Sedang Dikerjakan = "🔧 Sedang dalam perbaikan" (terkunci), Menunggu = "⏳ Kerusakan sudah dilaporkan" (pengingat belum ditangani).
+- Item Menunggu tetap bisa dinilai, dengan pita reminder; menandai Rusak memunculkan modal reminder.
+- Anti dobel: saat kirim, item Rusak yang sudah punya tiket terbuka TIDAK dibuatkan tiket/email baru; toast menyebut jumlah yang sudah tercatat di tiket berjalan.
+- Catatan: firebase deploy dari Git Bash sempat gagal "Assertion failed: resolving hosting target..." -- berhasil saat diulang dari PowerShell.
