@@ -75,11 +75,11 @@ export function useMasterKondisiAset() {
   const [dimuat, setDimuat] = useState(false);
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "master_kondisi_aset"), (s) => {
-      const d = s.data();
-      if (d && Array.isArray(d.gedung)) {
-        setNilai({ ...MASTER_KONDISI_BAWAAN, ...(d as Partial<MasterKondisiAset>) } as MasterKondisiAset);
-        setDariBawaan(false);
-      } else { setNilai(MASTER_KONDISI_BAWAAN); setDariBawaan(true); }
+      const d = (s.data() || {}) as Partial<MasterKondisiAset>;
+      const arr = <K extends keyof MasterKondisiAset>(k: K) => (Array.isArray(d[k]) ? d[k] : MASTER_KONDISI_BAWAAN[k]) as MasterKondisiAset[K];
+      // §114 digabung per field: petugas_utilitas bisa ditulis (Plotting/Admin) sebelum master item pernah disimpan
+      setNilai({ gedung: arr("gedung"), alat: arr("alat"), utilitas: arr("utilitas"), petugas_utilitas: arr("petugas_utilitas") });
+      setDariBawaan(!Array.isArray(d.gedung));
       setDimuat(true);
     }, (e) => { console.error("[kondisi aset] master:", e); setDimuat(true); });
     return () => unsub();

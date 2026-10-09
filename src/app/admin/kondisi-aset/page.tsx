@@ -21,6 +21,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { daerahTulis } from "../../../lib/daerah";
+import PetugasUtilitasPicker from "../../../components/PetugasUtilitasPicker";
 import { dataUrlKeCloudinary } from "../../../lib/uploadFoto";
 import {
   JENIS_INSPEKSI, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, MASTER_KONDISI_BAWAAN, STATUS_TEMUAN, STATUS_TEMUAN_TERBUKA, WARNA_KONDISI, WARNA_STATUS_TEMUAN,
@@ -75,7 +76,6 @@ export default function KondisiAsetPage() {
   const [lama, setLama] = useState<{ id: string; data: Record<string, unknown> }[] | null>(null);
   const masterHook = useMasterKondisiAset();
   const [draftMaster, setDraftMaster] = useState<MasterKondisiAset | null>(null);
-  const [petugasBaru, setPetugasBaru] = useState("");
   const master = draftMaster || masterHook.nilai;
 
   useEffect(() => {
@@ -156,7 +156,8 @@ export default function KondisiAsetPage() {
     if (!draftMaster) return;
     setMenyimpan(true);
     try {
-      await setDoc(doc(db, "settings", "master_kondisi_aset"), { ...salin(draftMaster), diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
+      const { petugas_utilitas: _abaikan, ...itemSaja } = salin(draftMaster); void _abaikan; // petugas disimpan terpisah (PetugasUtilitasPicker)
+      await setDoc(doc(db, "settings", "master_kondisi_aset"), { ...itemSaja, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() }, { merge: true });
       setDraftMaster(null);
       showToast("Master item tersimpan. Halaman OB langsung memakai daftar baru.", "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan master.", "error"); }
@@ -309,20 +310,7 @@ export default function KondisiAsetPage() {
               <EditorItem key={j} judul={`${LABEL_JENIS[j]} · ${KONDISI[j].join(" / ")}`} daftar={master[j]} onUbah={(d) => ubahMaster((m) => { m[j] = d; })} />
             ))}
             <Tile>
-              <h3 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 800 }}>Petugas utilitas teknis</h3>
-              <p style={{ margin: "0 0 10px", fontSize: "12px", color: "var(--muted)" }}>Hanya OB tetap di daftar ini yang melihat inspeksi Utilitas Teknis (nama harus sama persis dengan akun).</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                {master.petugas_utilitas.map((n) => (
-                  <span key={n} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 6px 4px 10px", borderRadius: "999px", background: "var(--bg)", border: "1px solid var(--line)", fontSize: "12px", fontWeight: 700 }}>
-                    {n}<button type="button" aria-label={`Hapus ${n}`} onClick={() => ubahMaster((m) => { m.petugas_utilitas = m.petugas_utilitas.filter((x) => x !== n); })} style={{ border: "none", background: "none", color: "var(--muted)", cursor: "pointer" }}>×</button>
-                  </span>
-                ))}
-                {!master.petugas_utilitas.length && <span style={{ fontSize: "12px", color: "var(--red-600)" }}>Belum ada petugas — inspeksi utilitas belum bisa dilakukan.</span>}
-              </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                <input className="ka-in" placeholder="Nama OB tetap" value={petugasBaru} onChange={(e) => setPetugasBaru(e.target.value)} />
-                <button type="button" className="sa-btn is-soft" onClick={() => { if (!petugasBaru.trim()) return; ubahMaster((m) => { if (!m.petugas_utilitas.includes(petugasBaru.trim())) m.petugas_utilitas.push(petugasBaru.trim()); }); setPetugasBaru(""); }}>+</button>
-              </div>
+              <PetugasUtilitasPicker oleh={session?.nama || "Admin"} />
             </Tile>
           </div>
           {draftMaster && <p style={{ fontSize: "12px", color: "var(--warn)", fontWeight: 700 }}>Ada perubahan belum disimpan — tekan &quot;Simpan master&quot; di atas.</p>}

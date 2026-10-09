@@ -19,6 +19,7 @@ import { useConfirm } from "../ui/ConfirmProvider";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
 import { paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
+import PetugasUtilitasPicker from "../PetugasUtilitasPicker";
 
 // ==========================================
 // KONSTANTA
@@ -525,6 +526,11 @@ export default function PlottingOBPage() {
               >
                 {isGenerating ? "🔄 Generating..." : "🚀 Generate 30 Hari ke Depan"}
               </button>
+            </div>
+
+            {/* §114 petugas inspeksi utilitas (sinkron dengan Admin > Temuan & Kondisi Aset) */}
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", border: "1px solid var(--line)" }}>
+              <PetugasUtilitasPicker oleh={adminName || "Koordinator"} />
             </div>
           </div>
 
