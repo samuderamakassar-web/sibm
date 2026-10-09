@@ -161,7 +161,11 @@ export default function SopChecklistPage() {
 
       {tab === "fasilitas" && (
         <Tile>
-          <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Daftar fasilitas yang diinspeksi OB tiap minggu</h2>
+          <div style={{ padding: "12px 14px", borderRadius: "12px", background: "var(--warn-50)", color: "var(--ink)", fontSize: "13px", marginBottom: "12px" }}>
+            <b>Sudah diganti (§113):</b> inspeksi OB kini dibagi Fasilitas Gedung · Peralatan Kebersihan · Utilitas Teknis dan daftar itemnya diatur di{" "}
+            <button type="button" className="sa-btn is-soft" style={{ height: "30px" }} onClick={() => router.push("/admin/kondisi-aset")}>Temuan &amp; Kondisi Aset → Master Item</button>. Daftar di bawah tidak dipakai lagi.
+          </div>
+          <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Daftar fasilitas lama (tidak dipakai)</h2>
           <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>Sama untuk semua area; fasilitas yang tidak ada di area tertentu dinilai &quot;Tidak Ada&quot; oleh OB. OB tetap bisa menambah fasilitas lain saat inspeksi.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {dFas.draft.map((x, i) => (

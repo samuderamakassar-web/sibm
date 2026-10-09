@@ -47,6 +47,7 @@ type StatusFilterType = "Semua" | "Menunggu" | "Sedang Dikerjakan" | "Selesai" |
 // "Dihapus" = arsip (laporan ganda/salah input) -- disembunyikan dari daftar & portal, bisa dipulihkan.
 const STATUS_TIDAK_DIJALANKAN = "Tidak Dijalankan";
 const STATUS_DIHAPUS = "Dihapus";
+const STATUS_DIPINDAHKAN = "Dipindahkan"; // §113 tiket hasil inspeksi OB yang dipindah ke /admin/kondisi-aset
 const STATUS_TERBUKA = ["Menunggu", "Sedang Dikerjakan"];
 
 const STATUS_TONE: Record<string, "warning" | "info" | "success" | "danger" | "neutral"> = {
@@ -286,6 +287,7 @@ export default function AdminHelpdeskPage() {
   const tahunTersedia = daftarTahunSejak().map(String);
 
   const filteredTickets = tickets.filter((t) => {
+    if (t.status === STATUS_DIPINDAHKAN) return false;
     const matchStatus = filterStatus === "Semua" ? t.status !== STATUS_DIHAPUS : t.status === filterStatus;
     const tglLapor = t.waktu_lapor?.toDate();
     const matchBulan = filterBulan === "SEMUA" || (tglLapor && String(tglLapor.getMonth()) === filterBulan);
@@ -359,7 +361,7 @@ export default function AdminHelpdeskPage() {
         <div className="hd-bar">
           <div className="hd-chips" role="tablist" aria-label="Filter status tiket">
             {(["Semua", "Menunggu", "Sedang Dikerjakan", "Selesai", STATUS_TIDAK_DIJALANKAN, STATUS_DIHAPUS] as StatusFilterType[]).map((status) => {
-              const count = status === "Semua" ? tickets.filter((t) => t.status !== STATUS_DIHAPUS).length : tickets.filter((t) => t.status === status).length;
+              const count = status === "Semua" ? tickets.filter((t) => t.status !== STATUS_DIHAPUS && t.status !== STATUS_DIPINDAHKAN).length : tickets.filter((t) => t.status === status).length;
               return (
                 <button key={status} type="button" role="tab" aria-selected={filterStatus === status} className={`hd-chip${filterStatus === status ? " is-on" : ""}`} onClick={() => setFilterStatus(status)}>
                   {status === STATUS_DIHAPUS ? "Arsip" : status}<span>{count}</span>

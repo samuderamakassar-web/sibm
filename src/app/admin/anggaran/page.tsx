@@ -36,8 +36,8 @@ interface ItemRab {
   qty: number; uom: string; harga: number; q: boolean[];
   deskripsi?: string; risiko?: string; usulan?: string;
 }
-interface PetaOtomatis { helpdesk?: string; servis?: string; atk?: string }
-type Sumber = "manual" | "helpdesk" | "servis" | "atk";
+interface PetaOtomatis { helpdesk?: string; servis?: string; atk?: string; temuan_gedung?: string; temuan_alat?: string }
+type Sumber = "manual" | "helpdesk" | "servis" | "atk" | "temuan_gedung" | "temuan_alat";
 interface Realisasi { id: string; sumber: Sumber; item_id?: string; tanggal: string; uraian: string; jumlah: number; kategori?: string }
 interface HasilImport { sheet: string; jenis: Jenis; items: ItemRab[] }
 
@@ -207,6 +207,15 @@ export default function AnggaranPage() {
           if (total > 0) hasil.push({ id: `atk-${d.id}`, sumber: "atk", tanggal: tgl(x.waktu_request.toDate()), uraian: `ATK ${x.resi || ""} · ${x.departemen || "-"}`, jumlah: total });
         });
       } catch (e) { console.error("[anggaran] atk:", e); }
+      try {
+        // §113 temuan inspeksi OB yang selesai dengan biaya (gedung & utilitas -> perbaikan; alat -> penggantian alat)
+        const tm = await getDocs(query(collection(db, "temuan_aset"), where("waktu_selesai", ">=", tsAwal), where("waktu_selesai", "<", tsAkhir)));
+        tm.docs.forEach((d) => {
+          const x = d.data();
+          if (x.status !== "Selesai" || !(x.biaya > 0) || x.dari_helpdesk_id) return; // pindahan Helpdesk sudah terhitung di sumber helpdesk
+          hasil.push({ id: `tm-${d.id}`, sumber: x.jenis === "alat" ? "temuan_alat" : "temuan_gedung", tanggal: tgl(x.waktu_selesai.toDate()), uraian: `${x.area}: ${x.item}`, jumlah: x.biaya });
+        });
+      } catch (e) { console.error("[anggaran] temuan:", e); }
       if (!batal) setOtomatis(hasil);
     })();
     return () => { batal = true; u1(); u2(); };
@@ -501,7 +510,7 @@ export default function AnggaranPage() {
             <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Sumber otomatis → baris RAB</h2>
             <p style={{ margin: "0 0 10px", fontSize: "12px", color: "var(--muted)" }}>Biaya dari menu lain masuk ke baris RAB yang dipilih di sini.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px" }}>
-              {([["helpdesk", "Biaya perbaikan Helpdesk"], ["servis", "Biaya servis kendaraan"], ["atk", "ATK keluar (harga master)"]] as const).map(([k, l]) => (
+              {([["helpdesk", "Biaya perbaikan Helpdesk"], ["temuan_gedung", "Perbaikan gedung & utilitas (temuan inspeksi)"], ["temuan_alat", "Penggantian alat kebersihan"], ["servis", "Biaya servis kendaraan"], ["atk", "ATK keluar (harga master)"]] as const).map(([k, l]) => (
                 <label key={k}>
                   <span className="rab-lbl">{l} <span style={{ fontWeight: 600, color: "var(--muted)" }}>· {rupiah((otomatis || []).filter((r) => r.sumber === k).reduce((a, r) => a + r.jumlah, 0))}</span></span>
                   <select className="rab-in" value={peta[k] || ""} onChange={(e) => { const p = { ...peta, [k]: e.target.value || undefined }; setPeta(p); simpanRab(items, p, "Alokasi otomatis tersimpan."); }}>
@@ -537,7 +546,7 @@ export default function AnggaranPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: "13px", color: "var(--ink)", fontWeight: 600 }}>{r.uraian}
                         <span style={{ marginLeft: "6px", fontSize: "10.5px", fontWeight: 800, padding: "1px 7px", borderRadius: "7px", background: r.sumber === "manual" ? "var(--line)" : "var(--info-50)", color: r.sumber === "manual" ? "var(--ink-soft)" : "var(--info)" }}>
-                          {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : "Manual"}
+                          {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : r.sumber === "temuan_gedung" ? "Temuan gedung" : r.sumber === "temuan_alat" ? "Alat kebersihan" : "Manual"}
                         </span>
                       </div>
                       {r.sumber === "manual" && (!r.item_id || !itemPerId.has(r.item_id)) && items.length > 0 ? (

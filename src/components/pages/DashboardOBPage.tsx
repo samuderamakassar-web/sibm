@@ -182,7 +182,7 @@ export default function DashboardOBPage() {
   const menuOB = [
     { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
     { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", action: "link", token: "warn", icon: IconDroplet },
-    { title: "Inspeksi Fasilitas", desc: "Checklist kondisi fasilitas per area, tiap minggu.", path: "/dashboard/ob/laporan", action: "link", token: "info", icon: IconSearch },
+    { title: "Inspeksi Kondisi Aset", desc: "Foto & kondisi fasilitas, alat kebersihan, utilitas — mingguan.", path: "/dashboard/ob/laporan", action: "link", token: "info", icon: IconSearch },
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input data lemburan Anda.", path: "", action: "modal_lembur", token: "accent", icon: IconClock },
     { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim OB & CS.", path: "/dashboard/ob/sop", action: "link", token: "info", icon: IconBook },
   ];

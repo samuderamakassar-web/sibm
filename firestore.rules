@@ -161,7 +161,9 @@ service cloud.firestore {
           // §88 Okupansi gedung, §89 Anggaran & realisasi (khusus akun staf, tidak dibaca publik)
           'okupansi_gedung', 'anggaran', 'realisasi_biaya',
           // §106 RAB, §107 Project Tracker
-          'anggaran_rab', 'project_tracker'
+          'anggaran_rab', 'project_tracker',
+          // §113 Temuan inspeksi kondisi aset (bukan Helpdesk)
+          'temuan_aset'
         ];
     }
 

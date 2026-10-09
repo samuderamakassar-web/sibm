@@ -827,7 +827,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
       // (yang dicari pelapor hampir selalu laporannya yang masih baru).
       const snap = await getDocs(query(collection(db, "helpdesk_tickets"), orderBy("waktu_lapor", "desc"), limit(BATAS_PENCARIAN)));
       const rawData = snap.docs.map(d => ({ id: d.id, ...d.data() } as HelpdeskTicket));
-      const filtered = rawData.filter(t => t.status !== "Dihapus" && String(t.nama_pelapor).toLowerCase().includes(searchHelpdeskName.toLowerCase().trim())); // §105 arsip disembunyikan
+      const filtered = rawData.filter(t => t.status !== "Dihapus" && t.status !== "Dipindahkan" && String(t.nama_pelapor).toLowerCase().includes(searchHelpdeskName.toLowerCase().trim())); // §105 arsip disembunyikan
       filtered.sort((a, b) => getTime(b.waktu_lapor) - getTime(a.waktu_lapor));
       setHasilHelpdesk(filtered.slice(0, 15));
       if (filtered.length === 0) showToast(`Belum ada laporan dari: "${searchHelpdeskName}"`, "info");

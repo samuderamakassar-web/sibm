@@ -1,5 +1,16 @@
 "use client";
 
+/**
+ * Inspeksi Kondisi Aset Mingguan -- OB & CS (§113, menggantikan "temuan rusak -> tiket Helpdesk").
+ * Tiga jenis (lihat src/lib/kondisiAset.ts):
+ *   Fasilitas Gedung      -- per area plot harian
+ *   Peralatan Kebersihan  -- alat kerja OB
+ *   Utilitas Teknis       -- hanya OB tetap yang ditunjuk Admin (settings/master_kondisi_aset.petugas_utilitas)
+ * Wajib: 1 foto keseluruhan area + foto tiap item (kecuali "Tidak Ada"); keterangan wajib bila kondisi bermasalah.
+ * Item yang dicentang "butuh perbaikan/penggantian" -> dokumen temuan_aset untuk Admin GA (BUKAN Helpdesk).
+ * Item yang temuannya sedang "Dikerjakan" terkunci; temuan "Baru/Dijadwalkan" -> pengingat, tidak membuat temuan dobel.
+ */
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, limit } from "firebase/firestore";
@@ -8,17 +19,13 @@ import { kirimEmail } from "@/lib/notify";
 import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
 import { useToast } from "@/components/ui/ToastProvider";
 import AdminShell from "../admin/AdminShell";
-import { useFasilitasOB } from "../../lib/sopChecklist";
-import { daerahTulis } from "@/lib/daerah";
 import Modal from "../ui/Modal";
+import { daerahTulis } from "@/lib/daerah";
+import {
+  AREA_TETAP, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, STATUS_TEMUAN_TERBUKA, WARNA_KONDISI, kodeTemuan, kondisiBermasalah, kondisiDefaultTindakan,
+  useMasterKondisiAset, type HasilInspeksiItem, type InspeksiAsetLog, type JenisInspeksi, type TemuanAset,
+} from "@/lib/kondisiAset";
 
-// §111 tiket Helpdesk yang masih terbuka untuk item fasilitas (lokasi "{area} - {nama}", format sama dgn tiket inspeksi)
-interface TiketTerbuka { id: string; lokasi: string; status: string; deskripsi: string; waktu_lapor?: Timestamp | null }
-const kodeTiket = (id: string) => id.slice(0, 8).toUpperCase();
-
-// ==========================================
-// IKON — SVG garis, satu ekosistem dengan halaman OB lain
-// ==========================================
 type IconProps = { size?: number; color?: string };
 const IconSearch = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
@@ -35,15 +42,6 @@ const IconCamera = ({ size = 18, color = "currentColor" }: IconProps) => (
 const IconTrash = ({ size = 14, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" /></svg>
 );
-const IconCheck = ({ size = 13, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-);
-const IconX = ({ size = 13, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="M6 6l12 12" /></svg>
-);
-const IconMinus = ({ size = 13, color = "currentColor" }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /></svg>
-);
 const IconClock = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
 );
@@ -51,59 +49,18 @@ const IconInbox = ({ size = 18, color = "currentColor" }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h4l2 3h4l2-3h4" /><path d="M5.5 5h13l2.5 7v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></svg>
 );
 
-// ==========================================
-// KONFIGURASI FASILITAS PER AREA
-// Disederhanakan atas permintaan user: cukup peralatan dapur + genset (bukan lagi daftar
-// generik toilet/meja/kursi/AC/dll) -- sama untuk SEMUA area, item yang gak relevan/gak ada
-// fisiknya di area tertentu (mis. Genset di luar Basement) tinggal dinilai "Tidak Ada" (N/A).
-// "dll fasilitas gedung lainnya" ditangani lewat tombol "+ Tambah Fasilitas Lain" di form
-// (item custom dgn nama bebas), bukan hardcode semua kemungkinan fasilitas gedung.
-// ==========================================
-// Daftar fasilitas diatur Admin GA di /admin/sop-checklist (§81) -- lihat useFasilitasOB() di komponen.
-
-type Kondisi = "Baik" | "Rusak" | "Tidak Ada";
-
-interface HasilItem {
-  nama: string;
-  kondisi: Kondisi | "";
-  catatan: string;
-  foto: string;
-}
-
-interface InspeksiLog {
-  id: string;
-  area: string;
-  pic_bertugas: string;
-  minggu_mulai: string;
-  waktu_selesai: Timestamp | null;
-  hasil: { nama: string; kondisi: Kondisi; catatan: string; foto: string }[];
-}
-
-// ==========================================
-// HELPER TANGGAL — WITA (Asia/Makassar), pola sama dengan halaman OB lain (hindari bug
-// UTC dari toISOString()). "Minggu berjalan" dihitung dari hari Senin (awal minggu ISO).
-// ==========================================
 function getTodayISOLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
-// OB & CS tidak ada jadwal di akhir pekan -- jaga-jaga kalau daily_plots weekend kebetulan
-// masih nyimpan data lama.
 function isWeekend(dateISO: string): boolean {
   const hari = new Date(dateISO + "T00:00:00").getDay();
   return hari === 0 || hari === 6;
 }
-function toISOFromDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 function getSeninMingguIni(): string {
   const d = new Date(`${getTodayISOLocal()}T00:00:00`);
-  const dow = d.getDay(); // 0 = Minggu ... 6 = Sabtu
-  const mundur = dow === 0 ? 6 : dow - 1;
-  d.setDate(d.getDate() - mundur);
-  return toISOFromDate(d);
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function formatRentangMinggu(seninISO: string): string {
   const senin = new Date(`${seninISO}T00:00:00`);
@@ -112,51 +69,78 @@ function formatRentangMinggu(seninISO: string): string {
   const fmt = (d: Date) => d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
   return `${fmt(senin)} - ${fmt(minggu)}`;
 }
+const tglRingkas = (ts?: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
+
+async function uploadToCloudinary(blob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", blob);
+  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+  formData.append("folder", "sibm/inspeksi-fasilitas");
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
+  return (await res.json()).secure_url as string;
+}
+/** Kecilkan foto (lebar 700px) lalu unggah. */
+function kecilkanLaluUnggah(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const skala = Math.min(1, 700 / img.width);
+        canvas.width = img.width * skala;
+        canvas.height = img.height * skala;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("canvas"));
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => (blob ? uploadToCloudinary(blob).then(resolve, reject) : reject(new Error("blob"))), "image/jpeg", 0.65);
+      };
+      img.onerror = () => reject(new Error("gambar"));
+      if (typeof ev.target?.result === "string") img.src = ev.target.result;
+    };
+    reader.onerror = () => reject(new Error("baca file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+type ItemForm = HasilInspeksiItem & { custom?: boolean };
 
 export default function InspeksiFasilitasPage() {
   const router = useRouter();
   const showToast = useToast();
+  const { nilai: master } = useMasterKondisiAset();
 
-  const { nilai: masterFasilitas } = useFasilitasOB();
-  const getFasilitasUntukArea = () => masterFasilitas.filter((x) => x.aktif !== false).map((x) => x.nama);
   const [picName, setPicName] = useState("");
   const [activeTab, setActiveTab] = useState<"form" | "history">("form");
   const [assignedAreas, setAssignedAreas] = useState<string[]>([]);
   const [step, setStep] = useState<1 | 2>(1);
+  const [jenis, setJenis] = useState<JenisInspeksi>("gedung");
   const [selectedArea, setSelectedArea] = useState("");
-
-  const [riwayatInspeksi, setRiwayatInspeksi] = useState<InspeksiLog[]>([]);
-
+  const [riwayat, setRiwayat] = useState<InspeksiAsetLog[]>([]);
+  const [temuanTerbuka, setTemuanTerbuka] = useState<TemuanAset[]>([]);
+  const [modalTemuan, setModalTemuan] = useState<TemuanAset[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPageLoading, setIsPageLoading] = useState(true);
-  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
-
-  // Diisi ulang tiap kali masuk step 2 (lihat tombol "Mulai Inspeksi") — daftarnya beda-beda
-  // per area (getFasilitasUntukArea), jadi gak bisa di-inisialisasi sekali pas mount.
-  const [hasilList, setHasilList] = useState<HasilItem[]>([]);
-  // §111 tiket terbuka & modal pemberitahuan
-  const [tiketTerbuka, setTiketTerbuka] = useState<TiketTerbuka[]>([]);
-  const [modalTiket, setModalTiket] = useState<TiketTerbuka[] | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null); // "area" | index item
+  const [fotoArea, setFotoArea] = useState("");
+  const [items, setItems] = useState<ItemForm[]>([]);
 
   const seninMingguIni = getSeninMingguIni();
+  const bolehUtilitas = master.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
+  const areaAktif = AREA_TETAP[jenis] || selectedArea;
 
-  // ==========================================
-  // EFEK 1: Identitas & Data Plotting Hari Ini (dipakai buat batasi pilihan area, sama
-  // pola dengan ChecklistOBPage — inspeksi tetap dikerjakan di area yang jadi tanggung
-  // jawab hari itu, walau cadence-nya mingguan)
-  // ==========================================
+  // Identitas & plot area hari ini
   useEffect(() => {
-    const muatDataAwal = async () => {
+    const muat = async () => {
       const nama = localStorage.getItem("pic_nama") || "";
       const dept = (localStorage.getItem("pic_dept") || "").toLowerCase();
-
       if (!nama || !dept.includes("ob & cs")) {
         showToast("Akses Ditolak! Halaman ini khusus staf OB & CS.", "error");
         setTimeout(() => router.push("/dashboard/ob"), 1200);
         return;
       }
       setPicName(nama);
-
       try {
         const todayISO = getTodayISOLocal();
         if (!isWeekend(todayISO)) {
@@ -174,203 +158,93 @@ export default function InspeksiFasilitasPage() {
         setIsPageLoading(false);
       }
     };
-    muatDataAwal();
+    muat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  // ==========================================
-  // EFEK 2: Listener Riwayat Inspeksi (punya PIC ini sendiri)
-  // ==========================================
+  // Riwayat milik PIC & temuan yang masih terbuka
   useEffect(() => {
     if (!picName) return;
-    // §64: 200 terakhir (dulu seluruh riwayat PIC).
-    const q = query(collection(db, "inspeksi_fasilitas"), where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"), limit(200));
-    const unsub = onSnapshot(q, (snap) => {
-      const logs: InspeksiLog[] = [];
-      snap.forEach((d) => logs.push({ ...d.data(), id: d.id } as InspeksiLog));
-      setRiwayatInspeksi(logs);
+    const u1 = onSnapshot(query(collection(db, "inspeksi_fasilitas"), where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"), limit(200)), (snap) => {
+      setRiwayat(snap.docs.map((d) => ({ ...(d.data() as Omit<InspeksiAsetLog, "id">), id: d.id })));
     });
-    return () => unsub();
+    const u2 = onSnapshot(query(collection(db, "temuan_aset"), where("status", "in", STATUS_TEMUAN_TERBUKA)), (snap) => {
+      setTemuanTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TemuanAset)));
+    }, (e) => console.error("[inspeksi] temuan terbuka:", e));
+    return () => { u1(); u2(); };
   }, [picName]);
 
-  // §111 tiket Helpdesk yang belum selesai -- mencegah temuan dobel & mengunci item yang sedang diperbaiki
-  useEffect(() => {
-    if (!picName) return;
-    const unsub = onSnapshot(query(collection(db, "helpdesk_tickets"), where("status", "in", ["Menunggu", "Sedang Dikerjakan"])), (snap) => {
-      setTiketTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TiketTerbuka)));
-    }, (e) => console.error("[inspeksi] tiket terbuka:", e));
-    return () => unsub();
-  }, [picName]);
-  const tiketUntuk = (nama: string) => (nama.trim() ? tiketTerbuka.find((tk) => tk.lokasi === `${selectedArea} - ${nama.trim()}`) : undefined);
+  const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => t.jenis === jenis && t.area === areaAktif && t.item.toLowerCase() === nama.trim().toLowerCase()) : undefined);
+  const sudahMingguIni = riwayat.find((l) => (l.jenis || "gedung") === jenis && l.area === areaAktif && l.minggu_mulai === seninMingguIni);
+  const daftarMaster = () => master[jenis].filter((x) => x.aktif !== false).map((x) => x.nama);
+  const terkaitArea = () => daftarMaster().map((n) => temuanUntuk(n)).filter((x): x is TemuanAset => !!x);
+
   const mulaiInspeksi = () => {
-    const daftar = getFasilitasUntukArea();
-    // Item yang sedang diperbaiki: otomatis tercatat Rusak (dalam perbaikan) & terkunci -- tidak perlu dinilai ulang.
-    setHasilList(daftar.map((nama) => {
-      const tk = tiketUntuk(nama);
-      return tk?.status === "Sedang Dikerjakan"
-        ? { nama, kondisi: "Rusak" as Kondisi, catatan: `Sedang dalam perbaikan (tiket ${kodeTiket(tk.id)})`, foto: "" }
-        : { nama, kondisi: "" as const, catatan: "", foto: "" };
+    setFotoArea("");
+    setItems(daftarMaster().map((nama) => {
+      const t = temuanUntuk(nama);
+      return t?.status === "Dikerjakan"
+        ? { nama, kondisi: t.kondisi || "Rusak", catatan: `Sedang ditangani (${kodeTemuan(t.id)})`, foto: t.foto || "", butuh_tindakan: false }
+        : { nama, kondisi: "", catatan: "", foto: "", butuh_tindakan: false };
     }));
     setStep(2);
-    const terkait = daftar.map((n) => tiketUntuk(n)).filter((x): x is TiketTerbuka => !!x);
-    if (terkait.length) setModalTiket(terkait);
+    const terkait = terkaitArea();
+    if (terkait.length) setModalTemuan(terkait);
   };
-  const waktuLapor = (ts?: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
 
-  // Sudah ada inspeksi buat area terpilih minggu ini? (info aja, gak nge-block submit ulang)
-  const sudahInspeksiMingguIni = riwayatInspeksi.find((l) => l.area === selectedArea && l.minggu_mulai === seninMingguIni);
-
-  // ==========================================
-  // UPLOAD FOTO
-  // ==========================================
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-    formData.append("folder", "sibm/inspeksi-fasilitas");
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-    const data = await res.json();
-    return data.secure_url as string;
-  }
-
-  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-    const file = e.target.files?.[0];
+  const ubahItem = (i: number, patch: Partial<ItemForm>) => setItems((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const pilihKondisi = (i: number, kondisi: string) => {
+    const t = temuanUntuk(items[i]?.nama || "");
+    if (t?.status === "Dikerjakan") { setModalTemuan([t]); return; }
+    if (t && kondisiBermasalah(kondisi) && !kondisiBermasalah(items[i]?.kondisi || "")) setModalTemuan([t]);
+    ubahItem(i, { kondisi, butuh_tindakan: t ? false : kondisiDefaultTindakan(kondisi) });
+  };
+  const unggah = (kunci: string, file: File | undefined, simpan: (url: string) => void) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = async () => {
-        const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 600;
-        const scale = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(async (blob) => {
-          if (!blob) return;
-          setUploadingIdx(index);
-          try {
-            const url = await uploadToCloudinary(blob);
-            setHasilList((prev) => { const next = [...prev]; next[index] = { ...next[index], foto: url }; return next; });
-          } catch (err) {
-            console.error(err);
-            showToast("Gagal upload foto, coba lagi.", "error");
-          } finally {
-            setUploadingIdx(null);
-          }
-        }, "image/jpeg", 0.6);
-      };
-      if (typeof ev.target?.result === "string") img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+    setUploading(kunci);
+    kecilkanLaluUnggah(file).then(simpan).catch((e) => { console.error(e); showToast("Gagal upload foto, coba lagi.", "error"); }).finally(() => setUploading(null));
   };
 
-  const ubahKondisi = (index: number, kondisi: Kondisi) => {
-    const tk = tiketUntuk(hasilList[index]?.nama || "");
-    if (tk?.status === "Sedang Dikerjakan") { setModalTiket([tk]); return; } // §111 terkunci
-    if (tk && kondisi === "Rusak" && hasilList[index]?.kondisi !== "Rusak") setModalTiket([tk]); // §111 reminder: sudah dilaporkan
-    setHasilList((prev) => { const next = [...prev]; next[index] = { ...next[index], kondisi }; return next; });
-  };
-  const ubahCatatan = (index: number, catatan: string) => {
-    setHasilList((prev) => { const next = [...prev]; next[index] = { ...next[index], catatan }; return next; });
-  };
-  const tambahFasilitasLain = () => {
-    setHasilList((prev) => [...prev, { nama: "", kondisi: "", catatan: "", foto: "" }]);
-  };
-  const ubahNamaCustom = (index: number, nama: string) => {
-    setHasilList((prev) => { const next = [...prev]; next[index] = { ...next[index], nama }; return next; });
-  };
-  const hapusItemCustom = (index: number) => {
-    setHasilList((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const resetForm = () => {
-    setHasilList([]);
-    setStep(1);
-  };
-
-  // ==========================================
-  // SUBMIT
-  // ==========================================
   const handleSubmit = async () => {
-    // Item standar wajib semua dinilai; item custom yang belum diisi nama/kondisi diabaikan (opsional).
-    const jumlahStandar = getFasilitasUntukArea().length;
-    const itemStandar = hasilList.slice(0, jumlahStandar);
-    const itemCustomTerisi = hasilList.slice(jumlahStandar).filter((h) => h.nama.trim() && h.kondisi);
-
-    if (itemStandar.some((h) => !h.kondisi)) {
-      return showToast("Mohon nilai kondisi (Baik/Rusak/Tidak Ada) untuk semua fasilitas standar sebelum mengirim.", "warning");
-    }
-    const semuaDinilai = [...itemStandar, ...itemCustomTerisi] as { nama: string; kondisi: Kondisi; catatan: string; foto: string }[];
-    const rusakTanpaCatatan = semuaDinilai.find((h) => h.kondisi === "Rusak" && !h.catatan.trim());
-    if (rusakTanpaCatatan) {
-      return showToast(`Mohon isi keterangan kerusakan untuk "${rusakTanpaCatatan.nama}" sebelum mengirim.`, "warning");
-    }
+    if (!fotoArea) return showToast("Foto keseluruhan area wajib diambil dulu.", "warning");
+    const jumlahStandar = daftarMaster().length;
+    const standar = items.slice(0, jumlahStandar);
+    const custom = items.slice(jumlahStandar).filter((h) => h.nama.trim() && h.kondisi);
+    if (standar.some((h) => !h.kondisi)) return showToast("Nilai kondisi semua item dulu.", "warning");
+    const semua = [...standar, ...custom];
+    const tanpaFoto = semua.find((h) => h.kondisi !== "Tidak Ada" && !h.foto);
+    if (tanpaFoto) return showToast(`Foto "${tanpaFoto.nama}" wajib diambil.`, "warning");
+    const tanpaKet = semua.find((h) => kondisiBermasalah(h.kondisi) && !h.catatan.trim());
+    if (tanpaKet) return showToast(`Isi keterangan kondisi "${tanpaKet.nama}".`, "warning");
 
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "inspeksi_fasilitas"), { daerah: daerahTulis(),
-        area: selectedArea,
-        pic_bertugas: picName,
-        minggu_mulai: seninMingguIni,
-        waktu_selesai: serverTimestamp(),
-        hasil: semuaDinilai,
+      const hasil: HasilInspeksiItem[] = semua.map((h) => ({ nama: h.nama.trim(), kondisi: h.kondisi, catatan: h.catatan.trim(), foto: h.foto, butuh_tindakan: !!h.butuh_tindakan }));
+      const ref = await addDoc(collection(db, "inspeksi_fasilitas"), {
+        daerah: daerahTulis(), jenis, area: areaAktif, pic_bertugas: picName, minggu_mulai: seninMingguIni,
+        waktu_selesai: serverTimestamp(), foto_area: fotoArea, hasil,
       });
-
-      // Fasilitas yang Rusak tetap diteruskan ke Helpdesk Admin GA — bagian yang dipertahankan
-      // dari fitur lama, cuma sumbernya sekarang checklist terstruktur, bukan form bebas.
-      // Sekalian kirim email ke Admin GA (sebelumnya cuma masuk tabel, gak ada notifikasi
-      // email sama sekali buat temuan dari inspeksi) supaya langsung ketahuan, bukan cuma
-      // nongol diam-diam di tabel admin/helpdesk.
-      // §111 item yang sudah punya tiket terbuka (Menunggu / Sedang Dikerjakan) tidak dibuatkan tiket baru (anti dobel)
-      const rusak = semuaDinilai.filter((h) => h.kondisi === "Rusak" && !tiketUntuk(h.nama));
-      const sudahAdaTiket = semuaDinilai.filter((h) => h.kondisi === "Rusak" && tiketUntuk(h.nama)).length;
-      await Promise.all(rusak.map((h) => addDoc(collection(db, "helpdesk_tickets"), { daerah: daerahTulis(),
-        nama_pelapor: picName,
-        departemen: "OB & CS",
-        waktu_lapor: serverTimestamp(),
-        lokasi: `${selectedArea} - ${h.nama}`,
-        deskripsi: `[Temuan Inspeksi Mingguan] ${h.catatan}`,
-        foto_awal: h.foto || "",
-        status: "Menunggu",
+      // Temuan baru hanya untuk item yang dicentang & belum punya temuan terbuka (anti dobel)
+      const baru = hasil.filter((h) => h.butuh_tindakan && kondisiBermasalah(h.kondisi) && !temuanUntuk(h.nama));
+      await Promise.all(baru.map((h) => addDoc(collection(db, "temuan_aset"), {
+        daerah: daerahTulis(), jenis, area: areaAktif, item: h.nama, kondisi: h.kondisi, catatan: h.catatan, foto: h.foto,
+        pelapor: picName, waktu_lapor: serverTimestamp(), status: "Baru", inspeksi_id: ref.id,
       })));
-
-      if (rusak.length > 0) {
+      if (baru.length) {
         try {
           const adminSnap = await getDocs(query(collection(db, "users_master"), where("departemen", "==", "Admin GA")));
-          const daftarAdminGA = adminSnap.docs.map((d) => d.data() as { nama: string; email?: string });
-          for (const h of rusak) {
-            const htmlEmail = buildRequestBaruEmailHtml({
-              jenisRequest: "Laporan Kerusakan (Inspeksi Mingguan)",
-              namaPemohon: picName,
-              departemen: "OB & CS",
-              rows: [
-                { label: "Lokasi", value: `${selectedArea} - ${h.nama}` },
-                { label: "Keterangan", value: h.catatan },
-              ],
-              fotoUrl: h.foto || undefined,
-            });
-            for (const admin of daftarAdminGA) {
-              if (!admin.email) continue;
-              const hasilEmail = await kirimEmail(admin.email, `Laporan Kerusakan Baru: ${selectedArea} - ${h.nama}`, htmlEmail, admin.nama);
-              if (!hasilEmail.sukses) console.error(`[notify] Gagal kirim email temuan inspeksi ke ${admin.nama}:`, hasilEmail.pesanError);
-            }
+          const html = buildRequestBaruEmailHtml({
+            jenisRequest: `${LABEL_TINDAKAN[jenis]} (hasil inspeksi)`, namaPemohon: picName, departemen: "OB & CS",
+            rows: [{ label: "Area", value: areaAktif }, ...baru.map((h) => ({ label: h.nama, value: `${h.kondisi} — ${h.catatan}` }))],
+            fotoUrl: baru[0].foto || undefined,
+          });
+          for (const a of adminSnap.docs.map((d) => d.data() as { nama: string; email?: string })) {
+            if (a.email) await kirimEmail(a.email, `${baru.length} Temuan ${LABEL_JENIS[jenis]}: ${areaAktif}`, html, a.nama);
           }
-        } catch (emailError) {
-          // Best-effort -- kegagalan kirim email TIDAK boleh membatalkan laporan inspeksi yang
-          // sudah kesimpan (helpdesk_tickets di atas sudah berhasil, itu yang lebih penting).
-          console.error("[notify] Gagal memproses notifikasi email temuan inspeksi:", emailError);
-        }
+        } catch (e) { console.error("[notify] email temuan:", e); }
       }
-
-      showToast(rusak.length > 0
-        ? `Inspeksi terkirim! ${rusak.length} temuan rusak baru diteruskan ke Admin GA${sudahAdaTiket ? ` (${sudahAdaTiket} sudah punya tiket berjalan)` : ""}.`
-        : sudahAdaTiket ? `Inspeksi terkirim! ${sudahAdaTiket} kerusakan sudah tercatat di tiket yang sedang berjalan.` : "Inspeksi terkirim! Semua fasilitas dalam kondisi baik.", "success");
-      resetForm();
-      setActiveTab("history");
+      showToast(baru.length ? `Inspeksi terkirim! ${baru.length} temuan diteruskan ke Admin GA.` : "Inspeksi terkirim! Kondisi tercatat.", "success");
+      setItems([]); setFotoArea(""); setStep(1); setActiveTab("history");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error(error);
@@ -380,291 +254,221 @@ export default function InspeksiFasilitasPage() {
     }
   };
 
-  const formatJam = (ts: Timestamp | null) => {
-    if (!ts) return "-";
-    return new Date(ts.toDate()).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  };
-
-  const rootTokenCSS = `
-    `;
-
   if (isPageLoading) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "var(--bg)", fontFamily: "'Inter', sans-serif" }}>
-        <style dangerouslySetInnerHTML={{ __html: `${rootTokenCSS} @keyframes spin { to { transform: rotate(360deg); } }` }} />
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "var(--bg)" }}>
+        <style dangerouslySetInnerHTML={{ __html: "@keyframes spin { to { transform: rotate(360deg); } }" }} />
         <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "4px solid var(--info-50)", borderTopColor: "var(--info)", animation: "spin 0.8s linear infinite", marginBottom: "16px" }} />
-        <div style={{ fontWeight: "bold", fontSize: "14px", color: "var(--ink-soft)" }}>Menyiapkan Inspeksi Fasilitas...</div>
+        <div style={{ fontWeight: "bold", fontSize: "14px", color: "var(--ink-soft)" }}>Menyiapkan Inspeksi...</div>
       </div>
     );
   }
 
+  const jenisTersedia = (["gedung", "alat", ...(bolehUtilitas ? ["utilitas"] : [])] as JenisInspeksi[]);
+  const bisaMulai = jenis !== "gedung" || assignedAreas.length > 0;
+
   return (
-    <AdminShell title="Inspeksi Fasilitas Mingguan" subtitle="Cek kondisi fasilitas tiap area — temuan rusak otomatis masuk helpdesk" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        ${rootTokenCSS}
+    <AdminShell title="Inspeksi Kondisi Aset" subtitle="Foto & kondisi fasilitas gedung, peralatan kebersihan, dan utilitas — mingguan" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
+      <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .tab-switch { background: var(--bg); padding: 4px; border-radius: 10px; display: flex; gap: 4px; }
-        .tab-btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .tab-switch { background: var(--bg); padding: 4px; border-radius: 10px; display: flex; gap: 4px; width: fit-content; margin-bottom: 16px; }
+        .tab-btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); display: flex; align-items: center; gap: 6px; font-family: inherit; }
         .tab-btn.active { background: var(--surface); color: var(--info); box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
-        .icon-chip { display: inline-flex; align-items: center; justify-content: center; border-radius: 16px; flex-shrink: 0; }
-        .fasilitas-row { background: var(--surface); padding: 16px; border-radius: 16px; box-shadow: 0 6px 12px -4px rgba(0,0,0,0.05); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
-        .kondisi-btn { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-weight: bold; font-size: 12.5px; cursor: pointer; font-family: inherit; transition: 0.15s; }
-        .kondisi-btn.baik.active { border-color: var(--ok-solid); background: var(--ok-solid); color: white; }
-        .kondisi-btn.rusak.active { border-color: var(--brand); background: var(--brand); color: white; }
-        .kondisi-btn.tidakada.active { border-color: var(--muted); background: var(--muted); color: white; }
-        .foto-dropzone { width: 90px; height: 90px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 10px; font-weight: bold; color: var(--muted); flex-shrink: 0; }
-      `}} />
+        .ka-kartu { background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+        .ka-jenis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }
+        .ka-jenis button { text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-family: inherit; color: var(--ink); }
+        .ka-jenis button.on { border-color: var(--info); box-shadow: inset 0 0 0 1px var(--info); }
+        .ka-kondisi { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ka-kondisi button { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-weight: 700; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+        .ka-foto { width: 84px; height: 84px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 10.5px; font-weight: 700; color: var(--muted); flex-shrink: 0; overflow: hidden; }
+        .ka-foto.wajib { border-color: var(--red-600); color: var(--red-600); }
+        .ka-in { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; }
+      ` }} />
 
-      <div className="no-print staff-toolbar">
-        <div className="tab-switch">
-          <button onClick={() => setActiveTab("form")} className={`tab-btn ${activeTab === "form" ? "active" : ""}`}>
-            <IconSearch size={14} /> Inspeksi
-          </button>
-          <button onClick={() => setActiveTab("history")} className={`tab-btn ${activeTab === "history" ? "active" : ""}`}>
-            <IconClock size={14} /> Riwayat ({riwayatInspeksi.length})
-          </button>
-        </div>
+      <div className="tab-switch">
+        <button onClick={() => setActiveTab("form")} className={`tab-btn ${activeTab === "form" ? "active" : ""}`}><IconSearch size={14} /> Inspeksi</button>
+        <button onClick={() => setActiveTab("history")} className={`tab-btn ${activeTab === "history" ? "active" : ""}`}><IconClock size={14} /> Riwayat</button>
       </div>
 
-      <div style={{ maxWidth: "640px", margin: "0 auto", padding: "0 20px" }}>
+      {activeTab === "form" && step === 1 && (
+        <div className="ka-kartu" style={{ maxWidth: "640px" }}>
+          <div style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>Minggu ini · {formatRentangMinggu(seninMingguIni)}</div>
+          <div className="ka-jenis" role="tablist" aria-label="Jenis inspeksi">
+            {jenisTersedia.map((j) => (
+              <button key={j} type="button" role="tab" aria-selected={jenis === j} className={jenis === j ? "on" : ""} onClick={() => setJenis(j)}>
+                <div style={{ fontWeight: 800, fontSize: "14px" }}>{LABEL_JENIS[j]}</div>
+                <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{master[j].filter((x) => x.aktif !== false).length} item{j === "utilitas" ? " · petugas tetap" : ""}</div>
+              </button>
+            ))}
+          </div>
 
-        {/* ========================================================================================= */}
-        {/* TAB 1: FORM INSPEKSI */}
-        {/* ========================================================================================= */}
-        {activeTab === "form" && (
-          <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-            {step === 1 && (
-              <div style={{ background: "var(--surface)", padding: "40px 25px", borderRadius: "24px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", textAlign: "center", borderTop: "6px solid var(--info)" }}>
-                {assignedAreas.length > 0 ? (
-                  <>
-                    <div className="icon-chip" style={{ width: "72px", height: "72px", background: "var(--info-50)", color: "var(--info)", margin: "0 auto 18px" }}><IconSearch size={32} /></div>
-                    <h2 style={{ margin: "0 0 10px 0", color: "var(--ink)", fontSize: "22px" }}>Inspeksi Fasilitas Mingguan</h2>
-                    <p style={{ color: "var(--muted)", marginBottom: "10px", fontSize: "14px", lineHeight: "1.5" }}>Cek kondisi fasilitas gedung di area Anda — dilakukan 1x seminggu.</p>
-                    <div style={{ display: "inline-block", background: "var(--bg)", color: "var(--ink-soft)", fontSize: "11px", fontWeight: "bold", padding: "5px 12px", borderRadius: "20px", marginBottom: "25px" }}>
-                      Minggu ini: {formatRentangMinggu(seninMingguIni)}
+          {jenis === "gedung" ? (
+            assignedAreas.length > 0 ? (
+              <label style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)" }}>Area hari ini
+                <select className="ka-in" style={{ marginTop: "4px" }} value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)}>
+                  {assignedAreas.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </label>
+            ) : (
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", padding: "12px", borderRadius: "12px", background: "var(--red-50)", color: "var(--red-600)", fontSize: "13px", fontWeight: 700 }}>
+                <IconAlertTriangle size={18} /> Belum ada plot area untuk Anda hari ini — hubungi koordinator. Peralatan Kebersihan tetap bisa diinspeksi.
+              </div>
+            )
+          ) : (
+            <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}><IconMapPin size={14} /> {areaAktif}</div>
+          )}
+
+          {sudahMingguIni && <div style={{ background: "var(--ok-50)", color: "var(--ok)", fontSize: "12px", fontWeight: 700, padding: "10px 12px", borderRadius: "10px" }}>✓ Sudah diinspeksi minggu ini ({tglRingkas(sudahMingguIni.waktu_selesai)}). Boleh diulang bila perlu update.</div>}
+          {bisaMulai && terkaitArea().length > 0 && (
+            <div style={{ background: "var(--warn-50)", color: "var(--warn)", fontSize: "12px", fontWeight: 700, padding: "10px 12px", borderRadius: "10px" }}>
+              🔧 {terkaitArea().length} item sudah tercatat sebagai temuan ({terkaitArea().filter((t) => t.status === "Dikerjakan").length} sedang ditangani).
+            </div>
+          )}
+          <button type="button" onClick={mulaiInspeksi} disabled={!bisaMulai} className="sa-btn is-primary" style={{ height: "50px", fontSize: "15px", opacity: bisaMulai ? 1 : 0.5 }}>Mulai Inspeksi {LABEL_JENIS[jenis]} ➔</button>
+          <p style={{ margin: 0, fontSize: "11.5px", color: "var(--muted)" }}>Wajib: 1 foto keseluruhan area + foto setiap item. Kerusakan yang perlu perbaikan/penggantian diteruskan ke Admin GA sebagai temuan (bukan tiket Helpdesk).</p>
+        </div>
+      )}
+
+      {activeTab === "form" && step === 2 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxWidth: "760px" }}>
+          <div className="ka-kartu" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderLeft: "6px solid var(--info)" }}>
+            <div>
+              <div style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px" }}>{LABEL_JENIS[jenis]}</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)" }}>{areaAktif}</div>
+            </div>
+            <button type="button" className="sa-btn is-soft" onClick={() => setStep(1)}>Ganti</button>
+          </div>
+
+          <div className="ka-kartu" style={{ flexDirection: "row", alignItems: "center", gap: "14px" }}>
+            <label className={`ka-foto${fotoArea ? "" : " wajib"}`} style={{ width: "110px", height: "84px" }}>
+              {fotoArea ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={fotoArea} alt="Foto area" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : uploading === "area" ? "Mengunggah..." : <><IconCamera size={18} /> Foto area *</>}
+              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { unggah("area", e.target.files?.[0], setFotoArea); e.target.value = ""; }} />
+            </label>
+            <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}><b>Foto keseluruhan {jenis === "alat" ? "peralatan" : "area"}</b><br /><span style={{ fontSize: "12px", color: "var(--muted)" }}>Wajib 1 foto sebagai gambaran umum kondisi.</span></div>
+          </div>
+
+          {items.map((h, i) => {
+            const t = temuanUntuk(h.nama);
+            const kunci = t?.status === "Dikerjakan";
+            const custom = i >= daftarMaster().length;
+            if (kunci && t) {
+              return (
+                <div key={i} className="ka-kartu" style={{ borderStyle: "dashed", opacity: 0.85, cursor: "pointer" }} onClick={() => setModalTemuan([t])}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <b style={{ fontSize: "15px" }}>{h.nama}</b>
+                    <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "4px 10px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>🔧 Sedang ditangani · terkunci</span>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>{kodeTemuan(t.id)} · dilaporkan {tglRingkas(t.waktu_lapor)} — tidak perlu dinilai sampai selesai.</div>
+                </div>
+              );
+            }
+            return (
+              <div key={i} className="ka-kartu">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  {custom ? <input className="ka-in" style={{ flex: "1 1 160px", fontWeight: 700 }} placeholder="Nama item lain..." value={h.nama} onChange={(e) => ubahItem(i, { nama: e.target.value })} />
+                    : <b style={{ fontSize: "15px", color: "var(--ink)" }}>{h.nama}</b>}
+                  <div className="ka-kondisi">
+                    {KONDISI[jenis].map((k) => (
+                      <button key={k} type="button" onClick={() => pilihKondisi(i, k)} style={h.kondisi === k ? { background: WARNA_KONDISI[k].fg, color: "#fff", borderColor: "transparent" } : undefined}>{k}</button>
+                    ))}
+                    {custom && <button type="button" onClick={() => setItems((l) => l.filter((_, j) => j !== i))} style={{ color: "var(--red-600)" }} aria-label="Hapus item"><IconTrash size={13} /></button>}
+                  </div>
+                </div>
+                {t && <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--warn)", background: "var(--warn-50)", padding: "8px 10px", borderRadius: "10px" }}>⏳ Sudah tercatat sebagai temuan ({kodeTemuan(t.id)}, {t.status}) sejak {tglRingkas(t.waktu_lapor)} — belum ditangani. Tidak membuat temuan baru.</div>}
+                {h.kondisi && h.kondisi !== "Tidak Ada" && (
+                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                    <label className={`ka-foto${h.foto ? "" : " wajib"}`}>
+                      {h.foto ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={h.foto} alt={`Foto ${h.nama}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : uploading === String(i) ? "Mengunggah..." : <><IconCamera size={18} /> Foto *</>}
+                      <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { unggah(String(i), e.target.files?.[0], (url) => ubahItem(i, { foto: url })); e.target.value = ""; }} />
+                    </label>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <textarea className="ka-in" style={{ minHeight: "60px", resize: "vertical", borderColor: kondisiBermasalah(h.kondisi) && !h.catatan.trim() ? "var(--red-600)" : undefined }}
+                        placeholder={kondisiBermasalah(h.kondisi) ? "Keterangan kondisi (wajib), mis. lampu mati 2 titik" : jenis === "utilitas" ? "Catatan / angka (opsional), mis. level solar 70%, jam operasi 1.250" : "Catatan (opsional)"}
+                        value={h.catatan} onChange={(e) => ubahItem(i, { catatan: e.target.value })} />
+                      {kondisiBermasalah(h.kondisi) && !t && (
+                        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", fontWeight: 700, color: h.butuh_tindakan ? "var(--red-600)" : "var(--ink-soft)", cursor: "pointer" }}>
+                          <input type="checkbox" checked={!!h.butuh_tindakan} onChange={(e) => ubahItem(i, { butuh_tindakan: e.target.checked })} />
+                          Butuh {jenis === "alat" ? "penggantian" : "perbaikan"} → teruskan ke Admin GA
+                        </label>
+                      )}
                     </div>
-
-                    <select
-                      value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)}
-                      style={{ width: "100%", padding: "18px", borderRadius: "12px", border: "2px solid var(--info)", fontSize: "16px", fontWeight: "bold", color: "var(--info)", marginBottom: "15px", cursor: "pointer", background: "var(--info-50)", outline: "none", appearance: "none", textAlign: "center" }}
-                    >
-                      {assignedAreas.map((area) => <option key={area} value={area}>{area}</option>)}
-                    </select>
-
-                    {sudahInspeksiMingguIni && (
-                      <div style={{ background: "var(--ok-50)", color: "var(--ok)", fontSize: "12px", fontWeight: "bold", padding: "10px 12px", borderRadius: "10px", marginBottom: "20px" }}>
-                        ✓ Area ini sudah diinspeksi minggu ini ({formatJam(sudahInspeksiMingguIni.waktu_selesai)}). Masih bisa diulang kalau perlu update.
-                      </div>
-                    )}
-
-                    {(() => {
-                      const terkait = getFasilitasUntukArea().map((n) => tiketUntuk(n)).filter(Boolean) as TiketTerbuka[];
-                      if (!terkait.length) return null;
-                      const proses = terkait.filter((x) => x.status === "Sedang Dikerjakan").length;
-                      return (
-                        <div style={{ background: "var(--warn-50)", color: "var(--warn)", fontSize: "12px", fontWeight: "bold", padding: "10px 12px", borderRadius: "10px", marginBottom: "14px" }}>
-                          🔧 {terkait.length} fasilitas di area ini sudah dilaporkan rusak{proses ? ` (${proses} sedang diperbaiki)` : ""}.
-                        </div>
-                      );
-                    })()}
-
-                    <button
-                      onClick={mulaiInspeksi}
-                      style={{ width: "100%", padding: "18px", background: "var(--info-solid)", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
-                    >
-                      Mulai Inspeksi ➔
-                    </button>
-                  </>
-                ) : (
-                  <div style={{ padding: "20px" }}>
-                    <div className="icon-chip" style={{ width: "72px", height: "72px", background: "var(--red-50)", color: "var(--red-600)", margin: "0 auto 18px" }}><IconAlertTriangle size={34} /></div>
-                    <h3 style={{ color: "var(--red-700)", margin: "0 0 10px 0", fontSize: "20px" }}>Anda Tidak Memiliki Jadwal</h3>
-                    <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0, lineHeight: "1.6" }}>
-                      Koordinator belum memetakan lokasi kerja Anda untuk hari ini. Silakan hubungi koordinator Anda untuk mendapatkan plot area.
-                    </p>
                   </div>
                 )}
               </div>
-            )}
+            );
+          })}
 
-            {step === 2 && (
-              <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-                <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid var(--line)", borderLeft: "6px solid var(--info)" }}>
+          <button type="button" onClick={() => setItems((l) => [...l, { nama: "", kondisi: "", catatan: "", foto: "", butuh_tindakan: false, custom: true }])} style={{ padding: "13px", background: "var(--surface)", color: "var(--info)", border: "2px dashed var(--info)", borderRadius: "14px", fontWeight: 700, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>+ Tambah item lain</button>
+          <button type="button" onClick={handleSubmit} disabled={isLoading || uploading !== null} className="sa-btn is-primary" style={{ height: "54px", fontSize: "16px" }}>{isLoading ? "Mengirim..." : uploading !== null ? "Menunggu foto terunggah..." : "Kirim Hasil Inspeksi"}</button>
+        </div>
+      )}
+
+      {activeTab === "history" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "760px" }}>
+          {riwayat.length === 0 ? (
+            <div className="ka-kartu" style={{ alignItems: "center", color: "var(--muted)" }}><IconInbox size={28} /> Belum ada riwayat inspeksi.</div>
+          ) : riwayat.map((log) => {
+            const bermasalah = log.hasil.filter((h) => kondisiBermasalah(h.kondisi)).length;
+            return (
+              <div key={log.id} className="ka-kartu">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                   <div>
-                    <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Area Inspeksi:</span>
-                    <h2 style={{ margin: "5px 0 0 0", color: "var(--ink)", fontSize: "18px" }}>{selectedArea}</h2>
+                    <div style={{ fontSize: "11px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>{LABEL_JENIS[log.jenis || "gedung"]}</div>
+                    <b style={{ fontSize: "15px" }}>{log.area}</b> <span style={{ fontSize: "12px", color: "var(--muted)" }}>· {tglRingkas(log.waktu_selesai)}</span>
                   </div>
-                  <button onClick={() => setStep(1)} style={{ background: "var(--bg)", border: "1px solid var(--line)", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", color: "var(--ink-soft)" }}>Ganti Area</button>
+                  <span style={{ fontSize: "11px", fontWeight: 800, padding: "4px 10px", borderRadius: "8px", background: bermasalah ? "var(--red-50)" : "var(--ok-50)", color: bermasalah ? "var(--red-600)" : "var(--ok)" }}>{bermasalah ? `${bermasalah} bermasalah` : "Semua baik"}</span>
                 </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {hasilList.map((h, index) => {
-                    const isCustom = index >= getFasilitasUntukArea().length;
-                    const tk = tiketUntuk(h.nama);
-                    if (tk?.status === "Sedang Dikerjakan") {
-                      return (
-                        <div key={index} className="fasilitas-row" style={{ opacity: 0.85, borderStyle: "dashed" }} onClick={() => setModalTiket([tk])}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: "bold", fontSize: "15px", color: "var(--ink)" }}>{h.nama}</span>
-                            <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "5px 10px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>🔧 Sedang diperbaiki · terkunci</span>
-                          </div>
-                          <div style={{ fontSize: "12px", color: "var(--muted)" }}>Tiket {kodeTiket(tk.id)} dilaporkan {waktuLapor(tk.waktu_lapor)} — tidak perlu dinilai sampai perbaikan selesai.</div>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={index} className="fasilitas-row">
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                          {isCustom ? (
-                            <input
-                              type="text" placeholder="Nama fasilitas lain..." value={h.nama}
-                              onChange={(e) => ubahNamaCustom(index, e.target.value)}
-                              style={{ flex: "1 1 160px", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "14px", fontWeight: "bold", color: "var(--ink)", outline: "none" }}
-                            />
-                          ) : (
-                            <span style={{ fontWeight: "bold", fontSize: "15px", color: "var(--ink)" }}>{h.nama}</span>
-                          )}
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <button type="button" onClick={() => ubahKondisi(index, "Baik")} className={`kondisi-btn baik ${h.kondisi === "Baik" ? "active" : ""}`}><IconCheck /> Baik</button>
-                            <button type="button" onClick={() => ubahKondisi(index, "Rusak")} className={`kondisi-btn rusak ${h.kondisi === "Rusak" ? "active" : ""}`}><IconX /> Rusak</button>
-                            <button type="button" onClick={() => ubahKondisi(index, "Tidak Ada")} className={`kondisi-btn tidakada ${h.kondisi === "Tidak Ada" ? "active" : ""}`}><IconMinus /> N/A</button>
-                            {isCustom && (
-                              <button type="button" onClick={() => hapusItemCustom(index)} className="kondisi-btn" style={{ color: "var(--red-600)" }} title="Hapus item"><IconTrash size={13} /></button>
-                            )}
-                          </div>
-                        </div>
-
-                        {tk && (
-                          <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--warn)", background: "var(--warn-50)", padding: "8px 10px", borderRadius: "10px" }}>
-                            ⏳ Sudah dilaporkan {waktuLapor(tk.waktu_lapor)} (tiket {kodeTiket(tk.id)}) — masih menunggu ditangani. Tandai Rusak tidak membuat tiket baru.
-                          </div>
-                        )}
-                        {h.kondisi === "Rusak" && (
-                          <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", background: "var(--red-50)", padding: "12px", borderRadius: "12px", border: "1px solid rgba(220,38,38,0.2)" }}>
-                            <textarea
-                              placeholder="Keterangan kerusakan (wajib)... contoh: keran bocor, air netes terus."
-                              value={h.catatan} onChange={(e) => ubahCatatan(index, e.target.value)}
-                              style={{ flex: 1, minHeight: "60px", padding: "10px", borderRadius: "8px", border: "1px solid rgba(220,38,38,0.25)", fontSize: "13px", resize: "none", outline: "none", background: "var(--surface)" }}
-                            />
-                            <label className="foto-dropzone">
-                              {h.foto ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={h.foto} alt="Bukti" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "11px" }} />
-                              ) : uploadingIdx === index ? (
-                                <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "3px solid rgba(220,38,38,0.2)", borderTopColor: "var(--red-600)", animation: "spin 0.8s linear infinite" }} />
-                              ) : (
-                                <><IconCamera size={18} color="var(--red-600)" /> Foto</>
-                              )}
-                              <input type="file" accept="image/*" onChange={(e) => handleFotoChange(e, index)} style={{ display: "none" }} disabled={uploadingIdx === index} />
-                            </label>
-                          </div>
-                        )}
-
-                        {/* Foto tetap bisa ditambahkan buat kondisi Baik/N/A juga (opsional, bukan cuma
-                            pas Rusak) -- dokumentasi kondisi fasilitas gak harus nunggu rusak dulu. */}
-                        {(h.kondisi === "Baik" || h.kondisi === "Tidak Ada") && (
-                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                            <label className="foto-dropzone">
-                              {h.foto ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={h.foto} alt="Bukti" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "11px" }} />
-                              ) : uploadingIdx === index ? (
-                                <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "3px solid var(--line)", borderTopColor: "var(--ok)", animation: "spin 0.8s linear infinite" }} />
-                              ) : (
-                                <><IconCamera size={18} color="var(--muted)" /> Foto</>
-                              )}
-                              <input type="file" accept="image/*" onChange={(e) => handleFotoChange(e, index)} style={{ display: "none" }} disabled={uploadingIdx === index} />
-                            </label>
-                          </div>
-                        )}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "6px" }}>
+                  {log.hasil.map((h, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 8px", borderRadius: "10px", background: "var(--bg)" }}>
+                      {h.foto ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={h.foto} alt="" style={{ width: "34px", height: "34px", objectFit: "cover", borderRadius: "8px" }} />
+                      ) : <span style={{ width: "34px" }} />}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: "12.5px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.nama}</div>
+                        <span style={{ fontSize: "10.5px", fontWeight: 800, color: (WARNA_KONDISI[h.kondisi] || WARNA_KONDISI.Baik).fg }}>{h.kondisi}{h.butuh_tindakan ? " · diteruskan" : ""}</span>
                       </div>
-                    );
-                  })}
-                </div>
-
-                <button type="button" onClick={tambahFasilitasLain} style={{ width: "100%", padding: "13px", background: "var(--surface)", color: "var(--info)", border: "2px dashed var(--info)", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", marginTop: "12px" }}>
-                  + Tambah Fasilitas Lain
-                </button>
-
-                <button
-                  onClick={handleSubmit} disabled={isLoading}
-                  style={{ width: "100%", padding: "20px", background: isLoading ? "#a0aec0" : "var(--info-solid)", color: "#fff", border: "none", borderRadius: "16px", fontWeight: "bold", fontSize: "16px", cursor: isLoading ? "not-allowed" : "pointer", marginTop: "20px", boxShadow: isLoading ? "none" : "0 10px 20px -5px rgba(37,99,235,0.4)" }}
-                >
-                  {isLoading ? "Mengirim Inspeksi..." : "Kirim Hasil Inspeksi"}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ========================================================================================= */}
-        {/* TAB 2: RIWAYAT INSPEKSI */}
-        {/* ========================================================================================= */}
-        {activeTab === "history" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px", animation: "fadeIn 0.3s ease-in-out" }}>
-            {riwayatInspeksi.length > 0 ? riwayatInspeksi.map((log) => {
-              const jumlahRusak = log.hasil.filter((h) => h.kondisi === "Rusak").length;
-              return (
-                <div key={log.id} style={{ background: "var(--surface)", borderRadius: "20px", padding: "22px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid var(--line)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
-                    <div>
-                      <h3 style={{ margin: "0 0 4px 0", color: "var(--ink)", fontSize: "17px", display: "flex", alignItems: "center", gap: "6px" }}><IconMapPin size={15} color="var(--info)" /> {log.area}</h3>
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>Minggu {formatRentangMinggu(log.minggu_mulai)} &middot; {formatJam(log.waktu_selesai)}</span>
                     </div>
-                    <span className="icon-chip" style={jumlahRusak > 0 ? { padding: "5px 11px", background: "var(--red-50)", color: "var(--red-600)", fontSize: "11px", fontWeight: 800 } : { padding: "5px 11px", background: "var(--ok-50)", color: "var(--ok)", fontSize: "11px", fontWeight: 800 }}>
-                      {jumlahRusak > 0 ? `${jumlahRusak} Rusak` : "Semua Baik"}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {log.hasil.map((h, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", borderRadius: "10px", background: h.kondisi === "Rusak" ? "var(--red-50)" : h.kondisi === "Tidak Ada" ? "var(--bg)" : "var(--ok-50)" }}>
-                        <span style={{ fontSize: "12.5px", color: "var(--ink)", fontWeight: 600 }}>{h.nama}</span>
-                        <span style={{ fontSize: "10px", fontWeight: 800, padding: "3px 8px", borderRadius: "6px", color: "#fff", background: h.kondisi === "Rusak" ? "var(--brand)" : h.kondisi === "Tidak Ada" ? "var(--muted-solid)" : "var(--ok-solid)" }}>{h.kondisi.toUpperCase()}</span>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
-              );
-            }) : (
-              <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", borderRadius: "20px", border: "2px dashed var(--line)" }}>
-                <div className="icon-chip" style={{ width: "60px", height: "60px", background: "var(--bg)", color: "var(--muted)", margin: "0 auto 15px" }}><IconInbox size={28} /></div>
-                <h3 style={{ color: "var(--ink-soft)", margin: "0 0 10px 0" }}>Belum Ada Riwayat</h3>
-                <p style={{ color: "var(--muted)", fontSize: "14px", margin: 0 }}>Hasil inspeksi mingguan Anda akan muncul di sini.</p>
               </div>
-            )}
-          </div>
-        )}
+            );
+          })}
+        </div>
+      )}
 
-      </div>
-      {/* §111 MODAL: item sedang diperbaiki (terkunci) / sudah dilaporkan (reminder) */}
-      <Modal open={!!modalTiket} onClose={() => setModalTiket(null)} maxWidth="460px">
-        {modalTiket && (
+      <Modal open={!!modalTemuan} onClose={() => setModalTemuan(null)} maxWidth="460px">
+        {modalTemuan && (
           <div>
-            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>
-              {modalTiket.every((x) => x.status === "Sedang Dikerjakan") ? "🔧 Sedang dalam perbaikan" : "⏳ Kerusakan sudah dilaporkan"}
-            </h3>
-            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--muted)" }}>Fasilitas berikut sudah punya laporan kerusakan yang belum selesai di area {selectedArea}.</p>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>{modalTemuan.every((x) => x.status === "Dikerjakan") ? "🔧 Sedang ditangani" : "⏳ Sudah tercatat sebagai temuan"}</h3>
+            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--muted)" }}>Item berikut sudah diteruskan ke Admin GA dan belum selesai.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {modalTiket.map((x) => {
-                const proses = x.status === "Sedang Dikerjakan";
+              {modalTemuan.map((x) => {
+                const proses = x.status === "Dikerjakan";
                 return (
                   <div key={x.id} style={{ padding: "10px 12px", borderRadius: "12px", background: proses ? "var(--info-50)" : "var(--warn-50)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
-                      <b style={{ fontSize: "13.5px", color: "var(--ink)" }}>{x.lokasi.replace(`${selectedArea} - `, "")}</b>
-                      <span style={{ fontSize: "11px", fontWeight: 800, color: proses ? "var(--info)" : "var(--warn)", whiteSpace: "nowrap" }}>{proses ? "SEDANG DIPERBAIKI" : "MENUNGGU"}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                      <b style={{ fontSize: "13.5px", color: "var(--ink)" }}>{x.item}</b>
+                      <span style={{ fontSize: "11px", fontWeight: 800, color: proses ? "var(--info)" : "var(--warn)" }}>{x.status.toUpperCase()}</span>
                     </div>
-                    <div style={{ fontSize: "12px", color: "var(--ink-soft)", marginTop: "3px" }}>{x.deskripsi.replace(/^\[[^\]]+\]\s*/, "")}</div>
-                    <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "3px" }}>Tiket {kodeTiket(x.id)} · dilaporkan {waktuLapor(x.waktu_lapor)}</div>
+                    <div style={{ fontSize: "12px", color: "var(--ink-soft)", marginTop: "3px" }}>{x.kondisi} — {x.catatan}</div>
+                    <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "3px" }}>{kodeTemuan(x.id)} · {tglRingkas(x.waktu_lapor)}{x.rencana ? ` · rencana ${x.rencana}` : ""}</div>
                     <div style={{ fontSize: "12px", fontWeight: 700, color: proses ? "var(--info)" : "var(--warn)", marginTop: "6px" }}>
-                      {proses ? "Item ini terkunci — tidak perlu dinilai sampai tim GA menyelesaikan perbaikan." : "Pengingat: kerusakan ini belum ditangani. Bila masih rusak, cukup tandai Rusak — tidak membuat tiket dobel."}
+                      {proses ? "Terkunci — tidak perlu dinilai sampai selesai ditangani." : "Pengingat: belum ditangani. Tetap nilai kondisinya; tidak membuat temuan dobel."}
                     </div>
                   </div>
                 );
               })}
             </div>
-            <button type="button" onClick={() => setModalTiket(null)} style={{ width: "100%", marginTop: "14px", padding: "12px", borderRadius: "12px", border: "none", background: "var(--ink)", color: "var(--surface)", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Mengerti</button>
+            <button type="button" className="sa-btn is-primary" style={{ width: "100%", marginTop: "14px" }} onClick={() => setModalTemuan(null)}>Mengerti</button>
           </div>
         )}
       </Modal>
