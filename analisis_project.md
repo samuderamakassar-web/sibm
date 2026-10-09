@@ -3056,3 +3056,10 @@ SUDAH DI-DEPLOY. Permintaan user: item hasil inspeksi yang tiketnya "progress" t
 - Item Menunggu tetap bisa dinilai, dengan pita reminder; menandai Rusak memunculkan modal reminder.
 - Anti dobel: saat kirim, item Rusak yang sudah punya tiket terbuka TIDAK dibuatkan tiket/email baru; toast menyebut jumlah yang sudah tercatat di tiket berjalan.
 - Catatan: firebase deploy dari Git Bash sempat gagal "Assertion failed: resolving hosting target..." -- berhasil saat diulang dari PowerShell.
+
+## 112. Rekap Lembur Gedung: Per Nama, Per PT & Top 5 (9 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: rekap yang sering overtime di gedung -- berapa hari & rata-rata jam per nama, per PT, dan tabel 5 nama teratas.
+- /admin/overtime tab baru "📊 Rekap Lembur Gedung" -> `src/components/admin/RekapLemburGedung.tsx` (data = dataGedung, jam = `jamTagihGedung`: durasi_tagih_jam validasi Security atau jam pengajuan).
+- Hari = tanggal lembur unik per nama; rata-rata jam/hari dihitung dari hari yang jamnya sudah ada (lembur masih Berlangsung dihitung harinya saja); status Ditolak/Batal diabaikan.
+- Periode: per bulan (default bulan terbaru), 3 bulan terakhir, tahun ini, semua. KPI: orang lembur, total hari-orang, total jam, rata-rata jam/hari.
+- Tabel "5 teratas paling sering lembur" (urut hari lalu total jam; rata-rata ≥ 4 jam/hari merah, batas PP 35/2021), rekap per PT (hari, orang, jam, rata-rata + bar), rekap per nama (cari, urut hari/total jam/rata-rata, tanggal terakhir lembur). Export Excel 3 sheet (Top 5, Per PT, Per Nama).

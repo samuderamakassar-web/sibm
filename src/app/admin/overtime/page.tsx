@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, Timestamp } from "firebase/firestore";
+import RekapLemburGedung from "../../../components/admin/RekapLemburGedung";
 import { isAdministrator } from "../../../hooks/useAuthGuard";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
@@ -67,7 +68,7 @@ export default function AdminOvertimePage() {
   const [isReady, setIsReady] = useState(false);
 
   // States Navigasi Tab
-  const [activeTab, setActiveTab] = useState<"GEDUNG" | "TIM">("GEDUNG");
+  const [activeTab, setActiveTab] = useState<"GEDUNG" | "TIM" | "REKAP">("GEDUNG");
 
   // States Data Database
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
@@ -433,7 +434,7 @@ export default function AdminOvertimePage() {
 
   return (
     <AdminShell title="Rekap & Persetujuan Overtime" subtitle="Rekap lembur utilitas gedung/tenant (tercatat otomatis) dan validasi lemburan tim operasional" userName={adminName || "Admin"}>
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{__html: `
       `}} />
 
       {/* 💡 CSS RESPONSIVE & ANTI-OVERFLOW MAGIC */}
@@ -494,8 +495,18 @@ export default function AdminOvertimePage() {
             👷‍♂️ Lembur Tim Operasional
             <span style={{ background: activeTab === "TIM" ? "var(--info-50)" : "var(--line)", color: activeTab === "TIM" ? "var(--info)" : "var(--ink-soft)", padding: "2px 8px", borderRadius: "20px", fontSize: "11px" }}>{dataTim.filter(r=>r.status?.includes("Menunggu")).length} Pending</span>
           </button>
+          {/* §112 rekap siapa yang sering lembur di gedung */}
+          <button
+            onClick={() => setActiveTab("REKAP")}
+            style={{ flexShrink: 0, padding: "12px 20px", borderRadius: "12px", fontWeight: "bold", border: "none", cursor: "pointer", transition: "all 0.2s", background: activeTab === "REKAP" ? "var(--surface)" : "rgba(255,255,255,0.8)", color: activeTab === "REKAP" ? "var(--ok)" : "var(--muted)", boxShadow: activeTab === "REKAP" ? "0 4px 6px rgba(0,0,0,0.1)" : "none", borderBottom: activeTab === "REKAP" ? "3px solid var(--ok)" : "3px solid transparent", display: "flex", alignItems: "center", gap: "8px" }}
+          >
+            📊 Rekap Lembur Gedung
+          </button>
         </div>
 
+        {activeTab === "REKAP" ? (
+          <RekapLemburGedung baris={dataGedung.map((req) => ({ nama: req.nama_pemohon || "", pt: req.departemen || "-", tanggal: req.tanggal || "", jam: jamTagihGedung(req), status: req.status }))} />
+        ) : (
         <div style={{ background: "var(--surface)", padding: "25px", borderRadius: "20px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)", border: "1px solid var(--line)", width: "100%" }}>
           
           {/* BAR FILTER KONTROL */}
@@ -739,6 +750,7 @@ export default function AdminOvertimePage() {
           </div>
 
         </div>
+        )}
 
       </div>
 
