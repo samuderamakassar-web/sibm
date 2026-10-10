@@ -1,286 +1,328 @@
 "use client";
 
 /**
- * SLA Personel (§118) -- pengukuran otomatis per orang per bulan dari data aplikasi.
- * Lihat src/lib/sla.ts untuk definisi indikator & target bawaan. Target bisa diubah (settings/sla_target).
+ * Beban Kerja & Kebutuhan Personel (§119) -- 4 penilaian (OB pelayanan, CS cleaning, Driver, Security) + resepsionis.
+ * Setiap penilaian: indeks beban = kebutuhan orang / jumlah orang sekarang (100% = pas). Kebutuhan dihitung dari data
+ * aplikasi (Okupansi, Master Karyawan, booking ruang meeting, plotting & checklist OB, log armada, roster & patroli,
+ * Buku Tamu, paket) dengan asumsi kapasitas di src/lib/sla.ts (bisa diubah -> settings/beban_asumsi).
  */
 
 import { useEffect, useState } from "react";
 import { collection, doc, documentId, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
-import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
-import { BATAS_LEMBUR_MINGGU, INDIKATOR_SLA, LEMBUR_PER_SHIFT_12_JAM, PERAN_SLA, hariKerjaAntara, persen, seninDari, type PeranSla } from "../../../lib/sla";
-
-type Nilai = { capai: number; total: number };
-type Hasil = Record<string, Record<string, Nilai>>; // nama -> indikator -> nilai
-interface Orang { nama: string; peran: PeranSla }
+import { ASUMSI_BAWAAN, LABEL_ASUMSI, WARNA_STATUS_BEBAN, statusBeban, type AsumsiBeban } from "../../../lib/sla";
 
 const tz = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
+const tzJam = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "2-digit", hourCycle: "h23" });
 const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const norm = (s?: string) => (s || "").trim().toLowerCase();
+const f1 = (n: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(n);
+const AREA_PELAYANAN = "Pelayanan Khusus OB";
 
-async function hitung(bulan: string, hariIni: string): Promise<{ orang: Orang[]; hasil: Hasil; catatan: string[] }> {
+interface Penilaian {
+  kunci: "OB" | "CS" | "DRIVER" | "SECURITY"; judul: string; sekarang: number; kebutuhan: number;
+  dasar: string[]; sinyal: string[]; nama: string[]; dataKurang?: string;
+}
+interface Resepsionis { tamuPerJam: number; puncak: { jam: string; rata: number } | null; paketPerHari: number; totalTamu: number; dasar: string[] }
+interface HasilBeban { penilaian: Penilaian[]; resepsionis: Resepsionis; hariKerja: number }
+
+async function hitung(bulan: string, hariIni: string, a: AsumsiBeban): Promise<HasilBeban> {
   const [y, m] = bulan.split("-").map(Number);
   const akhirBulan = `${bulan}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-  const batas = hariIni < akhirBulan ? hariIni : akhirBulan; // hanya sampai hari ini
+  const batas = hariIni < akhirBulan ? hariIni : akhirBulan;
   const tsAwal = Timestamp.fromDate(new Date(`${bulan}-01T00:00:00+08:00`));
-  const tsAkhir = Timestamp.fromDate(new Date(new Date(`${akhirBulan}T00:00:00+08:00`).getTime() + 86400000));
-  const hasil: Hasil = {};
-  const catatan: string[] = [];
-  const tambah = (nama: string, key: string, capai: number, total: number) => {
-    const n = nama.trim(); if (!n || total <= 0) return;
-    hasil[n] ??= {}; const x = (hasil[n][key] ??= { capai: 0, total: 0 }); x.capai += capai; x.total += total;
-  };
+  const tsAkhir = Timestamp.fromDate(new Date(new Date(`${batas}T00:00:00+08:00`).getTime() + 86400000));
+  const cadangan = 1 + a.cadangan_pct / 100;
+  const hariKerjaList: string[] = [];
+  for (let d = new Date(`${bulan}-01T12:00:00Z`); d.toISOString().slice(0, 10) <= batas; d.setUTCDate(d.getUTCDate() + 1)) {
+    const h = d.getUTCDay(); if (h !== 0 && h !== 6) hariKerjaList.push(d.toISOString().slice(0, 10));
+  }
+  const hariKerja = Math.max(1, hariKerjaList.length);
 
-  const users = (await getDocs(collection(db, "users_master"))).docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string });
-  const orang: Orang[] = users.filter((u) => u.nama && PERAN_SLA.includes(u.departemen as PeranSla) && !/magang/i.test(u.role || "")).map((u) => ({ nama: String(u.nama).trim(), peran: u.departemen as PeranSla }));
-  const daftar = (p: PeranSla) => orang.filter((o) => o.peran === p).map((o) => o.nama);
-  const minggu = (dari: string, sampai: string) => { const s = new Set<string>(); for (let d = new Date(`${dari}T12:00:00Z`); d.toISOString().slice(0, 10) <= sampai; d.setUTCDate(d.getUTCDate() + 1)) s.add(seninDari(d.toISOString().slice(0, 10))); return s; };
-
-  // ---------- OB & CS ----------
-  const [plots, cek, insp, alat] = await Promise.all([
+  const [users, karyawan, okupansi, plots, cek, booking, gerak, roster, patroli, tamu, paket] = await Promise.all([
+    getDocs(collection(db, "users_master")),
+    getDocs(collection(db, "employees_directory")),
+    getDoc(doc(db, "okupansi_gedung", "data")),
     getDocs(query(collection(db, "daily_plots"), where(documentId(), ">=", `${bulan}-01`), where(documentId(), "<=", batas))),
     getDocs(query(collection(db, "ob_checklists"), where("tanggal", ">=", `${bulan}-01`), where("tanggal", "<=", batas))),
-    getDocs(query(collection(db, "inspeksi_fasilitas"), where("waktu_selesai", ">=", tsAwal), where("waktu_selesai", "<", tsAkhir))),
-    getDocs(collection(db, "aset_alat")),
-  ]);
-  const sesiTerisi = new Set(cek.docs.map((d) => { const x = d.data(); return `${norm(x.pic_bertugas)}|${x.tanggal}|${x.area}|${x.sesi}`; }));
-  const mingguTugas: Record<string, Set<string>> = {};
-  plots.docs.forEach((d) => {
-    const tgl = d.id; const hari = new Date(`${tgl}T12:00:00Z`).getUTCDay(); if (hari === 0 || hari === 6) return;
-    Object.entries((d.data().plot_lantai || {}) as Record<string, string>).forEach(([area, nama]) => {
-      if (!nama || nama === "Semua / All" || nama === "-") return;
-      const sudah = ["Pagi", "Siang", "Sore"].filter((s) => sesiTerisi.has(`${norm(nama)}|${tgl}|${area}|${s}`)).length;
-      tambah(nama, "ob_checklist", sudah, tgl === hariIni ? sudah : 3); // hari ini: sesi yang belum lewat tidak dihitung kurang
-      (mingguTugas[nama.trim()] ??= new Set()).add(seninDari(tgl));
-    });
-  });
-  const mingguInspeksi: Record<string, Set<string>> = {};
-  insp.docs.forEach((d) => { const x = d.data(); if (x.waktu_selesai) (mingguInspeksi[norm(x.pic_bertugas)] ??= new Set()).add(seninDari(tz.format(x.waktu_selesai.toDate()))); });
-  Object.entries(mingguTugas).forEach(([nama, set]) => {
-    const tugas = Array.from(set).filter((s) => s !== seninDari(hariIni) || new Date(`${hariIni}T12:00:00Z`).getUTCDay() === 5); // minggu berjalan dihitung mulai Jumat
-    tambah(nama, "ob_inspeksi", tugas.filter((s) => mingguInspeksi[norm(nama)]?.has(s)).length, tugas.length);
-  });
-  alat.docs.forEach((d) => { const x = d.data(); if (x.status === "Afkir" || !x.pemegang || x.pemegang === "Gudang OB") return; tambah(x.pemegang, "ob_alat", x.status === "Hilang" ? 0 : 1, 1); });
-  if (!plots.size) catatan.push("Belum ada plotting OB pada bulan ini — indikator checklist & inspeksi OB kosong.");
-
-  // ---------- Security ----------
-  const [roster, patroli, handover] = await Promise.all([
+    getDocs(query(collection(db, "booking"), where("mulai", ">=", tsAwal), where("mulai", "<", tsAkhir))),
+    getDocs(query(collection(db, "operational_vehicle_logs"), where("waktu_catat", ">=", tsAwal), where("waktu_catat", "<", tsAkhir))),
     getDoc(doc(db, "security_monthly_schedules", bulan)),
     getDocs(query(collection(db, "security_patrols"), where("tanggal_shift", ">=", `${bulan}-01`), where("tanggal_shift", "<=", batas))),
-    getDocs(query(collection(db, "security_shift_handover"), where("tanggal_shift", ">=", `${bulan}-01`), where("tanggal_shift", "<=", batas))),
+    getDocs(query(collection(db, "security_visitor_logs"), where("waktu_masuk", ">=", tsAwal), where("waktu_masuk", "<", tsAkhir))),
+    getDocs(query(collection(db, "packages"), where("waktu_diterima", ">=", tsAwal), where("waktu_diterima", "<", tsAkhir))).catch(() => null),
   ]);
-  const dataHari = ((roster.exists() && roster.data().data_hari) || {}) as Record<string, Record<string, string>>;
-  const sesiPatroli: Record<string, Set<string>> = {};
-  patroli.docs.forEach((d) => { const x = d.data(); if (x.sesi) (sesiPatroli[`${norm(x.petugas)}|${x.tanggal_shift}|${x.shift}`] ??= new Set()).add(x.sesi); });
-  const shiftPerMinggu: Record<string, Record<string, number>> = {};
-  Object.entries(dataHari).forEach(([tgl, perNama]) => {
-    if (tgl > batas) return;
-    Object.entries(perNama || {}).forEach(([nama, label]) => {
-      const shift = String(label).includes("Shift 1") ? "Shift 1" : String(label).includes("Shift 2") ? "Shift 2" : null;
-      if (!shift) return;
-      if (tgl < hariIni) tambah(nama, "sec_patroli", (sesiPatroli[`${norm(nama)}|${tgl}|${shift}`]?.size || 0) >= 2 ? 1 : 0, 1);
-      ((shiftPerMinggu[nama] ??= {})[seninDari(tgl)] = (shiftPerMinggu[nama]?.[seninDari(tgl)] || 0) + 1);
+  const akun = users.docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string }).filter((u) => u.nama && !/magang/i.test(u.role || ""));
+  const namaDept = (dept: string) => akun.filter((u) => u.departemen === dept).map((u) => String(u.nama).trim());
+
+  // ---------- OB vs CS dari plotting (mayoritas hari di area pelayanan = OB) ----------
+  const hariPelayanan: Record<string, number> = {}, hariLantai: Record<string, number> = {};
+  const sesiTerisi = new Set(cek.docs.map((d) => { const x = d.data(); return `${norm(x.pic_bertugas)}|${x.tanggal}|${x.area}|${x.sesi}`; }));
+  let csSesi = 0, csSesiTotal = 0, obSesi = 0, obSesiTotal = 0;
+  plots.docs.forEach((d) => {
+    const hari = new Date(`${d.id}T12:00:00Z`).getUTCDay(); if (hari === 0 || hari === 6) return;
+    Object.entries((d.data().plot_lantai || {}) as Record<string, string>).forEach(([area, nama]) => {
+      if (!nama || nama === "-" || nama === "Semua / All") return;
+      const pel = area === AREA_PELAYANAN;
+      (pel ? hariPelayanan : hariLantai)[nama.trim()] = ((pel ? hariPelayanan : hariLantai)[nama.trim()] || 0) + 1;
+      const isi = ["Pagi", "Siang", "Sore"].filter((s) => sesiTerisi.has(`${norm(nama)}|${d.id}|${area}|${s}`)).length;
+      const tot = d.id === hariIni ? isi : 3;
+      if (pel) { obSesi += isi; obSesiTotal += tot; } else { csSesi += isi; csSesiTotal += tot; }
     });
   });
-  Object.entries(shiftPerMinggu).forEach(([nama, perMinggu]) => {
-    Object.values(perMinggu).forEach((n) => tambah(nama, "sec_lembur", n * LEMBUR_PER_SHIFT_12_JAM <= BATAS_LEMBUR_MINGGU ? 1 : 0, 1));
-  });
-  handover.docs.forEach((d) => { const x = d.data(); if (x.status === "selesai" && x.petugas_masuk && !x.tanpa_serah_terima) tambah(x.petugas_masuk, "sec_tukar", x.terlambat ? 0 : 1, 1); });
-  if (!Object.keys(dataHari).length) catatan.push("Roster Security bulan ini belum ada — indikator patroli & lembur Security kosong.");
+  const stafOB = namaDept("OB & CS");
+  const namaOB = stafOB.filter((n) => (hariPelayanan[n] || 0) > (hariLantai[n] || 0));
+  const namaCS = stafOB.filter((n) => !namaOB.includes(n));
+  const pct = (x: number, t: number) => (t ? `${Math.round((x / t) * 100)}%` : "—");
 
-  // ---------- Driver ----------
-  const [inspKend, kendaraan] = await Promise.all([
-    getDocs(query(collection(db, "kendaraan_inspeksi_logs"), where("tanggal", ">=", `${bulan}-01`), where("tanggal", "<=", batas))),
-    getDocs(collection(db, "master_kendaraan")),
-  ]);
-  const mingguDrv: Record<string, Set<string>> = {};
-  inspKend.docs.forEach((d) => { const x = d.data(); if (x.driver) (mingguDrv[norm(x.driver)] ??= new Set()).add(seninDari(x.tanggal)); });
-  const mingguBulan = Array.from(minggu(`${bulan}-01`, batas)).filter((s) => s !== seninDari(hariIni) || new Date(`${hariIni}T12:00:00Z`).getUTCDay() === 5);
-  const armada = kendaraan.docs.map((d) => d.data()).filter((k) => k.dikelola_driver);
-  const tepatServis = armada.filter((k) => !k.tanggal_servis_berikutnya || k.tanggal_servis_berikutnya >= hariIni).length;
-  daftar("Driver").forEach((nama) => {
-    tambah(nama, "drv_inspeksi", mingguBulan.filter((s) => mingguDrv[norm(nama)]?.has(s)).length, mingguBulan.length);
-    tambah(nama, "drv_servis", tepatServis, armada.length);
-  });
+  // ---------- CS: luas dari Okupansi ----------
+  const lantai = ((okupansi.data()?.lantai as { nama: string; unit: { nama: string; luas: number; status: string }[] }[]) || []);
+  let intensif = 0, ringan = 0, toilet = 0;
+  lantai.forEach((l) => (l.unit || []).forEach((u) => {
+    const n = u.nama || ""; const luas = Number(u.luas) || 0;
+    if (/gudang|pompa|server|rooftop|panel/i.test(n)) return;
+    if (/toilet|wc/i.test(n)) { toilet++; intensif += luas; return; }
+    if (u.status === "kosong" || /parkir|teras|garden|taman/i.test(n)) ringan += luas; else intensif += luas;
+  }));
+  const bebanM2 = intensif + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
+  const csPenilaian: Penilaian = {
+    kunci: "CS", judul: "CS · Cleaning", sekarang: namaCS.length, nama: namaCS,
+    kebutuhan: (bebanM2 / a.cs_m2_per_orang) * cadangan,
+    dasar: [
+      `Area intensif ${f1(intensif)} m² (kantor tenant, lobby, meeting, pantry, toilet, mushallah)`,
+      `Area ringan ${f1(ringan)} m² × bobot ${a.cs_bobot_ringan} (kosong, teras, garden, parkir)`,
+      `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara`,
+      `Beban setara ${f1(bebanM2)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}%`,
+    ],
+    sinyal: [`Checklist sesi area lantai terisi ${pct(csSesi, csSesiTotal)} (${csSesi}/${csSesiTotal})`],
+    dataKurang: lantai.length ? undefined : "Isi luas lantai di menu Okupansi agar beban CS terhitung.",
+  };
 
-  // ---------- QHSE (tim) ----------
-  const sbo = await getDocs(query(collection(db, "qhse_sbo_reports"), where("waktu_lapor", ">=", tsAwal), where("waktu_lapor", "<", tsAkhir)));
-  let respon = 0, tutup = 0, totalSbo = 0;
-  sbo.docs.forEach((d) => {
-    const x = d.data(); if (!x.waktu_lapor) return; totalSbo++;
-    const lapor = x.waktu_lapor.toDate().getTime();
-    if (x.waktu_tanggap && x.waktu_tanggap.toDate().getTime() - lapor <= 86400000) respon++;
-    if (x.status_temuan === "Close" && x.tanggal_closed && new Date(`${x.tanggal_closed}T23:59:59+08:00`).getTime() - lapor <= 7 * 86400000) tutup++;
-  });
-  daftar("QHSE").forEach((nama) => { tambah(nama, "qhse_respon", respon, totalSbo); tambah(nama, "qhse_tutup", tutup, totalSbo); });
+  // ---------- OB pelayanan ----------
+  const jumlahKaryawan = karyawan.size;
+  const meeting = booking.docs.map((d) => d.data()).filter((b) => b.jenis === "ruangan" && b.status !== "dibatalkan" && /meeting/i.test(String(b.objek_id || b.objek_nama || ""))).length;
+  const meetingPerHari = meeting / hariKerja;
+  const obPenilaian: Penilaian = {
+    kunci: "OB", judul: "OB · Pelayanan", sekarang: namaOB.length, nama: namaOB,
+    kebutuhan: ((jumlahKaryawan + meetingPerHari * a.ob_karyawan_per_meeting) / a.ob_karyawan_per_orang) * cadangan,
+    dasar: [
+      `${jumlahKaryawan} karyawan di Master Data`,
+      `${meeting} booking ruang meeting (${f1(meetingPerHari)}/hari kerja) × ${a.ob_karyawan_per_meeting} karyawan setara`,
+      `÷ ${a.ob_karyawan_per_orang} karyawan per OB × cadangan ${a.cadangan_pct}%`,
+    ],
+    sinyal: [`Checklist pelayanan terisi ${pct(obSesi, obSesiTotal)} (${obSesi}/${obSesiTotal})`, namaOB.length === 1 ? "Hanya 1 orang: saat cuti/sakit pelayanan berhenti total" : ""].filter(Boolean),
+    dataKurang: namaOB.length ? undefined : "Belum ada OB yang diplot di area Pelayanan Khusus OB bulan ini.",
+  };
 
-  // ---------- Admin GA (tim) ----------
-  const [tiket, temuan] = await Promise.all([
-    getDocs(query(collection(db, "helpdesk_tickets"), where("waktu_lapor", ">=", tsAwal), where("waktu_lapor", "<", tsAkhir))),
-    getDocs(query(collection(db, "temuan_aset"), where("waktu_lapor", ">=", tsAwal), where("waktu_lapor", "<", tsAkhir))),
-  ]);
-  let hdOk = 0, hdTot = 0;
-  tiket.docs.forEach((d) => {
-    const x = d.data(); if (!x.waktu_lapor || ["Dihapus", "Dipindahkan", "Tidak Dijalankan"].includes(x.status)) return;
-    const lapor = x.waktu_lapor.toDate();
-    if (x.status === "Selesai" && x.waktu_selesai) { hdTot++; if (hariKerjaAntara(lapor, x.waktu_selesai.toDate()) <= 3) hdOk++; }
-    else if (hariKerjaAntara(lapor, new Date()) > 3) hdTot++; // belum selesai & sudah lewat batas = gagal
-  });
-  let tmOk = 0, tmTot = 0;
-  temuan.docs.forEach((d) => {
-    const x = d.data(); if (!x.waktu_lapor || x.status === "Ditolak" || x.dari_helpdesk_id) return;
-    const lapor = x.waktu_lapor.toDate().getTime();
-    if (x.status === "Selesai" && x.waktu_selesai) { tmTot++; if (x.waktu_selesai.toDate().getTime() - lapor <= 7 * 86400000) tmOk++; }
-    else if (Date.now() - lapor > 7 * 86400000) tmTot++;
-  });
-  daftar("Admin GA").forEach((nama) => { tambah(nama, "ga_helpdesk", hdOk, hdTot); tambah(nama, "ga_temuan", tmOk, tmTot); });
+  // ---------- Driver: jam di jalan dari log armada ----------
+  const driverResmi = namaDept("Driver");
+  const setDriver = new Set(driverResmi.map(norm));
+  const logs = gerak.docs.map((d) => d.data()).filter((x) => x.waktu_catat).map((x) => ({ k: String(x.kendaraan || "").split(" - ")[0], st: String(x.status_kendaraan || ""), drv: String(x.driver_bertugas || "").replace("Standby: ", "").trim(), t: x.waktu_catat.toDate().getTime() }))
+    .sort((p, q) => p.t - q.t);
+  const perKend: Record<string, typeof logs> = {};
+  logs.forEach((l) => (perKend[l.k] ??= []).push(l));
+  let jamDriver = 0, tripDriver = 0, tripNonDriver = 0;
+  Object.values(perKend).forEach((arr) => arr.forEach((l, i) => {
+    if (!/Keluar|Bengkel|Service/i.test(l.st)) return;
+    const next = arr[i + 1];
+    const jam = Math.min(12, ((next ? next.t : Math.min(Date.now(), l.t + 4 * 3600000)) - l.t) / 3600000);
+    if (setDriver.has(norm(l.drv))) { jamDriver += Math.max(0, jam); tripDriver++; } else if (l.drv && l.drv !== "-") tripNonDriver++;
+  }));
+  const jamPerHari = jamDriver / hariKerja;
+  const bookingKend = booking.docs.map((d) => d.data()).filter((b) => b.jenis === "kendaraan" && b.status !== "dibatalkan").length;
+  const drvPenilaian: Penilaian = {
+    kunci: "DRIVER", judul: "Driver", sekarang: driverResmi.length, nama: driverResmi,
+    kebutuhan: (jamPerHari / (a.drv_jam_kerja * a.drv_utilisasi_sehat / 100)) * cadangan,
+    dasar: [
+      `${tripDriver} perjalanan driver, total ${f1(jamDriver)} jam di jalan (${f1(jamPerHari)} jam/hari kerja)`,
+      `÷ (${a.drv_jam_kerja} jam × utilisasi sehat ${a.drv_utilisasi_sehat}%) × cadangan ${a.cadangan_pct}%`,
+    ],
+    sinyal: [`${tripNonDriver} perjalanan dibawa bukan driver (kebutuhan yang tidak dilayani driver)`, `${bookingKend} booking kendaraan`],
+    dataKurang: logs.length ? undefined : "Belum ada log pergerakan armada bulan ini.",
+  };
 
-  // nama di data yang tidak punya akun (mis. roster) tetap ikut, perannya ditebak dari indikator
-  Object.keys(hasil).forEach((nama) => {
-    if (orang.some((o) => norm(o.nama) === norm(nama))) return;
-    const k = Object.keys(hasil[nama])[0];
-    const peran = INDIKATOR_SLA.find((i) => i.key === k)?.peran;
-    if (peran) orang.push({ nama, peran });
+  // ---------- Security: cakupan pos 24 jam ----------
+  const secResmi = namaDept("Security");
+  const dataHari = ((roster.exists() && roster.data().data_hari) || {}) as Record<string, Record<string, string>>;
+  const sesiP: Record<string, number> = {};
+  patroli.docs.forEach((d) => { const x = d.data(); if (x.sesi) { const k = `${norm(x.petugas)}|${x.tanggal_shift}|${x.shift}`; sesiP[k] = (sesiP[k] || 0) | (1 << ["Sesi 1", "Sesi 2", "Sesi 3"].indexOf(x.sesi)); } });
+  const bit = (n: number) => [1, 2, 4].filter((b) => n & b).length;
+  let s1 = 0, s1t = 0, s2 = 0, s2t = 0;
+  const namaRoster = new Set<string>();
+  Object.entries(dataHari).forEach(([tgl, perNama]) => {
+    if (tgl >= hariIni || tgl < `${bulan}-01`) return;
+    Object.entries(perNama || {}).forEach(([nama, label]) => {
+      const sh = String(label).includes("Shift 1") ? "Shift 1" : String(label).includes("Shift 2") ? "Shift 2" : null;
+      if (!sh) return; namaRoster.add(nama.trim());
+      const ok = bit(sesiP[`${norm(nama)}|${tgl}|${sh}`] || 0) >= 2 ? 1 : 0;
+      if (sh === "Shift 1") { s1 += ok; s1t++; } else { s2 += ok; s2t++; }
+    });
   });
-  return { orang, hasil, catatan };
+  const jumlahSec = Math.max(secResmi.length, namaRoster.size);
+  const jamPos = 168 * a.sec_pos;
+  const jamPerOrang = jumlahSec ? jamPos / jumlahSec : 0;
+  const lemburMinggu = Math.max(0, jamPerOrang - a.sec_jam_normal);
+  const secPenilaian: Penilaian = {
+    kunci: "SECURITY", judul: "Security", sekarang: jumlahSec, nama: secResmi.length >= namaRoster.size ? secResmi : Array.from(namaRoster),
+    kebutuhan: jamPos / (a.sec_jam_normal + a.sec_lembur_wajar),
+    dasar: [
+      `${a.sec_pos} pos × 24 jam × 7 hari = ${jamPos} jam/minggu harus terisi`,
+      `÷ (${a.sec_jam_normal} jam normal UU + ${a.sec_lembur_wajar} jam lembur rutin wajar) per orang — sisa batas legal untuk menutup cuti/sakit`,
+      jumlahSec ? `Dengan ${jumlahSec} orang: ${f1(jamPerOrang)} jam/orang/minggu → lembur ${f1(lemburMinggu)} jam/minggu (batas ${a.sec_batas_lembur})` : "Belum ada data jumlah petugas",
+    ],
+    sinyal: [`Patroli ≥2 sesi: Shift 1 ${pct(s1, s1t)} · Shift 2 ${pct(s2, s2t)}`, lemburMinggu > a.sec_batas_lembur ? "Lembur rutin MELEWATI batas legal 18 jam/minggu" : lemburMinggu > a.sec_batas_lembur - 4 ? "Lembur rutin mepet batas legal — cuti/sakit membuat lewat batas" : ""].filter(Boolean),
+  };
+
+  // ---------- Resepsionis: tamu jam sibuk ----------
+  const perJam: Record<string, number> = {};
+  let tamuSibuk = 0, totalTamu = 0;
+  tamu.docs.forEach((d) => {
+    const x = d.data(); if (x.jenis === "Karyawan" || !x.waktu_masuk) return;
+    const t = x.waktu_masuk.toDate(); const tgl = tz.format(t); if (!hariKerjaList.includes(tgl)) return;
+    totalTamu++;
+    const j = Number(tzJam.format(t)); if (j >= 9 && j < 17) { tamuSibuk++; perJam[`${String(j).padStart(2, "0")}:00`] = (perJam[`${String(j).padStart(2, "0")}:00`] || 0) + 1; }
+  });
+  const puncakEntri = Object.entries(perJam).sort((p, q) => q[1] - p[1])[0];
+  const resepsionis: Resepsionis = {
+    tamuPerJam: tamuSibuk / (hariKerja * 8), totalTamu,
+    puncak: puncakEntri ? { jam: puncakEntri[0], rata: puncakEntri[1] / hariKerja } : null,
+    paketPerHari: (paket?.size || 0) / hariKerja,
+    dasar: [`${totalTamu} tamu hari kerja (${tamuSibuk} pada 09:00–17:00)`, `Batas: ${a.res_tamu_per_jam} tamu/jam rata-rata jam sibuk → perlu petugas khusus`],
+  };
+  return { penilaian: [obPenilaian, csPenilaian, drvPenilaian, secPenilaian], resepsionis, hariKerja };
 }
 
-export default function SlaPage() {
+function KartuPenilaian({ p }: { p: Penilaian }) {
+  const indeks = p.sekarang ? (p.kebutuhan / p.sekarang) * 100 : p.kebutuhan > 0 ? 999 : 0;
+  const st = statusBeban(indeks);
+  const w = WARNA_STATUS_BEBAN[st];
+  const butuh = Math.ceil(p.kebutuhan - 0.15); // toleransi 0.15 orang
+  const tambah = Math.max(0, butuh - p.sekarang);
+  const rekom = p.dataKurang ? "Data belum cukup" : tambah > 0 ? `Perlu tambah ${tambah} ${p.kunci === "SECURITY" ? "Security" : p.kunci === "DRIVER" ? "Driver" : p.kunci}` : st === "Padat" ? `Pertimbangkan +1 ${p.kunci === "SECURITY" ? "Security" : p.kunci === "DRIVER" ? "Driver" : p.kunci}` : "Tidak perlu tambahan";
+  return (
+    <Tile>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" }}>
+        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>{p.judul}</h3>
+        <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "3px 10px", borderRadius: "999px", color: "#fff", background: w }}>{st}</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "10px 0 6px" }}>
+        <b style={{ fontSize: "34px", color: w, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{indeks > 500 ? "—" : `${Math.round(indeks)}%`}</b>
+        <span style={{ fontSize: "12.5px", color: "var(--muted)" }}>beban · butuh <b style={{ color: "var(--ink)" }}>{f1(p.kebutuhan)}</b> orang, ada <b style={{ color: "var(--ink)" }}>{p.sekarang}</b></span>
+      </div>
+      <div style={{ height: "8px", borderRadius: "4px", background: "var(--line)", overflow: "hidden" }}><div style={{ width: `${Math.min(100, indeks / 1.5)}%`, height: "100%", background: w }} /></div>
+      <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "12px", background: "var(--bg)", fontWeight: 800, fontSize: "14px", color: tambah > 0 ? "var(--red-600)" : st === "Padat" ? "var(--warn)" : "var(--ok)" }}>{rekom}</div>
+      {p.dataKurang && <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--warn)", fontWeight: 700 }}>⚠ {p.dataKurang}</div>}
+      <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--ink-soft)" }}>
+        <div style={{ fontWeight: 800, color: "var(--muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: ".04em" }}>Dasar perhitungan</div>
+        {p.dasar.map((d) => <div key={d}>· {d}</div>)}
+        {p.sinyal.length > 0 && <div style={{ fontWeight: 800, color: "var(--muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: ".04em", marginTop: "6px" }}>Sinyal pendukung</div>}
+        {p.sinyal.map((d) => <div key={d}>· {d}</div>)}
+        {p.nama.length > 0 && <div style={{ marginTop: "6px", color: "var(--muted)" }}>Personel: {p.nama.join(", ")}</div>}
+      </div>
+    </Tile>
+  );
+}
+
+export default function BebanKerjaPage() {
   const showToast = useToast();
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA." });
   const hariIni = tz.format(new Date());
   const [bulan, setBulan] = useState(hariIni.slice(0, 7));
-  const [peran, setPeran] = useState<PeranSla>("OB & CS");
-  const [data, setData] = useState<{ orang: Orang[]; hasil: Hasil; catatan: string[] } | null>(null);
-  const [target, setTarget] = useState<Record<string, number>>({});
-  const [editTarget, setEditTarget] = useState<Record<string, string> | null>(null);
+  const [asumsi, setAsumsi] = useState<AsumsiBeban>(ASUMSI_BAWAAN);
+  const [edit, setEdit] = useState<Record<string, string> | null>(null);
+  const [hasil, setHasil] = useState<HasilBeban | null>(null);
 
   useEffect(() => {
     if (!isReady) return;
-    return onSnapshot(doc(db, "settings", "sla_target"), (s) => setTarget((s.data()?.target as Record<string, number>) || {}));
+    return onSnapshot(doc(db, "settings", "beban_asumsi"), (s) => setAsumsi({ ...ASUMSI_BAWAAN, ...((s.data()?.asumsi as Partial<AsumsiBeban>) || {}) }));
   }, [isReady]);
   useEffect(() => {
     if (!isReady) return;
     let batal = false;
-    hitung(bulan, hariIni).then((h) => { if (!batal) setData(h); }).catch((e) => { console.error("[sla]", e); if (!batal) setData({ orang: [], hasil: {}, catatan: ["Gagal memuat data SLA."] }); });
-    return () => { batal = true; setData(null); };
-  }, [isReady, bulan, hariIni]);
+    hitung(bulan, hariIni, asumsi).then((h) => { if (!batal) setHasil(h); }).catch((e) => { console.error("[beban]", e); showToast("Gagal menghitung beban kerja.", "error"); });
+    return () => { batal = true; setHasil(null); };
+  }, [isReady, bulan, hariIni, asumsi, showToast]);
 
   if (!isReady) return null;
-  const tgt = (key: string) => target[key] ?? INDIKATOR_SLA.find((i) => i.key === key)!.target;
-  const indikator = INDIKATOR_SLA.filter((i) => i.peran === peran);
-  const orangPeran = (data?.orang || []).filter((o) => o.peran === peran).sort((a, b) => a.nama.localeCompare(b.nama));
-  const nilai = (nama: string, key: string) => { const v = data?.hasil[nama]?.[key]; return v ? persen(v.capai, v.total) : null; };
-  const skor = (nama: string) => {
-    const ada = indikator.map((i) => ({ i, p: nilai(nama, i.key) })).filter((x) => x.p !== null);
-    return { tercapai: ada.filter((x) => x.p! >= tgt(x.i.key)).length, dinilai: ada.length };
-  };
   const bulanOpsi = Array.from({ length: 6 }, (_, k) => { const d = new Date(Number(hariIni.slice(0, 4)), Number(hariIni.slice(5, 7)) - 1 - k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const simpan = async () => {
+    if (!edit) return;
+    const baru = Object.fromEntries(Object.keys(ASUMSI_BAWAAN).map((k) => [k, Number(edit[k]) > 0 ? Number(edit[k]) : ASUMSI_BAWAAN[k as keyof AsumsiBeban]])) as unknown as AsumsiBeban;
+    try { await setDoc(doc(db, "settings", "beban_asumsi"), { asumsi: baru, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() }); setEdit(null); showToast("Asumsi tersimpan.", "success"); }
+    catch (e) { console.error(e); showToast("Gagal menyimpan asumsi.", "error"); }
+  };
 
-  const simpanTarget = async () => {
-    if (!editTarget) return;
-    const t: Record<string, number> = {};
-    for (const i of INDIKATOR_SLA) { const n = Number(editTarget[i.key]); if (Number.isFinite(n) && n > 0 && n <= 100) t[i.key] = n; }
-    try {
-      await setDoc(doc(db, "settings", "sla_target"), { target: t, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
-      setEditTarget(null); showToast("Target SLA tersimpan.", "success");
-    } catch (e) { console.error(e); showToast("Gagal menyimpan target.", "error"); }
-  };
-  const ekspor = () => {
-    if (!data) return;
-    const wb = XLSX.utils.book_new();
-    for (const p of PERAN_SLA) {
-      const ind = INDIKATOR_SLA.filter((i) => i.peran === p);
-      const rows = data.orang.filter((o) => o.peran === p).map((o) => [o.nama, ...ind.map((i) => { const v = data.hasil[o.nama]?.[i.key]; return v ? `${persen(v.capai, v.total)}% (${v.capai}/${v.total})` : "-"; })]);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Nama", ...ind.map((i) => `${i.label} (target ${tgt(i.key)}%)`)], ...rows]), p.replace(/[^A-Za-z ]/g, "").slice(0, 28) || "Peran");
-    }
-    XLSX.writeFile(wb, `SLA_Personel_${bulan}.xlsx`);
-  };
+  const kesimpulan = (hasil?.penilaian || []).map((p) => {
+    const tambah = Math.max(0, Math.ceil(p.kebutuhan - 0.15) - p.sekarang);
+    const idx = p.sekarang ? (p.kebutuhan / p.sekarang) * 100 : 0;
+    return { p, tambah, padat: statusBeban(idx) === "Padat" };
+  });
+  const r = hasil?.resepsionis;
+  const perluResepsionis = !!r && (r.tamuPerJam >= asumsi.res_tamu_per_jam || (r.puncak?.rata || 0) >= asumsi.res_tamu_per_jam * 2);
 
   return (
-    <AdminShell title="SLA Personel" subtitle="Pengukuran otomatis kinerja per orang dari data aplikasi — tanpa input tambahan" userName={session?.nama || "Admin"}
+    <AdminShell title="Beban Kerja & Kebutuhan Personel" subtitle="Seberapa sibuk tim OB, CS, Driver & Security — dasar keputusan tambah personel" userName={session?.nama || "Admin"}
       actions={<div style={{ display: "flex", gap: "6px" }}>
         <select className="sa-field" value={bulan} onChange={(e) => setBulan(e.target.value)} aria-label="Bulan">{bulanOpsi.map((b) => <option key={b} value={b}>{NAMA_BULAN[Number(b.slice(5, 7)) - 1]} {b.slice(0, 4)}</option>)}</select>
-        <button type="button" className="sa-btn is-soft" onClick={() => setEditTarget(Object.fromEntries(INDIKATOR_SLA.map((i) => [i.key, String(tgt(i.key))])))}>Atur target</button>
-        <button type="button" className="sa-btn is-soft" onClick={ekspor} disabled={!data}>Export</button>
+        <button type="button" className="sa-btn is-soft" onClick={() => setEdit(Object.fromEntries(Object.entries(asumsi).map(([k, v]) => [k, String(v)])))}>Atur asumsi</button>
       </div>}>
-      <div className="sa-tabs" role="tablist" style={{ width: "fit-content", maxWidth: "100%", marginBottom: "14px", overflowX: "auto" }}>
-        {PERAN_SLA.map((p) => <button key={p} type="button" role="tab" aria-selected={peran === p} className={`sa-tab${peran === p ? " is-active" : ""}`} onClick={() => setPeran(p)}>{p}</button>)}
-      </div>
-
-      {data === null ? <Tile><div style={{ color: "var(--muted)", textAlign: "center", padding: "20px" }}>Menghitung SLA {NAMA_BULAN[Number(bulan.slice(5, 7)) - 1]}…</div></Tile> : (
+      {hasil === null ? <Tile><div style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>Menghitung beban kerja…</div></Tile> : (
         <>
-          {data.catatan.length > 0 && <Tile style={{ marginBottom: "12px" }}>{data.catatan.map((c) => <div key={c} style={{ fontSize: "12.5px", color: "var(--warn)", fontWeight: 700 }}>⚠ {c}</div>)}</Tile>}
-          <Tile>
-            {orangPeran.length === 0 ? <div style={{ color: "var(--muted)", textAlign: "center", padding: "20px" }}>Belum ada akun {peran} / data pada bulan ini.</div> : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: `${260 + indikator.length * 150}px` }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: "left", padding: "10px", fontSize: "12px", color: "var(--ink-soft)", borderBottom: "1px solid var(--line)" }}>Nama</th>
-                      {indikator.map((i) => (
-                        <th key={i.key} title={i.keterangan} style={{ textAlign: "center", padding: "10px", fontSize: "11.5px", color: "var(--ink-soft)", borderBottom: "1px solid var(--line)" }}>
-                          {i.label}{i.tim ? " · tim" : ""}<div style={{ fontWeight: 500, color: "var(--muted)" }}>target {tgt(i.key)}%</div>
-                        </th>
-                      ))}
-                      <th style={{ textAlign: "center", padding: "10px", fontSize: "12px", color: "var(--ink-soft)", borderBottom: "1px solid var(--line)" }}>Tercapai</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orangPeran.map((o) => {
-                      const s = skor(o.nama);
-                      return (
-                        <tr key={o.nama}>
-                          <td style={{ padding: "10px", fontWeight: 700, borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>{o.nama}</td>
-                          {indikator.map((i) => {
-                            const p = nilai(o.nama, i.key); const v = data.hasil[o.nama]?.[i.key];
-                            const w = p === null ? "var(--muted)" : p >= tgt(i.key) ? "var(--ok)" : p >= tgt(i.key) - 10 ? "var(--warn)" : "var(--red-600)";
-                            return (
-                              <td key={i.key} style={{ textAlign: "center", padding: "10px", borderBottom: "1px solid var(--line)" }}>
-                                <b style={{ fontSize: "15px", color: w, fontVariantNumeric: "tabular-nums" }}>{p === null ? "—" : `${p}%`}</b>
-                                {v && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{v.capai}/{v.total}</div>}
-                              </td>
-                            );
-                          })}
-                          <td style={{ textAlign: "center", padding: "10px", borderBottom: "1px solid var(--line)", fontWeight: 800, color: s.dinilai && s.tercapai === s.dinilai ? "var(--ok)" : "var(--warn)" }}>{s.dinilai ? `${s.tercapai}/${s.dinilai}` : "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Tile>
-          <Tile style={{ marginTop: "12px" }}>
-            <div style={{ fontSize: "12px", color: "var(--muted)", display: "flex", flexDirection: "column", gap: "4px" }}>
-              {indikator.map((i) => <div key={i.key}><b style={{ color: "var(--ink-soft)" }}>{i.label}</b> — {i.keterangan}{i.tim ? " (nilai tim, sama untuk semua anggota)" : ""}.</div>)}
-              <div>Hijau = capai target · oranye = kurang ≤ 10 poin · merah = kurang &gt; 10 poin. Bulan berjalan dihitung sampai hari ini. Batas lembur legal: {LEMBUR_PER_SHIFT_12_JAM} jam/hari & {BATAS_LEMBUR_MINGGU} jam/minggu (PP 35/2021).</div>
+          <Tile style={{ marginBottom: "14px" }}>
+            <h2 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 800 }}>Kesimpulan {NAMA_BULAN[Number(bulan.slice(5, 7)) - 1]} {bulan.slice(0, 4)} <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>· {hasil.hariKerja} hari kerja dihitung</span></h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "13.5px" }}>
+              {kesimpulan.map(({ p, tambah, padat }) => (
+                <div key={p.kunci}>{p.dataKurang ? "⚪" : tambah > 0 ? "🔴" : padat ? "🟠" : "🟢"} <b>{p.judul}</b>: {p.dataKurang ? "data belum cukup" : tambah > 0 ? `perlu tambah ${tambah} orang` : padat ? "padat — pertimbangkan tambahan bila bertahan 2–3 bulan" : "cukup, tidak perlu tambahan"}</div>
+              ))}
+              {r && <div>{perluResepsionis ? "🟠" : "🟢"} <b>Resepsionis</b>: {perluResepsionis ? "volume tamu jam sibuk tinggi — perlu resepsionis khusus (tetap), jangan dibebankan ke Security" : "volume tamu masih bisa ditangani magang/Security, belum perlu resepsionis tetap"}</div>}
             </div>
+            <p style={{ margin: "10px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Indeks beban = kebutuhan ÷ jumlah sekarang (100% = pas). Longgar &lt; 70% · Seimbang 70–100% · Padat 100–120% · Kelebihan beban &gt; 120%. Kapasitas per orang = asumsi standar industri (bisa diubah), bukan aturan Disnaker; batas jam kerja & lembur mengikuti UU/PP 35/2021. Gunakan bulan penuh & lihat 2–3 bulan sebelum memutuskan.</p>
           </Tile>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: "14px", alignItems: "start" }}>
+            {hasil.penilaian.map((p) => <KartuPenilaian key={p.kunci} p={p} />)}
+            {r && (
+              <Tile>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Resepsionis · Lobby</h3>
+                  <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "3px 10px", borderRadius: "999px", color: "#fff", background: perluResepsionis ? "var(--warn)" : "var(--ok)" }}>{perluResepsionis ? "Perlu" : "Cukup"}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "10px 0 6px" }}>
+                  <b style={{ fontSize: "34px", color: perluResepsionis ? "var(--warn)" : "var(--ok)", lineHeight: 1 }}>{f1(r.tamuPerJam)}</b>
+                  <span style={{ fontSize: "12.5px", color: "var(--muted)" }}>tamu/jam rata-rata 09:00–17:00{r.puncak ? ` · puncak ${r.puncak.jam} (${f1(r.puncak.rata)}/hari)` : ""}</span>
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--ink-soft)" }}>
+                  {r.dasar.map((d) => <div key={d}>· {d}</div>)}
+                  <div>· {f1(r.paketPerHari)} paket/hari kerja diterima di lobby</div>
+                  <div style={{ marginTop: "6px", color: "var(--muted)" }}>Saat ini jam kerja dibantu magang resepsionis. Bila perlu, rekomendasi = resepsionis tetap (bukan tambah Security) agar Security tetap bisa patroli.</div>
+                </div>
+              </Tile>
+            )}
+          </div>
         </>
       )}
 
-      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} maxWidth="520px">
-        {editTarget && (
+      <Modal open={!!edit} onClose={() => setEdit(null)} maxWidth="520px">
+        {edit && (
           <div>
-            <h3 style={{ margin: "0 0 10px", fontSize: "18px" }}>Target SLA (%)</h3>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px" }}>Asumsi kapasitas</h3>
+            <p style={{ margin: "0 0 10px", fontSize: "12px", color: "var(--muted)" }}>Angka standar industri yang bisa disesuaikan dengan kondisi gedung. Jam normal 40 & batas lembur 18 mengikuti aturan.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "60vh", overflowY: "auto" }}>
-              {INDIKATOR_SLA.map((i) => (
-                <label key={i.key} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px", gap: "8px", alignItems: "center", fontSize: "12.5px" }}>
-                  <span><b>{i.peran}</b> · {i.label}</span>
-                  <input inputMode="numeric" value={editTarget[i.key]} onChange={(e) => setEditTarget({ ...editTarget, [i.key]: e.target.value.replace(/[^\d.]/g, "") })} style={{ padding: "7px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", textAlign: "center" }} />
+              {(Object.keys(ASUMSI_BAWAAN) as (keyof AsumsiBeban)[]).map((k) => (
+                <label key={k} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 80px", gap: "8px", alignItems: "center", fontSize: "12.5px" }}>
+                  <span>{LABEL_ASUMSI[k]} <span style={{ color: "var(--muted)" }}>(bawaan {ASUMSI_BAWAAN[k]})</span></span>
+                  <input inputMode="decimal" value={edit[k]} onChange={(e) => setEdit({ ...edit, [k]: e.target.value.replace(/[^\d.]/g, "") })} style={{ padding: "7px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", textAlign: "center" }} />
                 </label>
               ))}
             </div>
             <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
-              <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setEditTarget(null)}>Batal</button>
-              <button type="button" className="sa-btn is-primary" style={{ flex: 1 }} onClick={simpanTarget}>Simpan</button>
+              <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setEdit(null)}>Batal</button>
+              <button type="button" className="sa-btn is-primary" style={{ flex: 1 }} onClick={simpan}>Simpan</button>
             </div>
           </div>
         )}
