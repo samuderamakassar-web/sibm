@@ -5,16 +5,23 @@
 
 import type { Timestamp } from "firebase/firestore";
 
+// §124 tim: OB = pelayanan (beban OB), CS = cleaning sesuai permintaan (sinyal beban CS)
+export type TimPelayanan = "OB" | "CS";
 export const JENIS_PELAYANAN = [
-  { key: "minuman", label: "Minuman (kopi / teh / air)", menit: 10 },
-  { key: "meeting", label: "Persiapan / beres ruang meeting", menit: 25 },
-  { key: "dokumen", label: "Antar / ambil dokumen", menit: 15 },
-  { key: "bersih", label: "Bersih cepat (tumpahan, sampah)", menit: 10 },
-  { key: "lainnya", label: "Lainnya", menit: 15 },
+  { key: "minuman", label: "Minuman (kopi / teh / air)", menit: 10, tim: "OB" },
+  { key: "meeting", label: "Persiapan / beres ruang meeting", menit: 25, tim: "OB" },
+  { key: "dokumen", label: "Antar / ambil dokumen", menit: 15, tim: "OB" },
+  { key: "lainnya", label: "Lainnya", menit: 15, tim: "OB" },
+  { key: "bersih", label: "Tumpahan / lantai kotor", menit: 10, tim: "CS" },
+  { key: "sampah", label: "Tempat sampah penuh", menit: 10, tim: "CS" },
+  { key: "toilet", label: "Toilet kotor / sabun & tisu habis", menit: 15, tim: "CS" },
+  { key: "ruangan", label: "Bersihkan ruangan / meja", menit: 20, tim: "CS" },
+  { key: "lainnya_cs", label: "Cleaning lainnya", menit: 15, tim: "CS" },
 ] as const;
 export type JenisPelayanan = (typeof JENIS_PELAYANAN)[number]["key"];
 export const labelJenis = (k: string) => JENIS_PELAYANAN.find((j) => j.key === k)?.label || k;
 export const menitJenis = (k: string) => JENIS_PELAYANAN.find((j) => j.key === k)?.menit || 15;
+export const timJenis = (k: string): TimPelayanan => JENIS_PELAYANAN.find((j) => j.key === k)?.tim || "OB";
 
 export type StatusPelayanan = "Baru" | "Diproses" | "Selesai" | "Batal";
 export interface PermintaanPelayanan {

@@ -364,7 +364,7 @@ export default function DashboardOBPage() {
         <AbsensiCard picName={picName} departemen="OB & CS" />
 
         {/* §123 OB Pelayanan: permintaan pelayanan paling atas */}
-        {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} />}
+        {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranTugas} />}
 
         {/* ⚠️ BANNER PERINGATAN LOW STOCK */}
         {stokMenipis.length > 0 && (
@@ -384,7 +384,7 @@ export default function DashboardOBPage() {
         )}
 
         {/* §122 permintaan pelayanan dari karyawan (portal) */}
-        {picName && !isOBPelayanan && <PermintaanPelayananPanel nama={picName} />}
+        {picName && !isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranTugas} />}
 
         {/* §123 kinerja pribadi -- hanya angka sendiri, bahan introspeksi */}
         {picName && <KinerjaSayaPanel nama={picName} peran={peranTugas} />}

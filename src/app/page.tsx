@@ -1621,7 +1621,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
             {/* §122 permintaan pelayanan OB -- data nyata beban OB pelayanan */}
             <button type="button" className="qa-card" onClick={() => setPelayananBuka(true)} style={{ gridColumn: "1 / -1" }}>
               <span className="qa-icon-chip"><IconClipboard size={20} /></span>
-              <span className="qa-teks"><span className="qa-judul">Minta Pelayanan OB</span><span className="qa-sub">Minuman, persiapan meeting, antar dokumen, bersih cepat</span></span>
+              <span className="qa-teks"><span className="qa-judul">Minta Pelayanan OB / Cleaning</span><span className="qa-sub">Minuman, meeting, dokumen — atau area yang perlu dibersihkan</span></span>
             </button>
             {surveiAktif && (
               <button type="button" className="qa-card qa-card-survei" onClick={() => router.push("/survei-kepuasan")} style={{ gridColumn: "1 / -1" }}>

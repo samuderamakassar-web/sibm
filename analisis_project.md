@@ -3134,3 +3134,10 @@ SUDAH DI-DEPLOY (hosting + rules + workflow). Urutan disetujui user: 1 → 4 →
 2. Beban Kerja: pembagian OB vs CS memakai `peran_tugas`; yang belum diisi masih ditebak dari plotting (mayoritas hari di area Pelayanan = OB). Beban pelayanan tetap dihitung dari jenis pekerjaan (permintaan_pelayanan), siapa pun yang mengerjakan.
 3. Dashboard OB: peran dibaca dari users_master/{uid} (live). OB Pelayanan -> sapaan "Siap melayani", panel permintaan pelayanan di atas; CS -> urutan lama. Semua menu tetap tersedia untuk backup.
 4. `src/components/KinerjaSayaPanel.tsx`: angka pribadi bulan ini / bulan lalu, tanpa peringkat -- checklist sesi terisi (area plot hari kerja x 3 sesi, sama dengan Beban Kerja; target >= 90%) dan respon pelayanan yang ia terima (rata-rata, % <= 10 menit; target <= 10 menit), warna Sudah baik / Bisa ditingkatkan / Perlu perhatian + saran. Tidak ada perubahan rules (ob_checklists, daily_plots, permintaan_pelayanan sudah terbaca akun staf).
+
+## 124. Permintaan Cleaning (CS) di Form Pelayanan Portal (10 Oktober 2026)
+1. `src/lib/pelayanan.ts`: tiap jenis punya `tim` (OB/CS) + `timJenis()`. OB: minuman, meeting, dokumen, lainnya. CS: bersih (tumpahan/lantai kotor, key lama dipertahankan), sampah, toilet, ruangan, lainnya_cs.
+2. Portal: kartu "Minta Pelayanan OB / Cleaning"; modal punya tab Pelayanan OB / Cleaning (CS), jenis tersaring per tab, jumlah hanya untuk OB, status "Menunggu OB/CS". Koleksi & rules sama (permintaan_pelayanan).
+3. Dashboard OB: panel "Permintaan pelayanan & cleaning" dengan label OB/CLEANING; permintaan tim sendiri (peran_tugas) diurutkan di atas, sisanya tetap tampil untuk backup.
+4. Beban Kerja: kebutuhan OB hanya dari jenis tim OB (jenis "bersih" lama kini dihitung CS); CS tetap dari luas area + sinyal jumlah permintaan cleaning/hari & respon rata-rata. Kinerja Saya: respon mencakup semua permintaan yang ia terima.
+5. Push laporan-baru-reminder: pesan diberi awalan [CLEANING] / [OB].

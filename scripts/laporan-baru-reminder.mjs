@@ -142,7 +142,8 @@ async function jalankan() {
     jenis: "pelayanan",
     collectionName: "permintaan_pelayanan",
     waktuField: "waktu_minta",
-    formatPesan: (d) => `${d.nama_pemohon || "Karyawan"} (${d.departemen || "-"}) minta ${d.jenis || "pelayanan"} di ${d.lokasi || "-"}${d.catatan ? ": " + d.catatan : ""}`,
+    // §124 jenis cleaning (CS) diberi penanda agar tim langsung tahu siapa yang bergerak
+    formatPesan: (d) => `${["bersih", "sampah", "toilet", "ruangan", "lainnya_cs"].includes(d.jenis) ? "[CLEANING] " : "[OB] "}${d.nama_pemohon || "Karyawan"} (${d.departemen || "-"}) minta ${String(d.jenis || "pelayanan").replace("_cs", "")} di ${d.lokasi || "-"}${d.catatan ? ": " + d.catatan : ""}`,
     notify: async (pesan) => kirimPushDept("OB & CS", "🛎️ Permintaan Pelayanan", pesan),
   });
 }

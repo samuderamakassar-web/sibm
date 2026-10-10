@@ -16,7 +16,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { ASUMSI_BAWAAN, LABEL_ASUMSI, WARNA_STATUS_BEBAN, statusBeban, type AsumsiBeban } from "../../../lib/sla";
-import { menitJenis } from "../../../lib/pelayanan";
+import { menitJenis, timJenis } from "../../../lib/pelayanan";
 
 const tz = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
 const tzJam = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "2-digit", hourCycle: "h23" });
@@ -109,6 +109,10 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     if (u.status === "kosong" || /parkir|teras|garden|taman/i.test(n)) ringan += luas; else intensif += luas;
   }));
   const bebanM2 = intensif + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
+  // §124 permintaan cleaning dari karyawan -> sinyal beban CS (kebutuhan CS tetap dari luas area)
+  const semuaPerm = (pelayanan?.docs || []).map((d) => d.data()).filter((x) => x.status !== "Batal" && x.waktu_minta);
+  const permCS = semuaPerm.filter((x) => timJenis(x.jenis) === "CS");
+  const responCS = permCS.filter((x) => x.waktu_terima).map((x) => (x.waktu_terima.toDate().getTime() - x.waktu_minta.toDate().getTime()) / 60000);
   const csPenilaian: Penilaian = {
     kunci: "CS", judul: "CS · Cleaning", sekarang: namaCS.length, nama: namaCS,
     kebutuhan: (bebanM2 / a.cs_m2_per_orang) * cadangan,
@@ -118,7 +122,10 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
       `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara`,
       `Beban setara ${f1(bebanM2)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}%`,
     ],
-    sinyal: [`Checklist sesi area lantai terisi ${pct(csSesi, csSesiTotal)} (${csSesi}/${csSesiTotal})`],
+    sinyal: [
+      `Checklist sesi area lantai terisi ${pct(csSesi, csSesiTotal)} (${csSesi}/${csSesiTotal})`,
+      permCS.length ? `${permCS.length} permintaan cleaning dari karyawan (${f1(permCS.length / hariKerja)}/hari kerja)${responCS.length ? ` · respon rata-rata ${f1(responCS.reduce((x, y) => x + y, 0) / responCS.length)} menit` : ""}` : "",
+    ].filter(Boolean),
     dataKurang: lantai.length ? undefined : "Isi luas lantai di menu Okupansi agar beban CS terhitung.",
   };
 
@@ -127,7 +134,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const meeting = booking.docs.map((d) => d.data()).filter((b) => b.jenis === "ruangan" && b.status !== "dibatalkan" && /meeting/i.test(String(b.objek_id || b.objek_nama || ""))).length;
   const meetingPerHari = meeting / hariKerja;
   // §122 data nyata permintaan pelayanan (bila cukup) -> menit kerja; selain itu perkiraan dari jumlah karyawan
-  const perm = (pelayanan?.docs || []).map((d) => d.data()).filter((x) => x.status !== "Batal" && x.waktu_minta);
+  const perm = semuaPerm.filter((x) => timJenis(x.jenis) === "OB");
   const menitPerm = perm.reduce((s, x) => s + menitJenis(x.jenis) + (x.jenis === "minuman" ? Math.max(0, (Number(x.jumlah) || 1) - 1) * 2 : 0), 0);
   const respon = perm.filter((x) => x.waktu_terima).map((x) => (x.waktu_terima.toDate().getTime() - x.waktu_minta.toDate().getTime()) / 60000);
   const pakaiPermintaan = perm.length >= a.ob_min_permintaan;
@@ -138,7 +145,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
       : ((jumlahKaryawan + meetingPerHari * a.ob_karyawan_per_meeting) / a.ob_karyawan_per_orang) * cadangan,
     dasar: pakaiPermintaan ? [
       `DATA NYATA: ${perm.length} permintaan pelayanan (${f1(perm.length / hariKerja)}/hari kerja)`,
-      `Total ± ${Math.round(menitPerm)} menit kerja (${f1(menitPerm / hariKerja)} menit/hari) — minuman 10, meeting 25, dokumen 15, bersih 10 menit`,
+      `Total ± ${Math.round(menitPerm)} menit kerja (${f1(menitPerm / hariKerja)} menit/hari) — minuman 10, meeting 25, dokumen 15, lainnya 15 menit`,
       `÷ ${a.ob_menit_produktif} menit efektif per OB per hari × cadangan ${a.cadangan_pct}%`,
     ] : [
       `${jumlahKaryawan} karyawan di Master Data`,
