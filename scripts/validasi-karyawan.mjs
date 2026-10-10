@@ -148,6 +148,7 @@ async function cekBelumInput() {
     return;
   }
 
+  const tulisDikecualikan = [];
   const awalHari = Timestamp.fromDate(waktuWITA(hariIni, "00:00"));
   const masukHariIni = (await db.collection("security_visitor_logs").where("waktu_masuk", ">=", awalHari).get())
     .docs.map((d) => d.data()).filter((x) => x.jenis === "Karyawan");
@@ -155,9 +156,15 @@ async function cekBelumInput() {
   const kartu = new Map((await db.collection("validasi_karyawan").where("tanggal", "==", hariIni).get())
     .docs.filter((d) => d.data().jenis === "belum_input").map((d) => [d.id, d.data()]));
 
-  const karyawan = (await db.collection("employees_directory").get()).docs.map((d) => d.data()).filter((e) => e.nama);
+  // §115 Security dikecualikan: kehadiran mereka dari roster + check-in/out otomatis saat tukar jaga
+  const namaSec = new Set((await db.collection("users_master").where("departemen", "==", "Security").get()).docs.map((d) => normal(d.data().nama)));
+  const rosterDoc = (await db.collection("security_monthly_schedules").doc(hariIni.slice(0, 7)).get()).data()?.data_hari || {};
+  Object.values(rosterDoc).forEach((perNama) => Object.keys(perNama || {}).forEach((n) => namaSec.add(normal(n))));
+  const karyawan = (await db.collection("employees_directory").get()).docs.map((d) => d.data()).filter((e) => e.nama && !namaSec.has(normal(e.nama)));
+  for (const [id, k] of kartu) if (k.status === "menunggu" && namaSec.has(normal(k.nama))) tulisDikecualikan.push(id);
   const menunggu = [];
   const tulis = []; // [ref, data, "set"|"update"] -- di-commit per 400 (batas batch Firestore 500)
+  for (const id of tulisDikecualikan) tulis.push([db.collection("validasi_karyawan").doc(id), { status: "dikecualikan", keterangan: "Security: kehadiran dari roster & tukar jaga" }, "update"]);
   for (const e of karyawan) {
     const id = `${hariIni}_masuk_${slugNama(e.nama)}`;
     const k = kartu.get(id);

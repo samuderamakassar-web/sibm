@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { daerahTulis } from "../../lib/daerah";
+import { namaSecurity } from "../../lib/kehadiranSecurity";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useToast } from "../ui/ToastProvider";
@@ -73,6 +74,12 @@ export default function ValidasiKaryawanPage() {
   const [sudahMasuk, setSudahMasuk] = useState<Set<string>>(new Set());
   const [sesiTerbuka, setSesiTerbuka] = useState<SesiTerbuka[]>([]);
   const [sekarang, setSekarang] = useState(() => Date.now());
+  // §115 petugas Security tidak divalidasi kehadirannya (roster + check-in/out otomatis saat tukar jaga)
+  const [namaSec, setNamaSec] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    namaSecurity(hariIni).then(setNamaSec).catch((e) => { console.error("[validasi] nama security:", e); setNamaSec(new Set()); });
+  }, [hariIni]);
+  const isSecurity = (nama: string) => !!namaSec?.has(normalNama(nama));
   useEffect(() => {
     const t = setInterval(() => setSekarang(Date.now()), 30000);
     return () => clearInterval(t);
@@ -111,7 +118,15 @@ export default function ValidasiKaryawanPage() {
   // §96: lewat 17:00 kartu "belum tercatat masuk" yang belum dijawab -> otomatis tidak hadir (cron = cadangan).
   useEffect(() => {
     if (!kartu || sekarang < waktuWITA(hariIni, JAM_BATAS_VALIDASI_MASUK).getTime()) return;
-    const target = kartu.filter((v) => v.jenis === "belum_input" && v.status === "menunggu" && v.tanggal <= hariIni
+    if (!namaSec) return; // tunggu daftar Security agar mereka tidak ikut ditandai
+    // §115 kartu lama milik Security ditutup "dikecualikan"
+    const kartuSec = kartu.filter((v) => v.jenis === "belum_input" && v.status === "menunggu" && namaSec.has(normalNama(v.nama)));
+    if (kartuSec.length) {
+      const bs = writeBatch(db);
+      kartuSec.slice(0, 450).forEach((v) => bs.update(doc(db, "validasi_karyawan", v.id), { status: "dikecualikan", keterangan: "Security: kehadiran dari roster & tukar jaga" }));
+      bs.commit().catch((e) => console.error("[validasi] tutup kartu security:", e));
+    }
+    const target = kartu.filter((v) => v.jenis === "belum_input" && v.status === "menunggu" && v.tanggal <= hariIni && !namaSec.has(normalNama(v.nama))
       && !(v.tanggal === hariIni && sudahMasuk.has(normalNama(v.nama))));
     if (target.length === 0) return;
     const batch = writeBatch(db);
@@ -120,7 +135,7 @@ export default function ValidasiKaryawanPage() {
       divalidasi_oleh: "Sistem (lewat 17:00)", waktu_validasi: serverTimestamp(),
     }));
     batch.commit().catch((err) => console.error("[validasi] gagal menandai tidak hadir otomatis:", err));
-  }, [kartu, sekarang, hariIni, sudahMasuk]);
+  }, [kartu, sekarang, hariIni, sudahMasuk, namaSec]);
 
   // Karyawan yang masih di dalam gedung (belum check-out) -> sumber kartu lembur langsung (§92).
   useEffect(() => {
@@ -227,7 +242,7 @@ export default function ValidasiKaryawanPage() {
     .sort((a, b) => a.nama.localeCompare(b.nama));
   const lemburBerjalan = semua.filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || (v.status === "akan_pulang" && !tanyaUlang(v))));
   const belumInput = semua
-    .filter((v) => v.jenis === "belum_input" && v.tanggal === hariIni && v.status === "menunggu" && !sudahMasuk.has(normalNama(v.nama)))
+    .filter((v) => v.jenis === "belum_input" && v.tanggal === hariIni && v.status === "menunggu" && !sudahMasuk.has(normalNama(v.nama)) && !isSecurity(v.nama))
     .sort((a, b) => a.nama.localeCompare(b.nama));
   const belumInputTampil = belumInput.filter(cocok);
   const sudahDijawab = semua.filter((v) => v.tanggal === hariIni && (v.status === "diinput_susulan" || v.status === "tidak_masuk" || v.status === "selesai"));

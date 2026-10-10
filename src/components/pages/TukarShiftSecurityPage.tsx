@@ -22,6 +22,7 @@ import { hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga, menitSejakBa
 import AdminShell from "../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
 import { idHandover } from "../SerahTerimaGuard";
+import { catatKehadiranTukarJaga, type ShiftSecurity } from "../../lib/kehadiranSecurity";
 
 type IconProps = { size?: number; color?: string };
 const IconQrCode = ({ size = 36, color = "currentColor" }: IconProps) => (
@@ -147,6 +148,9 @@ export default function TukarShiftSecurityPage() {
         notif_terlambat_terkirim: false,
       });
       showToast("Serah terima berhasil dikonfirmasi!", "success");
+      // §115 kehadiran Security otomatis: shift baru check-in, shift lama check-out (dari roster)
+      catatKehadiranTukarJaga({ tanggal: handoverDoc.tanggal_shift, shift: handoverDoc.shift as ShiftSecurity, handoverId: handoverDoc.id, pemindai: myName, petugasKeluar: handoverDoc.petugas_keluar, daerah: daerahTulis() })
+        .catch((e) => console.error("[kehadiran security] gagal mencatat:", e));
       // Kalau sebelumnya sempat telat & ada entri security_shift_extend aktif (lihat
       // EskalasiShiftModal.tsx / scripts/shift-handover-escalation.mjs), tutup otomatis --
       // "distop begitu tukar jaga beneran terjadi" (dikonfirmasi user). Cron juga punya

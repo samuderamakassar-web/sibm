@@ -25,6 +25,7 @@ import { hitungShiftSesi, waktuWITASekarang, AMBANG_TELAT_SERAH_TERIMA_MENIT, ty
 import QrLokal from "./QrLokal";
 import { daerahTulis } from "../lib/daerah";
 import { logout } from "../hooks/useAuthGuard";
+import { catatKehadiranTukarJaga } from "../lib/kehadiranSecurity";
 
 export const idHandover = (tanggal: string, shift: string) => `HO_${tanggal}_${shift.replace(" ", "")}`;
 const idExtend = (tanggal: string, shift: string) => `${tanggal}_${shift.replace(" ", "")}`;
@@ -199,6 +200,9 @@ export default function SerahTerimaGuard() {
       const extRef = doc(db, "security_shift_extend", idExtend(b.cur.tanggal, b.cur.shift));
       const e = await getDoc(extRef);
       if (e.exists() && e.data().status !== "selesai") await updateDoc(extRef, { status: "selesai", selesai_pada: serverTimestamp(), catatan_selesai: "Petugas masuk mulai jaga tanpa serah terima" });
+      // §115 kehadiran otomatis tetap dicatat (ditandai tanpa serah terima)
+      catatKehadiranTukarJaga({ tanggal: b.cur.tanggal, shift: b.cur.shift, handoverId: ref.id, pemindai: nama, petugasKeluar: hoCur?.petugas_keluar, tanpaSerahTerima: true, daerah: daerahTulis() })
+        .catch((er) => console.error("[kehadiran security] gagal mencatat:", er));
     } catch (err) { console.error(err); alert("Gagal menyimpan, coba lagi."); }
     finally { setSibuk(false); }
   };

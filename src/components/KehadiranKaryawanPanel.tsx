@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { jamWITA, tanggalWITA, type ValidasiKaryawan } from "../lib/validasiKaryawan";
+import KehadiranSecurityPanel from "./KehadiranSecurityPanel";
 
 const jam = (ts?: { toDate: () => Date } | null) => (ts ? jamWITA(ts.toDate()) : "-");
 
@@ -78,6 +79,7 @@ export default function KehadiranKaryawanPanel() {
           </div>
         </div>
       </div>
+      <KehadiranSecurityPanel />
     </div>
   );
 }

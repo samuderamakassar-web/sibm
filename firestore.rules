@@ -163,7 +163,9 @@ service cloud.firestore {
           // §106 RAB, §107 Project Tracker
           'anggaran_rab', 'project_tracker',
           // §113 Temuan inspeksi kondisi aset (bukan Helpdesk)
-          'temuan_aset'
+          'temuan_aset',
+          // §115 Kehadiran Security otomatis dari tukar jaga
+          'kehadiran_security'
         ];
     }
 
