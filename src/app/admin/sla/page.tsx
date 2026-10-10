@@ -31,15 +31,29 @@ interface Penilaian {
 interface Resepsionis { tamuPerJam: number; puncak: { jam: string; rata: number } | null; paketPerHari: number; totalTamu: number; dasar: string[] }
 interface HasilBeban { penilaian: Penilaian[]; resepsionis: Resepsionis; hariKerja: number }
 
-async function hitung(bulan: string, hariIni: string, a: AsumsiBeban): Promise<HasilBeban> {
-  const [y, m] = bulan.split("-").map(Number);
-  const akhirBulan = `${bulan}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-  const batas = hariIni < akhirBulan ? hariIni : akhirBulan;
-  const tsAwal = Timestamp.fromDate(new Date(`${bulan}-01T00:00:00+08:00`));
+/** §120 periode = rentang tanggal [dari, sampai] (per bulan, 3 bulan, YTD, 12 bulan). */
+export interface Periode { kunci: string; label: string; dari: string; sampai: string }
+function daftarPeriode(hariIni: string): Periode[] {
+  const y = Number(hariIni.slice(0, 4)), m = Number(hariIni.slice(5, 7));
+  const awalBulan = (yy: number, mm: number) => { const d = new Date(Date.UTC(yy, mm - 1, 1)); return d.toISOString().slice(0, 10); };
+  const akhirBulan = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).toISOString().slice(0, 10);
+  const bulan = Array.from({ length: 12 }, (_, k) => { const d = new Date(Date.UTC(y, m - 1 - k, 1)); return { yy: d.getUTCFullYear(), mm: d.getUTCMonth() + 1 }; });
+  return [
+    { kunci: "YTD", label: `YTD ${y} (Jan – hari ini)`, dari: `${y}-01-01`, sampai: hariIni },
+    { kunci: "12BLN", label: "12 bulan terakhir (semua)", dari: awalBulan(bulan[11].yy, bulan[11].mm), sampai: hariIni },
+    { kunci: "3BLN", label: "3 bulan terakhir", dari: awalBulan(bulan[2].yy, bulan[2].mm), sampai: hariIni },
+    ...bulan.map(({ yy, mm }) => ({ kunci: `${yy}-${String(mm).padStart(2, "0")}`, label: `${NAMA_BULAN[mm - 1]} ${yy}`, dari: awalBulan(yy, mm), sampai: akhirBulan(yy, mm) < hariIni ? akhirBulan(yy, mm) : hariIni })),
+  ];
+}
+
+async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<HasilBeban> {
+  const dari = p.dari;
+  const batas = p.sampai;
+  const tsAwal = Timestamp.fromDate(new Date(`${dari}T00:00:00+08:00`));
   const tsAkhir = Timestamp.fromDate(new Date(new Date(`${batas}T00:00:00+08:00`).getTime() + 86400000));
   const cadangan = 1 + a.cadangan_pct / 100;
   const hariKerjaList: string[] = [];
-  for (let d = new Date(`${bulan}-01T12:00:00Z`); d.toISOString().slice(0, 10) <= batas; d.setUTCDate(d.getUTCDate() + 1)) {
+  for (let d = new Date(`${dari}T12:00:00Z`); d.toISOString().slice(0, 10) <= batas; d.setUTCDate(d.getUTCDate() + 1)) {
     const h = d.getUTCDay(); if (h !== 0 && h !== 6) hariKerjaList.push(d.toISOString().slice(0, 10));
   }
   const hariKerja = Math.max(1, hariKerjaList.length);
@@ -48,12 +62,13 @@ async function hitung(bulan: string, hariIni: string, a: AsumsiBeban): Promise<H
     getDocs(collection(db, "users_master")),
     getDocs(collection(db, "employees_directory")),
     getDoc(doc(db, "okupansi_gedung", "data")),
-    getDocs(query(collection(db, "daily_plots"), where(documentId(), ">=", `${bulan}-01`), where(documentId(), "<=", batas))),
-    getDocs(query(collection(db, "ob_checklists"), where("tanggal", ">=", `${bulan}-01`), where("tanggal", "<=", batas))),
+    getDocs(query(collection(db, "daily_plots"), where(documentId(), ">=", dari), where(documentId(), "<=", batas))),
+    getDocs(query(collection(db, "ob_checklists"), where("tanggal", ">=", dari), where("tanggal", "<=", batas))),
     getDocs(query(collection(db, "booking"), where("mulai", ">=", tsAwal), where("mulai", "<", tsAkhir))),
     getDocs(query(collection(db, "operational_vehicle_logs"), where("waktu_catat", ">=", tsAwal), where("waktu_catat", "<", tsAkhir))),
-    getDoc(doc(db, "security_monthly_schedules", bulan)),
-    getDocs(query(collection(db, "security_patrols"), where("tanggal_shift", ">=", `${bulan}-01`), where("tanggal_shift", "<=", batas))),
+    // §120 roster semua bulan dalam periode
+    Promise.all(Array.from(new Set(Array.from({ length: 13 }, (_, k) => { const d = new Date(`${dari}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + k); return d.toISOString().slice(0, 7); }).filter((b) => b <= batas.slice(0, 7)))).map((b) => getDoc(doc(db, "security_monthly_schedules", b)))),
+    getDocs(query(collection(db, "security_patrols"), where("tanggal_shift", ">=", dari), where("tanggal_shift", "<=", batas))),
     getDocs(query(collection(db, "security_visitor_logs"), where("waktu_masuk", ">=", tsAwal), where("waktu_masuk", "<", tsAkhir))),
     getDocs(query(collection(db, "packages"), where("waktu_diterima", ">=", tsAwal), where("waktu_diterima", "<", tsAkhir))).catch(() => null),
   ]);
@@ -116,7 +131,7 @@ async function hitung(bulan: string, hariIni: string, a: AsumsiBeban): Promise<H
       `÷ ${a.ob_karyawan_per_orang} karyawan per OB × cadangan ${a.cadangan_pct}%`,
     ],
     sinyal: [`Checklist pelayanan terisi ${pct(obSesi, obSesiTotal)} (${obSesi}/${obSesiTotal})`, namaOB.length === 1 ? "Hanya 1 orang: saat cuti/sakit pelayanan berhenti total" : ""].filter(Boolean),
-    dataKurang: namaOB.length ? undefined : "Belum ada OB yang diplot di area Pelayanan Khusus OB bulan ini.",
+    dataKurang: namaOB.length ? undefined : "Belum ada OB yang diplot di area Pelayanan Khusus OB pada periode ini.",
   };
 
   // ---------- Driver: jam di jalan dari log armada ----------
@@ -143,19 +158,20 @@ async function hitung(bulan: string, hariIni: string, a: AsumsiBeban): Promise<H
       `÷ (${a.drv_jam_kerja} jam × utilisasi sehat ${a.drv_utilisasi_sehat}%) × cadangan ${a.cadangan_pct}%`,
     ],
     sinyal: [`${tripNonDriver} perjalanan dibawa bukan driver (kebutuhan yang tidak dilayani driver)`, `${bookingKend} booking kendaraan`],
-    dataKurang: logs.length ? undefined : "Belum ada log pergerakan armada bulan ini.",
+    dataKurang: logs.length ? undefined : "Belum ada log pergerakan armada pada periode ini.",
   };
 
   // ---------- Security: cakupan pos 24 jam ----------
   const secResmi = namaDept("Security");
-  const dataHari = ((roster.exists() && roster.data().data_hari) || {}) as Record<string, Record<string, string>>;
+  const dataHari: Record<string, Record<string, string>> = {};
+  roster.forEach((s) => Object.assign(dataHari, (s.exists() && s.data().data_hari) || {}));
   const sesiP: Record<string, number> = {};
   patroli.docs.forEach((d) => { const x = d.data(); if (x.sesi) { const k = `${norm(x.petugas)}|${x.tanggal_shift}|${x.shift}`; sesiP[k] = (sesiP[k] || 0) | (1 << ["Sesi 1", "Sesi 2", "Sesi 3"].indexOf(x.sesi)); } });
   const bit = (n: number) => [1, 2, 4].filter((b) => n & b).length;
   let s1 = 0, s1t = 0, s2 = 0, s2t = 0;
   const namaRoster = new Set<string>();
   Object.entries(dataHari).forEach(([tgl, perNama]) => {
-    if (tgl >= hariIni || tgl < `${bulan}-01`) return;
+    if (tgl >= hariIni || tgl < dari || tgl > batas) return;
     Object.entries(perNama || {}).forEach(([nama, label]) => {
       const sh = String(label).includes("Shift 1") ? "Shift 1" : String(label).includes("Shift 2") ? "Shift 2" : null;
       if (!sh) return; namaRoster.add(nama.trim());
@@ -232,7 +248,9 @@ export default function BebanKerjaPage() {
   const showToast = useToast();
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA." });
   const hariIni = tz.format(new Date());
-  const [bulan, setBulan] = useState(hariIni.slice(0, 7));
+  const periodeList = daftarPeriode(hariIni);
+  const [kunciPeriode, setKunciPeriode] = useState("YTD");
+  const periode = periodeList.find((p) => p.kunci === kunciPeriode) || periodeList[0];
   const [asumsi, setAsumsi] = useState<AsumsiBeban>(ASUMSI_BAWAAN);
   const [edit, setEdit] = useState<Record<string, string> | null>(null);
   const [hasil, setHasil] = useState<HasilBeban | null>(null);
@@ -244,12 +262,12 @@ export default function BebanKerjaPage() {
   useEffect(() => {
     if (!isReady) return;
     let batal = false;
-    hitung(bulan, hariIni, asumsi).then((h) => { if (!batal) setHasil(h); }).catch((e) => { console.error("[beban]", e); showToast("Gagal menghitung beban kerja.", "error"); });
+    hitung(periode, hariIni, asumsi).then((h) => { if (!batal) setHasil(h); }).catch((e) => { console.error("[beban]", e); showToast("Gagal menghitung beban kerja.", "error"); });
     return () => { batal = true; setHasil(null); };
-  }, [isReady, bulan, hariIni, asumsi, showToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- periode ditentukan oleh kunciPeriode
+  }, [isReady, kunciPeriode, hariIni, asumsi, showToast]);
 
   if (!isReady) return null;
-  const bulanOpsi = Array.from({ length: 6 }, (_, k) => { const d = new Date(Number(hariIni.slice(0, 4)), Number(hariIni.slice(5, 7)) - 1 - k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
   const simpan = async () => {
     if (!edit) return;
     const baru = Object.fromEntries(Object.keys(ASUMSI_BAWAAN).map((k) => [k, Number(edit[k]) > 0 ? Number(edit[k]) : ASUMSI_BAWAAN[k as keyof AsumsiBeban]])) as unknown as AsumsiBeban;
@@ -268,13 +286,16 @@ export default function BebanKerjaPage() {
   return (
     <AdminShell title="Beban Kerja & Kebutuhan Personel" subtitle="Seberapa sibuk tim OB, CS, Driver & Security — dasar keputusan tambah personel" userName={session?.nama || "Admin"}
       actions={<div style={{ display: "flex", gap: "6px" }}>
-        <select className="sa-field" value={bulan} onChange={(e) => setBulan(e.target.value)} aria-label="Bulan">{bulanOpsi.map((b) => <option key={b} value={b}>{NAMA_BULAN[Number(b.slice(5, 7)) - 1]} {b.slice(0, 4)}</option>)}</select>
+        <select className="sa-field" value={kunciPeriode} onChange={(e) => setKunciPeriode(e.target.value)} aria-label="Periode">
+          <optgroup label="Rentang">{periodeList.slice(0, 3).map((p) => <option key={p.kunci} value={p.kunci}>{p.label}</option>)}</optgroup>
+          <optgroup label="Per bulan">{periodeList.slice(3).map((p) => <option key={p.kunci} value={p.kunci}>{p.label}</option>)}</optgroup>
+        </select>
         <button type="button" className="sa-btn is-soft" onClick={() => setEdit(Object.fromEntries(Object.entries(asumsi).map(([k, v]) => [k, String(v)])))}>Atur asumsi</button>
       </div>}>
       {hasil === null ? <Tile><div style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>Menghitung beban kerja…</div></Tile> : (
         <>
           <Tile style={{ marginBottom: "14px" }}>
-            <h2 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 800 }}>Kesimpulan {NAMA_BULAN[Number(bulan.slice(5, 7)) - 1]} {bulan.slice(0, 4)} <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>· {hasil.hariKerja} hari kerja dihitung</span></h2>
+            <h2 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 800 }}>Kesimpulan {periode.label} <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>· {hasil.hariKerja} hari kerja dihitung ({periode.dari.split("-").reverse().join("/")} – {periode.sampai.split("-").reverse().join("/")})</span></h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "13.5px" }}>
               {kesimpulan.map(({ p, tambah, padat }) => (
                 <div key={p.kunci}>{p.dataKurang ? "⚪" : tambah > 0 ? "🔴" : padat ? "🟠" : "🟢"} <b>{p.judul}</b>: {p.dataKurang ? "data belum cukup" : tambah > 0 ? `perlu tambah ${tambah} orang` : padat ? "padat — pertimbangkan tambahan bila bertahan 2–3 bulan" : "cukup, tidak perlu tambahan"}</div>

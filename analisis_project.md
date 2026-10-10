@@ -3112,3 +3112,6 @@ SUDAH DI-DEPLOY. Arahan user: QHSE & Admin GA tidak perlu SLA; tujuannya kesimpu
   - Security: 168 jam × pos ÷ (40 + 4 lembur wajar) per orang; tampil jam/orang/minggu & lembur vs batas 18; sinyal patroli ≥2 sesi Shift 1 vs Shift 2.
   - Resepsionis: tamu (Buku Tamu non-karyawan) per jam 09:00–17:00 hari kerja, jam puncak, paket/hari (packages.waktu_diterima); perlu bila ≥ 4 tamu/jam rata-rata atau puncak ≥ 8.
 - Kotak "Kesimpulan" di atas (🟢/🟠/🔴 per tim + resepsionis). Perkiraan dengan data Okupansi user: CS ± 1,95 orang dari 3 (longgar), OB ± 1,9 dari 1 (perlu +1), Security 168/44 ≈ 3,8 → 4 (perlu +1).
+
+## 120. Beban Kerja: Pilihan Periode YTD / 12 Bulan / 3 Bulan / Per Bulan (10 Oktober 2026)
+SUDAH DI-DEPLOY. Permintaan user: perhitungan bisa semua bulan atau YTD. /admin/sla kini memakai rentang tanggal `Periode {dari, sampai}`: "YTD {tahun} (Jan – hari ini)" (default), "12 bulan terakhir (semua)", "3 bulan terakhir", dan 12 bulan terakhir per bulan. Semua query memakai rentang [dari, sampai] (plot, checklist, booking, log armada, patroli, Buku Tamu, paket); roster Security dimuat untuk setiap bulan dalam periode lalu digabung. Judul kesimpulan menampilkan label periode, jumlah hari kerja & rentang tanggal. Indeks = rata-rata harian sepanjang periode, sehingga YTD/12 bulan lebih stabil sebagai dasar keputusan.
