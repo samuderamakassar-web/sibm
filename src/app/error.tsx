@@ -9,7 +9,8 @@
 import { useEffect } from "react";
 
 const KUNCI = "sibm_reload_error";
-const isChunkError = (e: Error) => /ChunkLoadError|Loading chunk|Loading CSS chunk|dynamically imported module|Importing a module script failed/i.test(`${e.name} ${e.message}`);
+// §127 juga crash DOM akibat Google Translate (removeChild / insertBefore pada node yang sudah diganti)
+const isChunkError = (e: Error) => /ChunkLoadError|Loading chunk|Loading CSS chunk|dynamically imported module|Importing a module script failed|removeChild|insertBefore/i.test(`${e.name} ${e.message}`);
 
 export default function Error({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {

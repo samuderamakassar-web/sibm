@@ -1,6 +1,6 @@
 // Register alat kerja OB & CS dengan PIC (§116, Tahap 1 pengetatan).
-// Tiap alat punya kode (mis. VAC-01) & SATU pemegang. Pindah pemegang = serah terima: alat berstatus
-// "menunggu konfirmasi" sampai pemegang baru menekan "Terima" di halaman inspeksinya. Rusak/hilang dicatat
+// Tiap alat punya kode (mis. VAC-01) & SATU pemegang yang bertanggung jawab penuh (dibawa sendiri saat pindah
+// lantai). §127: tanpa serah terima/konfirmasi -- Koordinator/Admin cukup "Ganti PIC" (resign/mutasi). Rusak/hilang dicatat
 // dengan kronologi atas nama pemegang. Inspeksi Peralatan Kebersihan memakai alat milik pemegang sendiri.
 // Label: QR dicetak dari halaman alat, ATAU cukup tulis kode di label nama biasa (pemilihan alat via daftar).
 //   aset_alat/{id} { kode, nama, kategori, pemegang, status, dikonfirmasi, foto, catatan, kondisi_terakhir,

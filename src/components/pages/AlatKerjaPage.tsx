@@ -2,7 +2,7 @@
 
 /**
  * Alat Kerja OB & CS (§116) -- register alat dengan PIC. Akses: Admin GA / Administrator / Koordinator OB & CS.
- * Tambah alat (kode otomatis), serah terima ke pemegang lain (menunggu konfirmasi pemegang baru), tandai
+ * Tambah alat (kode otomatis), ganti PIC (langsung berlaku, §127 tanpa konfirmasi), tandai
  * Rusak / Hilang (kronologi wajib) / Afkir, riwayat, dan cetak label (QR + kode, atau cukup tulis kode).
  */
 
@@ -83,7 +83,7 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
           terpakai.push({ kode });
           await addDoc(collection(db, "aset_alat"), {
             daerah: daerahTulis(), kode, nama: form.nama.trim(), kategori: form.kategori, pemegang: form.pemegang, status: "Aktif",
-            dikonfirmasi: form.pemegang === PEMEGANG_GUDANG, foto, catatan: form.catatan.trim(), dibuat_pada: serverTimestamp(),
+            dikonfirmasi: true, foto, catatan: form.catatan.trim(), dibuat_pada: serverTimestamp(),
             riwayat: [riwayat("Didaftarkan", { ke: form.pemegang })],
           });
         }
@@ -91,10 +91,10 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
       } else if (aksi.jenis === "pindah") {
         if (!form.ke || form.ke === aksi.a.pemegang) return showToast("Pilih pemegang baru.", "warning");
         await updateDoc(doc(db, "aset_alat", aksi.a.id), {
-          pemegang: form.ke, dikonfirmasi: form.ke === PEMEGANG_GUDANG, diserahkan_pada: serverTimestamp(),
-          riwayat: arrayUnion(riwayat("Serah terima", { dari: aksi.a.pemegang, ke: form.ke, catatan: form.catatan.trim() })),
+          pemegang: form.ke, dikonfirmasi: true, diserahkan_pada: serverTimestamp(),
+          riwayat: arrayUnion(riwayat("Ganti PIC", { dari: aksi.a.pemegang, ke: form.ke, catatan: form.catatan.trim() })),
         });
-        showToast(form.ke === PEMEGANG_GUDANG ? `${aksi.a.kode} dikembalikan ke gudang.` : `${aksi.a.kode} diserahkan ke ${form.ke} — menunggu konfirmasi penerimaan.`, "success");
+        showToast(form.ke === PEMEGANG_GUDANG ? `${aksi.a.kode} dikembalikan ke gudang.` : `PIC ${aksi.a.kode} sekarang ${form.ke}.`, "success");
       } else if (aksi.jenis === "status") {
         if (form.status === aksi.a.status) return showToast("Status tidak berubah.", "warning");
         if ((form.status === "Hilang" || form.status === "Rusak") && !form.kronologi.trim()) return showToast("Kronologi wajib diisi.", "warning");
@@ -154,7 +154,7 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
       ` }} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "8px", marginBottom: "12px" }}>
-        {([["Total aktif", alat.filter((a) => a.status === "Aktif").length, "var(--ink)"], ["Belum dikonfirmasi", alat.filter((a) => a.status !== "Afkir" && !a.dikonfirmasi).length, "var(--warn)"], ["Rusak", alat.filter((a) => a.status === "Rusak").length, "var(--warn)"], ["Hilang", alat.filter((a) => a.status === "Hilang").length, "var(--red-600)"]] as const).map(([l, n, w]) => (
+        {([["Total aktif", alat.filter((a) => a.status === "Aktif").length, "var(--ink)"], ["Belum diinspeksi", alat.filter((a) => a.status === "Aktif" && !a.inspeksi_terakhir).length, "var(--warn)"], ["Rusak", alat.filter((a) => a.status === "Rusak").length, "var(--warn)"], ["Hilang", alat.filter((a) => a.status === "Hilang").length, "var(--red-600)"]] as const).map(([l, n, w]) => (
           <Tile key={l} compact><div style={{ fontSize: "22px", fontWeight: 800, color: w }}>{n}</div><div style={{ fontSize: "12px", fontWeight: 700, color: "var(--muted)" }}>{l}</div></Tile>
         ))}
       </div>
@@ -179,12 +179,11 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
                 <b style={{ fontSize: "14px", color: "var(--ink)" }}>{a.kode}</b>
                 <span style={{ fontSize: "13px", color: "var(--ink)" }}>{a.nama}</span>
                 <Pill s={a.status} />
-                {!a.dikonfirmasi && a.status !== "Afkir" && <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--warn)" }}>⏳ menunggu konfirmasi {a.pemegang}</span>}
               </div>
               <div style={{ fontSize: "12px", color: "var(--muted)" }}>PIC <b style={{ color: "var(--ink-soft)" }}>{a.pemegang}</b> · {a.kategori}{a.kondisi_terakhir ? ` · inspeksi ${tgl(a.inspeksi_terakhir)}: ${a.kondisi_terakhir}` : " · belum diinspeksi"}</div>
             </div>
             <div className="al-aksi">
-              <button type="button" onClick={() => { buka({ jenis: "pindah", a }); }}>Serah terima</button>
+              <button type="button" onClick={() => { buka({ jenis: "pindah", a }); }}>Ganti PIC</button>
               <button type="button" onClick={() => buka({ jenis: "status", a })}>Ubah status</button>
               <button type="button" onClick={() => buka({ jenis: "riwayat", a })}>Riwayat</button>
             </div>
@@ -213,9 +212,9 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
             )}
             {aksi.jenis === "pindah" && (
               <>
-                <h3 style={{ margin: 0, fontSize: "18px" }}>Serah terima {aksi.a.kode}</h3>
-                <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--muted)" }}>{aksi.a.nama} · pemegang sekarang <b>{aksi.a.pemegang}</b>. Pemegang baru harus menekan &quot;Terima&quot; di halaman inspeksinya.</p>
-                <label className="al-lbl">Pemegang baru *</label>
+                <h3 style={{ margin: 0, fontSize: "18px" }}>Ganti PIC {aksi.a.kode}</h3>
+                <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--muted)" }}>{aksi.a.nama} · PIC sekarang <b>{aksi.a.pemegang}</b>. Hanya untuk resign / mutasi / alat ditarik ke gudang — pindah lantai tidak perlu ganti PIC, alat dibawa pemiliknya.</p>
+                <label className="al-lbl">PIC baru *</label>
                 <select className="al-in" value={form.ke} onChange={(e) => setForm({ ...form, ke: e.target.value })}><option value="">Pilih...</option>{pemegangList.filter((p) => p !== aksi.a.pemegang).map((p) => <option key={p}>{p}</option>)}</select>
                 <label className="al-lbl">Catatan</label>
                 <input className="al-in" value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Mis. rotasi area / resign" />

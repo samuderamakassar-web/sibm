@@ -13,7 +13,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, limit, updateDoc, arrayUnion } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, limit, updateDoc } from "firebase/firestore";
 import type { AlatKerja } from "@/lib/alatKerja";
 import { db } from "@/lib/firebase";
 import { kirimEmail } from "@/lib/notify";
@@ -179,14 +179,9 @@ export default function InspeksiFasilitasPage() {
     }, (e) => console.error("[inspeksi] alat saya:", e));
     return () => { u1(); u2(); u3(); };
   }, [picName]);
-  const alatDipegang = alatSaya.filter((a) => a.dikonfirmasi && a.status !== "Hilang");
+  // §127 tanpa konfirmasi serah terima: semua alat atas nama PIC langsung miliknya
+  const alatDipegang = alatSaya.filter((a) => a.status !== "Hilang");
   const labelAlat = (a: AlatKerja) => `${a.kode} · ${a.nama}`;
-  const terimaAlat = async (a: AlatKerja) => {
-    try {
-      await updateDoc(doc(db, "aset_alat", a.id), { dikonfirmasi: true, diterima_pada: serverTimestamp(), riwayat: arrayUnion({ waktu: Timestamp.now(), aksi: "Diterima pemegang", ke: picName, oleh: picName }) });
-      showToast(`${a.kode} diterima — sekarang tanggung jawab Anda.`, "success");
-    } catch (e) { console.error(e); showToast("Gagal mengonfirmasi.", "error"); }
-  };
 
   const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => t.jenis === jenis && t.area === areaAktif && t.item.toLowerCase() === nama.trim().toLowerCase()) : undefined);
   const sudahMingguIni = riwayat.find((l) => (l.jenis || "gedung") === jenis && l.area === areaAktif && l.minggu_mulai === seninMingguIni);
@@ -288,7 +283,6 @@ export default function InspeksiFasilitasPage() {
 
   const jenisTersedia = (["gedung", "alat", ...(bolehUtilitas ? ["utilitas"] : [])] as JenisInspeksi[]);
   const bisaMulai = jenis === "gedung" ? assignedAreas.length > 0 : jenis === "alat" ? alatDipegang.length > 0 : true;
-  const belumDiterima = alatSaya.filter((a) => !a.dikonfirmasi);
 
   return (
     <AdminShell title="Inspeksi Kondisi Aset" subtitle="Foto & kondisi fasilitas gedung, peralatan kebersihan, dan utilitas — mingguan" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
@@ -325,19 +319,6 @@ export default function InspeksiFasilitasPage() {
               </button>
             ))}
           </div>
-
-          {belumDiterima.length > 0 && (
-            <div style={{ padding: "12px", borderRadius: "12px", background: "var(--warn-50)", display: "flex", flexDirection: "column", gap: "8px" }}>
-              <b style={{ fontSize: "13px", color: "var(--ink)" }}>📦 {belumDiterima.length} alat diserahkan kepada Anda — cek fisiknya lalu tekan Terima</b>
-              {belumDiterima.map((a) => (
-                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "13px" }}><b>{a.kode}</b> {a.nama}</span>
-                  <button type="button" className="sa-btn is-primary" style={{ height: "32px" }} onClick={() => terimaAlat(a)}>Terima</button>
-                </div>
-              ))}
-              <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>Setelah diterima, alat menjadi tanggung jawab Anda (rusak/hilang dicatat atas nama pemegang).</span>
-            </div>
-          )}
 
           {jenis === "gedung" ? (
             assignedAreas.length > 0 ? (
