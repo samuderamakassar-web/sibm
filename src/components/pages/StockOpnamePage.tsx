@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, Timestamp, increment, writeBatch } from "firebase/firestore";
+import Modal from "../ui/Modal";
+import { handleFotoUpload } from "@/lib/uploadFoto";
+import { isAdministrator } from "@/hooks/useAuthGuard";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
@@ -81,8 +84,17 @@ function BarisKelompok({ k, n, kolom }: { k: Kategori; n: number; kolom: number 
   );
 }
 
+// §116 opname fisik: selisih sistem vs fisik, wajib disetujui Koordinator OB / Admin (bukan pembuatnya)
+interface OpnameItem { id: string; nama: string; sistem: number; fisik: number; selisih: number; alasan: string }
+interface Opname { id: string; dibuat_oleh: string; dibuat_pada?: Timestamp | null; status: "Menunggu Persetujuan" | "Disetujui" | "Ditolak" | "Sesuai"; items: OpnameItem[]; disetujui_oleh?: string; alasan_tolak?: string }
+type Transaksi = { item: StockItem; arah: "MASUK" | "KELUAR"; jumlah: string; keperluan: string; foto: string };
+const BATAS_FOTO_KELUAR = 5; // keluar >= 5 unit wajib foto
+const HARI_PENGINGAT_OPNAME = 30;
+
 interface StockLog {
   id: string;
+  keperluan?: string;
+  foto_bukti?: string;
   id_barang?: string;
   nama_barang: string;
   jenis_transaksi: string;
@@ -167,6 +179,12 @@ export default function StockOpnamePage() {
   const [formData, setFormData] = useState({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" as Kategori | "" });
   const [filterKat, setFilterKat] = useState<Kategori | "Semua">("Semua");
   const [isLoading, setIsLoading] = useState(false);
+  const [trx, setTrx] = useState<Transaksi | null>(null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [opnames, setOpnames] = useState<Opname[]>([]);
+  const [formOpname, setFormOpname] = useState<Record<string, { fisik: string; alasan: string }> | null>(null);
+  const [alasanTolak, setAlasanTolak] = useState("");
+  const [sekarang] = useState(() => Date.now());
 
   const picRef = useRef("");
 
@@ -198,9 +216,14 @@ export default function StockOpnamePage() {
       setRiwayatLogs(logsData);
     });
 
+    const unsubOpname = onSnapshot(query(collection(db, "ob_opname"), orderBy("dibuat_pada", "desc"), limit(20)), (s) => {
+      setOpnames(s.docs.map((d) => ({ id: d.id, ...d.data() } as Opname)));
+    }, (e) => console.error("[opname]", e));
+
     return () => {
       unsubscribeStock();
       unsubscribeLog();
+      unsubOpname();
     };
   }, [isAuthReady, session]);
 
@@ -220,8 +243,9 @@ export default function StockOpnamePage() {
     const kategori: Kategori = formData.kategori || tebakKategori(formData.nama_barang);
     try {
       if (isEditMode && editId) {
+        // §116 jumlah stok TIDAK bisa diubah lewat Edit -- hanya lewat transaksi bertanda bukti atau opname fisik yang disetujui
         await updateDoc(doc(db, "ob_stock", editId), {
-          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, kategori, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
+          nama_barang: formData.nama_barang, batas_minimum: formData.batas_minimum, kategori, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       } else {
         await addDoc(collection(db, "ob_stock"), { daerah: daerahTulis(),
@@ -239,22 +263,76 @@ export default function StockOpnamePage() {
     }
   };
 
-  const handleQuickUpdate = async (id: string, nama_barang: string, currentQty: number, change: number) => {
-    const newQty = currentQty + change;
-    if (newQty < 0) return;
+  const bisaSetujui = !!session && (isAdministrator(session.role) || session.role.toLowerCase().includes("koordinator") || session.dept === "Admin GA");
 
+  /** §116 transaksi keluar/masuk WAJIB alasan; masuk wajib foto bukti, keluar >= 5 unit wajib foto. */
+  const simpanTransaksi = async () => {
+    if (!trx) return;
+    const n = parseInt(trx.jumlah, 10) || 0;
+    if (n <= 0) return showToast("Isi jumlah.", "warning");
+    if (trx.arah === "KELUAR" && n > trx.item.qty) return showToast(`Stok ${trx.item.nama_barang} hanya ${trx.item.qty}.`, "warning");
+    if (!trx.keperluan.trim()) return showToast(trx.arah === "KELUAR" ? "Isi keperluan / area pemakaian." : "Isi sumber barang (nota / pengiriman).", "warning");
+    if (!trx.foto && (trx.arah === "MASUK" || n >= BATAS_FOTO_KELUAR)) return showToast(trx.arah === "MASUK" ? "Foto bukti barang masuk / nota wajib." : `Pengambilan ${BATAS_FOTO_KELUAR}+ unit wajib foto.`, "warning");
+    setIsLoading(true);
     try {
-      await updateDoc(doc(db, "ob_stock", id), { qty: newQty, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current });
+      const delta = trx.arah === "MASUK" ? n : -n;
+      await updateDoc(doc(db, "ob_stock", trx.item.id), { qty: increment(delta), terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current });
       await addDoc(collection(db, "ob_stock_logs"), { daerah: daerahTulis(),
-        id_barang: id, nama_barang: nama_barang, jenis_transaksi: change > 0 ? "MASUK (TAMBAH)" : "KELUAR (PAKAI)", jumlah_perubahan: Math.abs(change), sisa_stok_akhir: newQty, pic_bertugas: picRef.current, waktu_transaksi: serverTimestamp()
+        id_barang: trx.item.id, nama_barang: trx.item.nama_barang, jenis_transaksi: trx.arah === "MASUK" ? "MASUK (TAMBAH)" : "KELUAR (PAKAI)", jumlah_perubahan: n,
+        sisa_stok_akhir: trx.item.qty + delta, pic_bertugas: picRef.current, waktu_transaksi: serverTimestamp(), keperluan: trx.keperluan.trim(), foto_bukti: trx.foto || "",
       });
+      showToast(`${trx.item.nama_barang} ${trx.arah === "MASUK" ? "+" : "−"}${n} tercatat.`, "success");
+      setTrx(null);
     } catch (error) {
       console.error(error);
       showToast("Gagal memproses transaksi stok.", "error");
-    }
+    } finally { setIsLoading(false); }
+  };
+
+  const mulaiOpname = () => setFormOpname(Object.fromEntries(items.map((i) => [i.id, { fisik: String(i.qty), alasan: "" }])));
+  const kirimOpname = async () => {
+    if (!formOpname) return;
+    const baris: OpnameItem[] = items.map((i) => {
+      const fisik = Math.max(0, parseInt(formOpname[i.id]?.fisik ?? "", 10));
+      const f2 = Number.isFinite(fisik) ? fisik : i.qty;
+      return { id: i.id, nama: i.nama_barang, sistem: i.qty, fisik: f2, selisih: f2 - i.qty, alasan: (formOpname[i.id]?.alasan || "").trim() };
+    });
+    const tanpaAlasan = baris.find((b) => b.selisih !== 0 && !b.alasan);
+    if (tanpaAlasan) return showToast(`Isi alasan selisih "${tanpaAlasan.nama}".`, "warning");
+    const adaSelisih = baris.some((b) => b.selisih !== 0);
+    setIsLoading(true);
+    try {
+      await addDoc(collection(db, "ob_opname"), { daerah: daerahTulis(), dibuat_oleh: picRef.current, dibuat_pada: serverTimestamp(), status: adaSelisih ? "Menunggu Persetujuan" : "Sesuai", items: baris.filter((b) => b.selisih !== 0 || !adaSelisih) });
+      showToast(adaSelisih ? "Opname terkirim — menunggu persetujuan Koordinator / Admin." : "Opname selesai — fisik sesuai sistem.", "success");
+      setFormOpname(null);
+    } catch (e) { console.error(e); showToast("Gagal mengirim opname.", "error"); }
+    finally { setIsLoading(false); }
+  };
+  const putuskanOpname = async (op: Opname, setuju: boolean) => {
+    if (op.dibuat_oleh === picRef.current) return showToast("Opname harus disetujui orang lain (bukan pembuatnya).", "warning");
+    if (!setuju && !alasanTolak.trim()) return showToast("Isi alasan penolakan.", "warning");
+    setIsLoading(true);
+    try {
+      const batch = writeBatch(db);
+      if (setuju) {
+        for (const b of op.items.filter((x) => x.selisih !== 0)) {
+          batch.update(doc(db, "ob_stock", b.id), { qty: increment(b.selisih), terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current });
+          batch.set(doc(collection(db, "ob_stock_logs")), { daerah: daerahTulis(), id_barang: b.id, nama_barang: b.nama, jenis_transaksi: b.selisih > 0 ? "KOREKSI OPNAME (+)" : "KOREKSI OPNAME (-)",
+            jumlah_perubahan: Math.abs(b.selisih), sisa_stok_akhir: b.fisik, pic_bertugas: op.dibuat_oleh, keperluan: `Opname: ${b.alasan} · disetujui ${picRef.current}`, waktu_transaksi: serverTimestamp() });
+        }
+      }
+      batch.update(doc(db, "ob_opname", op.id), setuju
+        ? { status: "Disetujui", disetujui_oleh: picRef.current, disetujui_pada: serverTimestamp() }
+        : { status: "Ditolak", disetujui_oleh: picRef.current, alasan_tolak: alasanTolak.trim(), disetujui_pada: serverTimestamp() });
+      await batch.commit();
+      setAlasanTolak("");
+      showToast(setuju ? "Opname disetujui — stok dikoreksi." : "Opname ditolak.", "success");
+    } catch (e) { console.error(e); showToast("Gagal memproses opname.", "error"); }
+    finally { setIsLoading(false); }
   };
 
   const handleDelete = async (id: string, nama_barang: string) => {
+    if (!bisaSetujui) return showToast("Hapus barang hanya oleh Koordinator OB / Admin.", "warning");
     const yakin = await confirm({
       title: "Hapus Item Inventori",
       message: `Hapus permanen item "${nama_barang}" dari daftar inventori?`,
@@ -283,6 +361,18 @@ export default function StockOpnamePage() {
   const jumlahPerKat = (k: Kategori) => items.filter((i) => kategoriOf(i) === k).length;
   const analisaSemuaBarang = itemTampil.map((item) => hitungAnalisaPemakaian(item, riwayatLogs));
   const ambilItem = (a: AnalisaPemakaian) => a.item;
+  // §116 pemakaian tidak wajar: keluar 7 hari terakhir > 2x rata-rata mingguan (min 3 unit)
+  const batas7 = sekarang - 7 * 86400000;
+  const anomali = (item: StockItem): { minggu: number; biasa: number } | null => {
+    const a = hitungAnalisaPemakaian(item, riwayatLogs);
+    if (!a.adaDataPemakaian) return null;
+    const minggu = riwayatLogs.filter((l) => l.jenis_transaksi === "KELUAR (PAKAI)" && (l.id_barang ? l.id_barang === item.id : l.nama_barang === item.nama_barang) && (l.waktu_transaksi?.toMillis() || 0) >= batas7).reduce((s, l) => s + l.jumlah_perubahan, 0);
+    const biasa = a.rataRataPerHari * 7;
+    return minggu >= 3 && minggu > biasa * 2 ? { minggu, biasa: Math.max(1, Math.round(biasa)) } : null;
+  };
+  const opnameMenunggu = opnames.filter((o) => o.status === "Menunggu Persetujuan");
+  const opnameTerakhir = opnames.find((o) => o.status === "Disetujui" || o.status === "Sesuai");
+  const hariSejakOpname = opnameTerakhir?.dibuat_pada ? Math.floor((sekarang - opnameTerakhir.dibuat_pada.toMillis()) / 86400000) : null;
   /** Sisipkan baris kelompok kategori di tabel saat filter "Semua". */
   const denganKelompok = (daftar: AnalisaPemakaian[], baris: (x: AnalisaPemakaian) => React.ReactNode, kolom: number) => {
     if (filterKat !== "Semua") return daftar.map(baris);
@@ -366,8 +456,10 @@ export default function StockOpnamePage() {
 
               <div style={{ display: "flex", gap: "15px" }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Stok (Qty)</label>
-                  <input type="number" name="qty" value={formData.qty} onChange={handleInputChange} required min="0" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", outline: "none", background: "var(--bg)" }} />
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>{isEditMode ? "Stok (terkunci)" : "Stok awal"}</label>
+                  {isEditMode
+                    ? <div style={{ padding: "12px", borderRadius: "10px", border: "1px dashed var(--line)", fontSize: "12px", color: "var(--muted)" }}>Ubah lewat −/+ atau opname fisik</div>
+                    : <input type="number" name="qty" value={formData.qty} onChange={handleInputChange} required min="0" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", outline: "none", background: "var(--bg)" }} />}
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Limit Alert</label>
@@ -392,6 +484,34 @@ export default function StockOpnamePage() {
           {/* KOLOM KANAN                              */}
           {/* ======================================= */}
           <div className="right-col" style={{ flex: "2 1 500px", display: "flex", flexDirection: "column", gap: "25px" }}>
+
+            {/* §116 OPNAME FISIK */}
+            <div className="card" style={{ padding: "16px 18px", borderLeft: `5px solid ${opnameMenunggu.length ? "var(--warn)" : hariSejakOpname === null || hariSejakOpname > HARI_PENGINGAT_OPNAME ? "var(--red-600)" : "var(--ok)"}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "15px", color: "var(--ink)" }}>Opname fisik</div>
+                  <div style={{ fontSize: "12.5px", color: hariSejakOpname === null || hariSejakOpname > HARI_PENGINGAT_OPNAME ? "var(--red-600)" : "var(--muted)" }}>
+                    {hariSejakOpname === null ? "Belum pernah opname fisik — hitung stok sekarang." : `Opname terakhir ${hariSejakOpname} hari lalu (${opnameTerakhir?.dibuat_oleh})${hariSejakOpname > HARI_PENGINGAT_OPNAME ? " — sudah waktunya opname lagi" : ""}.`}
+                  </div>
+                </div>
+                <button type="button" className="sa-btn is-primary" onClick={mulaiOpname} disabled={!items.length}>Mulai opname fisik</button>
+              </div>
+              {opnameMenunggu.map((op) => (
+                <div key={op.id} style={{ marginTop: "12px", padding: "12px", borderRadius: "12px", background: "var(--warn-50)" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 800, color: "var(--ink)" }}>Menunggu persetujuan · oleh {op.dibuat_oleh} · {formatJam(op.dibuat_pada || null)}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "3px", margin: "8px 0", fontSize: "12.5px" }}>
+                    {op.items.map((b) => <div key={b.id}><b>{b.nama}</b>: sistem {b.sistem} → fisik {b.fisik} <b style={{ color: b.selisih < 0 ? "var(--red-600)" : "var(--ok)" }}>({b.selisih > 0 ? "+" : ""}{b.selisih})</b> — {b.alasan}</div>)}
+                  </div>
+                  {bisaSetujui && op.dibuat_oleh !== picName ? (
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      <button type="button" className="sa-btn is-primary" disabled={isLoading} onClick={() => putuskanOpname(op, true)}>Setujui & koreksi stok</button>
+                      <input value={alasanTolak} onChange={(e) => setAlasanTolak(e.target.value)} placeholder="Alasan tolak (wajib bila tolak)" style={{ flex: "1 1 160px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "12.5px" }} />
+                      <button type="button" className="sa-btn is-soft" disabled={isLoading} onClick={() => putuskanOpname(op, false)}>Tolak</button>
+                    </div>
+                  ) : <div style={{ fontSize: "12px", color: "var(--muted)" }}>{op.dibuat_oleh === picName ? "Menunggu Koordinator OB / Admin GA lain menyetujui." : "Hanya Koordinator OB / Admin GA yang bisa menyetujui."}</div>}
+                </div>
+              ))}
+            </div>
 
             {/* §97 FILTER KATEGORI */}
             <div className="kat-filter" role="tablist" aria-label="Filter kategori barang">
@@ -561,16 +681,16 @@ export default function StockOpnamePage() {
                     <div className={`stock-row${isLowStock ? " is-low" : ""}`}>
                       <div style={{ minWidth: 0 }}>
                         <div className="sr-nama" title={item.nama_barang}>{item.nama_barang}</div>
-                        <div className="sr-sub">min. {item.batas_minimum}{isLowStock && <b style={{ color: "var(--red-600)" }}> · perlu beli</b>}</div>
+                        <div className="sr-sub">min. {item.batas_minimum}{isLowStock && <b style={{ color: "var(--red-600)" }}> · perlu beli</b>}{(() => { const an = anomali(item); return an ? <b style={{ color: "var(--warn)" }} title={`Keluar ${an.minggu} dalam 7 hari, biasanya ~${an.biasa}/minggu`}> · ⚠ pemakaian tidak wajar ({an.minggu}/7hr, biasa ~{an.biasa})</b> : null; })()}</div>
                       </div>
                       <div className="sr-qty">
-                        <button onClick={() => handleQuickUpdate(item.id, item.nama_barang, item.qty, -1)} className="qty-btn" aria-label={`Kurangi ${item.nama_barang}`} style={{ background: "var(--red-50)", borderColor: "rgba(220,38,38,0.25)", color: "var(--red-600)" }}>−</button>
+                        <button onClick={() => setTrx({ item, arah: "KELUAR", jumlah: "1", keperluan: "", foto: "" })} disabled={item.qty <= 0} className="qty-btn" aria-label={`Kurangi ${item.nama_barang}`} style={{ background: "var(--red-50)", borderColor: "rgba(220,38,38,0.25)", color: "var(--red-600)" }}>−</button>
                         <span className="sr-angka" style={{ color: isLowStock ? "var(--red-600)" : "var(--ink)" }}>{item.qty}</span>
-                        <button onClick={() => handleQuickUpdate(item.id, item.nama_barang, item.qty, 1)} className="qty-btn" aria-label={`Tambah ${item.nama_barang}`} style={{ background: "var(--ok-50)", borderColor: "rgba(22,163,74,0.25)", color: "var(--ok)" }}>+</button>
+                        <button onClick={() => setTrx({ item, arah: "MASUK", jumlah: "1", keperluan: "", foto: "" })} className="qty-btn" aria-label={`Tambah ${item.nama_barang}`} style={{ background: "var(--ok-50)", borderColor: "rgba(22,163,74,0.25)", color: "var(--ok)" }}>+</button>
                       </div>
                       <div className="sr-aksi">
                         <button onClick={() => handleEdit(item)} className="icon-btn" style={{ color: "var(--accent)" }} title="Edit" aria-label={`Edit ${item.nama_barang}`}><IconEdit size={15} /></button>
-                        <button onClick={() => handleDelete(item.id, item.nama_barang)} className="icon-btn" style={{ color: "var(--red-600)" }} title="Hapus" aria-label={`Hapus ${item.nama_barang}`}><IconTrash size={15} /></button>
+                        {bisaSetujui && <button onClick={() => handleDelete(item.id, item.nama_barang)} className="icon-btn" style={{ color: "var(--red-600)" }} title="Hapus" aria-label={`Hapus ${item.nama_barang}`}><IconTrash size={15} /></button>}
                       </div>
                     </div>
                     </div>
@@ -600,12 +720,15 @@ export default function StockOpnamePage() {
                   </thead>
                   <tbody>
                     {riwayatLogs.length > 0 ? riwayatLogs.slice(0, 25).map((log) => {
-                      const isMasuk = log.jenis_transaksi.includes("MASUK");
+                      const isMasuk = log.jenis_transaksi.includes("MASUK") || log.jenis_transaksi.includes("(+)");
                       return (
                         <tr key={log.id}>
                           <td style={{ color: "var(--muted)" }}>{formatJam(log.waktu_transaksi)}</td>
                           <td style={{ fontWeight: "bold", color: "var(--info)" }}>{log.pic_bertugas}</td>
-                          <td style={{ color: "var(--ink)", fontWeight: "bold" }}>{log.nama_barang}</td>
+                          <td style={{ color: "var(--ink)", fontWeight: "bold" }}>
+                            {log.nama_barang}
+                            {(log.keperluan || log.foto_bukti) && <div style={{ fontSize: "11.5px", color: "var(--muted)", fontWeight: 500, whiteSpace: "normal" }}>{log.keperluan}{log.foto_bukti && <> · <a href={log.foto_bukti} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)" }}>foto</a></>}</div>}
+                          </td>
                           <td style={{ textAlign: "center" }}>
                             <span className="badge" style={isMasuk ? { background: "var(--ok-50)", color: "var(--ok)" } : { background: "var(--red-50)", color: "var(--red-600)" }}>
                               {isMasuk ? `+${log.jumlah_perubahan}` : `-${log.jumlah_perubahan}`} (Sisa: {log.sisa_stok_akhir})
@@ -624,6 +747,69 @@ export default function StockOpnamePage() {
           </div>
         </div>
       </div>
+      {/* §116 MODAL TRANSAKSI */}
+      <Modal open={!!trx} onClose={() => !isLoading && setTrx(null)} maxWidth="440px">
+        {trx && (
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>{trx.arah === "KELUAR" ? "Ambil / pakai" : "Barang masuk"} · {trx.item.nama_barang}</h3>
+            <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>Stok sekarang {trx.item.qty}. Tercatat atas nama {picName}.</p>
+            <label style={{ fontSize: "12px", fontWeight: 800, color: "var(--ink-soft)" }}>Jumlah *</label>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center", margin: "4px 0 10px" }}>
+              <button type="button" className="qty-btn" style={{ background: "var(--bg)", borderColor: "var(--line)", color: "var(--ink)" }} onClick={() => setTrx({ ...trx, jumlah: String(Math.max(1, (parseInt(trx.jumlah, 10) || 1) - 1)) })}>−</button>
+              <input value={trx.jumlah} inputMode="numeric" onChange={(e) => setTrx({ ...trx, jumlah: e.target.value.replace(/\D/g, "") })} style={{ width: "70px", textAlign: "center", padding: "8px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontWeight: 800, fontSize: "16px" }} aria-label="Jumlah" />
+              <button type="button" className="qty-btn" style={{ background: "var(--bg)", borderColor: "var(--line)", color: "var(--ink)" }} onClick={() => setTrx({ ...trx, jumlah: String((parseInt(trx.jumlah, 10) || 0) + 1) })}>+</button>
+            </div>
+            <label style={{ fontSize: "12px", fontWeight: 800, color: "var(--ink-soft)" }}>{trx.arah === "KELUAR" ? "Keperluan / area pemakaian *" : "Sumber barang (nota / pengiriman) *"}</label>
+            <input value={trx.keperluan} onChange={(e) => setTrx({ ...trx, keperluan: e.target.value })} placeholder={trx.arah === "KELUAR" ? "Mis. toilet Lantai 2 / pantry" : "Mis. nota Toko X 10/10"} list={trx.arah === "KELUAR" ? "trx-area" : undefined}
+              style={{ width: "100%", boxSizing: "border-box", margin: "4px 0 10px", padding: "10px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px" }} />
+            <datalist id="trx-area">{["Lantai 1", "Lantai 2", "Lantai 3", "Lantai 4", "Toilet", "Pantry", "Lobby", "Mushallah", "Ruang meeting"].map((a) => <option key={a} value={a} />)}</datalist>
+            <label style={{ fontSize: "12px", fontWeight: 800, color: "var(--ink-soft)" }}>Foto bukti {trx.arah === "MASUK" || (parseInt(trx.jumlah, 10) || 0) >= BATAS_FOTO_KELUAR ? "*" : "(opsional)"}</label>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", margin: "4px 0 12px", padding: "10px", borderRadius: "12px", border: "1px dashed var(--line)", cursor: "pointer", fontSize: "12.5px", color: "var(--ink-soft)" }}>
+              {trx.foto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={trx.foto} alt="Bukti" style={{ width: "52px", height: "52px", objectFit: "cover", borderRadius: "8px" }} />
+              ) : "📷"}
+              {uploadingFoto ? "Mengunggah..." : trx.foto ? "Ganti foto" : trx.arah === "MASUK" ? "Foto barang / nota" : "Foto barang yang diambil"}
+              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; handleFotoUpload(file, "sibm/stok-ob", () => setUploadingFoto(true), (url) => setTrx((x) => (x ? { ...x, foto: url } : x)), (err) => { console.error(err); showToast("Gagal upload foto.", "error"); }, () => setUploadingFoto(false)); }} />
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setTrx(null)} disabled={isLoading}>Batal</button>
+              <button type="button" className="sa-btn is-primary" style={{ flex: 1 }} onClick={simpanTransaksi} disabled={isLoading || uploadingFoto}>{isLoading ? "Menyimpan..." : "Simpan"}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* §116 MODAL OPNAME FISIK */}
+      <Modal open={!!formOpname} onClose={() => !isLoading && setFormOpname(null)} maxWidth="620px">
+        {formOpname && (
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>Opname fisik gudang</h3>
+            <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>Hitung fisik tiap barang. Selisih wajib diberi alasan dan baru mengoreksi stok setelah disetujui Koordinator OB / Admin GA (bukan Anda).</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "55vh", overflowY: "auto" }}>
+              {items.map((i) => {
+                const v = formOpname[i.id] || { fisik: String(i.qty), alasan: "" };
+                const selisih = (parseInt(v.fisik, 10) || 0) - i.qty;
+                return (
+                  <div key={i.id} style={{ padding: "8px 10px", borderRadius: "10px", background: selisih ? "var(--warn-50)" : "var(--bg)" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px 70px 54px", gap: "8px", alignItems: "center", fontSize: "13px" }}>
+                      <b style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.nama_barang}</b>
+                      <span style={{ color: "var(--muted)", fontSize: "12px" }}>sistem {i.qty}</span>
+                      <input value={v.fisik} inputMode="numeric" aria-label={`Fisik ${i.nama_barang}`} onChange={(e) => setFormOpname({ ...formOpname, [i.id]: { ...v, fisik: e.target.value.replace(/\D/g, "") } })} style={{ width: "100%", padding: "6px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", textAlign: "center", fontWeight: 800 }} />
+                      <b style={{ textAlign: "right", color: selisih < 0 ? "var(--red-600)" : selisih > 0 ? "var(--ok)" : "var(--muted)" }}>{selisih > 0 ? "+" : ""}{selisih}</b>
+                    </div>
+                    {selisih !== 0 && <input value={v.alasan} onChange={(e) => setFormOpname({ ...formOpname, [i.id]: { ...v, alasan: e.target.value } })} placeholder="Alasan selisih * (mis. tidak dicatat saat dipakai, rusak, salah hitung)" style={{ width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "7px 9px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "12.5px" }} />}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
+              <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setFormOpname(null)} disabled={isLoading}>Batal</button>
+              <button type="button" className="sa-btn is-primary" style={{ flex: 1 }} onClick={kirimOpname} disabled={isLoading}>{isLoading ? "Mengirim..." : "Kirim opname"}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </AdminShell>
   );
 }

@@ -13,7 +13,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, limit } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, limit, updateDoc, arrayUnion } from "firebase/firestore";
+import type { AlatKerja } from "@/lib/alatKerja";
 import { db } from "@/lib/firebase";
 import { kirimEmail } from "@/lib/notify";
 import { buildRequestBaruEmailHtml } from "@/lib/emailTemplates";
@@ -125,6 +126,8 @@ export default function InspeksiFasilitasPage() {
   const [uploading, setUploading] = useState<string | null>(null); // "area" | index item
   const [fotoArea, setFotoArea] = useState("");
   const [items, setItems] = useState<ItemForm[]>([]);
+  // §116 alat kerja yang dipegang OB ini (register aset_alat)
+  const [alatSaya, setAlatSaya] = useState<AlatKerja[]>([]);
 
   const seninMingguIni = getSeninMingguIni();
   const bolehUtilitas = master.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
@@ -171,12 +174,24 @@ export default function InspeksiFasilitasPage() {
     const u2 = onSnapshot(query(collection(db, "temuan_aset"), where("status", "in", STATUS_TEMUAN_TERBUKA)), (snap) => {
       setTemuanTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TemuanAset)));
     }, (e) => console.error("[inspeksi] temuan terbuka:", e));
-    return () => { u1(); u2(); };
+    const u3 = onSnapshot(query(collection(db, "aset_alat"), where("pemegang", "==", picName)), (snap) => {
+      setAlatSaya(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AlatKerja)).filter((a) => a.status !== "Afkir").sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true })));
+    }, (e) => console.error("[inspeksi] alat saya:", e));
+    return () => { u1(); u2(); u3(); };
   }, [picName]);
+  const alatDipegang = alatSaya.filter((a) => a.dikonfirmasi && a.status !== "Hilang");
+  const labelAlat = (a: AlatKerja) => `${a.kode} · ${a.nama}`;
+  const terimaAlat = async (a: AlatKerja) => {
+    try {
+      await updateDoc(doc(db, "aset_alat", a.id), { dikonfirmasi: true, diterima_pada: serverTimestamp(), riwayat: arrayUnion({ waktu: Timestamp.now(), aksi: "Diterima pemegang", ke: picName, oleh: picName }) });
+      showToast(`${a.kode} diterima — sekarang tanggung jawab Anda.`, "success");
+    } catch (e) { console.error(e); showToast("Gagal mengonfirmasi.", "error"); }
+  };
 
   const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => t.jenis === jenis && t.area === areaAktif && t.item.toLowerCase() === nama.trim().toLowerCase()) : undefined);
   const sudahMingguIni = riwayat.find((l) => (l.jenis || "gedung") === jenis && l.area === areaAktif && l.minggu_mulai === seninMingguIni);
-  const daftarMaster = () => master[jenis].filter((x) => x.aktif !== false).map((x) => x.nama);
+  // §116 Peralatan Kebersihan = alat milik pemegang sendiri (register), bukan daftar umum
+  const daftarMaster = () => (jenis === "alat" ? alatDipegang.map(labelAlat) : master[jenis].filter((x) => x.aktif !== false).map((x) => x.nama));
   const terkaitArea = () => daftarMaster().map((n) => temuanUntuk(n)).filter((x): x is TemuanAset => !!x);
 
   const mulaiInspeksi = () => {
@@ -225,6 +240,13 @@ export default function InspeksiFasilitasPage() {
         waktu_selesai: serverTimestamp(), foto_area: fotoArea, hasil,
       });
       // Temuan baru hanya untuk item yang dicentang & belum punya temuan terbuka (anti dobel)
+      // §116 kondisi & foto terakhir tiap alat (bukti bila kelak rusak/hilang)
+      if (jenis === "alat") {
+        await Promise.all(hasil.map((h) => {
+          const a = alatDipegang.find((x) => labelAlat(x) === h.nama);
+          return a ? updateDoc(doc(db, "aset_alat", a.id), { kondisi_terakhir: h.kondisi, foto_terakhir: h.foto || a.foto_terakhir || "", inspeksi_terakhir: serverTimestamp() }) : Promise.resolve();
+        }));
+      }
       const baru = hasil.filter((h) => h.butuh_tindakan && kondisiBermasalah(h.kondisi) && !temuanUntuk(h.nama));
       await Promise.all(baru.map((h) => addDoc(collection(db, "temuan_aset"), {
         daerah: daerahTulis(), jenis, area: areaAktif, item: h.nama, kondisi: h.kondisi, catatan: h.catatan, foto: h.foto,
@@ -265,7 +287,8 @@ export default function InspeksiFasilitasPage() {
   }
 
   const jenisTersedia = (["gedung", "alat", ...(bolehUtilitas ? ["utilitas"] : [])] as JenisInspeksi[]);
-  const bisaMulai = jenis !== "gedung" || assignedAreas.length > 0;
+  const bisaMulai = jenis === "gedung" ? assignedAreas.length > 0 : jenis === "alat" ? alatDipegang.length > 0 : true;
+  const belumDiterima = alatSaya.filter((a) => !a.dikonfirmasi);
 
   return (
     <AdminShell title="Inspeksi Kondisi Aset" subtitle="Foto & kondisi fasilitas gedung, peralatan kebersihan, dan utilitas — mingguan" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
@@ -298,10 +321,23 @@ export default function InspeksiFasilitasPage() {
             {jenisTersedia.map((j) => (
               <button key={j} type="button" role="tab" aria-selected={jenis === j} className={jenis === j ? "on" : ""} onClick={() => setJenis(j)}>
                 <div style={{ fontWeight: 800, fontSize: "14px" }}>{LABEL_JENIS[j]}</div>
-                <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{master[j].filter((x) => x.aktif !== false).length} item{j === "utilitas" ? " · petugas tetap" : ""}</div>
+                <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{j === "alat" ? `${alatDipegang.length} alat milik Anda` : `${master[j].filter((x) => x.aktif !== false).length} item`}{j === "utilitas" ? " · petugas tetap" : ""}</div>
               </button>
             ))}
           </div>
+
+          {belumDiterima.length > 0 && (
+            <div style={{ padding: "12px", borderRadius: "12px", background: "var(--warn-50)", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <b style={{ fontSize: "13px", color: "var(--ink)" }}>📦 {belumDiterima.length} alat diserahkan kepada Anda — cek fisiknya lalu tekan Terima</b>
+              {belumDiterima.map((a) => (
+                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "13px" }}><b>{a.kode}</b> {a.nama}</span>
+                  <button type="button" className="sa-btn is-primary" style={{ height: "32px" }} onClick={() => terimaAlat(a)}>Terima</button>
+                </div>
+              ))}
+              <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>Setelah diterima, alat menjadi tanggung jawab Anda (rusak/hilang dicatat atas nama pemegang).</span>
+            </div>
+          )}
 
           {jenis === "gedung" ? (
             assignedAreas.length > 0 ? (
@@ -315,6 +351,12 @@ export default function InspeksiFasilitasPage() {
                 <IconAlertTriangle size={18} /> Belum ada plot area untuk Anda hari ini — hubungi koordinator. Peralatan Kebersihan tetap bisa diinspeksi.
               </div>
             )
+          ) : jenis === "alat" ? (
+            alatDipegang.length > 0 ? (
+              <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>
+                <b>Alat tanggung jawab Anda:</b> {alatDipegang.map(labelAlat).join(", ")}
+              </div>
+            ) : <div style={{ fontSize: "13px", color: "var(--muted)" }}>Belum ada alat atas nama Anda. Koordinator / Admin GA mendaftarkan & menyerahkan alat lewat menu Alat Kerja.</div>
           ) : (
             <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}><IconMapPin size={14} /> {areaAktif}</div>
           )}
@@ -405,7 +447,7 @@ export default function InspeksiFasilitasPage() {
             );
           })}
 
-          <button type="button" onClick={() => setItems((l) => [...l, { nama: "", kondisi: "", catatan: "", foto: "", butuh_tindakan: false, custom: true }])} style={{ padding: "13px", background: "var(--surface)", color: "var(--info)", border: "2px dashed var(--info)", borderRadius: "14px", fontWeight: 700, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>+ Tambah item lain</button>
+          {jenis !== "alat" && <button type="button" onClick={() => setItems((l) => [...l, { nama: "", kondisi: "", catatan: "", foto: "", butuh_tindakan: false, custom: true }])} style={{ padding: "13px", background: "var(--surface)", color: "var(--info)", border: "2px dashed var(--info)", borderRadius: "14px", fontWeight: 700, fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>+ Tambah item lain</button>}
           <button type="button" onClick={handleSubmit} disabled={isLoading || uploading !== null} className="sa-btn is-primary" style={{ height: "54px", fontSize: "16px" }}>{isLoading ? "Mengirim..." : uploading !== null ? "Menunggu foto terunggah..." : "Kirim Hasil Inspeksi"}</button>
         </div>
       )}

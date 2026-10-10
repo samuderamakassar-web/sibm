@@ -384,6 +384,18 @@ export default function DashboardOBPage() {
                 <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>Manajemen tugas perawatan khusus.</p>
               </div>
             </div>
+            {/* §116 register alat kerja & PIC */}
+            <div
+              className="coord-card"
+              onClick={() => router.push("/dashboard/ob/alat")}
+              style={{ background: "linear-gradient(to right, var(--ok-solid), #166534)", boxShadow: "0 10px 15px -3px rgba(22,163,74,0.3)" }}
+            >
+              <div className="coord-icon"><IconCalendar size={28} /></div>
+              <div>
+                <h2 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>Alat Kerja Tim</h2>
+                <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>PIC alat, serah terima, rusak/hilang.</p>
+              </div>
+            </div>
           </div>
         )}
 

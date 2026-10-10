@@ -64,6 +64,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { title: "Booking Kendaraan & Ruangan", desc: "Jadwal, ubah & batalkan booking", path: "/admin/booking", icon: "calendar" },
       { title: "Helpdesk & Tiket Kerusakan", desc: "Laporan kerusakan dari pengguna kantor", path: "/admin/helpdesk", icon: "wrench" },
       { title: "Temuan & Kondisi Aset", desc: "Hasil inspeksi OB: perbaikan & penggantian", path: "/admin/kondisi-aset", icon: "search" },
+      { title: "Alat Kerja OB & CS", desc: "Register alat, PIC, serah terima, label", path: "/dashboard/ob/alat", icon: "box" },
     ],
   },
   {

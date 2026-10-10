@@ -165,7 +165,9 @@ service cloud.firestore {
           // §113 Temuan inspeksi kondisi aset (bukan Helpdesk)
           'temuan_aset',
           // §115 Kehadiran Security otomatis dari tukar jaga
-          'kehadiran_security'
+          'kehadiran_security',
+          // §116 Register alat kerja OB (PIC) & opname fisik gudang
+          'aset_alat', 'ob_opname'
         ];
     }
 
