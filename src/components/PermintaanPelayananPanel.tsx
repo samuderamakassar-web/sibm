@@ -29,14 +29,16 @@ export default function PermintaanPelayananPanel({ nama, peran = "" }: { nama: s
     } catch (e) { console.error(e); showToast("Gagal memperbarui permintaan.", "error"); }
   };
 
-  // §124 permintaan tim sendiri di atas (CS Cleaning -> cleaning dulu), lainnya tetap tampil untuk backup
+  // §125 dipisah tegas per peran tugas: OB Pelayanan hanya permintaan OB, CS Cleaning hanya cleaning.
+  // Peran belum diisi (mis. koordinator) -> semua tampil.
   const timSaya = peran === "CS Cleaning" ? "CS" : peran === "OB Pelayanan" ? "OB" : "";
-  const urut = timSaya ? [...daftar].sort((a, b) => Number(timJenis(b.jenis) === timSaya) - Number(timJenis(a.jenis) === timSaya)) : daftar;
-  if (daftar.length === 0) return null;
+  const urut = timSaya ? daftar.filter((p) => timJenis(p.jenis) === timSaya) : daftar;
+  if (urut.length === 0) return null;
+  const judul = timSaya === "CS" ? "Permintaan cleaning" : timSaya === "OB" ? "Permintaan pelayanan" : "Permintaan pelayanan & cleaning";
   return (
     <div style={{ marginBottom: "24px", padding: "16px", borderRadius: "20px", border: "2px solid var(--info)", background: "var(--surface)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
-        <b style={{ fontSize: "16px", color: "var(--ink)" }}>🔔 Permintaan pelayanan & cleaning ({daftar.length})</b>
+        <b style={{ fontSize: "16px", color: "var(--ink)" }}>🔔 {judul} ({urut.length})</b>
         <span style={{ fontSize: "12px", color: "var(--muted)" }}>Terima segera — waktu respon tercatat</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

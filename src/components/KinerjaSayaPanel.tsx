@@ -24,7 +24,8 @@ const WARNA: Record<Nada, { bg: string; fg: string; label: string }> = {
   kosong: { bg: "var(--surface)", fg: "var(--muted)", label: "Belum ada data" },
 };
 
-async function hitung(nama: string, bulanIni: boolean): Promise<Ukuran[]> {
+async function hitung(nama: string, bulanIni: boolean, peran: string): Promise<Ukuran[]> {
+  const kata = peran === "CS Cleaning" ? "cleaning" : peran === "OB Pelayanan" ? "pelayanan" : "pelayanan & cleaning";
   const hariIni = tz.format(new Date());
   const y = Number(hariIni.slice(0, 4)), m = Number(hariIni.slice(5, 7));
   const awal = new Date(Date.UTC(y, m - 1 - (bulanIni ? 0 : 1), 1));
@@ -70,10 +71,10 @@ async function hitung(nama: string, bulanIni: boolean): Promise<Ukuran[]> {
       saran: !total ? "Belum ada plotting area untuk Anda di periode ini." : pctCek >= 90 ? "Pertahankan — isi checklist tepat di sesinya." : "Isi checklist di setiap sesi (Pagi, Siang, Sore) begitu area selesai dikerjakan, jangan ditunda ke akhir hari.",
     },
     {
-      judul: "Respon permintaan pelayanan", target: "Target rata-rata ≤ 10 menit",
+      judul: `Respon permintaan ${kata}`, target: "Target rata-rata ≤ 10 menit",
       nilai: respon.length ? `${f1(rata)} menit rata-rata · ${respon.length} permintaan · ${Math.round((cepat / respon.length) * 100)}% ≤ 10 menit` : "—",
       nada: !respon.length ? "kosong" : rata <= 10 ? "baik" : rata <= 15 ? "cukup" : "kurang",
-      saran: !respon.length ? "Belum ada permintaan pelayanan yang Anda terima di periode ini." : rata <= 10 ? "Respon sudah cepat — tetap tekan Terima begitu permintaan masuk." : "Tekan Terima segera saat notifikasi masuk, walau baru akan dikerjakan beberapa menit lagi.",
+      saran: !respon.length ? `Belum ada permintaan ${kata} yang Anda terima di periode ini.` : rata <= 10 ? "Respon sudah cepat — tetap tekan Terima begitu permintaan masuk." : "Tekan Terima segera saat notifikasi masuk, walau baru akan dikerjakan beberapa menit lagi.",
     },
   ];
 }
@@ -84,9 +85,9 @@ export default function KinerjaSayaPanel({ nama, peran }: { nama: string; peran:
 
   useEffect(() => {
     let batal = false;
-    hitung(nama, bulanIni).then((h) => { if (!batal) setData(h); }).catch((e) => { console.error("[kinerja]", e); if (!batal) setData([]); });
+    hitung(nama, bulanIni, peran).then((h) => { if (!batal) setData(h); }).catch((e) => { console.error("[kinerja]", e); if (!batal) setData([]); });
     return () => { batal = true; };
-  }, [nama, bulanIni]);
+  }, [nama, bulanIni, peran]);
 
   const sekarang = new Date();
   const labelBulan = (geser: number) => NAMA_BULAN[(sekarang.getMonth() - geser + 12) % 12];

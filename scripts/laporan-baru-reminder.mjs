@@ -35,9 +35,10 @@ async function tulisNotifPersonal(namaList, judul, pesan) {
   ));
 }
 
-async function kirimPushDept(dept, judul, pesan) {
+async function kirimPushDept(dept, judul, pesan, saring = null) {
   const usersSnap = await db.collection("users_master").where("departemen", "==", dept).get();
-  const namaList = usersSnap.docs.map((d) => d.data().nama).filter(Boolean);
+  // §125 saring opsional per akun (mis. peran_tugas OB Pelayanan / CS Cleaning)
+  const namaList = usersSnap.docs.map((d) => d.data()).filter((u) => !saring || saring(u)).map((u) => u.nama).filter(Boolean);
   if (namaList.length === 0) {
     console.log(`  Tidak ada staf ${dept} terdaftar di users_master, skip notifikasi.`);
     return;
@@ -46,7 +47,7 @@ async function kirimPushDept(dept, judul, pesan) {
 
   const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", dept).get();
   const tokens = [];
-  tokenSnap.forEach((d) => { if (d.data().token) tokens.push(d.data().token); });
+  tokenSnap.forEach((d) => { if (d.data().token && (!saring || namaList.includes(d.data().pic_nama))) tokens.push(d.data().token); });
   if (tokens.length === 0) {
     console.log(`  Notifikasi in-app ditulis (${dept}), tapi belum ada token FCM terdaftar, skip push.`);
     return;
@@ -90,7 +91,7 @@ async function prosesJenis({ jenis, collectionName, waktuField, notify, formatPe
 
   for (const doc of snap.docs) {
     const pesan = formatPesan(doc.data());
-    await notify(pesan);
+    await notify(pesan, doc.data());
     console.log(`${jenis}: notifikasi terkirim -- ${pesan}`);
   }
 
@@ -144,7 +145,12 @@ async function jalankan() {
     waktuField: "waktu_minta",
     // §124 jenis cleaning (CS) diberi penanda agar tim langsung tahu siapa yang bergerak
     formatPesan: (d) => `${["bersih", "sampah", "toilet", "ruangan", "lainnya_cs"].includes(d.jenis) ? "[CLEANING] " : "[OB] "}${d.nama_pemohon || "Karyawan"} (${d.departemen || "-"}) minta ${String(d.jenis || "pelayanan").replace("_cs", "")} di ${d.lokasi || "-"}${d.catatan ? ": " + d.catatan : ""}`,
-    notify: async (pesan) => kirimPushDept("OB & CS", "🛎️ Permintaan Pelayanan", pesan),
+    // §125 cleaning -> CS Cleaning, lainnya -> OB Pelayanan; akun tanpa peran tetap menerima semua
+    notify: async (pesan, d) => {
+      const cs = ["bersih", "sampah", "toilet", "ruangan", "lainnya_cs"].includes(d?.jenis);
+      const peranTujuan = cs ? "CS Cleaning" : "OB Pelayanan";
+      await kirimPushDept("OB & CS", cs ? "🧹 Permintaan Cleaning" : "🛎️ Permintaan Pelayanan", pesan, (u) => !u.peran_tugas || u.peran_tugas === peranTujuan);
+    },
   });
 }
 

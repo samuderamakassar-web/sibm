@@ -3141,3 +3141,9 @@ SUDAH DI-DEPLOY (hosting + rules + workflow). Urutan disetujui user: 1 → 4 →
 3. Dashboard OB: panel "Permintaan pelayanan & cleaning" dengan label OB/CLEANING; permintaan tim sendiri (peran_tugas) diurutkan di atas, sisanya tetap tampil untuk backup.
 4. Beban Kerja: kebutuhan OB hanya dari jenis tim OB (jenis "bersih" lama kini dihitung CS); CS tetap dari luas area + sinyal jumlah permintaan cleaning/hari & respon rata-rata. Kinerja Saya: respon mencakup semua permintaan yang ia terima.
 5. Push laporan-baru-reminder: pesan diberi awalan [CLEANING] / [OB].
+
+## 125. Permintaan Pelayanan vs Cleaning Dipisah Tegas per Peran (10 Oktober 2026)
+1. PermintaanPelayananPanel: OB Pelayanan hanya melihat permintaan tim OB, CS Cleaning hanya permintaan cleaning (judul panel ikut). Akun OB & CS tanpa peran_tugas (mis. koordinator) melihat semua.
+2. Push laporan-baru-reminder: `kirimPushDept` menerima saring per akun; cleaning -> akun peran CS Cleaning, pelayanan -> OB Pelayanan; akun tanpa peran tetap menerima semua (in-app & FCM, token dicocokkan pic_nama).
+3. Kinerja Saya: label respon menyesuaikan peran (cleaning / pelayanan).
+Catatan: peran_tugas wajib diisi di Master User agar pemisahan berlaku; aplikasi yang sedang terbuka perlu dibuka ulang.
