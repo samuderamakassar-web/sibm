@@ -3160,3 +3160,7 @@ KinerjaSayaPanel menerima `departemen` (OB & CS / Security / Driver); bulan ini 
 - Security (dashboard security, bukan magang): (1) shift di roster yang patrolinya >= MINIMUM_SESI_PER_SHIFT sesi (security_patrols petugas); shift yang belum berakhir hanya dihitung bila sudah terpenuhi; target >= 90%. (2) tukar jaga tepat waktu: security_shift_handover petugas_masuk = saya, waktu_scan ada, terlambat=false; target >= 90%, tampil rata-rata menit telat.
 - Driver (menu driver): (1) inspeksi mingguan kendaraan_inspeksi_logs per Senin (minggu berjalan dihitung bila sudah diisi); target 100%. (2) perjalanan "Keluar Beroperasi" oleh saya ditutup log berikutnya kendaraan yang sama <= 12 jam; target >= 95%.
 Tidak ada perubahan rules (koleksi sudah terbaca akun staf).
+
+## 129. Notifikasi Booking: Ruangan -> Security, Kendaraan -> Driver (10 Oktober 2026)
+1. scripts/laporan-baru-reminder.mjs `prosesBooking()` (jenis checkpoint "booking", waktuField dibuat_pada): booking aktif ruangan -> push + in-app ke dept Security ("📅 Booking Ruangan Baru"), kendaraan -> Driver ("🚗 Booking Kendaraan Baru"); pesan: objek, waktu mulai–selesai WITA, pemesan, departemen, keperluan. Run pertama hanya menyetel checkpoint (histori tidak dikirim). Ikut jadwal laporan-baru-reminder (15 menit, cron-job.org).
+2. Dashboard Security: `BookingRuanganPanel` live (onSnapshot booking mulai hari ini–besok, filter ruangan & aktif di klien; tanpa index komposit), label BARU (< 60 menit sejak dibuat) & BERLANGSUNG; tersembunyi bila kosong.

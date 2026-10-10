@@ -9,6 +9,7 @@ import { logoutWithConfirm, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import AbsensiCard from "../../../components/AbsensiCard";
 import KinerjaSayaPanel from "../../../components/KinerjaSayaPanel";
+import BookingRuanganPanel from "../../../components/BookingRuanganPanel";
 import EskalasiShiftModal from "../../../components/EskalasiShiftModal";
 import HandbookMagangList from "../../../components/HandbookMagangList";
 import { tanggalISOWITASekarang, hitungShiftSesi, waktuWITASekarang, dalamJendelaTukarJaga } from "../../../lib/shift";
@@ -624,6 +625,8 @@ export default function SecurityDashboard() {
         )}
 
         {!isMagang && <AbsensiCard picName={picName} departemen="Security" />}
+        {/* §129 booking ruangan live (hari ini & besok) */}
+        <BookingRuanganPanel />
         {/* §128 kinerja pribadi -- hanya angka sendiri */}
         {!isMagang && picName && <KinerjaSayaPanel nama={picName} departemen="Security" />}
 

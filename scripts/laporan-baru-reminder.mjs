@@ -154,7 +154,26 @@ async function jalankan() {
   });
 }
 
+// §129 booking ruangan -> Security (siapkan akses & catat tamu); booking kendaraan -> Driver
+const fmtWaktuBooking = (ts) => ts?.toDate
+  ? ts.toDate().toLocaleString("id-ID", { timeZone: "Asia/Makassar", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+  : "-";
+async function prosesBooking() {
+  await prosesJenis({
+    jenis: "booking",
+    collectionName: "booking",
+    waktuField: "dibuat_pada",
+    formatPesan: (d) => `${d.objek_nama || "-"} · ${fmtWaktuBooking(d.mulai)} s.d. ${fmtWaktuBooking(d.sampai).split(" ").pop()} -- ${d.nama_pemesan || "-"} (${d.departemen || "-"})${d.keperluan ? ": " + d.keperluan : ""}`,
+    notify: async (pesan, d) => {
+      if (d?.status && d.status !== "aktif") return;
+      if (d?.jenis === "kendaraan") await kirimPushDept("Driver", "🚗 Booking Kendaraan Baru", pesan);
+      else await kirimPushDept("Security", "📅 Booking Ruangan Baru", pesan);
+    },
+  });
+}
+
 jalankan()
+  .then(() => prosesBooking())
   .then(() => {
     console.log("Selesai.");
     process.exit(0);
