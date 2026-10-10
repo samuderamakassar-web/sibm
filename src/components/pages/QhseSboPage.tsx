@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
@@ -26,7 +26,15 @@ interface ReportSBO {
   foto_after?: string;
   tanggal_closed?: string;
   waktu_lapor: Timestamp | null;
+  // §118 tanggapan QHSE (SLA respon <= 24 jam)
+  waktu_tanggap?: Timestamp | null;
+  ditanggapi_oleh?: string;
+  rencana_tindakan?: string;
+  pic_tindakan?: string;
+  target_selesai?: string;
 }
+const JAM_SLA_RESPON = 24;
+const HARI_SLA_TUTUP = 7;
 
 // Fix bug timezone: sebelumnya pakai new Date().toISOString().split("T")[0] (basis UTC) —
 // sama kelas bug dengan yang sudah difix di halaman lain (ChecklistOBPage, DeepCleaningPage,
@@ -168,6 +176,25 @@ export default function QhseSboPage() {
     document.body.removeChild(link);
   };
 
+  // §118 TANGGAPI: wajib sebelum ditutup -- rencana tindakan, PIC, target; waktu_tanggap = ukuran SLA respon
+  const [formTanggap, setFormTanggap] = useState({ rencana: "", pic: "", target: "" });
+  const handleTanggapi = async () => {
+    if (!selectedReport) return;
+    if (!formTanggap.rencana.trim() || !formTanggap.pic.trim() || !formTanggap.target) return showToast("Isi rencana tindakan, PIC & target selesai.", "warning");
+    setIsUpdating(true);
+    try {
+      await updateDoc(doc(db, "qhse_sbo_reports", selectedReport.id), {
+        waktu_tanggap: serverTimestamp(), ditanggapi_oleh: session?.nama || "-", rencana_tindakan: formTanggap.rencana.trim(), pic_tindakan: formTanggap.pic.trim(), target_selesai: formTanggap.target,
+      });
+      setSelectedReport({ ...selectedReport, waktu_tanggap: Timestamp.now(), ditanggapi_oleh: session?.nama || "-", rencana_tindakan: formTanggap.rencana.trim(), pic_tindakan: formTanggap.pic.trim(), target_selesai: formTanggap.target });
+      setFormTanggap({ rencana: "", pic: "", target: "" });
+      showToast("Tanggapan tercatat.", "success");
+    } catch (e) { console.error(e); showToast("Gagal menyimpan tanggapan.", "error"); }
+    finally { setIsUpdating(false); }
+  };
+  const [sekarang] = useState(() => Date.now());
+  const jamSejak = (ts?: Timestamp | null) => (ts ? Math.floor((sekarang - ts.toMillis()) / 3600000) : 0);
+
   // ===============================================
   // FUNGSI UPDATE TIKET MENJADI CLOSED
   // ===============================================
@@ -178,6 +205,7 @@ export default function QhseSboPage() {
   // §73: foto kondisi sesudah WAJIB (keputusan user). Dulu input file "required" tapi bila upload gagal
   // laporan tetap bisa ditutup tanpa foto.
   if (!fotoAfter) return showToast("Foto kondisi sesudah (after) wajib diunggah sebelum menutup laporan.", "warning");
+  if (!selectedReport.waktu_tanggap) return showToast("Tanggapi laporan dulu (rencana tindakan) sebelum menutup.", "warning");
 
   const yakin = await confirm({
     title: "Tutup Laporan SBO",
@@ -277,6 +305,8 @@ export default function QhseSboPage() {
                   <td style={{ padding: "12px 15px", textAlign: "center" }}>
                     <span style={{ background: r.status_temuan === "Close" ? "#c6f6d5" : "#fed7d7", color: r.status_temuan === "Close" ? "#22543d" : "#c53030", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold" }}>{r.status_temuan}</span>
                     {r.tanggal_closed && <div style={{ fontSize: "10px", color: "#38a169", marginTop: "5px" }}>Selesai: {r.tanggal_closed}</div>}
+                    {r.status_temuan !== "Close" && !r.waktu_tanggap && <div style={{ fontSize: "10.5px", fontWeight: 800, marginTop: "5px", color: jamSejak(r.waktu_lapor) > JAM_SLA_RESPON ? "var(--red-600)" : "var(--warn)" }}>Belum ditanggapi · {jamSejak(r.waktu_lapor)} jam{jamSejak(r.waktu_lapor) > JAM_SLA_RESPON ? " (lewat SLA)" : ""}</div>}
+                    {r.status_temuan !== "Close" && r.waktu_tanggap && <div style={{ fontSize: "10.5px", color: jamSejak(r.waktu_lapor) > HARI_SLA_TUTUP * 24 ? "var(--red-600)" : "var(--muted)", marginTop: "5px" }}>Ditanggapi · target {r.target_selesai}{jamSejak(r.waktu_lapor) > HARI_SLA_TUTUP * 24 ? " · lewat 7 hari" : ""}</div>}
                   </td>
                   <td style={{ padding: "12px 15px", textAlign: "center" }}>
                     <button onClick={() => setSelectedReport(r)} style={{ background: "#ebf8ff", color: "#3182ce", border: "1px solid #bee3f8", padding: "6px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
@@ -354,7 +384,26 @@ export default function QhseSboPage() {
               </div>
 
               {/* AREA UPDATE STATUS OLEH QHSE */}
-              {selectedReport.status_temuan === "Open" ? (
+              {selectedReport.status_temuan === "Open" && !selectedReport.waktu_tanggap && (
+                <div style={{ background: "var(--surface)", border: "1px solid var(--warn)", padding: "18px", borderRadius: "12px", marginBottom: "12px" }}>
+                  <h3 style={{ margin: "0 0 4px", color: "var(--warn)", fontSize: "15px" }}>1. Tanggapi laporan (SLA ≤ {JAM_SLA_RESPON} jam)</h3>
+                  <p style={{ margin: "0 0 10px", fontSize: "12px", color: "var(--muted)" }}>Dilaporkan {jamSejak(selectedReport.waktu_lapor)} jam lalu. Tanggapan wajib sebelum laporan bisa ditutup.</p>
+                  <textarea value={formTanggap.rencana} onChange={(e) => setFormTanggap({ ...formTanggap, rencana: e.target.value })} placeholder="Rencana tindakan perbaikan / pengendalian *" style={{ width: "100%", boxSizing: "border-box", minHeight: "70px", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px" }} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: "8px", marginTop: "8px" }}>
+                    <input value={formTanggap.pic} onChange={(e) => setFormTanggap({ ...formTanggap, pic: e.target.value })} placeholder="PIC tindakan * (mis. Engineering / tenant X)" style={{ padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px" }} />
+                    <input type="date" value={formTanggap.target} onChange={(e) => setFormTanggap({ ...formTanggap, target: e.target.value })} aria-label="Target selesai" style={{ padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "13px" }} />
+                  </div>
+                  <button type="button" onClick={handleTanggapi} disabled={isUpdating} style={{ width: "100%", marginTop: "10px", padding: "12px", background: "var(--warn-solid)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}>{isUpdating ? "Menyimpan..." : "Simpan tanggapan"}</button>
+                </div>
+              )}
+              {selectedReport.waktu_tanggap && (
+                <div style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "14px", borderRadius: "12px", marginBottom: "12px", fontSize: "13px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 800, color: "var(--ink-soft)", marginBottom: "4px" }}>TANGGAPAN QHSE · {selectedReport.waktu_tanggap.toDate().toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {selectedReport.ditanggapi_oleh}</div>
+                  <div style={{ color: "var(--ink)" }}>{selectedReport.rencana_tindakan}</div>
+                  <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>PIC {selectedReport.pic_tindakan} · target {selectedReport.target_selesai}</div>
+                </div>
+              )}
+              {selectedReport.status_temuan === "Open" && !selectedReport.waktu_tanggap ? null : selectedReport.status_temuan === "Open" ? (
                 <form onSubmit={handleCloseTicket} style={{ background: "var(--surface)", border: "1px solid #9ae6b4", padding: "20px", borderRadius: "12px", marginTop: "10px" }}>
                   <h3 style={{ margin: "0 0 15px 0", color: "#22543d", fontSize: "15px" }}>🟢 Tindakan Penyelesaian (Close Report)</h3>
 
