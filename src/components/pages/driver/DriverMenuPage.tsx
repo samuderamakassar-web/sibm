@@ -9,6 +9,7 @@ import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import AbsensiCard from "../../AbsensiCard";
+import KinerjaSayaPanel from "../../KinerjaSayaPanel";
 import KlaimLemburModal from "../../KlaimLemburModal";
 import AdminShell from "../../admin/AdminShell";
 import Tile from "../../admin/Tile";
@@ -225,6 +226,8 @@ export default function DriverMenuPage() {
         </div>
 
         <AbsensiCard picName={session?.nama || ""} departemen="Driver" />
+        {/* §128 kinerja pribadi -- hanya angka sendiri */}
+        {session?.nama && <KinerjaSayaPanel nama={session.nama} departemen="Driver" />}
 
         {/* 🔹 GRID MENU UTAMA DRIVER */}
         <div className="driver-menu-grid">
