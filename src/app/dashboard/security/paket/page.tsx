@@ -1,4 +1,5 @@
 "use client";
+import WajibLogin from "@/components/WajibLogin";
 
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
@@ -78,7 +79,7 @@ interface EmployeeData {
   email?: string;
 }
 
-export default function PaketPage() {
+function PaketPage() {
   const router = useRouter();
   const showToast = useToast();
 
@@ -689,5 +690,14 @@ export default function PaketPage() {
         </div>
       )}
     </AdminShell>
+  );
+}
+
+// §117 cek sesi Firebase Auth + departemen (dulu hanya localStorage)
+export default function Halaman() {
+  return (
+    <WajibLogin depts={["Security"]} redirectTo="/" pesan="Akses Ditolak! Halaman ini khusus Tim Security.">
+      <PaketPage />
+    </WajibLogin>
   );
 }

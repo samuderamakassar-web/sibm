@@ -94,14 +94,15 @@ function buatRotasiCleaning(cleaningStaff: string[], paket: string[][]): Record<
   return hasil;
 }
 
-export default function PlottingOBPage() {
+/** §117 dipakai di /dashboard/ob/plotting (Koordinator) & /admin/plotting-ob (Admin). */
+export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel = "Dashboard OB" }: { backHref?: string; backLabel?: string }) {
   const showToast = useToast();
   const confirm = useConfirm();
 
   const { session, isReady } = useAuthGuard({
     roles: ["Koordinator"],
     depts: ["OB & CS"],
-    redirectTo: "/dashboard/ob",
+    redirectTo: backHref,
     deniedMessage: "Akses Ditolak! Halaman ini khusus Koordinator OB & CS.",
   });
 
@@ -386,7 +387,7 @@ export default function PlottingOBPage() {
   const adminName = session.nama || "Koordinator";
 
   return (
-    <AdminShell title="Plotting Harian OB & CS" subtitle="Atur penugasan area kebersihan & pelayanan per hari, atau generate otomatis 1 bulan" userName={adminName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
+    <AdminShell title="Plotting Harian OB & CS" subtitle="Atur penugasan area kebersihan & pelayanan per hari, atau generate otomatis 1 bulan" userName={adminName || "Staf"} backHref={backHref} backLabel={backLabel}>
       <style
         dangerouslySetInnerHTML={{
           __html: `

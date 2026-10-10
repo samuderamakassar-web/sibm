@@ -277,6 +277,18 @@ export default function MonitorSecurityPage() {
     .filter((row) => filterTahunPatroli === "SEMUA" || row.tanggal_shift.split("-")[0] === filterTahunPatroli)
     .sort((a, b) => b.tanggal_shift.localeCompare(a.tanggal_shift) || a.petugas.localeCompare(b.petugas));
 
+  // §117 rekap per petugas (periode filter): shift memenuhi minimum sesi / kurang / tanpa laporan
+  const rekapPerPetugas = Array.from(rekapSesiRows.reduce((m, row) => {
+    const x = m.get(row.petugas) || { petugas: row.petugas, shift: 0, memenuhi: 0, kurang: 0, nihil: 0, sesi: 0 };
+    x.shift++; x.sesi += row.sesiSet.size;
+    if (row.sesiSet.size >= MINIMUM_SESI_PER_SHIFT) x.memenuhi++; else if (row.sesiSet.size === 0) x.nihil++; else x.kurang++;
+    return m.set(row.petugas, x);
+  }, new Map<string, { petugas: string; shift: number; memenuhi: number; kurang: number; nihil: number; sesi: number }>()).values())
+    .sort((a, b) => a.memenuhi / Math.max(1, a.shift) - b.memenuhi / Math.max(1, b.shift) || a.petugas.localeCompare(b.petugas));
+  // §117 laporan terkirim ganda: petugas + menit + jumlah titik sama
+  const kunciLaporan = (p: PatroliLog) => `${p.petugas}|${formatWaktu(p.waktu_laporan)}|${p.titik_patroli?.length || 0}`;
+  const hitungKunci = fPatrols.reduce((m, p) => m.set(kunciLaporan(p), (m.get(kunciLaporan(p)) || 0) + 1), new Map<string, number>());
+
   const handlePrint = () => {
     setWaktuCetak(new Date().toLocaleString("id-ID"));
     setTimeout(() => window.print(), 0);
@@ -478,14 +490,41 @@ export default function MonitorSecurityPage() {
               ))}
             </div>
 
+            {/* §117 REKAP PER PETUGAS -- ringkas di atas tabel */}
+            <div className="no-print" style={{ marginBottom: "18px" }}>
+              <h3 style={{ margin: "0 0 4px", color: "var(--ink)", fontSize: "15px" }}>Rekap misi sesi per petugas</h3>
+              <p style={{ margin: "0 0 10px", fontSize: "12px", color: "var(--muted)" }}>Tiap shift wajib patroli minimal {MINIMUM_SESI_PER_SHIFT} dari 3 sesi. Shift dihitung dari roster + laporan pada periode filter.</p>
+              {rekapPerPetugas.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Belum ada data sesi pada periode ini.</div> : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: "8px" }}>
+                  {rekapPerPetugas.map((x) => {
+                    const pct = Math.round((x.memenuhi / Math.max(1, x.shift)) * 100);
+                    const w = pct >= 95 ? "var(--ok)" : pct >= 80 ? "var(--warn)" : "var(--red-600)";
+                    return (
+                      <div key={x.petugas} style={{ padding: "10px 12px", borderRadius: "14px", background: "var(--bg)", border: "1px solid var(--line)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" }}>
+                          <b style={{ fontSize: "13.5px", color: "var(--ink)" }}>{x.petugas}</b>
+                          <b style={{ fontSize: "18px", color: w }}>{pct}%</b>
+                        </div>
+                        <div style={{ height: "6px", borderRadius: "3px", background: "var(--line)", overflow: "hidden", margin: "6px 0" }}><div style={{ width: `${pct}%`, height: "100%", background: w }} /></div>
+                        <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>
+                          <b style={{ color: "var(--ok)" }}>{x.memenuhi} tuntas</b> · <b style={{ color: "var(--warn)" }}>{x.kurang} kurang</b> · <b style={{ color: "var(--red-600)" }}>{x.nihil} tanpa laporan</b> dari {x.shift} shift · {x.sesi} sesi
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="no-print" style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid var(--line)", width: "100%" }}>
               <table className="sec-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "20%" }}>Waktu Laporan</th>
-                    <th style={{ width: "25%" }}>Petugas Patroli</th>
-                    <th style={{ width: "20%" }}>Total Titik Di-Scan</th>
-                    <th style={{ width: "20%" }}>Lantai Dipatroli</th>
+                    <th style={{ width: "15%" }}>Waktu Laporan</th>
+                    <th style={{ width: "16%" }}>Petugas Patroli</th>
+                    <th style={{ width: "15%" }}>Shift · Sesi</th>
+                    <th style={{ width: "13%" }}>Total Titik Di-Scan</th>
+                    <th style={{ width: "18%" }}>Lantai Dipatroli</th>
                     <th style={{ width: "20%", textAlign: "center" }}>Status Keliling</th>
                     <th style={{ width: "15%", textAlign: "center" }}>Aksi</th>
                   </tr>
@@ -496,6 +535,15 @@ export default function MonitorSecurityPage() {
                       <td style={{ color: "var(--muted)" }}>{formatWaktu(p.waktu_laporan)}</td>
                       <td>
                         <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{p.petugas}</div>
+                        {(hitungKunci.get(kunciLaporan(p)) || 0) > 1 && <div style={{ fontSize: "10.5px", fontWeight: 800, color: "var(--warn)", marginTop: "3px" }}>⚠ terkirim ganda</div>}
+                      </td>
+                      <td>
+                        {p.sesi ? (
+                          <>
+                            <span style={{ display: "inline-block", fontSize: "11.5px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", background: "var(--info-50)", color: "var(--info)" }}>{p.sesi}</span>
+                            <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "3px" }}>{p.shift} · {p.tanggal_shift?.split("-").reverse().slice(0, 2).join("/")}</div>
+                          </>
+                        ) : <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>— (data lama)</span>}
                       </td>
                       <td>
                         <div style={{ fontWeight: "bold", color: "var(--ink)" }}>{p.titik_patroli?.length || 0} Titik Terpantau</div>
@@ -522,14 +570,14 @@ export default function MonitorSecurityPage() {
                         </div>
                       </td>
                     </tr>
-                  )) : <tr><td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log patroli yang cocok dengan pencarian.</td></tr>}
+                  )) : <tr><td colSpan={7} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log patroli yang cocok dengan pencarian.</td></tr>}
                 </tbody>
               </table>
             </div>
 
             {/* REKAP KEPATUHAN SESI PATROLI -- minimal 2 dari 3 sesi per shift */}
             <div className="no-print" style={{ marginTop: "25px" }}>
-              <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "16px" }}>Rekap Kepatuhan Sesi Patroli</h3>
+              <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "16px" }}>Detail kepatuhan sesi per shift</h3>
               <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--muted)" }}>
                 Setiap petugas wajib patroli minimal {MINIMUM_SESI_PER_SHIFT} dari 3 sesi per shift. Data sesi tersedia sejak fitur ini dirilis — laporan lama ditandai belum tersedia, bukan gagal.
               </p>

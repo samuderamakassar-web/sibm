@@ -3,5 +3,5 @@
 import AlatKerjaPage from "@/components/pages/AlatKerjaPage";
 
 export default function Page() {
-  return <AlatKerjaPage  />;
+  return <AlatKerjaPage backHref="/admin" backLabel="Control Panel" />;
 }
