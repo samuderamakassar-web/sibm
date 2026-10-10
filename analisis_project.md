@@ -3147,3 +3147,6 @@ SUDAH DI-DEPLOY (hosting + rules + workflow). Urutan disetujui user: 1 → 4 →
 2. Push laporan-baru-reminder: `kirimPushDept` menerima saring per akun; cleaning -> akun peran CS Cleaning, pelayanan -> OB Pelayanan; akun tanpa peran tetap menerima semua (in-app & FCM, token dicocokkan pic_nama).
 3. Kinerja Saya: label respon menyesuaikan peran (cleaning / pelayanan).
 Catatan: peran_tugas wajib diisi di Master User agar pemisahan berlaku; aplikasi yang sedang terbuka perlu dibuka ulang.
+
+## 126. Halaman Error Aplikasi: Muat Ulang Otomatis Setelah Update + Pesan Error Terlihat (10 Oktober 2026)
+Laporan Security: /dashboard/security menampilkan halaman error bawaan Next ("This page couldn't load", diterjemahkan Chrome) = exception sisi klien. Penyebab paling mungkin: aplikasi masih memegang versi lama lalu chunk lama hilang setelah beberapa deploy hari itu. `src/app/error.tsx`: ChunkLoadError / gagal import modul -> reload otomatis 1x (sessionStorage, jeda 60 dtk agar tidak berputar) dengan teks "Aplikasi baru saja diperbarui"; error lain -> tampil nama + pesan error + path + tombol Muat ulang / Coba lagi (retry) / Ke beranda, agar screenshot staf bisa langsung didiagnosis.
