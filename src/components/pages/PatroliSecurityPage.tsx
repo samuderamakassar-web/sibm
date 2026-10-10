@@ -385,8 +385,13 @@ export default function PatroliSecurityPage() {
   // ==========================================
   // HANDLERS
   // ==========================================
+  // §122 kunci kirim: ketukan ganda / ketuk lagi saat layar "berhasil" dulu menghasilkan laporan dobel
+  const sedangKirimRef = useRef(false);
   const handleSubmitFinal = async () => {
+    if (sedangKirimRef.current) return;
+    sedangKirimRef.current = true;
     setIsLoading(true);
+    let berhasil = false;
     try {
       const sesiSaatSubmit = hitungShiftSesi(waktuWITASekarang());
       await addDoc(collection(db, "security_patrols"), { daerah: daerahTulis(),
@@ -401,13 +406,16 @@ export default function PatroliSecurityPage() {
         status: titikTerlewat.length === 0 ? "Selesai Sempurna" : "Selesai Sebagian"
       });
 
+      berhasil = true;
       setIsSuccess(true);
       setTimeout(() => {
+        sedangKirimRef.current = false;
         setIsSuccess(false);
         setShowReview(false);
         setScannedItems([]);
         setAlasanTerlewat({});
         setCatatanUmum("");
+        setIsLoading(false);
         setActiveTab("HISTORY"); // PERBAIKAN: Arahkan ke Tab Riwayat setelah submit
         window.scrollTo({ top: 0, behavior: "smooth" });
       }, 2000);
@@ -415,7 +423,7 @@ export default function PatroliSecurityPage() {
       console.error(error);
       showToast("Gagal mengirim laporan patroli.", "error");
     } finally {
-      setIsLoading(false);
+      if (!berhasil) { sedangKirimRef.current = false; setIsLoading(false); } // berhasil: tetap terkunci sampai form direset
     }
   };
 

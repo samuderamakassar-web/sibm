@@ -1,5 +1,10 @@
 name: Shift Handover Escalation
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: shift-handover-escalation
+  cancel-in-progress: false
+
 on:
   schedule:
     # Tiap 10 menit sepanjang hari -- cek serah terima shift Security yang telat (>10 menit

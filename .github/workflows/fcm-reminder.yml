@@ -1,5 +1,10 @@
 name: FCM Reminder OB & CS
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: fcm-reminder
+  cancel-in-progress: false
+
 on:
   schedule:
     # Jalan tiap 30 menit SEPANJANG hari, setiap hari (bukan cuma jam & hari kerja

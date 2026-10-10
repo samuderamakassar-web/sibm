@@ -10,6 +10,8 @@ export interface AsumsiBeban {
   cs_m2_per_toilet: number;     // 1 toilet setara berapa m2 area intensif (pengecekan berkala)
   ob_karyawan_per_orang: number;// karyawan yang sanggup dilayani 1 OB pelayanan
   ob_karyawan_per_meeting: number; // 1 meeting per hari setara berapa karyawan
+  ob_menit_produktif: number;   // menit kerja efektif OB per hari untuk permintaan (7 jam x 75%)
+  ob_min_permintaan: number;    // minimal permintaan tercatat sebelum dipakai sebagai dasar utama
   drv_jam_kerja: number;        // jam kerja driver per hari
   drv_utilisasi_sehat: number;  // % jam di jalan yang dianggap sehat (sisanya standby/administrasi)
   sec_pos: number;              // jumlah pos jaga 24 jam
@@ -21,7 +23,7 @@ export interface AsumsiBeban {
 }
 export const ASUMSI_BAWAAN: AsumsiBeban = {
   cs_m2_per_orang: 600, cs_bobot_ringan: 0.3, cs_m2_per_toilet: 60,
-  ob_karyawan_per_orang: 40, ob_karyawan_per_meeting: 5,
+  ob_karyawan_per_orang: 40, ob_karyawan_per_meeting: 5, ob_menit_produktif: 315, ob_min_permintaan: 20,
   drv_jam_kerja: 8, drv_utilisasi_sehat: 75,
   sec_pos: 1, sec_jam_normal: 40, sec_batas_lembur: 18, sec_lembur_wajar: 4,
   res_tamu_per_jam: 4, cadangan_pct: 10,
@@ -32,6 +34,8 @@ export const LABEL_ASUMSI: Record<keyof AsumsiBeban, string> = {
   cs_m2_per_toilet: "CS: 1 toilet setara m²",
   ob_karyawan_per_orang: "OB: karyawan dilayani per orang",
   ob_karyawan_per_meeting: "OB: 1 meeting/hari setara karyawan",
+  ob_menit_produktif: "OB: menit kerja efektif/hari untuk permintaan",
+  ob_min_permintaan: "OB: minimal permintaan tercatat agar dipakai",
   drv_jam_kerja: "Driver: jam kerja per hari",
   drv_utilisasi_sehat: "Driver: utilisasi sehat (%)",
   sec_pos: "Security: jumlah pos 24 jam",

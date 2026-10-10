@@ -1,5 +1,10 @@
 name: Security Tugas Tambahan Reminder
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: security-tugas-reminder
+  cancel-in-progress: false
+
 on:
   schedule:
     # Tiap 30 menit sepanjang hari -- script sendiri yang memutuskan skip kalau

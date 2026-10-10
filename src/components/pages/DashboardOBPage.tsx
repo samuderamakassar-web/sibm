@@ -11,6 +11,8 @@ import AbsensiCard from "@/components/AbsensiCard";
 import KlaimLemburModal from "../KlaimLemburModal";
 import AdminShell from "../admin/AdminShell";
 import Tile from "../admin/Tile";
+import { useMasterKondisiAset } from "@/lib/kondisiAset";
+import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -118,6 +120,16 @@ export default function DashboardOBPage() {
   const picName = session?.nama || "";
   const picRole = session?.role || "";
 
+  // §122 menu Inspeksi hanya untuk yang punya tugas: plot area hari ini, memegang alat, atau petugas utilitas
+  const { nilai: masterAset } = useMasterKondisiAset();
+  const [jumlahAlat, setJumlahAlat] = useState(0);
+  useEffect(() => {
+    if (!picName) return;
+    return onSnapshot(query(collection(db, "aset_alat"), where("pemegang", "==", picName)), (s) => setJumlahAlat(s.docs.filter((d) => d.data().status !== "Afkir").length), () => setJumlahAlat(0));
+  }, [picName]);
+  const petugasUtilitas = masterAset.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
+  const punyaTugasInspeksi = assignedFloors.length > 0 || jumlahAlat > 0 || petugasUtilitas || /koordinator|admin/i.test(picRole);
+
 // 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari sesi Firebase Auth
   useFcmSetup(picName, !!picName, "OB & CS");
 
@@ -182,7 +194,7 @@ export default function DashboardOBPage() {
   const menuOB = [
     { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
     { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", action: "link", token: "warn", icon: IconDroplet },
-    { title: "Inspeksi Kondisi Aset", desc: "Foto & kondisi fasilitas, alat kebersihan, utilitas — mingguan.", path: "/dashboard/ob/laporan", action: "link", token: "info", icon: IconSearch },
+    ...(punyaTugasInspeksi ? [{ title: "Inspeksi Kondisi Aset", desc: "Foto & kondisi fasilitas, alat kebersihan, utilitas — mingguan.", path: "/dashboard/ob/laporan", action: "link", token: "info", icon: IconSearch }] : []),
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input data lemburan Anda.", path: "", action: "modal_lembur", token: "accent", icon: IconClock },
     { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim OB & CS.", path: "/dashboard/ob/sop", action: "link", token: "info", icon: IconBook },
   ];
@@ -358,6 +370,9 @@ export default function DashboardOBPage() {
             </div>
           </div>
         )}
+
+        {/* §122 permintaan pelayanan dari karyawan (portal) */}
+        {picName && <PermintaanPelayananPanel nama={picName} />}
 
         {/* 👑 PANEL KHUSUS KOORDINATOR */}
         {(picRole.includes("Koordinator") || picRole.includes("Administrator")) && (

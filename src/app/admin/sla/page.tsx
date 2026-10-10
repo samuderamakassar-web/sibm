@@ -16,6 +16,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { ASUMSI_BAWAAN, LABEL_ASUMSI, WARNA_STATUS_BEBAN, statusBeban, type AsumsiBeban } from "../../../lib/sla";
+import { menitJenis } from "../../../lib/pelayanan";
 
 const tz = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
 const tzJam = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "2-digit", hourCycle: "h23" });
@@ -58,7 +59,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   }
   const hariKerja = Math.max(1, hariKerjaList.length);
 
-  const [users, karyawan, okupansi, plots, cek, booking, gerak, roster, patroli, tamu, paket] = await Promise.all([
+  const [users, karyawan, okupansi, plots, cek, booking, gerak, roster, patroli, tamu, paket, pelayanan] = await Promise.all([
     getDocs(collection(db, "users_master")),
     getDocs(collection(db, "employees_directory")),
     getDoc(doc(db, "okupansi_gedung", "data")),
@@ -71,6 +72,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     getDocs(query(collection(db, "security_patrols"), where("tanggal_shift", ">=", dari), where("tanggal_shift", "<=", batas))),
     getDocs(query(collection(db, "security_visitor_logs"), where("waktu_masuk", ">=", tsAwal), where("waktu_masuk", "<", tsAkhir))),
     getDocs(query(collection(db, "packages"), where("waktu_diterima", ">=", tsAwal), where("waktu_diterima", "<", tsAkhir))).catch(() => null),
+    getDocs(query(collection(db, "permintaan_pelayanan"), where("waktu_minta", ">=", tsAwal), where("waktu_minta", "<", tsAkhir))).catch(() => null),
   ]);
   const akun = users.docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string }).filter((u) => u.nama && !/magang/i.test(u.role || ""));
   const namaDept = (dept: string) => akun.filter((u) => u.departemen === dept).map((u) => String(u.nama).trim());
@@ -122,15 +124,31 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const jumlahKaryawan = karyawan.size;
   const meeting = booking.docs.map((d) => d.data()).filter((b) => b.jenis === "ruangan" && b.status !== "dibatalkan" && /meeting/i.test(String(b.objek_id || b.objek_nama || ""))).length;
   const meetingPerHari = meeting / hariKerja;
+  // §122 data nyata permintaan pelayanan (bila cukup) -> menit kerja; selain itu perkiraan dari jumlah karyawan
+  const perm = (pelayanan?.docs || []).map((d) => d.data()).filter((x) => x.status !== "Batal" && x.waktu_minta);
+  const menitPerm = perm.reduce((s, x) => s + menitJenis(x.jenis) + (x.jenis === "minuman" ? Math.max(0, (Number(x.jumlah) || 1) - 1) * 2 : 0), 0);
+  const respon = perm.filter((x) => x.waktu_terima).map((x) => (x.waktu_terima.toDate().getTime() - x.waktu_minta.toDate().getTime()) / 60000);
+  const pakaiPermintaan = perm.length >= a.ob_min_permintaan;
   const obPenilaian: Penilaian = {
     kunci: "OB", judul: "OB · Pelayanan", sekarang: namaOB.length, nama: namaOB,
-    kebutuhan: ((jumlahKaryawan + meetingPerHari * a.ob_karyawan_per_meeting) / a.ob_karyawan_per_orang) * cadangan,
-    dasar: [
+    kebutuhan: pakaiPermintaan
+      ? ((menitPerm / hariKerja) / a.ob_menit_produktif) * cadangan
+      : ((jumlahKaryawan + meetingPerHari * a.ob_karyawan_per_meeting) / a.ob_karyawan_per_orang) * cadangan,
+    dasar: pakaiPermintaan ? [
+      `DATA NYATA: ${perm.length} permintaan pelayanan (${f1(perm.length / hariKerja)}/hari kerja)`,
+      `Total ± ${Math.round(menitPerm)} menit kerja (${f1(menitPerm / hariKerja)} menit/hari) — minuman 10, meeting 25, dokumen 15, bersih 10 menit`,
+      `÷ ${a.ob_menit_produktif} menit efektif per OB per hari × cadangan ${a.cadangan_pct}%`,
+    ] : [
       `${jumlahKaryawan} karyawan di Master Data`,
       `${meeting} booking ruang meeting (${f1(meetingPerHari)}/hari kerja) × ${a.ob_karyawan_per_meeting} karyawan setara`,
       `÷ ${a.ob_karyawan_per_orang} karyawan per OB × cadangan ${a.cadangan_pct}%`,
+      `Perkiraan — data permintaan pelayanan baru ${perm.length} (dipakai setelah ≥ ${a.ob_min_permintaan})`,
     ],
-    sinyal: [`Checklist pelayanan terisi ${pct(obSesi, obSesiTotal)} (${obSesi}/${obSesiTotal})`, namaOB.length === 1 ? "Hanya 1 orang: saat cuti/sakit pelayanan berhenti total" : ""].filter(Boolean),
+    sinyal: [
+      respon.length ? `Respon rata-rata ${f1(respon.reduce((x, y) => x + y, 0) / respon.length)} menit · ${pct(respon.filter((m) => m <= 10).length, respon.length)} direspon ≤ 10 menit` : "",
+      `Checklist pelayanan terisi ${pct(obSesi, obSesiTotal)} (${obSesi}/${obSesiTotal})`,
+      namaOB.length === 1 ? "Hanya 1 orang: saat cuti/sakit pelayanan berhenti total" : "",
+    ].filter(Boolean),
     dataKurang: namaOB.length ? undefined : "Belum ada OB yang diplot di area Pelayanan Khusus OB pada periode ini.",
   };
 

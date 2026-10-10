@@ -167,14 +167,16 @@ service cloud.firestore {
           // §115 Kehadiran Security otomatis dari tukar jaga
           'kehadiran_security',
           // §116 Register alat kerja OB (PIC) & opname fisik gudang
-          'aset_alat', 'ob_opname'
+          'aset_alat', 'ob_opname',
+          // §122 Permintaan pelayanan OB (form portal publik)
+          'permintaan_pelayanan'
         ];
     }
 
     // Collection yang DITULIS portal publik TANPA login (src/app/page.tsx: form ATK, Lembur AC,
     // SBO, Lapor Kerusakan; SurveiKepuasanPage) -- cuma boleh MEMBUAT dokumen baru.
     function koleksiFormPublik() {
-      return ['helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests', 'ga_overtime_requests', 'survei_kepuasan_gedung', 'booking'];
+      return ['helpdesk_tickets', 'qhse_sbo_reports', 'ga_atk_requests', 'ga_overtime_requests', 'survei_kepuasan_gedung', 'booking', 'permintaan_pelayanan'];
     }
 
     // Collection yang DIBACA portal publik tanpa login (src/app/page.tsx: Ringkasan, Pengumuman, Menu
@@ -187,7 +189,7 @@ service cloud.firestore {
           'employees_directory', 'master_atk', 'master_kendaraan',
           'operational_vehicle_logs', 'driver_status_logs', 'ga_overtime_requests', 'ga_atk_requests',
           'helpdesk_tickets', 'packages', 'security_visitor_logs', 'validasi_karyawan', 'attendance_logs',
-          'booking'
+          'booking', 'permintaan_pelayanan'
         ];
     }
 

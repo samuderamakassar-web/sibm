@@ -147,6 +147,7 @@ export default function DriverServisPage() {
     if (!kendaraanId) return showToast("Pilih kendaraan dulu.", "warning");
     if (!odometerInput.trim()) return showToast("Odometer wajib diisi.", "warning");
     if (servisJenisTerpilih.length === 0) return showToast("Pilih minimal 1 jenis servis.", "warning");
+    if (servisBiaya === "") return showToast("Isi biaya servis (angka Rp, isi 0 bila gratis/garansi).", "warning");
     if (adaUploadBerjalan) return showToast("Tunggu semua foto selesai diunggah dulu.", "warning");
 
     const jenisBelumFoto = jenisButuhFotoSendiri.find((j) => !fotoPerJenis[j]);
@@ -172,7 +173,8 @@ export default function DriverServisPage() {
         tanggal: todayISO,
         jenis_service: servisJenisTerpilih.join(", "),
         deskripsi: servisDeskripsi.trim() || "-",
-        biaya: servisBiaya.trim() || "-",
+        // §122 biaya angka (Rp) -- dulu teks bebas ("350rb" terbaca Rp 350 di Anggaran)
+        biaya: Number(servisBiaya.replace(/\D/g, "")) || 0,
         odometer: odometerInput.trim(),
         foto_emisi_url: fotoUtama,
         foto_detail: fotoDetail,
@@ -287,8 +289,8 @@ export default function DriverServisPage() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>BIAYA (OPSIONAL)</label>
-                <input type="text" placeholder="Contoh: 350000" value={servisBiaya} onChange={(e) => setServisBiaya(e.target.value)} style={sharedInputStyle} />
+                <label style={{ display: "block", fontWeight: "800", marginBottom: "6px", fontSize: "12px", color: "var(--ink-soft)" }}>BIAYA (RP) *</label>
+                <input type="text" inputMode="numeric" placeholder="Contoh: 350.000 — isi 0 bila gratis/garansi" value={servisBiaya ? new Intl.NumberFormat("id-ID").format(Number(servisBiaya)) : ""} onChange={(e) => setServisBiaya(e.target.value.replace(/\D/g, ""))} style={sharedInputStyle} />
               </div>
 
               <button type="submit" disabled={isSavingServis || adaUploadBerjalan} style={{ width: "100%", padding: "16px", background: isSavingServis ? "#a0aec0" : "#dd6b20", color: "#fff", border: "none", borderRadius: "14px", fontWeight: "900", fontSize: "14px", cursor: isSavingServis ? "not-allowed" : "pointer", boxShadow: isSavingServis ? "none" : "0 4px 15px rgba(221, 107, 32, 0.3)" }}>

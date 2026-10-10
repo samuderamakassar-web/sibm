@@ -1,5 +1,10 @@
 name: Validasi Karyawan (Belum Input, Lembur, Jam Kerja)
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: validasi-karyawan
+  cancel-in-progress: false
+
 on:
   schedule:
     # Tiap 30 menit (§59): slot cek belum-input 09:00 & 13:00, lembur mulai 18:00, tanya ulang

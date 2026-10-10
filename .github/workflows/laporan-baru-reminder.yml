@@ -1,5 +1,10 @@
 name: Laporan Baru Reminder
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: laporan-baru-reminder
+  cancel-in-progress: false
+
 on:
   schedule:
     # Tiap 15 menit sepanjang hari -- notifikasi Admin GA/QHSE begitu ada laporan baru masuk

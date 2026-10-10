@@ -1,5 +1,10 @@
 name: Driver Status Staleness Push
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: driver-status-staleness
+  cancel-in-progress: false
+
 on:
   schedule:
     # Tiap 30 menit -- cek kendaraan yang statusnya (operational_vehicle_logs)

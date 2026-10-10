@@ -8,6 +8,7 @@ import PengumumanCarousel from "../components/PengumumanCarousel";
 import { FITUR_ABSENSI_AKTIF } from "../lib/fitur";
 import { gedungPortal } from "../lib/daerah";
 import BookingModal from "../components/BookingModal";
+import PelayananModal from "../components/PelayananModal";
 import { RUANGAN_BOOKING, rentangWaktu, type Booking, type JenisBooking } from "../lib/booking";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, getCountFromServer, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
@@ -206,6 +207,7 @@ export default function PortalSIBM() {
   const [filterPlatArmada, setFilterPlatArmada] = useState<string | null>(null);
   // 📅 BOOKING (§80) -- modal booking kendaraan/ruangan + booking yang belum selesai (tanda "Dibooking").
   const [bookingBuka, setBookingBuka] = useState<{ jenis: JenisBooking; objekId: string | null } | null>(null);
+  const [pelayananBuka, setPelayananBuka] = useState(false); // §122 permintaan pelayanan OB
   const [bookingBerjalan, setBookingBerjalan] = useState<Booking[]>([]);
   const [riwayatArmadaLengkap, setRiwayatArmadaLengkap] = useState(false);
   const [lemburLewatTerbuka, setLemburLewatTerbuka] = useState(false);
@@ -1616,6 +1618,11 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 <span className="qa-teks"><span className="qa-judul">Bahaya SBO</span><span className="qa-sub">Temuan kondisi berbahaya</span></span>
               </button>
             </div>
+            {/* §122 permintaan pelayanan OB -- data nyata beban OB pelayanan */}
+            <button type="button" className="qa-card" onClick={() => setPelayananBuka(true)} style={{ gridColumn: "1 / -1" }}>
+              <span className="qa-icon-chip"><IconClipboard size={20} /></span>
+              <span className="qa-teks"><span className="qa-judul">Minta Pelayanan OB</span><span className="qa-sub">Minuman, persiapan meeting, antar dokumen, bersih cepat</span></span>
+            </button>
             {surveiAktif && (
               <button type="button" className="qa-card qa-card-survei" onClick={() => router.push("/survei-kepuasan")} style={{ gridColumn: "1 / -1" }}>
                 <span className="qa-icon-chip" style={{ background: "var(--accent-50, #f5f3ff)", color: "var(--accent, #7c3aed)" }}><IconClipboardSurvei size={20} /></span>
@@ -1974,6 +1981,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         </div>
       </div>
 
+
+      <PelayananModal open={pelayananBuka} onClose={() => setPelayananBuka(false)} karyawan={employees} />
 
       {/* 📅 BOOKING KENDARAAN / RUANGAN (§80) */}
       <BookingModal

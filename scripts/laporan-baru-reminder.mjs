@@ -136,6 +136,15 @@ async function jalankan() {
     },
     notify: async (pesan) => kirimPushDept("Admin GA", "📦 Request ATK Baru", pesan),
   });
+
+  // §122 permintaan pelayanan OB dari portal -> push ke tim OB & CS (panel live di Dashboard OB tetap jalur utama)
+  await prosesJenis({
+    jenis: "pelayanan",
+    collectionName: "permintaan_pelayanan",
+    waktuField: "waktu_minta",
+    formatPesan: (d) => `${d.nama_pemohon || "Karyawan"} (${d.departemen || "-"}) minta ${d.jenis || "pelayanan"} di ${d.lokasi || "-"}${d.catatan ? ": " + d.catatan : ""}`,
+    notify: async (pesan) => kirimPushDept("OB & CS", "🛎️ Permintaan Pelayanan", pesan),
+  });
 }
 
 jalankan()

@@ -1,5 +1,10 @@
 name: Patroli Push Reminder
 
+# §122 dipicu juga dari cron-job.org (jadwal GitHub sering telat ~3 jam) -- cegah 2 run bertumpuk
+concurrency:
+  group: patroli-push-reminder
+  cancel-in-progress: false
+
 on:
   schedule:
     # Tiap 30 menit sepanjang hari -- ganti banner in-app PatroliShiftBanner yang

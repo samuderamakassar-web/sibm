@@ -69,7 +69,7 @@ interface ServiceLog {
   tanggal: string;
   jenis_service: string;
   deskripsi: string;
-  biaya?: string;
+  biaya?: string | number; // §122 kini angka; data lama teks
   foto_emisi_url?: string;
   waktu_catat?: Timestamp | null;
 }
@@ -334,7 +334,7 @@ function buildRiwayatEntries(kendaraanId: string, kendaraanLabel: string, data: 
   const entriesService: RiwayatEntry[] = data.serviceLogs.map((l) => ({
     id: `${kendaraanId}-svc-${l.id}`, kendaraanId, kendaraanLabel, tanggal: l.tanggal, jenis: "Servis", tone: "warning",
     utama: l.jenis_service || "Servis",
-    sub: [l.deskripsi, l.biaya ? `Rp ${l.biaya}` : ""].filter(Boolean).join(" • ") || undefined,
+    sub: [l.deskripsi, l.biaya ? (typeof l.biaya === "number" ? `Rp ${new Intl.NumberFormat("id-ID").format(l.biaya)}` : `Rp ${l.biaya}`) : ""].filter(Boolean).join(" • ") || undefined,
     foto: l.foto_emisi_url,
   }));
 
@@ -909,7 +909,7 @@ export default function ManajemenKendaraanPage() {
         tanggal: formService.tanggal,
         jenis_service: formService.jenis_service.trim(),
         deskripsi: formService.deskripsi.trim(),
-        biaya: formService.biaya.trim(),
+        biaya: Number(formService.biaya.replace(/\D/g, "")) || 0, // §122 angka
         foto_emisi_url: formService.foto_emisi_url || "",
         waktu_catat: serverTimestamp(),
       });
@@ -1572,7 +1572,7 @@ export default function ManajemenKendaraanPage() {
                   <Input containerStyle={{ flex: 1 }} label="Tanggal" type="date" value={formService.tanggal} onChange={(e) => setFormService({ ...formService, tanggal: e.target.value })} />
                 </div>
                 <Input label="Deskripsi" value={formService.deskripsi} onChange={(e) => setFormService({ ...formService, deskripsi: e.target.value })} placeholder="Detail servis (opsional)" />
-                <Input label="Biaya (opsional)" value={formService.biaya} onChange={(e) => setFormService({ ...formService, biaya: e.target.value })} placeholder="Cth: 350000" />
+                <Input label="Biaya (Rp)" inputMode="numeric" value={formService.biaya ? new Intl.NumberFormat("id-ID").format(Number(formService.biaya)) : ""} onChange={(e) => setFormService({ ...formService, biaya: e.target.value.replace(/\D/g, "") })} placeholder="Cth: 350.000" />
 
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "var(--bg)", border: "1px dashed var(--line)", borderRadius: "10px", padding: "10px 12px" }}>
                   {formService.foto_emisi_url ? (
