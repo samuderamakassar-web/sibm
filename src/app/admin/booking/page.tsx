@@ -162,6 +162,12 @@ export default function AdminBookingPage() {
                         {b.status === "dibatalkan" && ` · Dibatalkan ${b.dibatalkan_oleh || ""}: ${b.alasan_batal || "-"}`}
                         {b.diubah_oleh && b.status === "aktif" && ` · Jadwal diubah oleh ${b.diubah_oleh}`}
                       </div>
+                      {/* §130 konfirmasi Security */}
+                      {b.jenis === "ruangan" && b.status === "aktif" && (
+                        <div style={{ fontSize: "11.5px", fontWeight: 700, marginTop: "3px", color: b.dikonfirmasi_oleh ? "var(--ok)" : "var(--warn)" }}>
+                          {b.dikonfirmasi_oleh ? `✓ Dikonfirmasi Security (${b.dikonfirmasi_oleh})${b.email_konfirmasi === "terkirim" ? " · email terkirim" : b.email_konfirmasi === "tanpa_email" ? " · pemesan tanpa email" : b.email_konfirmasi === "gagal" ? " · email gagal" : ""}` : "⏳ Belum dikonfirmasi Security"}
+                        </div>
+                      )}
                     </div>
                     {bisaKelola && (
                       <div style={{ display: "flex", gap: "8px" }}>

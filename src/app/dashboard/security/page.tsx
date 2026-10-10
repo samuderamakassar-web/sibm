@@ -626,7 +626,7 @@ export default function SecurityDashboard() {
 
         {!isMagang && <AbsensiCard picName={picName} departemen="Security" />}
         {/* §129 booking ruangan live (hari ini & besok) */}
-        <BookingRuanganPanel />
+        {picName && <BookingRuanganPanel petugas={picName} />}
         {/* §128 kinerja pribadi -- hanya angka sendiri */}
         {!isMagang && picName && <KinerjaSayaPanel nama={picName} departemen="Security" />}
 

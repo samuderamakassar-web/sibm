@@ -3164,3 +3164,8 @@ Tidak ada perubahan rules (koleksi sudah terbaca akun staf).
 ## 129. Notifikasi Booking: Ruangan -> Security, Kendaraan -> Driver (10 Oktober 2026)
 1. scripts/laporan-baru-reminder.mjs `prosesBooking()` (jenis checkpoint "booking", waktuField dibuat_pada): booking aktif ruangan -> push + in-app ke dept Security ("📅 Booking Ruangan Baru"), kendaraan -> Driver ("🚗 Booking Kendaraan Baru"); pesan: objek, waktu mulai–selesai WITA, pemesan, departemen, keperluan. Run pertama hanya menyetel checkpoint (histori tidak dikirim). Ikut jadwal laporan-baru-reminder (15 menit, cron-job.org).
 2. Dashboard Security: `BookingRuanganPanel` live (onSnapshot booking mulai hari ini–besok, filter ruangan & aktif di klien; tanpa index komposit), label BARU (< 60 menit sejak dibuat) & BERLANGSUNG; tersembunyi bila kosong.
+
+## 130. Konfirmasi Booking Ruangan oleh Security + Email ke Pemesan (10 Oktober 2026)
+1. BookingRuanganPanel (dashboard Security): booking ruangan belum dikonfirmasi berlatar kuning + tombol Konfirmasi -> modal catatan opsional -> email `buildBookingDikonfirmasiEmailHtml` (src/lib/emailTemplates.ts) lewat kirimEmail ke email pemesan dari employees_directory (nama persis, lalu cocok tanpa beda huruf/spasi) -> updateDoc booking { dikonfirmasi_oleh, dikonfirmasi_pada, email_konfirmasi: terkirim|tanpa_email|gagal, catatan_security? }. Judul panel menampilkan jumlah "perlu konfirmasi"; yang sudah: "✓ Dikonfirmasi <petugas> <jam> · status email".
+2. Admin Booking: baris ruangan aktif menampilkan status konfirmasi Security.
+3. Tipe Booking (src/lib/booking.ts) + field konfirmasi. Rules tidak berubah (booking di koleksiOperasional; update = akun staf).

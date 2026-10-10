@@ -383,3 +383,33 @@ export function buildHelpdeskUpdateEmailHtml(p: {
 
   return emailShell("&#128295; Update Tiket Helpdesk", body);
 }
+
+/** §130 Booking ruangan dikonfirmasi Security -> email ke pemesan. */
+export function buildBookingDikonfirmasiEmailHtml(p: {
+  namaPemesan: string;
+  ruangan: string;
+  waktu: string;
+  keperluan?: string;
+  namaPetugas: string;
+  catatan?: string;
+}): string {
+  const rows = [
+    fieldRow("Status", statusBadge("DIKONFIRMASI", "ok")),
+    fieldRow("Pemesan", escapeHtml(p.namaPemesan)),
+    fieldRow("Ruangan", escapeHtml(p.ruangan)),
+    fieldRow("Waktu", escapeHtml(p.waktu)),
+    ...(p.keperluan ? [fieldRow("Keperluan", escapeHtml(p.keperluan))] : []),
+    fieldRow("Dikonfirmasi oleh (Security)", escapeHtml(p.namaPetugas)),
+    ...(p.catatan ? [fieldRow("Catatan Security", escapeHtml(p.catatan))] : []),
+  ].join("");
+
+  const body = `
+    <p style="margin:0 0 16px 0;font-size:13.5px;color:#3f3f46;line-height:1.6;">
+      Booking ruangan Anda sudah diterima dan dicatat oleh Security. Ruangan akan disiapkan sesuai jadwal berikut:
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+    <p style="margin:16px 0 0 0;font-size:12.5px;color:#71717a;line-height:1.6;">Bila ada perubahan atau pembatalan, hubungi Admin GA atau pos Security lobby.</p>
+  `;
+
+  return emailShell("&#128197; Booking Ruangan Dikonfirmasi", body);
+}

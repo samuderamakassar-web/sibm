@@ -35,6 +35,10 @@ export interface Booking {
   dibatalkan_oleh?: string;
   alasan_batal?: string;
   diubah_oleh?: string;
+  /** §130 konfirmasi Security (booking ruangan) + status email ke pemesan */
+  dikonfirmasi_oleh?: string;
+  dikonfirmasi_pada?: Timestamp | null;
+  email_konfirmasi?: "terkirim" | "tanpa_email" | "gagal";
 }
 
 const FMT_TGL = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
