@@ -48,6 +48,8 @@ interface UserData {
   daerah?: string;
   /** §108 PT tenant -- wajib untuk departemen "Eksekutif Tenant" (data karyawan disaring per PT). */
   unit_bisnis?: string;
+  /** §123 peran tugas dept OB & CS -- dasar penilaian Beban Kerja & tampilan Dashboard OB. */
+  peran_tugas?: string;
 }
 
 async function uploadFotoToCloudinary(blob: Blob): Promise<string> {
@@ -93,6 +95,7 @@ export default function UserManagementPage() {
     foto_url: "",
     daerah: "",
     unit_bisnis: "",
+    peran_tugas: "",
   });
   const [jadikanSuperAdmin, setJadikanSuperAdmin] = useState(false);
   const [daerahLainnya, setDaerahLainnya] = useState(false);
@@ -188,6 +191,7 @@ export default function UserManagementPage() {
         foto_url: formData.foto_url || "",
         daerah: daerahFinal,
         unit_bisnis: formData.departemen === "Eksekutif Tenant" ? formData.unit_bisnis : "",
+        peran_tugas: formData.departemen === "OB & CS" ? formData.peran_tugas : "",
       };
 
       if (isEditMode && editId) {
@@ -217,7 +221,7 @@ export default function UserManagementPage() {
         showToast("Pengguna baru berhasil ditambahkan!", "success");
       }
 
-      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "", unit_bisnis: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false);
+      setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "", unit_bisnis: "", peran_tugas: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false);
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
@@ -266,6 +270,7 @@ export default function UserManagementPage() {
       foto_url: user.foto_url || "",
       daerah: user.daerah === "PUSAT" ? "" : (user.daerah || ""),
       unit_bisnis: user.unit_bisnis || "",
+      peran_tugas: user.peran_tugas || "",
     });
     setJadikanSuperAdmin(user.daerah === "PUSAT");
     setDaerahLainnya(!!user.daerah && user.daerah !== "PUSAT" && !DAFTAR_KOTA_INDONESIA.includes(user.daerah));
@@ -441,6 +446,13 @@ export default function UserManagementPage() {
                       {DAFTAR_UNIT_BISNIS.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   )}
+                  {formData.departemen === "OB & CS" && (
+                    <select name="peran_tugas" value={formData.peran_tugas} onChange={handleInputChange} aria-label="Peran tugas OB & CS" style={{ width: "100%", marginTop: "8px", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--surface)", fontSize: "13px", cursor: "pointer", outline: "none" }}>
+                      <option value="">— Peran tugas (ikut plotting) —</option>
+                      <option value="OB Pelayanan">OB Pelayanan (minuman, meeting, dokumen)</option>
+                      <option value="CS Cleaning">CS Cleaning (kebersihan area)</option>
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Role / Jabatan *</label>
@@ -518,7 +530,7 @@ export default function UserManagementPage() {
                   {isLoading ? "Menyimpan..." : (isEditMode ? "Simpan Perubahan" : "➕ Daftarkan Akun")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "", unit_bisnis: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false); }} style={{ padding: "13px 16px", background: "var(--surface)", color: "var(--ink-soft)", border: "1px solid var(--line)", borderRadius: "8px", fontWeight: 600, fontSize: "13.5px", cursor: "pointer", transition: "0.15s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama: "", email: "", departemen: "OB & CS", role: "Staff", whatsapp: "", password: "", foto_url: "", daerah: "", unit_bisnis: "", peran_tugas: "" }); setJadikanSuperAdmin(false); setDaerahLainnya(false); }} style={{ padding: "13px 16px", background: "var(--surface)", color: "var(--ink-soft)", border: "1px solid var(--line)", borderRadius: "8px", fontWeight: 600, fontSize: "13.5px", cursor: "pointer", transition: "0.15s" }}>
                     Batal
                   </button>
                 )}
@@ -588,6 +600,9 @@ export default function UserManagementPage() {
                         <td>
                           <div style={{ marginBottom: "6px", display: "flex", gap: "5px", flexWrap: "wrap" }}>
                             <span style={{ background: deptBg, color: deptColor, padding: "3px 8px", borderRadius: "5px", fontSize: "10.5px", fontWeight: 600, display: "inline-block" }}>{user.departemen}</span>
+                            {user.departemen === "OB & CS" && user.peran_tugas && (
+                              <span style={{ background: "var(--ok-50)", color: "var(--ok)", padding: "3px 8px", borderRadius: "5px", fontSize: "10.5px", fontWeight: 600 }}>{user.peran_tugas}</span>
+                            )}
                             {user.daerah === "PUSAT" ? (
                               <span style={{ background: "var(--accent-50)", color: "var(--accent)", padding: "3px 8px", borderRadius: "5px", fontSize: "10.5px", fontWeight: 600 }}>⭐ Super Admin</span>
                             ) : user.daerah ? (

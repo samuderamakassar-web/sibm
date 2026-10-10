@@ -74,7 +74,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     getDocs(query(collection(db, "packages"), where("waktu_diterima", ">=", tsAwal), where("waktu_diterima", "<", tsAkhir))).catch(() => null),
     getDocs(query(collection(db, "permintaan_pelayanan"), where("waktu_minta", ">=", tsAwal), where("waktu_minta", "<", tsAkhir))).catch(() => null),
   ]);
-  const akun = users.docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string }).filter((u) => u.nama && !/magang/i.test(u.role || ""));
+  const akun = users.docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string; peran_tugas?: string }).filter((u) => u.nama && !/magang/i.test(u.role || ""));
   const namaDept = (dept: string) => akun.filter((u) => u.departemen === dept).map((u) => String(u.nama).trim());
 
   // ---------- OB vs CS dari plotting (mayoritas hari di area pelayanan = OB) ----------
@@ -93,7 +93,9 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     });
   });
   const stafOB = namaDept("OB & CS");
-  const namaOB = stafOB.filter((n) => (hariPelayanan[n] || 0) > (hariLantai[n] || 0));
+  // §123 peran tugas di Master User menang; yang belum diisi masih ditebak dari plotting
+  const peranDari = (n: string) => akun.find((u) => u.departemen === "OB & CS" && String(u.nama).trim() === n)?.peran_tugas || "";
+  const namaOB = stafOB.filter((n) => peranDari(n) ? peranDari(n) === "OB Pelayanan" : (hariPelayanan[n] || 0) > (hariLantai[n] || 0));
   const namaCS = stafOB.filter((n) => !namaOB.includes(n));
   const pct = (x: number, t: number) => (t ? `${Math.round((x / t) * 100)}%` : "—");
 

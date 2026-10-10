@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { useFcmSetup } from "@/hooks/useFcmSetup";
 import { logoutWithConfirm, useAuthGuard } from "@/hooks/useAuthGuard";
 import { useConfirm } from "@/components/ui/ConfirmProvider";
@@ -13,6 +13,7 @@ import AdminShell from "../admin/AdminShell";
 import Tile from "../admin/Tile";
 import { useMasterKondisiAset } from "@/lib/kondisiAset";
 import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
+import KinerjaSayaPanel from "../KinerjaSayaPanel";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -123,6 +124,14 @@ export default function DashboardOBPage() {
   // §122 menu Inspeksi hanya untuk yang punya tugas: plot area hari ini, memegang alat, atau petugas utilitas
   const { nilai: masterAset } = useMasterKondisiAset();
   const [jumlahAlat, setJumlahAlat] = useState(0);
+  // §123 peran tugas dari Master User (OB Pelayanan / CS Cleaning) -- urutan tampilan menyesuaikan
+  const [peranTugas, setPeranTugas] = useState("");
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!picName || !uid) return;
+    return onSnapshot(doc(db, "users_master", uid), (s) => setPeranTugas(String(s.data()?.peran_tugas || "")), () => setPeranTugas(""));
+  }, [picName]);
+  const isOBPelayanan = peranTugas === "OB Pelayanan";
   useEffect(() => {
     if (!picName) return;
     return onSnapshot(query(collection(db, "aset_alat"), where("pemegang", "==", picName)), (s) => setJumlahAlat(s.docs.filter((d) => d.data().status !== "Afkir").length), () => setJumlahAlat(0));
@@ -327,8 +336,8 @@ export default function DashboardOBPage() {
 
       {/* 🔹 KARTU SAPAAN (pengganti hero merah lama) */}
       <Tile variant="brand" className="staff-hero">
-        <span className="staff-hero-label">Cleaning Center · OB & CS</span>
-        <h1 className="staff-hero-title">Halo, {picName.split(/\s+/)[0]}.<br />Siap bersih-bersih hari ini?</h1>
+        <span className="staff-hero-label">Cleaning Center · {peranTugas || "OB & CS"}</span>
+        <h1 className="staff-hero-title">Halo, {picName.split(/\s+/)[0]}.<br />{isOBPelayanan ? "Siap melayani hari ini?" : "Siap bersih-bersih hari ini?"}</h1>
       </Tile>
 
       <div>
@@ -354,6 +363,9 @@ export default function DashboardOBPage() {
 
         <AbsensiCard picName={picName} departemen="OB & CS" />
 
+        {/* §123 OB Pelayanan: permintaan pelayanan paling atas */}
+        {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} />}
+
         {/* ⚠️ BANNER PERINGATAN LOW STOCK */}
         {stokMenipis.length > 0 && (
           <div className="stock-banner">
@@ -372,7 +384,10 @@ export default function DashboardOBPage() {
         )}
 
         {/* §122 permintaan pelayanan dari karyawan (portal) */}
-        {picName && <PermintaanPelayananPanel nama={picName} />}
+        {picName && !isOBPelayanan && <PermintaanPelayananPanel nama={picName} />}
+
+        {/* §123 kinerja pribadi -- hanya angka sendiri, bahan introspeksi */}
+        {picName && <KinerjaSayaPanel nama={picName} peran={peranTugas} />}
 
         {/* 👑 PANEL KHUSUS KOORDINATOR */}
         {(picRole.includes("Koordinator") || picRole.includes("Administrator")) && (
