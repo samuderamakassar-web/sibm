@@ -1013,6 +1013,7 @@ export default function ManajemenKendaraanPage() {
       title="Master Data Kendaraan"
       subtitle="Kelola armada, riwayat perawatan, dan kepatuhan kendaraan operasional"
       userName={adminName}
+      actions={<button type="button" className="sa-btn is-soft" onClick={() => router.push("/admin/uji-emisi")}>Hasil Uji Emisi</button>}
     >
       <style dangerouslySetInnerHTML={{__html: `
         .print-only { display: none; }

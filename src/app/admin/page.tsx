@@ -41,67 +41,78 @@ interface MenuGroup {
 
 // "Pantau Laporan Tim" tidak masuk MENU_GROUPS -- grup ini tampil sebagai kotak angka live
 // di bagian atas (PANTAU), jadi tidak diulang di daftar menu.
+// §132 disusun ulang per bidang kerja; beberapa menu digabung (halaman lama tetap ada, dibuka dari halaman induk
+// atau lewat pencarian -- lihat MENU_PENCARIAN). "Laporan Eksekutif" dihapus (dobel dengan Dashboard Eksekutif).
 const MENU_GROUPS: MenuGroup[] = [
   {
-    name: "Manajemen Dasar",
+    name: "Layanan & Permintaan",
+    tone: "warn",
+    items: [
+      { title: "Helpdesk & Tiket Kerusakan", desc: "Laporan kerusakan dari pengguna kantor", path: "/admin/helpdesk", icon: "wrench" },
+      { title: "Gudang ATK", desc: "Permintaan alat tulis kantor", path: "/admin/atk", icon: "clipboard" },
+      { title: "Persetujuan Overtime", desc: "Lembur AC & listrik", path: "/admin/overtime", icon: "clock" },
+      { title: "Booking Kendaraan & Ruangan", desc: "Jadwal, ubah & batalkan booking", path: "/admin/booking", icon: "calendar" },
+      { title: "Pengumuman Gedung", desc: "Carousel info di portal utama", path: "/admin/broadcast", icon: "megaphone" },
+      { title: "Survei Kepuasan Gedung", desc: "Kuesioner pelayanan 2x/tahun", path: "/admin/survei-kepuasan", icon: "clipboardList" },
+    ],
+  },
+  {
+    name: "OB & CS",
+    tone: "ok",
+    items: [
+      { title: "Plotting OB & CS", desc: "Atur area tugas harian & petugas utilitas", path: "/admin/plotting-ob", icon: "calendar" },
+      { title: "Temuan & Kondisi Aset", desc: "Hasil inspeksi OB: perbaikan & penggantian", path: "/admin/kondisi-aset", icon: "search" },
+      { title: "Alat Kerja OB & CS", desc: "Daftar alat, rusak/hilang, label", path: "/admin/alat-kerja", icon: "box" },
+    ],
+  },
+  {
+    name: "Gedung & Keselamatan",
     tone: "info",
     items: [
-      { title: "Manajemen Pengguna", desc: "Akun login staf operasional", path: "/admin/users", icon: "idCard" },
-      { title: "Master Data Karyawan", desc: "Direktori 70+ karyawan SIBM", path: "/admin/karyawan", icon: "building" },
-      { title: "Master Data Kendaraan", desc: "Foto, PIC, odometer, riwayat servis", path: "/admin/kendaraan", icon: "truck" },
-      { title: "Hasil Uji Emisi", desc: "Rekap uji emisi per kendaraan", path: "/admin/uji-emisi", icon: "car" },
+      { title: "Okupansi Gedung", desc: "Luas lantai, tenant & area kosong", path: "/admin/okupansi", icon: "building" },
+      { title: "Titik Patroli & QR", desc: "Titik wajib scan per lantai + cetak label QR", path: "/admin/titik-patroli", icon: "shield" },
+      { title: "Master Data APAR", desc: "APAR per lantai & QR inspeksi", path: "/admin/apar", icon: "fireExtinguisher" },
+    ],
+  },
+  {
+    name: "Aset & Legalitas",
+    tone: "accent",
+    items: [
+      { title: "Kendaraan & Uji Emisi", desc: "Foto, PIC, odometer, servis, uji emisi", path: "/admin/kendaraan", icon: "truck" },
       { title: "Master Data Laptop", desc: "Masa sewa laptop tiap user", path: "/admin/laptop", icon: "laptop" },
       { title: "Legalitas & Perizinan", desc: "Dokumen legal + riwayat versi", path: "/admin/legalitas", icon: "stamp" },
     ],
   },
   {
-    name: "Layanan GA",
-    tone: "warn",
-    items: [
-      { title: "Pengumuman Gedung", desc: "Carousel info di portal utama", path: "/admin/broadcast", icon: "megaphone" },
-      { title: "Gudang ATK", desc: "Permintaan alat tulis kantor", path: "/admin/atk", icon: "clipboard" },
-      { title: "Persetujuan Overtime", desc: "Lembur AC & listrik", path: "/admin/overtime", icon: "clock" },
-      { title: "Booking Kendaraan & Ruangan", desc: "Jadwal, ubah & batalkan booking", path: "/admin/booking", icon: "calendar" },
-      { title: "Helpdesk & Tiket Kerusakan", desc: "Laporan kerusakan dari pengguna kantor", path: "/admin/helpdesk", icon: "wrench" },
-      { title: "Temuan & Kondisi Aset", desc: "Hasil inspeksi OB: perbaikan & penggantian", path: "/admin/kondisi-aset", icon: "search" },
-      { title: "Plotting OB & CS", desc: "Atur area tugas harian & petugas utilitas", path: "/admin/plotting-ob", icon: "calendar" },
-      { title: "Alat Kerja OB & CS", desc: "Register alat, PIC, serah terima, label", path: "/admin/alat-kerja", icon: "box" },
-    ],
-  },
-  {
-    name: "Skor & Pengembangan",
-    tone: "accent",
-    items: [
-      { title: "Rekap Poin Staf", desc: "Skor bulanan per departemen", path: "/admin/monitor-poin", icon: "trophy" },
-      { title: "Update Dokumen SOP", desc: "SOP/IK untuk tiap menu staf", path: "/admin/sop", icon: "book" },
-      { title: "Handbook Magang", desc: "Materi belajar PDF/video", path: "/admin/handbook-magang", icon: "graduationCap" },
-      { title: "Survei Kepuasan Gedung", desc: "Kuesioner pelayanan 2x/tahun", path: "/admin/survei-kepuasan", icon: "clipboardList" },
-    ],
-  },
-  {
-    name: "Alat & Master",
-    tone: "ok",
-    items: [
-      { title: "Master Data APAR", desc: "APAR per lantai & QR inspeksi", path: "/admin/apar", icon: "fireExtinguisher" },
-      { title: "SOP Checklist", desc: "Checklist OB, fasilitas & inspeksi driver", path: "/admin/sop-checklist", icon: "clipboardList" },
-      { title: "Titik Patroli", desc: "Titik wajib scan per lantai (renovasi)", path: "/admin/titik-patroli", icon: "shield" },
-      { title: "QR Code Generator", desc: "Label titik patroli & kebersihan", path: "/admin/qr-manager", icon: "printer" },
-      { title: "Hari Libur", desc: "Tanggal merah & cuti bersama", path: "/admin/hari-libur", icon: "calendar" },
-    ],
-  },
-  {
-    name: "Laporan & Sistem",
+    name: "Personel & SDM",
     tone: "teal",
     items: [
-      { title: "Okupansi Gedung", desc: "Luas lantai, tenant & area kosong", path: "/admin/okupansi", icon: "building" },
-      { title: "Anggaran & Realisasi", desc: "RAB CAPEX/OPEX vs biaya aktual", path: "/admin/anggaran", icon: "chart" },
+      { title: "Manajemen Pengguna", desc: "Akun login staf & peran tugas", path: "/admin/users", icon: "idCard" },
+      { title: "Master Data Karyawan", desc: "Direktori karyawan SIBM + email", path: "/admin/karyawan", icon: "building" },
       { title: "Beban Kerja & Personel", desc: "Perlu tambah OB, CS, Driver, Security?", path: "/admin/sla", icon: "trophy" },
+      { title: "Rekap Poin Staf", desc: "Skor bulanan per departemen", path: "/admin/monitor-poin", icon: "trophy" },
+      { title: "SOP & Checklist", desc: "Checklist harian/inspeksi + dokumen SOP/IK", path: "/admin/sop-checklist", icon: "book" },
+      { title: "Handbook Magang", desc: "Materi belajar PDF/video", path: "/admin/handbook-magang", icon: "graduationCap" },
+    ],
+  },
+  {
+    name: "Manajemen & Sistem",
+    tone: "red",
+    items: [
+      { title: "Dashboard Eksekutif", desc: "Ringkasan untuk Eksekutif Tenant", path: "/dashboard/eksekutif", icon: "activity" },
+      { title: "Anggaran & Realisasi", desc: "RAB CAPEX/OPEX vs biaya aktual", path: "/admin/anggaran", icon: "chart" },
       { title: "Project Tracker", desc: "Target, kuartal, task & review mingguan", path: "/admin/project-tracker", icon: "clipboardList" },
-      { title: "Dashboard Eksekutif", desc: "Pratinjau tampilan Eksekutif Tenant", path: "/dashboard/eksekutif", icon: "activity" },
-      { title: "Laporan Eksekutif", desc: "Rekap bulanan PDF/print", path: "/admin/report", icon: "fileText" },
+      { title: "Hari Libur", desc: "Tanggal merah & cuti bersama", path: "/admin/hari-libur", icon: "calendar" },
       { title: "Kesehatan Notifikasi", desc: "Status cron reminder", path: "/admin/monitor-cron", icon: "activity" },
     ],
   },
+];
+
+/** Halaman yang digabung ke menu induk -- tidak tampil sebagai kartu, tetap bisa dicari. */
+const MENU_PENCARIAN: MenuItem[] = [
+  { title: "Hasil Uji Emisi", desc: "Bagian dari Kendaraan & Uji Emisi", path: "/admin/uji-emisi", icon: "car" },
+  { title: "QR Code Generator", desc: "Bagian dari Titik Patroli & QR", path: "/admin/qr-manager", icon: "printer" },
+  { title: "Dokumen SOP / IK", desc: "Bagian dari SOP & Checklist", path: "/admin/sop", icon: "book" },
 ];
 
 type KunciHitungan =
@@ -270,6 +281,7 @@ export default function AdminDashboardPage() {
     const semua: MenuItem[] = [
       ...PANTAU.map((p) => ({ title: `Pantau ${p.title}`, desc: p.sub, path: p.path, icon: p.icon })),
       ...MENU_GROUPS.flatMap((g) => g.items),
+      ...MENU_PENCARIAN,
     ];
     return semua.filter((m) => `${m.title} ${m.desc}`.toLowerCase().includes(kata));
   }, [cari]);

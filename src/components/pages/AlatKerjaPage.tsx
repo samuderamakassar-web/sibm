@@ -55,11 +55,11 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
 
   if (!isReady || !boleh) return null;
   const oleh = session?.nama || "-";
+  // §132 tanpa PIC: filter per status (alat milik tim, diinspeksi Koordinator 2x sebulan)
   const pemegangList = [PEMEGANG_GUDANG, ...staf];
-  const tampil = alat.filter((a) => a.status !== "Afkir" || filterPemegang === "Afkir")
-    .filter((a) => filterPemegang === "Semua" || filterPemegang === "Afkir" ? (filterPemegang !== "Afkir" || a.status === "Afkir") : a.pemegang === filterPemegang)
-    .filter((a) => !cari.trim() || `${a.kode} ${a.nama} ${a.pemegang}`.toLowerCase().includes(cari.toLowerCase()));
-  const perPemegang = (p: string) => alat.filter((a) => a.pemegang === p && a.status !== "Afkir");
+  const tampil = alat.filter((a) => (filterPemegang === "Semua" ? a.status !== "Afkir" : a.status === filterPemegang))
+    .filter((a) => !cari.trim() || `${a.kode} ${a.nama}`.toLowerCase().includes(cari.toLowerCase()));
+  const perStatus = (s: string) => alat.filter((a) => a.status === s).length;
 
   const fotoPilih = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
@@ -139,7 +139,7 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
   }
 
   return (
-    <AdminShell title="Alat Kerja OB & CS" subtitle="Register alat dengan penanggung jawab (PIC), serah terima, rusak/hilang & label" userName={oleh} backHref={backHref} backLabel={backLabel}
+    <AdminShell title="Alat Kerja OB & CS" subtitle="Daftar alat kebersihan tim, status rusak/hilang & label — diinspeksi Koordinator 2x sebulan" userName={oleh} backHref={backHref} backLabel={backLabel}
       actions={<div style={{ display: "flex", gap: "6px" }}><button type="button" className="sa-btn is-soft" onClick={() => setCetak(true)}>Cetak label</button><button type="button" className="sa-btn is-primary" onClick={() => buka({ jenis: "tambah" })}>+ Alat</button></div>}>
       <style dangerouslySetInnerHTML={{ __html: `
         .al-in { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px; font-family: inherit; box-sizing: border-box; }
@@ -160,10 +160,9 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
       </div>
 
       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px", alignItems: "center" }}>
-        {["Semua", ...pemegangList].map((p) => (
-          <button key={p} type="button" className={`al-chip${filterPemegang === p ? " on" : ""}`} onClick={() => setFilterPemegang(p)}>{p}{p !== "Semua" && <span>{perPemegang(p).length}</span>}</button>
+        {["Semua", ...STATUS_ALAT].map((p) => (
+          <button key={p} type="button" className={`al-chip${filterPemegang === p ? " on" : ""}`} onClick={() => setFilterPemegang(p)}>{p}{p !== "Semua" && <span>{perStatus(p)}</span>}</button>
         ))}
-        <button type="button" className={`al-chip${filterPemegang === "Afkir" ? " on" : ""}`} onClick={() => setFilterPemegang("Afkir")}>Afkir</button>
         <input className="al-in" style={{ width: "200px", marginLeft: "auto" }} placeholder="Cari kode / nama..." value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari alat" />
       </div>
 
@@ -180,10 +179,9 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
                 <span style={{ fontSize: "13px", color: "var(--ink)" }}>{a.nama}</span>
                 <Pill s={a.status} />
               </div>
-              <div style={{ fontSize: "12px", color: "var(--muted)" }}>PIC <b style={{ color: "var(--ink-soft)" }}>{a.pemegang}</b> · {a.kategori}{a.kondisi_terakhir ? ` · inspeksi ${tgl(a.inspeksi_terakhir)}: ${a.kondisi_terakhir}` : " · belum diinspeksi"}</div>
+              <div style={{ fontSize: "12px", color: "var(--muted)" }}>{a.kategori}{a.kondisi_terakhir ? ` · inspeksi ${tgl(a.inspeksi_terakhir)}: ${a.kondisi_terakhir}` : " · belum diinspeksi"}</div>
             </div>
             <div className="al-aksi">
-              <button type="button" onClick={() => { buka({ jenis: "pindah", a }); }}>Ganti PIC</button>
               <button type="button" onClick={() => buka({ jenis: "status", a })}>Ubah status</button>
               <button type="button" onClick={() => buka({ jenis: "riwayat", a })}>Riwayat</button>
             </div>
@@ -201,9 +199,8 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
                 <input className="al-in" list="al-nama" value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} placeholder="Mis. Vacuum cleaner" />
                 <datalist id="al-nama">{Array.from(new Set(alat.map((a) => a.nama))).map((n) => <option key={n} value={n} />)}</datalist>
                 {form.nama.trim() && <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>Kode otomatis: <b>{kodeBerikut(form.nama, alat)}</b>{Number(form.jumlah) > 1 ? ` dst.` : ""}</div>}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 90px", gap: "8px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 90px", gap: "8px" }}>
                   <div><label className="al-lbl">Kategori</label><select className="al-in" value={form.kategori} onChange={(e) => setForm({ ...form, kategori: e.target.value })}>{KATEGORI_ALAT.map((k) => <option key={k}>{k}</option>)}</select></div>
-                  <div><label className="al-lbl">PIC / pemegang</label><select className="al-in" value={form.pemegang} onChange={(e) => setForm({ ...form, pemegang: e.target.value })}>{pemegangList.map((p) => <option key={p}>{p}</option>)}</select></div>
                   <div><label className="al-lbl">Jumlah</label><input className="al-in" inputMode="numeric" value={form.jumlah} onChange={(e) => setForm({ ...form, jumlah: e.target.value.replace(/\D/g, "") })} /></div>
                 </div>
                 <label className="al-lbl">Catatan (merk, spesifikasi)</label>

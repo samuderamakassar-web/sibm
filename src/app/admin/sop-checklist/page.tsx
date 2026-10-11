@@ -138,6 +138,8 @@ export default function SopChecklistPage() {
       userName={session?.nama || "Admin"}
       actions={aktifTab ? (
         <div style={{ display: "flex", gap: "8px" }}>
+          {/* §132 menu SOP & Checklist digabung: dokumen SOP/IK dibuka dari sini */}
+          <button type="button" className="sa-btn is-soft" onClick={() => router.push("/admin/sop")}>Dokumen SOP/IK</button>
           {aktifTab.d.berubah && <button type="button" className="sa-btn is-soft" onClick={aktifTab.d.reset} disabled={menyimpan}>Batalkan</button>}
           <button type="button" className="sa-btn is-primary" onClick={aktifTab.simpan} disabled={menyimpan || (!aktifTab.d.berubah && !aktifTab.bawaan)}>
             {menyimpan ? "Menyimpan..." : aktifTab.d.berubah ? "Simpan perubahan" : aktifTab.bawaan ? "Simpan daftar ini" : "Tersimpan"}

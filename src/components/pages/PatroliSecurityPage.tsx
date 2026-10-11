@@ -378,6 +378,40 @@ export default function PatroliSecurityPage() {
     }
   }, [photoTarget]);
 
+  // ==========================================
+  // §132 DRAF PATROLI DI HP -- HP terkunci lama / tab ditutup Android dulu menghapus titik yang sudah
+  // difoto (foto sudah terunggah, daftar titik hanya di memori) -> petugas foto ulang. Sekarang progres
+  // disimpan di localStorage per petugas & dipulihkan bila shift & tanggal sama (<= 4 jam, 1 sesi).
+  // ==========================================
+  const kunciDraf = picName ? `sibm_patroli_draf|${picName}` : "";
+  const drafSiapRef = useRef(false);
+  useEffect(() => {
+    if (!kunciDraf || !shiftSesiInfo || drafSiapRef.current) return;
+    let pulih: { tanggal_shift: string; shift: string; disimpan: number; scannedItems: TitikAman[]; alasanTerlewat: Record<string, string>; catatanUmum: string } | null = null;
+    try { pulih = JSON.parse(localStorage.getItem(kunciDraf) || "null"); } catch { pulih = null; }
+    const cocok = !!pulih && pulih.tanggal_shift === shiftSesiInfo.tanggal_shift && pulih.shift === shiftSesiInfo.shift && Date.now() - pulih.disimpan < 4 * 3600000 && pulih.scannedItems?.length > 0;
+    const t = setTimeout(() => {
+      if (cocok && pulih) {
+        setScannedItems(pulih.scannedItems);
+        setAlasanTerlewat(pulih.alasanTerlewat || {});
+        setCatatanUmum(pulih.catatanUmum || "");
+        showToast(`Progres patroli dipulihkan: ${pulih.scannedItems.length} titik sudah difoto, lanjutkan saja.`, "success");
+      } else {
+        try { localStorage.removeItem(kunciDraf); } catch { /* storage diblokir */ }
+      }
+      drafSiapRef.current = true;
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dipulihkan sekali saat sesi & nama siap
+  }, [kunciDraf, shiftSesiInfo]);
+  useEffect(() => {
+    if (!kunciDraf || !shiftSesiInfo || !drafSiapRef.current) return;
+    try {
+      if (scannedItems.length === 0 && !catatanUmum.trim()) localStorage.removeItem(kunciDraf);
+      else localStorage.setItem(kunciDraf, JSON.stringify({ tanggal_shift: shiftSesiInfo.tanggal_shift, shift: shiftSesiInfo.shift, disimpan: Date.now(), scannedItems, alasanTerlewat, catatanUmum }));
+    } catch { /* storage penuh/diblokir -> tetap jalan tanpa draf */ }
+  }, [kunciDraf, shiftSesiInfo, scannedItems, alasanTerlewat, catatanUmum]);
+
   const handleUbahAlasan = (id: string, alasan: string) => {
     setAlasanTerlewat((prev) => ({ ...prev, [id]: alasan }));
   };
@@ -407,6 +441,7 @@ export default function PatroliSecurityPage() {
       });
 
       berhasil = true;
+      try { if (kunciDraf) localStorage.removeItem(kunciDraf); } catch { /* abaikan */ }
       setIsSuccess(true);
       setTimeout(() => {
         sedangKirimRef.current = false;

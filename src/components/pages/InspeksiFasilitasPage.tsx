@@ -130,6 +130,13 @@ export default function InspeksiFasilitasPage() {
   const [alatSaya, setAlatSaya] = useState<AlatKerja[]>([]);
 
   const seninMingguIni = getSeninMingguIni();
+  // §132 inspeksi alat kebersihan: Koordinator/Admin, 2x sebulan (tgl 1–15 & 16–akhir), semua alat tim
+  const [isKoordinator, setIsKoordinator] = useState(false);
+  const tglHariIni = getTodayISOLocal();
+  const paruhKe = Number(tglHariIni.slice(8, 10)) <= 15 ? 1 : 2;
+  const periodeAlat = `${tglHariIni.slice(0, 7)}-P${paruhKe}`;
+  const akhirBulan = new Date(Date.UTC(Number(tglHariIni.slice(0, 4)), Number(tglHariIni.slice(5, 7)), 0)).getUTCDate();
+  const labelPeriodeAlat = `${paruhKe === 1 ? "1–15" : `16–${akhirBulan}`} ${new Date(`${tglHariIni}T12:00:00Z`).toLocaleDateString("id-ID", { month: "short", year: "numeric" })}`;
   const bolehUtilitas = master.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
   const areaAktif = AREA_TETAP[jenis] || selectedArea;
 
@@ -144,6 +151,7 @@ export default function InspeksiFasilitasPage() {
         return;
       }
       setPicName(nama);
+      setIsKoordinator(/koordinator|administrator/i.test(localStorage.getItem("pic_role") || ""));
       try {
         const todayISO = getTodayISOLocal();
         if (!isWeekend(todayISO)) {
@@ -174,17 +182,17 @@ export default function InspeksiFasilitasPage() {
     const u2 = onSnapshot(query(collection(db, "temuan_aset"), where("status", "in", STATUS_TEMUAN_TERBUKA)), (snap) => {
       setTemuanTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TemuanAset)));
     }, (e) => console.error("[inspeksi] temuan terbuka:", e));
-    const u3 = onSnapshot(query(collection(db, "aset_alat"), where("pemegang", "==", picName)), (snap) => {
+    const u3 = onSnapshot(collection(db, "aset_alat"), (snap) => {
       setAlatSaya(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AlatKerja)).filter((a) => a.status !== "Afkir").sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true })));
     }, (e) => console.error("[inspeksi] alat saya:", e));
     return () => { u1(); u2(); u3(); };
   }, [picName]);
   // §127 tanpa konfirmasi serah terima: semua alat atas nama PIC langsung miliknya
-  const alatDipegang = alatSaya.filter((a) => a.status !== "Hilang");
+  const alatDipegang = isKoordinator ? alatSaya.filter((a) => a.status !== "Hilang") : [];
   const labelAlat = (a: AlatKerja) => `${a.kode} · ${a.nama}`;
 
   const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => t.jenis === jenis && t.area === areaAktif && t.item.toLowerCase() === nama.trim().toLowerCase()) : undefined);
-  const sudahMingguIni = riwayat.find((l) => (l.jenis || "gedung") === jenis && l.area === areaAktif && l.minggu_mulai === seninMingguIni);
+  const sudahMingguIni = riwayat.find((l) => (l.jenis || "gedung") === jenis && l.area === areaAktif && (jenis === "alat" ? (l as InspeksiAsetLog & { periode_alat?: string }).periode_alat === periodeAlat : l.minggu_mulai === seninMingguIni));
   // §116 Peralatan Kebersihan = alat milik pemegang sendiri (register), bukan daftar umum
   const daftarMaster = () => (jenis === "alat" ? alatDipegang.map(labelAlat) : master[jenis].filter((x) => x.aktif !== false).map((x) => x.nama));
   const terkaitArea = () => daftarMaster().map((n) => temuanUntuk(n)).filter((x): x is TemuanAset => !!x);
@@ -231,7 +239,7 @@ export default function InspeksiFasilitasPage() {
     try {
       const hasil: HasilInspeksiItem[] = semua.map((h) => ({ nama: h.nama.trim(), kondisi: h.kondisi, catatan: h.catatan.trim(), foto: h.foto, butuh_tindakan: !!h.butuh_tindakan }));
       const ref = await addDoc(collection(db, "inspeksi_fasilitas"), {
-        daerah: daerahTulis(), jenis, area: areaAktif, pic_bertugas: picName, minggu_mulai: seninMingguIni,
+        daerah: daerahTulis(), jenis, area: areaAktif, pic_bertugas: picName, minggu_mulai: seninMingguIni, ...(jenis === "alat" ? { periode_alat: periodeAlat } : {}),
         waktu_selesai: serverTimestamp(), foto_area: fotoArea, hasil,
       });
       // Temuan baru hanya untuk item yang dicentang & belum punya temuan terbuka (anti dobel)
@@ -281,7 +289,7 @@ export default function InspeksiFasilitasPage() {
     );
   }
 
-  const jenisTersedia = (["gedung", "alat", ...(bolehUtilitas ? ["utilitas"] : [])] as JenisInspeksi[]);
+  const jenisTersedia = (["gedung", ...(isKoordinator ? ["alat"] : []), ...(bolehUtilitas ? ["utilitas"] : [])] as JenisInspeksi[]);
   const bisaMulai = jenis === "gedung" ? assignedAreas.length > 0 : jenis === "alat" ? alatDipegang.length > 0 : true;
 
   return (
@@ -310,12 +318,12 @@ export default function InspeksiFasilitasPage() {
 
       {activeTab === "form" && step === 1 && (
         <div className="ka-kartu" style={{ maxWidth: "640px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>Minggu ini · {formatRentangMinggu(seninMingguIni)}</div>
+          <div style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>{jenis === "alat" ? `Periode alat (2x sebulan) · ${labelPeriodeAlat}` : `Minggu ini · ${formatRentangMinggu(seninMingguIni)}`}</div>
           <div className="ka-jenis" role="tablist" aria-label="Jenis inspeksi">
             {jenisTersedia.map((j) => (
               <button key={j} type="button" role="tab" aria-selected={jenis === j} className={jenis === j ? "on" : ""} onClick={() => setJenis(j)}>
                 <div style={{ fontWeight: 800, fontSize: "14px" }}>{LABEL_JENIS[j]}</div>
-                <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{j === "alat" ? `${alatDipegang.length} alat milik Anda` : `${master[j].filter((x) => x.aktif !== false).length} item`}{j === "utilitas" ? " · petugas tetap" : ""}</div>
+                <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{j === "alat" ? `${alatDipegang.length} alat tim · 2x sebulan` : `${master[j].filter((x) => x.aktif !== false).length} item`}{j === "utilitas" ? " · petugas tetap" : ""}</div>
               </button>
             ))}
           </div>
@@ -335,14 +343,14 @@ export default function InspeksiFasilitasPage() {
           ) : jenis === "alat" ? (
             alatDipegang.length > 0 ? (
               <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>
-                <b>Alat tanggung jawab Anda:</b> {alatDipegang.map(labelAlat).join(", ")}
+                <b>Alat yang diinspeksi ({alatDipegang.length}):</b> {alatDipegang.map(labelAlat).join(", ")}
               </div>
-            ) : <div style={{ fontSize: "13px", color: "var(--muted)" }}>Belum ada alat atas nama Anda. Koordinator / Admin GA mendaftarkan & menyerahkan alat lewat menu Alat Kerja.</div>
+            ) : <div style={{ fontSize: "13px", color: "var(--muted)" }}>Belum ada alat terdaftar. Daftarkan lewat menu Alat Kerja Tim.</div>
           ) : (
             <div style={{ fontSize: "13px", color: "var(--ink-soft)" }}><IconMapPin size={14} /> {areaAktif}</div>
           )}
 
-          {sudahMingguIni && <div style={{ background: "var(--ok-50)", color: "var(--ok)", fontSize: "12px", fontWeight: 700, padding: "10px 12px", borderRadius: "10px" }}>✓ Sudah diinspeksi minggu ini ({tglRingkas(sudahMingguIni.waktu_selesai)}). Boleh diulang bila perlu update.</div>}
+          {sudahMingguIni && <div style={{ background: "var(--ok-50)", color: "var(--ok)", fontSize: "12px", fontWeight: 700, padding: "10px 12px", borderRadius: "10px" }}>✓ Sudah diinspeksi {jenis === "alat" ? "periode ini" : "minggu ini"} ({tglRingkas(sudahMingguIni.waktu_selesai)}). Boleh diulang bila perlu update.</div>}
           {bisaMulai && terkaitArea().length > 0 && (
             <div style={{ background: "var(--warn-50)", color: "var(--warn)", fontSize: "12px", fontWeight: 700, padding: "10px 12px", borderRadius: "10px" }}>
               🔧 {terkaitArea().length} item sudah tercatat sebagai temuan ({terkaitArea().filter((t) => t.status === "Dikerjakan").length} sedang ditangani).
