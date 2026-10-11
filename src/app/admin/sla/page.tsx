@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Beban Kerja & Kebutuhan Personel (§119) -- 4 penilaian (OB pelayanan, CS cleaning, Driver, Security) + resepsionis.
+ * Beban Kerja & Kebutuhan Personel (§119) -- 4 penilaian (OB pelayanan, CS cleaning, Driver, Security termasuk lobby/resepsionis §131).
  * Setiap penilaian: indeks beban = kebutuhan orang / jumlah orang sekarang (100% = pas). Kebutuhan dihitung dari data
  * aplikasi (Okupansi, Master Karyawan, booking ruang meeting, plotting & checklist OB, log armada, roster & patroli,
  * Buku Tamu, paket) dengan asumsi kapasitas di src/lib/sla.ts (bisa diubah -> settings/beban_asumsi).
@@ -17,6 +17,7 @@ import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { ASUMSI_BAWAAN, LABEL_ASUMSI, WARNA_STATUS_BEBAN, statusBeban, type AsumsiBeban } from "../../../lib/sla";
 import { menitJenis, timJenis } from "../../../lib/pelayanan";
+import { CHECKLIST_OB_BAWAAN, paketPlottingDari, type AreaChecklist } from "../../../lib/sopChecklist";
 
 const tz = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
 const tzJam = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "2-digit", hourCycle: "h23" });
@@ -28,9 +29,10 @@ const AREA_PELAYANAN = "Pelayanan Khusus OB";
 interface Penilaian {
   kunci: "OB" | "CS" | "DRIVER" | "SECURITY"; judul: string; sekarang: number; kebutuhan: number;
   dasar: string[]; sinyal: string[]; nama: string[]; dataKurang?: string;
+  /** §131 rekomendasi khusus (Security: kombinasi Security / resepsionis) + skenario pembanding */
+  rekomKhusus?: string; skenario?: { label: string; isi: string; pilih: boolean }[];
 }
-interface Resepsionis { tamuPerJam: number; puncak: { jam: string; rata: number } | null; paketPerHari: number; totalTamu: number; dasar: string[] }
-interface HasilBeban { penilaian: Penilaian[]; resepsionis: Resepsionis; hariKerja: number }
+interface HasilBeban { penilaian: Penilaian[]; hariKerja: number }
 
 /** §120 periode = rentang tanggal [dari, sampai] (per bulan, 3 bulan, YTD, 12 bulan). */
 export interface Periode { kunci: string; label: string; dari: string; sampai: string }
@@ -59,7 +61,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   }
   const hariKerja = Math.max(1, hariKerjaList.length);
 
-  const [users, karyawan, okupansi, plots, cek, booking, gerak, roster, patroli, tamu, paket, pelayanan] = await Promise.all([
+  const [users, karyawan, okupansi, plots, cek, booking, gerak, roster, patroli, tamu, paket, pelayanan, sop] = await Promise.all([
     getDocs(collection(db, "users_master")),
     getDocs(collection(db, "employees_directory")),
     getDoc(doc(db, "okupansi_gedung", "data")),
@@ -73,6 +75,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     getDocs(query(collection(db, "security_visitor_logs"), where("waktu_masuk", ">=", tsAwal), where("waktu_masuk", "<", tsAkhir))),
     getDocs(query(collection(db, "packages"), where("waktu_diterima", ">=", tsAwal), where("waktu_diterima", "<", tsAkhir))).catch(() => null),
     getDocs(query(collection(db, "permintaan_pelayanan"), where("waktu_minta", ">=", tsAwal), where("waktu_minta", "<", tsAkhir))).catch(() => null),
+    getDoc(doc(db, "settings", "checklist_ob")),
   ]);
   const akun = users.docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string; peran_tugas?: string }).filter((u) => u.nama && !/magang/i.test(u.role || ""));
   const namaDept = (dept: string) => akun.filter((u) => u.departemen === dept).map((u) => String(u.nama).trim());
@@ -99,28 +102,54 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const namaCS = stafOB.filter((n) => !namaOB.includes(n));
   const pct = (x: number, t: number) => (t ? `${Math.round((x / t) * 100)}%` : "—");
 
-  // ---------- CS: luas dari Okupansi ----------
-  const lantai = ((okupansi.data()?.lantai as { nama: string; unit: { nama: string; luas: number; status: string }[] }[]) || []);
-  let intensif = 0, ringan = 0, toilet = 0;
-  lantai.forEach((l) => (l.unit || []).forEach((u) => {
-    const n = u.nama || ""; const luas = Number(u.luas) || 0;
-    if (/gudang|pompa|server|rooftop|panel/i.test(n)) return;
-    if (/toilet|wc/i.test(n)) { toilet++; intensif += luas; return; }
-    if (u.status === "kosong" || /parkir|teras|garden|taman/i.test(n)) ringan += luas; else intensif += luas;
-  }));
+  // ---------- CS: luas dari Okupansi (§131 ikut angka tingkat gedung) + SOP checklist ----------
+  const okData = okupansi.data() || {};
+  const lantai = ((okData.lantai as { nama: string; luas_total?: number; unit: { nama: string; luas: number; status: string }[] }[]) || []);
+  const gedung = (okData.gedung as { luas_total?: number; luas_bersama?: number } | undefined) || {};
+  let intensif = 0, ringan = 0, toiletUnit = 0, terisiU = 0, kosongU = 0, bersamaU = 0, totalLantai = 0;
+  lantai.forEach((l) => {
+    let tercatat = 0;
+    (l.unit || []).forEach((u) => {
+      const n = u.nama || ""; const luas = Number(u.luas) || 0;
+      tercatat += luas;
+      if (u.status === "terisi") terisiU += luas; else if (u.status === "kosong") kosongU += luas; else if (u.status === "bersama") bersamaU += luas;
+      if (/gudang|pompa|server|rooftop|panel/i.test(n)) return;
+      if (/toilet|wc/i.test(n)) { toiletUnit++; intensif += luas; return; }
+      if (u.status === "kosong" || /parkir|teras|garden|taman/i.test(n)) ringan += luas; else intensif += luas;
+    });
+    totalLantai += Math.max(Number(l.luas_total) || 0, tercatat);
+  });
+  // Angka tingkat gedung (diisi manual di Okupansi) yang belum terpecah per unit ikut dihitung
+  const bersamaGedung = Number(gedung.luas_bersama) > 0 ? Number(gedung.luas_bersama) : bersamaU;
+  const totalGedung = Number(gedung.luas_total) > 0 ? Number(gedung.luas_total) : totalLantai;
+  const bersamaTambahan = Math.max(0, bersamaGedung - bersamaU);
+  const kosongTambahan = Math.max(0, totalGedung - terisiU - kosongU - bersamaGedung);
+  intensif += bersamaTambahan; ringan += kosongTambahan;
+  // SOP checklist harian (settings/checklist_ob): paket plotting = posisi CS harian, segmen toilet, jumlah item
+  const areaSop = ((sop.exists() && Array.isArray(sop.data()?.area) && sop.data()?.area.length ? sop.data()?.area : CHECKLIST_OB_BAWAAN) as AreaChecklist[]);
+  const areaCleaning = areaSop.filter((x) => !x.area.toLowerCase().includes("pelayanan"));
+  const paketSop = paketPlottingDari(areaSop).length;
+  const segAktif = areaCleaning.flatMap((x) => x.segmen.filter((s) => s.aktif !== false));
+  const toiletSop = segAktif.filter((s) => /toilet|wc/i.test(s.nama)).length;
+  const itemSop = segAktif.reduce((s, x) => s + x.pertanyaan.length, 0);
+  const toilet = Math.max(toiletUnit, toiletSop);
   const bebanM2 = intensif + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
+  const kebutuhanLuas = (bebanM2 / a.cs_m2_per_orang) * cadangan;
   // §124 permintaan cleaning dari karyawan -> sinyal beban CS (kebutuhan CS tetap dari luas area)
   const semuaPerm = (pelayanan?.docs || []).map((d) => d.data()).filter((x) => x.status !== "Batal" && x.waktu_minta);
   const permCS = semuaPerm.filter((x) => timJenis(x.jenis) === "CS");
   const responCS = permCS.filter((x) => x.waktu_terima).map((x) => (x.waktu_terima.toDate().getTime() - x.waktu_minta.toDate().getTime()) / 60000);
   const csPenilaian: Penilaian = {
     kunci: "CS", judul: "CS · Cleaning", sekarang: namaCS.length, nama: namaCS,
-    kebutuhan: (bebanM2 / a.cs_m2_per_orang) * cadangan,
+    // §131 kebutuhan = yang lebih besar: beban luas (Okupansi) atau posisi harian menurut pembagian area SOP
+    kebutuhan: Math.max(kebutuhanLuas, paketSop),
     dasar: [
-      `Area intensif ${f1(intensif)} m² (kantor tenant, lobby, meeting, pantry, toilet, mushallah)`,
-      `Area ringan ${f1(ringan)} m² × bobot ${a.cs_bobot_ringan} (kosong, teras, garden, parkir)`,
-      `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara`,
-      `Beban setara ${f1(bebanM2)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}%`,
+      `Area intensif ${f1(intensif)} m² (tenant terisi + area bersama ${f1(bersamaGedung)} m²: lobi, koridor, toilet, tangga)`,
+      `Area ringan ${f1(ringan)} m² × bobot ${a.cs_bobot_ringan} (area kosong, teras, parkir)`,
+      `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara (${toiletSop >= toiletUnit ? "dari segmen SOP checklist" : "dari unit Okupansi"})`,
+      `Beban luas: ${f1(bebanM2)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}% = ${f1(kebutuhanLuas)} orang`,
+      `SOP checklist: area dibagi ${paketSop} paket plotting = ${paketSop} CS bertugas setiap hari · ${itemSop} item × 3 sesi = ${itemSop * 3} pengecekan/hari`,
+      `Dipakai yang lebih besar: ${kebutuhanLuas >= paketSop ? "beban luas" : "posisi harian SOP (belum termasuk pengganti saat cuti)"}`,
     ],
     sinyal: [
       `Checklist sesi area lantai terisi ${pct(csSesi, csSesiTotal)} (${csSesi}/${csSesiTotal})`,
@@ -210,34 +239,57 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const jamPos = 168 * a.sec_pos;
   const jamPerOrang = jumlahSec ? jamPos / jumlahSec : 0;
   const lemburMinggu = Math.max(0, jamPerOrang - a.sec_jam_normal);
-  const secPenilaian: Penilaian = {
-    kunci: "SECURITY", judul: "Security", sekarang: jumlahSec, nama: secResmi.length >= namaRoster.size ? secResmi : Array.from(namaRoster),
-    kebutuhan: jamPos / (a.sec_jam_normal + a.sec_lembur_wajar),
-    dasar: [
-      `${a.sec_pos} pos × 24 jam × 7 hari = ${jamPos} jam/minggu harus terisi`,
-      `÷ (${a.sec_jam_normal} jam normal UU + ${a.sec_lembur_wajar} jam lembur rutin wajar) per orang — sisa batas legal untuk menutup cuti/sakit`,
-      jumlahSec ? `Dengan ${jumlahSec} orang: ${f1(jamPerOrang)} jam/orang/minggu → lembur ${f1(lemburMinggu)} jam/minggu (batas ${a.sec_batas_lembur})` : "Belum ada data jumlah petugas",
-    ],
-    sinyal: [`Patroli ≥2 sesi: Shift 1 ${pct(s1, s1t)} · Shift 2 ${pct(s2, s2t)}`, lemburMinggu > a.sec_batas_lembur ? "Lembur rutin MELEWATI batas legal 18 jam/minggu" : lemburMinggu > a.sec_batas_lembur - 4 ? "Lembur rutin mepet batas legal — cuti/sakit membuat lewat batas" : ""].filter(Boolean),
-  };
+  const lemburDengan = (n: number) => Math.max(0, jamPos / n - a.sec_jam_normal);
 
-  // ---------- Resepsionis: tamu jam sibuk ----------
+  // §131 beban lobby jam kerja (tamu + paket + booking ruangan) -- resepsionis bagian dari Security
   const perJam: Record<string, number> = {};
   let tamuSibuk = 0, totalTamu = 0;
   tamu.docs.forEach((d) => {
     const x = d.data(); if (x.jenis === "Karyawan" || !x.waktu_masuk) return;
-    const t = x.waktu_masuk.toDate(); const tgl = tz.format(t); if (!hariKerjaList.includes(tgl)) return;
+    const tm = x.waktu_masuk.toDate(); const tgl = tz.format(tm); if (!hariKerjaList.includes(tgl)) return;
     totalTamu++;
-    const j = Number(tzJam.format(t)); if (j >= 9 && j < 17) { tamuSibuk++; perJam[`${String(j).padStart(2, "0")}:00`] = (perJam[`${String(j).padStart(2, "0")}:00`] || 0) + 1; }
+    const j = Number(tzJam.format(tm)); if (j >= 9 && j < 17) { tamuSibuk++; perJam[`${String(j).padStart(2, "0")}:00`] = (perJam[`${String(j).padStart(2, "0")}:00`] || 0) + 1; }
   });
-  const puncakEntri = Object.entries(perJam).sort((p, q) => q[1] - p[1])[0];
-  const resepsionis: Resepsionis = {
-    tamuPerJam: tamuSibuk / (hariKerja * 8), totalTamu,
-    puncak: puncakEntri ? { jam: puncakEntri[0], rata: puncakEntri[1] / hariKerja } : null,
-    paketPerHari: (paket?.size || 0) / hariKerja,
-    dasar: [`${totalTamu} tamu hari kerja (${tamuSibuk} pada 09:00–17:00)`, `Batas: ${a.res_tamu_per_jam} tamu/jam rata-rata jam sibuk → perlu petugas khusus`],
+  const puncak = Object.entries(perJam).sort((p, q) => q[1] - p[1])[0];
+  const jumlahPaket = paket?.size || 0;
+  const bookingRuang = booking.docs.map((d) => d.data()).filter((b) => b.jenis === "ruangan" && b.status !== "dibatalkan").length;
+  const lobbyPerJam = (tamuSibuk + jumlahPaket + bookingRuang) / (hariKerja * 8);
+  const pctS1 = s1t ? (s1 / s1t) * 100 : 100, pctS2 = s2t ? (s2 / s2t) * 100 : 100;
+
+  // Keputusan: tambah Security bila lembur rutin mepet/lewat batas legal; resepsionis bila lobby ramai,
+  // atau patroli Shift 1 (jam kantor) jauh lebih buruk dari Shift 2 padahal lobby cukup sibuk
+  const perluSec = jumlahSec > 0 && lemburMinggu > a.sec_batas_lembur - a.sec_lembur_wajar;
+  const lobbyRamai = lobbyPerJam >= a.res_tamu_per_jam;
+  const lobbyGanggu = s1t > 0 && s2t > 0 && pctS1 < pctS2 - 20 && lobbyPerJam >= a.res_tamu_per_jam / 2;
+  const perluRes = lobbyRamai || lobbyGanggu;
+  const rekomSec = perluSec && perluRes ? "Tambah 1 Security + resepsionis jam kerja"
+    : perluSec ? "Tambah 1 Security — resepsionis belum perlu"
+    : perluRes ? "Cukup tambah resepsionis jam kerja"
+    : "Tidak perlu tambahan";
+  const ket = (n: number) => `${f1(jamPos / n)} jam/orang/minggu · lembur ${f1(lemburDengan(n))} jam`;
+  const secPenilaian: Penilaian = {
+    kunci: "SECURITY", judul: "Security (termasuk lobby/resepsionis)", sekarang: jumlahSec, nama: secResmi.length >= namaRoster.size ? secResmi : Array.from(namaRoster),
+    kebutuhan: jamPos / (a.sec_jam_normal + a.sec_lembur_wajar),
+    rekomKhusus: jumlahSec ? rekomSec : undefined,
+    dasar: [
+      `${a.sec_pos} pos × 24 jam × 7 hari = ${jamPos} jam/minggu harus terisi`,
+      `÷ (${a.sec_jam_normal} jam normal UU + ${a.sec_lembur_wajar} jam lembur rutin wajar) per orang — sisa batas legal untuk menutup cuti/sakit`,
+      jumlahSec ? `Dengan ${jumlahSec} orang: ${ket(jumlahSec)} (batas ${a.sec_batas_lembur})` : "Belum ada data jumlah petugas",
+      `Lobby jam kerja 09:00–17:00: ${tamuSibuk} tamu + ${jumlahPaket} paket + ${bookingRuang} booking ruangan = ${f1(lobbyPerJam)} kejadian/jam (perlu resepsionis bila ≥ ${a.res_tamu_per_jam}/jam)`,
+    ],
+    sinyal: [
+      `Patroli ≥2 sesi: Shift 1 ${pct(s1, s1t)} · Shift 2 ${pct(s2, s2t)}${lobbyGanggu ? " — Shift 1 (jam kantor) jauh lebih rendah: lobby menyita waktu" : ""}`,
+      puncak ? `Jam tamu tersibuk ${puncak[0]} (rata-rata ${f1(puncak[1] / hariKerja)} tamu/hari) · total ${totalTamu} tamu hari kerja` : "",
+      lemburMinggu > a.sec_batas_lembur ? "Lembur rutin MELEWATI batas legal 18 jam/minggu" : perluSec ? "Lembur rutin mepet batas legal — cuti/sakit membuat lewat batas" : "",
+    ].filter(Boolean),
+    skenario: jumlahSec ? [
+      { label: `Tetap ${jumlahSec} Security`, isi: `${ket(jumlahSec)}; lobby dirangkap Security + magang`, pilih: !perluSec && !perluRes },
+      { label: "+ Resepsionis saja", isi: `lobby jam kerja dipegang resepsionis; pos 24 jam tetap ${ket(jumlahSec)}`, pilih: !perluSec && perluRes },
+      { label: "+ 1 Security", isi: `${ket(jumlahSec + 1)}; lobby tetap dirangkap`, pilih: perluSec && !perluRes },
+      { label: "+ 1 Security + Resepsionis", isi: `${ket(jumlahSec + 1)}; Security fokus pos & patroli`, pilih: perluSec && perluRes },
+    ] : undefined,
   };
-  return { penilaian: [obPenilaian, csPenilaian, drvPenilaian, secPenilaian], resepsionis, hariKerja };
+  return { penilaian: [obPenilaian, csPenilaian, drvPenilaian, secPenilaian], hariKerja };
 }
 
 function KartuPenilaian({ p }: { p: Penilaian }) {
@@ -246,7 +298,7 @@ function KartuPenilaian({ p }: { p: Penilaian }) {
   const w = WARNA_STATUS_BEBAN[st];
   const butuh = Math.ceil(p.kebutuhan - 0.15); // toleransi 0.15 orang
   const tambah = Math.max(0, butuh - p.sekarang);
-  const rekom = p.dataKurang ? "Data belum cukup" : tambah > 0 ? `Perlu tambah ${tambah} ${p.kunci === "SECURITY" ? "Security" : p.kunci === "DRIVER" ? "Driver" : p.kunci}` : st === "Padat" ? `Pertimbangkan +1 ${p.kunci === "SECURITY" ? "Security" : p.kunci === "DRIVER" ? "Driver" : p.kunci}` : "Tidak perlu tambahan";
+  const rekom = p.dataKurang ? "Data belum cukup" : p.rekomKhusus ? p.rekomKhusus : tambah > 0 ? `Perlu tambah ${tambah} ${p.kunci === "SECURITY" ? "Security" : p.kunci === "DRIVER" ? "Driver" : p.kunci}` : st === "Padat" ? `Pertimbangkan +1 ${p.kunci === "SECURITY" ? "Security" : p.kunci === "DRIVER" ? "Driver" : p.kunci}` : "Tidak perlu tambahan";
   return (
     <Tile>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" }}>
@@ -258,7 +310,16 @@ function KartuPenilaian({ p }: { p: Penilaian }) {
         <span style={{ fontSize: "12.5px", color: "var(--muted)" }}>beban · butuh <b style={{ color: "var(--ink)" }}>{f1(p.kebutuhan)}</b> orang, ada <b style={{ color: "var(--ink)" }}>{p.sekarang}</b></span>
       </div>
       <div style={{ height: "8px", borderRadius: "4px", background: "var(--line)", overflow: "hidden" }}><div style={{ width: `${Math.min(100, indeks / 1.5)}%`, height: "100%", background: w }} /></div>
-      <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "12px", background: "var(--bg)", fontWeight: 800, fontSize: "14px", color: tambah > 0 ? "var(--red-600)" : st === "Padat" ? "var(--warn)" : "var(--ok)" }}>{rekom}</div>
+      <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "12px", background: "var(--bg)", fontWeight: 800, fontSize: "14px", color: (p.rekomKhusus ? p.rekomKhusus !== "Tidak perlu tambahan" : tambah > 0) ? "var(--red-600)" : st === "Padat" ? "var(--warn)" : "var(--ok)" }}>{rekom}</div>
+      {p.skenario && (
+        <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+          {p.skenario.map((s) => (
+            <div key={s.label} style={{ fontSize: "12px", padding: "6px 10px", borderRadius: "10px", border: s.pilih ? "2px solid var(--ok)" : "1px solid var(--line)", color: "var(--ink-soft)" }}>
+              <b style={{ color: "var(--ink)" }}>{s.pilih ? "✓ " : ""}{s.label}</b> — {s.isi}
+            </div>
+          ))}
+        </div>
+      )}
       {p.dataKurang && <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--warn)", fontWeight: 700 }}>⚠ {p.dataKurang}</div>}
       <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--ink-soft)" }}>
         <div style={{ fontWeight: 800, color: "var(--muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: ".04em" }}>Dasar perhitungan</div>
@@ -307,8 +368,6 @@ export default function BebanKerjaPage() {
     const idx = p.sekarang ? (p.kebutuhan / p.sekarang) * 100 : 0;
     return { p, tambah, padat: statusBeban(idx) === "Padat" };
   });
-  const r = hasil?.resepsionis;
-  const perluResepsionis = !!r && (r.tamuPerJam >= asumsi.res_tamu_per_jam || (r.puncak?.rata || 0) >= asumsi.res_tamu_per_jam * 2);
 
   return (
     <AdminShell title="Beban Kerja & Kebutuhan Personel" subtitle="Seberapa sibuk tim OB, CS, Driver & Security — dasar keputusan tambah personel" userName={session?.nama || "Admin"}
@@ -325,32 +384,16 @@ export default function BebanKerjaPage() {
             <h2 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 800 }}>Kesimpulan {periode.label} <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>· {hasil.hariKerja} hari kerja dihitung ({periode.dari.split("-").reverse().join("/")} – {periode.sampai.split("-").reverse().join("/")})</span></h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "13.5px" }}>
               {kesimpulan.map(({ p, tambah, padat }) => (
-                <div key={p.kunci}>{p.dataKurang ? "⚪" : tambah > 0 ? "🔴" : padat ? "🟠" : "🟢"} <b>{p.judul}</b>: {p.dataKurang ? "data belum cukup" : tambah > 0 ? `perlu tambah ${tambah} orang` : padat ? "padat — pertimbangkan tambahan bila bertahan 2–3 bulan" : "cukup, tidak perlu tambahan"}</div>
+                p.rekomKhusus && !p.dataKurang
+                  ? <div key={p.kunci}>{p.rekomKhusus === "Tidak perlu tambahan" ? "🟢" : "🔴"} <b>{p.judul}</b>: {p.rekomKhusus.toLowerCase()}</div>
+                  : <div key={p.kunci}>{p.dataKurang ? "⚪" : tambah > 0 ? "🔴" : padat ? "🟠" : "🟢"} <b>{p.judul}</b>: {p.dataKurang ? "data belum cukup" : tambah > 0 ? `perlu tambah ${tambah} orang` : padat ? "padat — pertimbangkan tambahan bila bertahan 2–3 bulan" : "cukup, tidak perlu tambahan"}</div>
               ))}
-              {r && <div>{perluResepsionis ? "🟠" : "🟢"} <b>Resepsionis</b>: {perluResepsionis ? "volume tamu jam sibuk tinggi — perlu resepsionis khusus (tetap), jangan dibebankan ke Security" : "volume tamu masih bisa ditangani magang/Security, belum perlu resepsionis tetap"}</div>}
             </div>
             <p style={{ margin: "10px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Indeks beban = kebutuhan ÷ jumlah sekarang (100% = pas). Longgar &lt; 70% · Seimbang 70–100% · Padat 100–120% · Kelebihan beban &gt; 120%. Kapasitas per orang = asumsi standar industri (bisa diubah), bukan aturan Disnaker; batas jam kerja & lembur mengikuti UU/PP 35/2021. Gunakan bulan penuh & lihat 2–3 bulan sebelum memutuskan.</p>
           </Tile>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: "14px", alignItems: "start" }}>
             {hasil.penilaian.map((p) => <KartuPenilaian key={p.kunci} p={p} />)}
-            {r && (
-              <Tile>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Resepsionis · Lobby</h3>
-                  <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "3px 10px", borderRadius: "999px", color: "#fff", background: perluResepsionis ? "var(--warn)" : "var(--ok)" }}>{perluResepsionis ? "Perlu" : "Cukup"}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "10px 0 6px" }}>
-                  <b style={{ fontSize: "34px", color: perluResepsionis ? "var(--warn)" : "var(--ok)", lineHeight: 1 }}>{f1(r.tamuPerJam)}</b>
-                  <span style={{ fontSize: "12.5px", color: "var(--muted)" }}>tamu/jam rata-rata 09:00–17:00{r.puncak ? ` · puncak ${r.puncak.jam} (${f1(r.puncak.rata)}/hari)` : ""}</span>
-                </div>
-                <div style={{ fontSize: "12px", color: "var(--ink-soft)" }}>
-                  {r.dasar.map((d) => <div key={d}>· {d}</div>)}
-                  <div>· {f1(r.paketPerHari)} paket/hari kerja diterima di lobby</div>
-                  <div style={{ marginTop: "6px", color: "var(--muted)" }}>Saat ini jam kerja dibantu magang resepsionis. Bila perlu, rekomendasi = resepsionis tetap (bukan tambah Security) agar Security tetap bisa patroli.</div>
-                </div>
-              </Tile>
-            )}
           </div>
         </>
       )}

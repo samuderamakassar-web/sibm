@@ -18,7 +18,7 @@ export interface AsumsiBeban {
   sec_jam_normal: number;       // jam kerja normal per orang per minggu (UU: 40)
   sec_batas_lembur: number;     // batas lembur per minggu (PP 35/2021: 18)
   sec_lembur_wajar: number;     // lembur RUTIN yang wajar per orang/minggu (sisa batas legal untuk menutup cuti/sakit)
-  res_tamu_per_jam: number;     // tamu per jam (jam sibuk) yang butuh resepsionis khusus
+  res_tamu_per_jam: number;     // §131 kejadian lobby (tamu + paket + booking ruangan) per jam kerja yang butuh resepsionis (bagian Security)
   cadangan_pct: number;         // cadangan cuti/sakit (%)
 }
 export const ASUMSI_BAWAAN: AsumsiBeban = {
@@ -42,7 +42,7 @@ export const LABEL_ASUMSI: Record<keyof AsumsiBeban, string> = {
   sec_jam_normal: "Security: jam normal/orang/minggu (UU)",
   sec_batas_lembur: "Security: batas lembur/minggu (PP 35/2021)",
   sec_lembur_wajar: "Security: lembur rutin wajar/orang/minggu",
-  res_tamu_per_jam: "Resepsionis: tamu/jam yang butuh petugas khusus",
+  res_tamu_per_jam: "Security lobby: tamu+paket+booking per jam kerja yang butuh resepsionis",
   cadangan_pct: "Cadangan cuti/sakit (%)",
 };
 
