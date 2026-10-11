@@ -13,6 +13,8 @@ export interface TitikPatroli {
   nama: string;
   aktif: boolean;
   catatan?: string;
+  /** §133 titik kritis = wajib di SETIAP sesi; titik lain bergilir per sesi (lihat PatroliSecurityPage). */
+  kritis?: boolean;
 }
 export interface LantaiPatroli {
   lantai: string;

@@ -133,7 +133,9 @@ export default function DashboardOBPage() {
   const isOBPelayanan = peranTugas === "OB Pelayanan";
   const petugasUtilitas = masterAset.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
   // §132 alat tidak lagi per PIC (diinspeksi Koordinator 2x sebulan) -> jumlahAlat tidak memberi tugas
-  const punyaTugasInspeksi = assignedFloors.length > 0 || petugasUtilitas || /koordinator|admin/i.test(picRole);
+  // §133 gedung = petugas yang ditunjuk Koordinator (bergilir), bukan lagi semua yang punya plot area
+  const petugasGedung = masterAset.petugas_gedung.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
+  const punyaTugasInspeksi = petugasGedung || petugasUtilitas || /koordinator|admin/i.test(picRole);
 
 // 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari sesi Firebase Auth
   useFcmSetup(picName, !!picName, "OB & CS");

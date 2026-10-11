@@ -156,7 +156,7 @@ export default function KondisiAsetPage() {
     if (!draftMaster) return;
     setMenyimpan(true);
     try {
-      const { petugas_utilitas: _abaikan, ...itemSaja } = salin(draftMaster); void _abaikan; // petugas disimpan terpisah (PetugasUtilitasPicker)
+      const { petugas_utilitas: _abaikan, petugas_gedung: _abaikan2, ...itemSaja } = salin(draftMaster); void _abaikan; void _abaikan2; // petugas disimpan terpisah (PetugasUtilitasPicker)
       await setDoc(doc(db, "settings", "master_kondisi_aset"), { ...itemSaja, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() }, { merge: true });
       setDraftMaster(null);
       showToast("Master item tersimpan. Halaman OB langsung memakai daftar baru.", "success");
@@ -309,6 +309,9 @@ export default function KondisiAsetPage() {
             {JENIS_INSPEKSI.map((j) => (
               <EditorItem key={j} judul={`${LABEL_JENIS[j]} · ${KONDISI[j].join(" / ")}`} daftar={master[j]} onUbah={(d) => ubahMaster((m) => { m[j] = d; })} />
             ))}
+            <Tile>
+              <PetugasUtilitasPicker oleh={session?.nama || "Admin"} field="petugas_gedung" />
+            </Tile>
             <Tile>
               <PetugasUtilitasPicker oleh={session?.nama || "Admin"} />
             </Tile>

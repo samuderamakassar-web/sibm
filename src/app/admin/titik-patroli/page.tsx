@@ -44,7 +44,7 @@ export default function TitikPatroliPage() {
   const simpan = async () => {
     setMenyimpan(true);
     try {
-      const bersih = draft.map((l) => ({ lantai: l.lantai.trim(), titik: l.titik.map((x) => ({ id: x.id, nama: x.nama.trim() || x.id, aktif: x.aktif !== false, ...(x.catatan?.trim() ? { catatan: x.catatan.trim() } : {}) })) }));
+      const bersih = draft.map((l) => ({ lantai: l.lantai.trim(), titik: l.titik.map((x) => ({ id: x.id, nama: x.nama.trim() || x.id, aktif: x.aktif !== false, ...(x.kritis ? { kritis: true } : {}), ...(x.catatan?.trim() ? { catatan: x.catatan.trim() } : {}) })) }));
       await setDoc(REF_TITIK_PATROLI(), { lantai: bersih, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
       setBerubah(false);
       showToast("Titik patroli tersimpan. Halaman Patroli Security langsung memakai daftar baru.", "success");
@@ -119,7 +119,7 @@ export default function TitikPatroliPage() {
       <div style={{ marginBottom: "14px", padding: "12px 16px", borderRadius: "16px", background: dariBawaan ? "var(--warn-50)" : "var(--info-50)", color: dariBawaan ? "var(--warn)" : "var(--info)", fontSize: "12.5px", lineHeight: 1.6 }}>
         {dariBawaan
           ? <>Masih memakai <b>daftar bawaan</b>. Ubah sesuai kondisi gedung lalu tekan <b>Simpan</b>.</>
-          : <>{jumlahAktif} titik aktif · {semua.length - jumlahAktif} nonaktif sementara. Titik <b>nonaktif</b> tidak wajib discan &amp; tidak dihitung terlewat. Titik <b>baru</b> perlu dicetak QR-nya di <b>Cetak QR</b>.</>}
+          : <>{jumlahAktif} titik aktif · {semua.length - jumlahAktif} nonaktif sementara. Titik <b>nonaktif</b> tidak wajib discan &amp; tidak dihitung terlewat. Titik <b>Kritis</b> wajib di setiap sesi; titik <b>Bergilir</b> dibagi rata ke Sesi 1–3 (aktif setelah minimal 1 titik ditandai Kritis; sebelum itu semua titik wajib tiap sesi). {semua.filter((x) => x.kritis && x.aktif !== false).length} kritis. Titik <b>baru</b> perlu dicetak QR-nya di <b>Cetak QR</b>.</>}
       </div>
 
       <div className="tp-grid">
@@ -140,6 +140,11 @@ export default function TitikPatroliPage() {
                       <button type="button" className="tp-pil" onClick={() => ubah((d) => { d[li].titik[ti].aktif = !aktif; })}
                         style={aktif ? { background: "var(--ok-50)", color: "var(--ok)" } : { background: "var(--warn-solid)", color: "#fff" }}>
                         {aktif ? "Aktif" : "Nonaktif"}
+                      </button>
+                      {/* §133 titik kritis wajib tiap sesi; lainnya bergilir */}
+                      <button type="button" className="tp-pil" onClick={() => ubah((d) => { d[li].titik[ti].kritis = !x.kritis; })} aria-pressed={!!x.kritis}
+                        style={x.kritis ? { background: "var(--red-600)", color: "#fff" } : { background: "var(--bg)", color: "var(--muted)" }}>
+                        {x.kritis ? "Kritis" : "Bergilir"}
                       </button>
                       <button type="button" className="tp-pil" onClick={() => hapusTitik(li, ti)} style={{ background: "var(--red-50)", color: "var(--red-600)" }} aria-label={`Hapus ${x.nama}`}>Hapus</button>
                     </div>

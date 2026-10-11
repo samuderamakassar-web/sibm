@@ -92,7 +92,7 @@ export default function SopChecklistPage() {
   const showToast = useToast();
   const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA." });
-  const [tab, setTab] = useState<Tab>("fasilitas");
+  const [tab, setTab] = useState<Tab>("ob"); // §133 tab "Inspeksi Fasilitas OB" lama dihapus (diganti Temuan & Kondisi Aset)
   const [menyimpan, setMenyimpan] = useState(false);
 
   const ob = useChecklistOB();
@@ -149,7 +149,7 @@ export default function SopChecklistPage() {
     >
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="sa-tabs" role="tablist" aria-label="Jenis checklist" style={{ width: "fit-content", maxWidth: "100%" }}>
-        {([["fasilitas", "Inspeksi Fasilitas OB"], ["ob", "Checklist Harian OB & CS"], ["driver", "Inspeksi Kendaraan Driver"], ["servis", "Jenis Servis Kendaraan"], ["patroli", "Titik Patroli Security"]] as [Tab, string][]).map(([k, l]) => (
+        {([["ob", "Checklist Harian OB & CS"], ["driver", "Inspeksi Kendaraan Driver"], ["servis", "Jenis Servis Kendaraan"], ["patroli", "Titik Patroli Security"]] as [Tab, string][]).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sa-tab${tab === k ? " is-active" : ""}`}
             onClick={() => { if (aktifTab?.d.berubah) { showToast("Simpan atau batalkan perubahan di tab ini dulu.", "warning"); return; } setTab(k); }}>{l}</button>
         ))}
@@ -159,30 +159,6 @@ export default function SopChecklistPage() {
         <div style={{ marginBottom: "14px", padding: "12px 16px", borderRadius: "16px", background: "var(--warn-50)", color: "var(--warn)", fontSize: "12.5px" }}>
           Masih memakai <b>daftar bawaan</b>. Ubah sesuai kebutuhan lalu tekan <b>Simpan</b>.
         </div>
-      )}
-
-      {tab === "fasilitas" && (
-        <Tile>
-          <div style={{ padding: "12px 14px", borderRadius: "12px", background: "var(--warn-50)", color: "var(--ink)", fontSize: "13px", marginBottom: "12px" }}>
-            <b>Sudah diganti (§113):</b> inspeksi OB kini dibagi Fasilitas Gedung · Peralatan Kebersihan · Utilitas Teknis dan daftar itemnya diatur di{" "}
-            <button type="button" className="sa-btn is-soft" style={{ height: "30px" }} onClick={() => router.push("/admin/kondisi-aset")}>Temuan &amp; Kondisi Aset → Master Item</button>. Daftar di bawah tidak dipakai lagi.
-          </div>
-          <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Daftar fasilitas lama (tidak dipakai)</h2>
-          <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>Sama untuk semua area; fasilitas yang tidak ada di area tertentu dinilai &quot;Tidak Ada&quot; oleh OB. OB tetap bisa menambah fasilitas lain saat inspeksi.</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {dFas.draft.map((x, i) => (
-              <div key={i} className="sc-baris">
-                <input className="sc-input" value={x.nama} aria-label={`Fasilitas ${i + 1}`} onChange={(e) => dFas.ubah((d) => { d[i].nama = e.target.value; })} />
-                <TombolAktif aktif={x.aktif !== false} onClick={() => dFas.ubah((d) => { d[i].aktif = !(x.aktif !== false); })} />
-                <TombolHapus label={`Hapus ${x.nama}`} onClick={async () => { if (await yakinHapus(x.nama)) dFas.ubah((d) => { d.splice(i, 1); }); }} />
-              </div>
-            ))}
-            <div className="sc-baris" style={{ marginTop: "6px" }}>
-              <input className="sc-input" placeholder="Fasilitas baru, mis. Microwave Pantry Lt 2" value={itemBaru} onChange={(e) => setItemBaru(e.target.value)} />
-              <button type="button" className="sa-btn is-soft" style={{ height: "34px" }} onClick={() => { if (!itemBaru.trim()) return; dFas.ubah((d) => { d.push({ nama: itemBaru.trim(), aktif: true }); }); setItemBaru(""); }}>+ Tambah</button>
-            </div>
-          </div>
-        </Tile>
       )}
 
       {tab === "driver" && (

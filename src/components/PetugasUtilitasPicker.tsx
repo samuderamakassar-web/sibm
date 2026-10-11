@@ -12,7 +12,14 @@ import { db } from "../lib/firebase";
 import { useToast } from "./ui/ToastProvider";
 import { useMasterKondisiAset } from "../lib/kondisiAset";
 
-export default function PetugasUtilitasPicker({ oleh }: { oleh: string }) {
+// §133 dipakai juga untuk petugas inspeksi fasilitas gedung (field petugas_gedung, bergilir oleh Koordinator)
+const TEKS = {
+  petugas_utilitas: { judul: "Petugas Inspeksi Utilitas Teknis", ket: "OB tetap yang mengecek genset, panel, pompa, dll. tiap minggu. Pilih dari akun OB & CS — tersinkron antara Plotting (Koordinator) dan Admin.", lepas: "dilepas dari tugas utilitas.", tugas: "ditugaskan inspeksi utilitas." },
+  petugas_gedung: { judul: "Petugas Inspeksi Fasilitas Gedung", ket: "Ditunjuk bergilir oleh Koordinator (boleh dirinya sendiri). Cukup lapor temuan atau tekan \"Semua aman\" per area tiap minggu.", lepas: "dilepas dari inspeksi gedung.", tugas: "ditugaskan inspeksi fasilitas gedung." },
+} as const;
+
+export default function PetugasUtilitasPicker({ oleh, field = "petugas_utilitas" }: { oleh: string; field?: "petugas_utilitas" | "petugas_gedung" }) {
+  const teks = TEKS[field];
   const showToast = useToast();
   const { nilai } = useMasterKondisiAset();
   const [staf, setStaf] = useState<string[]>([]);
@@ -25,23 +32,23 @@ export default function PetugasUtilitasPicker({ oleh }: { oleh: string }) {
     return () => unsub();
   }, []);
 
-  const terpilih = nilai.petugas_utilitas;
+  const terpilih = nilai[field];
   const tanpaAkun = terpilih.filter((n) => !staf.some((s) => s.toLowerCase() === n.toLowerCase()));
   const ubah = async (nama: string) => {
     const ada = terpilih.some((n) => n.toLowerCase() === nama.toLowerCase());
     const baru = ada ? terpilih.filter((n) => n.toLowerCase() !== nama.toLowerCase()) : [...terpilih, nama];
     setMenyimpan(true);
     try {
-      await setDoc(doc(db, "settings", "master_kondisi_aset"), { petugas_utilitas: baru, petugas_diubah_oleh: oleh || "-", petugas_diubah_pada: serverTimestamp() }, { merge: true });
-      showToast(ada ? `${nama} dilepas dari tugas utilitas.` : `${nama} ditugaskan inspeksi utilitas.`, "success");
+      await setDoc(doc(db, "settings", "master_kondisi_aset"), { [field]: baru, petugas_diubah_oleh: oleh || "-", petugas_diubah_pada: serverTimestamp() }, { merge: true });
+      showToast(`${nama} ${ada ? teks.lepas : teks.tugas}`, "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan petugas.", "error"); }
     finally { setMenyimpan(false); }
   };
 
   return (
     <div>
-      <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--ink)" }}>Petugas Inspeksi Utilitas Teknis</div>
-      <p style={{ margin: "2px 0 10px", fontSize: "12px", color: "var(--muted)" }}>OB tetap yang mengecek genset, panel, pompa, dll. tiap minggu. Pilih dari akun OB & CS — tersinkron antara Plotting (Koordinator) dan Admin.</p>
+      <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--ink)" }}>{teks.judul}</div>
+      <p style={{ margin: "2px 0 10px", fontSize: "12px", color: "var(--muted)" }}>{teks.ket}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
         {staf.map((n) => {
           const on = terpilih.some((x) => x.toLowerCase() === n.toLowerCase());

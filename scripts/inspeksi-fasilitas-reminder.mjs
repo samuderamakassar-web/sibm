@@ -84,10 +84,8 @@ if (hariMinggu === 0 || hariMinggu === 6) {
   console.log("Weekend, OB & CS tidak ada jadwal, skip.");
   process.exit(0);
 }
-if (hariMinggu < 4) {
-  console.log(`Hari ${["Minggu", "Senin", "Selasa", "Rabu"][hariMinggu]}, masih awal minggu -- kasih waktu dulu sebelum diingatkan, skip.`);
-  process.exit(0);
-}
+// §133 Senin–Rabu: gedung belum diingatkan (kasih waktu); pengingat alat tetap dicek
+const awalMinggu = hariMinggu < 4;
 
 // Senin minggu berjalan -- sama persis dengan getSeninMingguIni() di InspeksiFasilitasPage.tsx.
 function getSeninMingguIni(d) {
@@ -107,55 +105,53 @@ function formatRentangMinggu(seninISO) {
   return `${fmt(senin)} - ${fmt(minggu)}`;
 }
 
+// §133 aturan baru: Fasilitas Gedung diinspeksi per area (area checklist SOP, bukan plot harian) oleh petugas yang
+// ditunjuk Koordinator (settings/master_kondisi_aset.petugas_gedung, bergilir); Peralatan Kebersihan oleh Koordinator
+// 2x sebulan (periode_alat YYYY-MM-P1 tgl 1–15 / P2 tgl 16–akhir), diingatkan mulai tgl 10 / 25.
 async function jalankan() {
-  const plotSnap = await db.collection("daily_plots").doc(hariIni).get();
-  if (!plotSnap.exists) {
-    console.log("Belum ada plotting hari ini, skip.");
-    return;
-  }
-  const plotLantai = plotSnap.data().plot_lantai || {};
+  const [masterSnap, sopSnap, plotSnap] = await Promise.all([
+    db.collection("settings").doc("master_kondisi_aset").get(),
+    db.collection("settings").doc("checklist_ob").get(),
+    db.collection("daily_plots").doc(hariIni).get(),
+  ]);
+  const petugasGedung = (masterSnap.data()?.petugas_gedung || []).filter(Boolean);
+  const areaSop = (sopSnap.data()?.area || []).map((a) => a.area);
+  const areaGedung = (areaSop.length ? areaSop : Object.keys(plotSnap.data()?.plot_lantai || {}))
+    .filter((a) => a && !a.toLowerCase().includes("pelayanan"));
 
-  const areaPerPic = {};
-  for (const [area, nama] of Object.entries(plotLantai)) {
-    if (!nama || nama === "Semua / All") continue; // area shared -- gak ada 1 nama pasti, lihat catatan di atas.
-    if (!areaPerPic[nama]) areaPerPic[nama] = [];
-    areaPerPic[nama].push(area);
-  }
-  const daftarPic = Object.keys(areaPerPic);
-  if (daftarPic.length === 0) {
-    console.log("Tidak ada PIC dengan area spesifik terplot hari ini, skip.");
-    return;
-  }
-
-  const inspeksiSnap = await db.collection("inspeksi_fasilitas").where("minggu_mulai", "==", seninMingguIni).get();
-  const areaSudahInspeksi = new Set(inspeksiSnap.docs.map((d) => d.data().area));
-
-  const picBelumLengkap = [];
-  for (const [nama, areaList] of Object.entries(areaPerPic)) {
-    const belum = areaList.filter((a) => !areaSudahInspeksi.has(a));
-    if (belum.length > 0) picBelumLengkap.push({ nama, areaBelum: belum });
-  }
-
-  if (picBelumLengkap.length === 0) {
-    console.log(`Semua area sudah diinspeksi minggu ini (${formatRentangMinggu(seninMingguIni)}).`);
-    return;
+  // ---------- Fasilitas Gedung (mingguan, mulai Kamis) ----------
+  if (!awalMinggu && areaGedung.length) {
+    const inspeksiSnap = await db.collection("inspeksi_fasilitas").where("minggu_mulai", "==", seninMingguIni).get();
+    const sudah = new Set(inspeksiSnap.docs.map((d) => d.data()).filter((x) => (x.jenis || "gedung") === "gedung").map((x) => x.area));
+    const belum = areaGedung.filter((a) => !sudah.has(a));
+    const iniHariTerakhir = hariMinggu === 5;
+    if (!belum.length) console.log(`Semua area gedung sudah diinspeksi minggu ini (${formatRentangMinggu(seninMingguIni)}).`);
+    else if (!petugasGedung.length) {
+      console.log("Belum ada petugas inspeksi gedung ditunjuk.");
+      if (iniHariTerakhir) await kirimNotifAdminGA("🧽 Petugas Inspeksi Gedung Belum Ditunjuk", `${belum.length} area belum diinspeksi minggu ini & belum ada petugas inspeksi gedung. Koordinator OB menunjuk lewat menu Plotting.`);
+    } else {
+      const pesan = `Inspeksi Fasilitas Gedung minggu ini (${formatRentangMinggu(seninMingguIni)}) belum untuk: ${belum.join(", ")}. Cukup tekan "Semua aman" atau lapor temuan.${iniHariTerakhir ? " Ini hari kerja terakhir minggu ini!" : ""}`;
+      await tulisNotifPersonal(petugasGedung, "🧽 Inspeksi Fasilitas Gedung Belum Selesai", pesan);
+      await kirimPush(petugasGedung, "🧽 Inspeksi Fasilitas Gedung Belum Selesai", pesan, "OB & CS");
+      if (iniHariTerakhir) await kirimNotifAdminGA("🧽 Inspeksi Fasilitas Gedung Tertunggak", `${belum.length} area belum diinspeksi (${formatRentangMinggu(seninMingguIni)}): ${belum.join(", ")}. Petugas: ${petugasGedung.join(", ")}.`);
+    }
   }
 
-  console.log(`${picBelumLengkap.length} PIC belum lengkap inspeksi minggu ini:`, picBelumLengkap.map((p) => `${p.nama} (${p.areaBelum.join(", ")})`).join("; "));
-
-  const iniHariTerakhir = hariMinggu === 5; // Jumat -- hari kerja terakhir OB & CS minggu ini.
-  for (const p of picBelumLengkap) {
-    const pesan = `Inspeksi Fasilitas Mingguan area ${p.areaBelum.join(", ")} belum diselesaikan minggu ini (${formatRentangMinggu(seninMingguIni)}).${iniHariTerakhir ? " Ini hari kerja terakhir minggu ini!" : ""}`;
-    await tulisNotifPersonal([p.nama], "🧽 Inspeksi Fasilitas Mingguan Belum Selesai", pesan);
-    await kirimPush([p.nama], "🧽 Inspeksi Fasilitas Mingguan Belum Selesai", pesan, "OB & CS");
-  }
-
-  if (iniHariTerakhir) {
-    const daftar = picBelumLengkap.map((p) => `${p.nama} (${p.areaBelum.join(", ")})`).join("; ");
-    await kirimNotifAdminGA(
-      "🧽 Inspeksi Fasilitas Mingguan Tertunggak",
-      `${picBelumLengkap.length} PIC OB/CS belum menyelesaikan Inspeksi Fasilitas Mingguan (${formatRentangMinggu(seninMingguIni)}): ${daftar}.`
-    );
+  // ---------- Peralatan Kebersihan (Koordinator, 2x sebulan) ----------
+  const tgl = now.getDate();
+  const paruh = tgl <= 15 ? 1 : 2;
+  const periodeAlat = `${hariIni.slice(0, 7)}-P${paruh}`;
+  if ((paruh === 1 && tgl >= 10) || (paruh === 2 && tgl >= 25)) {
+    const alatSnap = await db.collection("inspeksi_fasilitas").where("periode_alat", "==", periodeAlat).get();
+    if (alatSnap.empty) {
+      const userSnap = await db.collection("users_master").where("departemen", "==", "OB & CS").get();
+      const koordinator = userSnap.docs.map((d) => d.data()).filter((u) => /koordinator/i.test(u.role || "")).map((u) => u.nama).filter(Boolean);
+      const pesan = `Inspeksi Peralatan Kebersihan periode ${paruh === 1 ? "1–15" : "16–akhir"} bulan ini belum dilakukan. Cukup tekan "Semua aman" atau lapor alat yang bermasalah.`;
+      if (koordinator.length) {
+        await tulisNotifPersonal(koordinator, "🧹 Inspeksi Alat Kebersihan", pesan);
+        await kirimPush(koordinator, "🧹 Inspeksi Alat Kebersihan", pesan, "OB & CS");
+      } else console.log("Tidak ada Koordinator OB & CS terdaftar.");
+    } else console.log(`Inspeksi alat periode ${periodeAlat} sudah ada.`);
   }
 }
 

@@ -70,10 +70,17 @@ function isWeekend(now: Date): boolean {
 // (dengan wajib foto bukti) ditangani sendiri, lihat NotifikasiDadakanBanner / scripts terkait.
 // Cek AC menyala jam 07:20 -- cuma Senin-Jumat, khusus petugas Shift 2 (kerja sampai jam
 // 08:00 pagi) yang masih standby pas jam segitu.
-function buatGroupedPatroli(master: LantaiPatroli[], sertakanSiramTanaman: boolean, sertakanCekAC: boolean): Record<string, { id: string, nama: string }[]> {
-  const hasil: Record<string, { id: string, nama: string }[]> = {};
+// §133 titik kritis wajib di setiap sesi; titik lain dibagi bergilir ke Sesi 1/2/3 (urutan master, indeks mod 3)
+// supaya 1 sesi tidak harus mengelilingi semua titik. Berlaku setelah Admin menandai minimal 1 titik kritis.
+function buatGroupedPatroli(master: LantaiPatroli[], sertakanSiramTanaman: boolean, sertakanCekAC: boolean, nomorSesi = 0): Record<string, { id: string, nama: string, kritis?: boolean }[]> {
+  const hasil: Record<string, { id: string, nama: string, kritis?: boolean }[]> = {};
+  const modeGilir = nomorSesi > 0 && master.some((l) => l.titik.some((x) => x.aktif !== false && x.kritis));
+  let urutGilir = 0;
   master.forEach((l) => {
-    const aktif = l.titik.filter((x) => x.aktif !== false).map((x) => ({ id: x.id, nama: x.nama }));
+    const aktif = l.titik.filter((x) => x.aktif !== false).filter((x) => {
+      if (!modeGilir || x.kritis) return true;
+      return (urutGilir++ % 3) + 1 === nomorSesi;
+    }).map((x) => ({ id: x.id, nama: x.nama, ...(x.kritis ? { kritis: true } : {}) }));
     if (aktif.length) hasil[l.lantai] = aktif;
   });
 
@@ -160,7 +167,7 @@ export default function PatroliSecurityPage() {
   const { daftar: masterTitik } = useTitikPatroli();
   const GROUPED_PATROLI = useMemo(() => {
     const [sesi, shift, hari] = kunciSesi.split("|");
-    return buatGroupedPatroli(masterTitik, sesi === "Sesi 1", hari === "wd" && shift === "Shift 2");
+    return buatGroupedPatroli(masterTitik, sesi === "Sesi 1", hari === "wd" && shift === "Shift 2", Number(String(sesi).replace(/\D/g, "")) || 0);
   }, [kunciSesi, masterTitik]);
   const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), [GROUPED_PATROLI]);
   const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), [GROUPED_PATROLI]);
@@ -613,7 +620,7 @@ export default function PatroliSecurityPage() {
                                       <img src={dataSelesai.foto} alt="Thumb" style={{ width: "40px", height: "40px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(22,163,74,0.35)" }} />
                                     )}
                                     <div>
-                                      <div style={{ fontSize: "14px", color: dataSelesai ? "var(--ok)" : "var(--ink-soft)", fontWeight: "bold" }}>{titik.nama}</div>
+                                      <div style={{ fontSize: "14px", color: dataSelesai ? "var(--ok)" : "var(--ink-soft)", fontWeight: "bold" }}>{titik.nama}{titik.kritis && <span style={{ marginLeft: "6px", fontSize: "10px", fontWeight: 800, padding: "1px 6px", borderRadius: "5px", background: "var(--red-50)", color: "var(--red-600)" }}>KRITIS</span>}</div>
                                       {dataSelesai ? (
                                         <div style={{ fontSize: "11px", color: dataSelesai.kondisi === "Aman Terkendali" ? "var(--ok)" : "var(--red-600)", marginTop: "4px", fontWeight: "bold" }}>
                                           ↳ {dataSelesai.kondisi} ({dataSelesai.waktu_patroli})

@@ -529,7 +529,10 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
               </button>
             </div>
 
-            {/* §114 petugas inspeksi utilitas (sinkron dengan Admin > Temuan & Kondisi Aset) */}
+            {/* §133 petugas inspeksi fasilitas gedung (bergilir) + §114 utilitas -- sinkron dengan Admin > Temuan & Kondisi Aset */}
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", border: "1px solid var(--line)" }}>
+              <PetugasUtilitasPicker oleh={adminName || "Koordinator"} field="petugas_gedung" />
+            </div>
             <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", border: "1px solid var(--line)" }}>
               <PetugasUtilitasPicker oleh={adminName || "Koordinator"} />
             </div>

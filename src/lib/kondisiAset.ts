@@ -60,13 +60,15 @@ export interface TemuanAset {
   waktu_selesai?: Timestamp | null; ditangani_oleh?: string; dari_helpdesk_id?: string;
 }
 
-export interface MasterKondisiAset { gedung: ItemSederhana[]; alat: ItemSederhana[]; utilitas: ItemSederhana[]; petugas_utilitas: string[] }
+/** §133 petugas_gedung = OB/CS yang ditunjuk Koordinator (bergilir) untuk inspeksi fasilitas gedung. */
+export interface MasterKondisiAset { gedung: ItemSederhana[]; alat: ItemSederhana[]; utilitas: ItemSederhana[]; petugas_utilitas: string[]; petugas_gedung: string[] }
 const daftar = (xs: string[]): ItemSederhana[] => xs.map((nama) => ({ nama, aktif: true }));
 export const MASTER_KONDISI_BAWAAN: MasterKondisiAset = {
   gedung: daftar(["Lampu", "Stop kontak & saklar", "AC", "Pintu & handle", "Kaca jendela", "Plafon", "Lantai", "Wastafel & keran", "Kloset & flush", "Urinoir", "Hand dryer / tisu", "Dispenser", "Kulkas", "Kursi & meja", "Tempat sampah"]),
   alat: daftar(["Mop / pel", "Ember peras", "Sapu & pengki", "Vacuum cleaner", "Floor polisher", "Trolley kebersihan", "Wiper kaca", "Sikat toilet", "Kain microfiber", "Tangga lipat", "Sign lantai basah"]),
   utilitas: daftar(["Genset", "Panel listrik (LVMDP)", "Pompa air bersih", "Pompa hydrant", "Roof tank / ground tank", "STP / IPAL", "Lift"]),
   petugas_utilitas: [],
+  petugas_gedung: [],
 };
 
 export function useMasterKondisiAset() {
@@ -78,7 +80,7 @@ export function useMasterKondisiAset() {
       const d = (s.data() || {}) as Partial<MasterKondisiAset>;
       const arr = <K extends keyof MasterKondisiAset>(k: K) => (Array.isArray(d[k]) ? d[k] : MASTER_KONDISI_BAWAAN[k]) as MasterKondisiAset[K];
       // §114 digabung per field: petugas_utilitas bisa ditulis (Plotting/Admin) sebelum master item pernah disimpan
-      setNilai({ gedung: arr("gedung"), alat: arr("alat"), utilitas: arr("utilitas"), petugas_utilitas: arr("petugas_utilitas") });
+      setNilai({ gedung: arr("gedung"), alat: arr("alat"), utilitas: arr("utilitas"), petugas_utilitas: arr("petugas_utilitas"), petugas_gedung: arr("petugas_gedung") });
       setDariBawaan(!Array.isArray(d.gedung));
       setDimuat(true);
     }, (e) => { console.error("[kondisi aset] master:", e); setDimuat(true); });
