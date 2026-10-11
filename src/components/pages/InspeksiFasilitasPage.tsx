@@ -257,8 +257,9 @@ export default function InspeksiFasilitasPage() {
       if (!tanpaTemuan && !temuan.length) return showToast("Tambahkan minimal 1 temuan, atau kembali & tekan Semua aman.", "warning");
       if (temuan.some((h) => !h.kondisi)) return showToast("Pilih kondisi setiap temuan.", "warning");
       if (jenis === "alat" && temuan.some((h) => !daftarMaster().includes(h.nama.trim()))) return showToast("Pilih alat dari daftar.", "warning");
-      const tanpaFotoT = temuan.find((h) => h.kondisi !== "Tidak Ada" && h.kondisi !== "Hilang" && !h.foto);
-      if (tanpaFotoT) return showToast(`Foto "${tanpaFotoT.nama}" wajib diambil.`, "warning");
+      // §134 setiap temuan wajib foto (hilang/tidak ada: foto lokasi terakhirnya) & keterangan
+      const tanpaFotoT = temuan.find((h) => !h.foto);
+      if (tanpaFotoT) return showToast(`Foto temuan "${tanpaFotoT.nama}" wajib diambil${tanpaFotoT.kondisi === "Hilang" || tanpaFotoT.kondisi === "Tidak Ada" ? " (foto lokasi terakhirnya)" : ""}.`, "warning");
       const tanpaKetT = temuan.find((h) => !h.catatan.trim());
       if (tanpaKetT) return showToast(`Isi keterangan "${tanpaKetT.nama}".`, "warning");
       semua = lengkapiBaik(temuan);
@@ -464,12 +465,12 @@ export default function InspeksiFasilitasPage() {
                       {h.foto ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={h.foto} alt={`Foto ${h.nama}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : uploading === String(i) ? "Mengunggah..." : <><IconCamera size={18} /> {modeTemuan && (h.kondisi === "Hilang" || h.kondisi === "Tidak Ada") ? "Foto" : "Foto *"}</>}
+                      ) : uploading === String(i) ? "Mengunggah..." : <><IconCamera size={18} /> Foto *</>}
                       <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { unggah(String(i), e.target.files?.[0], (url) => ubahItem(i, { foto: url })); e.target.value = ""; }} />
                     </label>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <textarea className="ka-in" style={{ minHeight: "60px", resize: "vertical", borderColor: kondisiBermasalah(h.kondisi) && !h.catatan.trim() ? "var(--red-600)" : undefined }}
-                        placeholder={kondisiBermasalah(h.kondisi) ? "Keterangan kondisi (wajib), mis. lampu mati 2 titik" : jenis === "utilitas" ? "Catatan / angka (opsional), mis. level solar 70%, jam operasi 1.250" : "Catatan (opsional)"}
+                      <textarea className="ka-in" style={{ minHeight: "60px", resize: "vertical", borderColor: (modeTemuan || kondisiBermasalah(h.kondisi)) && !h.catatan.trim() ? "var(--red-600)" : undefined }}
+                        placeholder={modeTemuan ? "Keterangan temuan (wajib), mis. lampu mati 2 titik / alat terakhir dipakai di Lt 2" : kondisiBermasalah(h.kondisi) ? "Keterangan kondisi (wajib), mis. lampu mati 2 titik" : jenis === "utilitas" ? "Catatan / angka (opsional), mis. level solar 70%, jam operasi 1.250" : "Catatan (opsional)"}
                         value={h.catatan} onChange={(e) => ubahItem(i, { catatan: e.target.value })} />
                       {kondisiBermasalah(h.kondisi) && !t && (
                         <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", fontWeight: 700, color: h.butuh_tindakan ? "var(--red-600)" : "var(--ink-soft)", cursor: "pointer" }}>

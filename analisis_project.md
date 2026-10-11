@@ -3186,3 +3186,7 @@ Tidak ada perubahan rules (koleksi sudah terbaca akun staf).
 3. Fasilitas Gedung: petugas = settings/master_kondisi_aset.petugas_gedung (ditunjuk bergilir oleh Koordinator di Plotting / Admin di Kondisi Aset, PetugasUtilitasPicker field="petugas_gedung") + Koordinator; area = area checklist SOP (bukan plot harian). Peralatan Kebersihan: Koordinator, 2x sebulan, ringkasan jumlah alat per jenis. Menu Inspeksi di Dashboard OB: petugas gedung / utilitas / Koordinator.
 4. SOP Checklist: tab "Inspeksi Fasilitas OB" lama dihapus (tidak dipakai sejak §113; daftar item di Temuan & Kondisi Aset → Master Item).
 5. scripts/inspeksi-fasilitas-reminder.mjs: gedung -> area SOP yang belum diinspeksi minggu ini diingatkan ke petugas_gedung mulai Kamis (Jumat tembusan Admin GA; bila belum ada petugas -> Admin GA); alat -> Koordinator OB & CS diingatkan mulai tgl 10 (P1) / 25 (P2) bila belum ada inspeksi periode_alat.
+
+## 134. Tugas Tambahan Pilih dari Akun OB & CS + Temuan Wajib Foto & Keterangan (11 Oktober 2026)
+1. SOP Checklist > Tugas tambahan per staf: "Nama staf" kini dropdown dari users_master dept OB & CS (nama persis login); nama lama yang tidak punya akun tetap tampil dengan tanda "(tanpa akun)".
+2. Inspeksi mode temuan (gedung & alat): setiap temuan WAJIB foto (termasuk Hilang/Tidak Ada -> foto lokasi terakhirnya) dan WAJIB keterangan (kolom merah bila kosong).

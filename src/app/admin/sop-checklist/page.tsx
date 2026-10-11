@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -94,6 +94,15 @@ export default function SopChecklistPage() {
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA." });
   const [tab, setTab] = useState<Tab>("ob"); // §133 tab "Inspeksi Fasilitas OB" lama dihapus (diganti Temuan & Kondisi Aset)
   const [menyimpan, setMenyimpan] = useState(false);
+
+  // §134 nama staf tugas tambahan dipilih dari akun OB & CS (sama persis dengan nama login)
+  const [stafOB, setStafOB] = useState<string[]>([]);
+  useEffect(() => {
+    if (!isReady) return;
+    return onSnapshot(query(collection(db, "users_master"), where("departemen", "==", "OB & CS")), (s) => {
+      setStafOB(s.docs.map((d) => String(d.data().nama || "").trim()).filter(Boolean).sort((a, b) => a.localeCompare(b)));
+    }, (e) => console.error("[sop] staf:", e));
+  }, [isReady]);
 
   const ob = useChecklistOB();
   const fas = useFasilitasOB();
@@ -242,7 +251,10 @@ export default function SopChecklistPage() {
                 <div key={tg.segmen.id} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <div className="sc-baris">
                     <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Nama staf:</span>
-                    <input className="sc-input" value={tg.nama_staf} onChange={(e) => dOb.ubah((d) => { d.tugas_tambahan[ti].nama_staf = e.target.value; })} />
+                    <select className="sc-input" value={tg.nama_staf} onChange={(e) => dOb.ubah((d) => { d.tugas_tambahan[ti].nama_staf = e.target.value; })} aria-label="Nama staf">
+                      <option value="">— Pilih staf OB & CS —</option>
+                      {(tg.nama_staf && !stafOB.includes(tg.nama_staf) ? [tg.nama_staf, ...stafOB] : stafOB).map((n) => <option key={n} value={n}>{n}{stafOB.includes(n) ? "" : " (tanpa akun)"}</option>)}
+                    </select>
                     <TombolHapus label="Hapus tugas tambahan" onClick={async () => { if (await yakinHapus(`${tg.segmen.nama} (${tg.nama_staf})`)) dOb.ubah((d) => { d.tugas_tambahan.splice(ti, 1); }); }} />
                   </div>
                   <EditorSegmen s={tg.segmen} ubahSegmen={(fn) => dOb.ubah((d) => { fn(d.tugas_tambahan[ti].segmen); })} hapusSegmen={async () => { if (await yakinHapus(tg.segmen.nama)) dOb.ubah((d) => { d.tugas_tambahan.splice(ti, 1); }); }} />
