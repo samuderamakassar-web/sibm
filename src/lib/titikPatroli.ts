@@ -36,6 +36,17 @@ export const TITIK_PATROLI_BAWAAN: LantaiPatroli[] = [
 
 export const REF_TITIK_PATROLI = () => doc(db, "settings", "titik_patroli");
 
+// §136 Scan QR per lantai: sebelum memotret titik di sebuah lantai, petugas wajib scan label QR lantai itu
+// (bukti benar-benar naik & jam mulai tiap lantai). Bisa dinyalakan/dimatikan Admin (settings/patroli_qr_lantai).
+export const qrLantai = (lantai: string) => `SIBM-PATROLI-LANTAI::${lantai}`;
+export const REF_QR_LANTAI = () => doc(db, "settings", "patroli_qr_lantai");
+export function useQrLantaiAktif(): { aktif: boolean; dimuat: boolean } {
+  const [aktif, setAktif] = useState(false);
+  const [dimuat, setDimuat] = useState(false);
+  useEffect(() => onSnapshot(REF_QR_LANTAI(), (s) => { setAktif(s.data()?.aktif === true); setDimuat(true); }, () => setDimuat(true)), []);
+  return { aktif, dimuat };
+}
+
 /** Buat ID titik baru dari lantai & nama: "Lantai 3::Ruang Meeting B". */
 export function idTitikBaru(lantai: string, nama: string): string {
   const prefixLantai = lantai.startsWith("Ground") ? "Ground" : lantai.trim();

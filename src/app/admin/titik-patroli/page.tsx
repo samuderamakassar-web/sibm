@@ -14,7 +14,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
-import { idTitikBaru, REF_TITIK_PATROLI, useTitikPatroli, type LantaiPatroli } from "../../../lib/titikPatroli";
+import { idTitikBaru, REF_QR_LANTAI, REF_TITIK_PATROLI, useQrLantaiAktif, useTitikPatroli, type LantaiPatroli } from "../../../lib/titikPatroli";
 
 export default function TitikPatroliPage() {
   const router = useRouter();
@@ -28,6 +28,14 @@ export default function TitikPatroliPage() {
   const [menyimpan, setMenyimpan] = useState(false);
   const [titikBaru, setTitikBaru] = useState<Record<string, string>>({});
   const [lantaiBaru, setLantaiBaru] = useState("");
+  // §136 wajib scan QR lantai (ON setelah label QR lantai dicetak & ditempel)
+  const { aktif: qrLantaiAktif } = useQrLantaiAktif();
+  const ubahQrLantai = async () => {
+    const baru = !qrLantaiAktif;
+    if (baru && !(await confirm({ title: "Wajibkan scan QR lantai?", message: "Security wajib scan label QR di setiap lantai sebelum memotret titik di lantai itu. Pastikan label QR lantai (Cetak QR → Patroli Security) sudah ditempel di semua lantai.", confirmText: "Ya, aktifkan", cancelText: "Batal" }))) return;
+    try { await setDoc(REF_QR_LANTAI(), { aktif: baru, diubah_oleh: session?.nama || "-", diubah_pada: serverTimestamp() }); showToast(baru ? "Scan QR lantai WAJIB aktif." : "Scan QR lantai dimatikan.", "success"); }
+    catch (e) { console.error(e); showToast("Gagal mengubah pengaturan.", "error"); }
+  };
 
   // Salin data tersimpan ke draft selama admin belum mengubah apa pun.
   useEffect(() => {
@@ -98,6 +106,7 @@ export default function TitikPatroliPage() {
       userName={session?.nama || "Admin"}
       actions={
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button type="button" className="sa-btn is-soft" onClick={ubahQrLantai} aria-pressed={qrLantaiAktif} style={qrLantaiAktif ? { background: "var(--ok-50)", color: "var(--ok)" } : undefined}>Scan QR lantai: {qrLantaiAktif ? "ON" : "OFF"}</button>
           <button type="button" className="sa-btn is-soft" onClick={() => router.push("/admin/qr-manager")}>Cetak QR</button>
           {berubah && <button type="button" className="sa-btn is-soft" onClick={batal} disabled={menyimpan}>Batalkan</button>}
           <button type="button" className="sa-btn is-primary" onClick={simpan} disabled={menyimpan || (!berubah && !dariBawaan)}>

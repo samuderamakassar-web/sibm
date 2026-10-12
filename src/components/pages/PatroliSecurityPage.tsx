@@ -8,7 +8,8 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { hitungShiftSesi, waktuWITASekarang, sesiMinimumTerpenuhi, BATAS_SESI, MINIMUM_SESI_PER_SHIFT, ShiftSesiInfo } from "../../lib/shift";
 import AdminShell from "../admin/AdminShell";
-import { useTitikPatroli, type LantaiPatroli } from "../../lib/titikPatroli";
+import { qrLantai, useQrLantaiAktif, useTitikPatroli, type LantaiPatroli } from "../../lib/titikPatroli";
+import { Html5QrcodeScanner } from "html5-qrcode";
 import { daerahTulis } from "@/lib/daerah";
 
 // ==========================================
@@ -165,6 +166,11 @@ export default function PatroliSecurityPage() {
     return `${info.sesi}|${info.shift}|${isWeekend(now) ? "we" : "wd"}`;
   });
   const { daftar: masterTitik } = useTitikPatroli();
+  // §136 scan QR per lantai (wajib bila diaktifkan Admin): lantai -> jam scan (ISO)
+  const { aktif: qrLantaiAktif } = useQrLantaiAktif();
+  const [scanLantai, setScanLantai] = useState<Record<string, string>>({});
+  const [scanLantaiTarget, setScanLantaiTarget] = useState<string | null>(null);
+  const perluScanLantai = (lantai: string) => qrLantaiAktif && masterTitik.some((l) => l.lantai === lantai) && !scanLantai[lantai];
   const GROUPED_PATROLI = useMemo(() => {
     const [sesi, shift, hari] = kunciSesi.split("|");
     return buatGroupedPatroli(masterTitik, sesi === "Sesi 1", hari === "wd" && shift === "Shift 2", Number(String(sesi).replace(/\D/g, "")) || 0);
@@ -394,14 +400,15 @@ export default function PatroliSecurityPage() {
   const drafSiapRef = useRef(false);
   useEffect(() => {
     if (!kunciDraf || !shiftSesiInfo || drafSiapRef.current) return;
-    let pulih: { tanggal_shift: string; shift: string; disimpan: number; scannedItems: TitikAman[]; alasanTerlewat: Record<string, string>; catatanUmum: string } | null = null;
+    let pulih: { tanggal_shift: string; shift: string; disimpan: number; scannedItems: TitikAman[]; alasanTerlewat: Record<string, string>; catatanUmum: string; scanLantai?: Record<string, string> } | null = null;
     try { pulih = JSON.parse(localStorage.getItem(kunciDraf) || "null"); } catch { pulih = null; }
-    const cocok = !!pulih && pulih.tanggal_shift === shiftSesiInfo.tanggal_shift && pulih.shift === shiftSesiInfo.shift && Date.now() - pulih.disimpan < 4 * 3600000 && pulih.scannedItems?.length > 0;
+    const cocok = !!pulih && pulih.tanggal_shift === shiftSesiInfo.tanggal_shift && pulih.shift === shiftSesiInfo.shift && Date.now() - pulih.disimpan < 4 * 3600000 && (pulih.scannedItems?.length > 0 || Object.keys(pulih.scanLantai || {}).length > 0);
     const t = setTimeout(() => {
       if (cocok && pulih) {
         setScannedItems(pulih.scannedItems);
         setAlasanTerlewat(pulih.alasanTerlewat || {});
         setCatatanUmum(pulih.catatanUmum || "");
+        setScanLantai(pulih.scanLantai || {});
         showToast(`Progres patroli dipulihkan: ${pulih.scannedItems.length} titik sudah difoto, lanjutkan saja.`, "success");
       } else {
         try { localStorage.removeItem(kunciDraf); } catch { /* storage diblokir */ }
@@ -414,10 +421,32 @@ export default function PatroliSecurityPage() {
   useEffect(() => {
     if (!kunciDraf || !shiftSesiInfo || !drafSiapRef.current) return;
     try {
-      if (scannedItems.length === 0 && !catatanUmum.trim()) localStorage.removeItem(kunciDraf);
-      else localStorage.setItem(kunciDraf, JSON.stringify({ tanggal_shift: shiftSesiInfo.tanggal_shift, shift: shiftSesiInfo.shift, disimpan: Date.now(), scannedItems, alasanTerlewat, catatanUmum }));
+      if (scannedItems.length === 0 && !catatanUmum.trim() && Object.keys(scanLantai).length === 0) localStorage.removeItem(kunciDraf);
+      else localStorage.setItem(kunciDraf, JSON.stringify({ tanggal_shift: shiftSesiInfo.tanggal_shift, shift: shiftSesiInfo.shift, disimpan: Date.now(), scannedItems, alasanTerlewat, catatanUmum, scanLantai }));
     } catch { /* storage penuh/diblokir -> tetap jalan tanpa draf */ }
-  }, [kunciDraf, shiftSesiInfo, scannedItems, alasanTerlewat, catatanUmum]);
+  }, [kunciDraf, shiftSesiInfo, scannedItems, alasanTerlewat, catatanUmum, scanLantai]);
+
+  // §136 pemindai QR lantai
+  useEffect(() => {
+    if (!scanLantaiTarget) return;
+    const target = scanLantaiTarget;
+    const scanner = new Html5QrcodeScanner("reader-lantai", { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 }, false);
+    let selesai = false;
+    scanner.render((teks) => {
+      if (selesai) return;
+      if (teks.trim() === qrLantai(target)) {
+        selesai = true;
+        setScanLantai((s) => ({ ...s, [target]: new Date().toISOString() }));
+        showToast(`${target} terverifikasi — silakan foto titik di lantai ini.`, "success");
+        setLantaiAktif(target);
+        setScanLantaiTarget(null);
+      } else {
+        showToast(teks.startsWith("SIBM-PATROLI-LANTAI::") ? `Ini QR ${teks.split("::")[1]}, bukan ${target}.` : "Bukan QR lantai. Scan label QR LANTAI di lantai ini.", "warning");
+      }
+    }, () => {});
+    return () => { scanner.clear().catch((e) => console.error(e)); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dibuat ulang per target
+  }, [scanLantaiTarget]);
 
   const handleUbahAlasan = (id: string, alasan: string) => {
     setAlasanTerlewat((prev) => ({ ...prev, [id]: alasan }));
@@ -444,6 +473,9 @@ export default function PatroliSecurityPage() {
         titik_patroli: scannedItems,
         area_terlewat: titikTerlewat.map((t) => ({ id: t.id, nama: t.nama, alasan: alasanTerlewat[t.id] || "" })),
         catatan_shift: catatanUmum,
+        // §136 jam scan QR tiap lantai (urut waktu) -- bukti petugas naik ke lantai & jam mulai patroli
+        qr_lantai_wajib: qrLantaiAktif,
+        scan_lantai: Object.entries(scanLantai).map(([lantai, waktu]) => ({ lantai, waktu })).sort((a, b) => a.waktu.localeCompare(b.waktu)),
         status: titikTerlewat.length === 0 ? "Selesai Sempurna" : "Selesai Sebagian"
       });
 
@@ -457,6 +489,7 @@ export default function PatroliSecurityPage() {
         setScannedItems([]);
         setAlasanTerlewat({});
         setCatatanUmum("");
+        setScanLantai({});
         setIsLoading(false);
         setActiveTab("HISTORY"); // PERBAIKAN: Arahkan ke Tab Riwayat setelah submit
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -602,13 +635,20 @@ export default function PatroliSecurityPage() {
                         <div onClick={() => setLantaiAktif(isAktif ? "" : lantai)} className="floor-head" style={{ background: isLengkap ? "var(--ok-50)" : (isAktif ? "var(--bg)" : "var(--surface)") }}>
                           <div>
                             <h3 style={{ margin: "0 0 4px 0", color: isLengkap ? "var(--ok)" : "var(--ink)", fontSize: "16px" }}>{lantai}</h3>
-                            <div style={{ fontSize: "12px", color: isLengkap ? "var(--ok)" : "var(--muted)", fontWeight: "bold" }}>{stat.selesai} / {stat.total} Titik Selesai</div>
+                            <div style={{ fontSize: "12px", color: isLengkap ? "var(--ok)" : "var(--muted)", fontWeight: "bold" }}>{stat.selesai} / {stat.total} Titik Selesai{perluScanLantai(lantai) ? " · 🔒 scan QR lantai" : ""}</div>
                           </div>
                           <div style={{ transform: isAktif ? "rotate(180deg)" : "rotate(0deg)", transition: "0.3s", color: "var(--muted)" }}><IconChevronDown size={18} /></div>
                         </div>
 
-                        {isAktif && (
+                        {isAktif && perluScanLantai(lantai) && (
+                          <div style={{ padding: "15px", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "10px", background: "var(--bg)", alignItems: "center", textAlign: "center" }}>
+                            <div style={{ fontSize: "13px", color: "var(--ink-soft)", fontWeight: 600 }}>🔒 Scan label <b>QR LANTAI</b> di {lantai} dulu untuk membuka {GROUPED_PATROLI[lantai].length} titik.</div>
+                            <button type="button" onClick={() => setScanLantaiTarget(lantai)} className="sa-btn is-primary" style={{ height: "46px", width: "100%", maxWidth: "320px" }}>📷 Scan QR {lantai}</button>
+                          </div>
+                        )}
+                        {isAktif && !perluScanLantai(lantai) && (
                           <div style={{ padding: "15px", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "10px", background: "var(--bg)" }}>
+                            {scanLantai[lantai] && <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--ok)" }}>✓ QR lantai discan {new Date(scanLantai[lantai]).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</div>}
                             {GROUPED_PATROLI[lantai].map((titik) => {
                               const dataSelesai = scannedItems.find((item) => item.id === titik.id);
 
@@ -865,6 +905,15 @@ export default function PatroliSecurityPage() {
               <IconCamera size={16} /> Buka Kamera
             </button>
           </div>
+        </div>
+      )}
+
+      {/* §136 MODAL SCAN QR LANTAI */}
+      {scanLantaiTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 1100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "16px", gap: "12px" }}>
+          <div style={{ color: "#fff", fontWeight: 800, fontSize: "16px", textAlign: "center" }}>Scan QR LANTAI · {scanLantaiTarget}</div>
+          <div id="reader-lantai" style={{ width: "100%", maxWidth: "380px", background: "#fff", borderRadius: "12px", overflow: "hidden" }} />
+          <button type="button" onClick={() => setScanLantaiTarget(null)} className="sa-btn is-soft" style={{ minWidth: "160px" }}>Batal</button>
         </div>
       )}
 

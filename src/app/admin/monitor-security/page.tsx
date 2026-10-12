@@ -11,9 +11,10 @@ import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon, { type AdminIconName } from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
 
-type TabId = "PATROLI" | "TAMU" | "PAKET" | "ROSTER";
+type TabId = "PATROLI" | "KEPATUHAN" | "TAMU" | "PAKET" | "ROSTER";
 const TABS: { id: TabId; label: string; icon: AdminIconName }[] = [
   { id: "PATROLI", label: "Log Patroli", icon: "shield" },
+  { id: "KEPATUHAN", label: "Kepatuhan Patroli", icon: "activity" },
   { id: "TAMU", label: "Buku Tamu", icon: "idCard" },
   { id: "PAKET", label: "Log Paket", icon: "box" },
   { id: "ROSTER", label: "Roster Danru", icon: "clipboardList" },
@@ -45,6 +46,8 @@ interface PatroliLog {
   shift?: string;
   sesi?: string;
   evaluasiManual?: EvaluasiManualData | null;
+  /** §136 jam scan QR tiap lantai (bila wajib) */
+  scan_lantai?: { lantai: string; waktu: string }[];
 }
 
 interface VisitorLog {
@@ -120,6 +123,70 @@ function labelPeriodeOption(docId: string): string {
   const [y, m] = docId.split("-").map(Number);
   if (!y || !m) return docId;
   return `Mulai ${new Date(y, m - 1, 11).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}`;
+}
+
+// ==========================================
+// §136 TAB KEPATUHAN PATROLI -- per tanggal, shift & petugas sesuai roster. "Sempurna" bila sesi patroli
+// minimum per shift (MINIMUM_SESI_PER_SHIFT) terpenuhi; "Berjalan" bila shift belum berakhir.
+// ==========================================
+const jamID = (d: Date) => d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Makassar" });
+function KepatuhanPatroli({ patrols, roster, cari }: { patrols: PatroliLog[]; roster: Record<string, Record<string, string>>; cari: string }) {
+  const [sekarang] = useState(() => Date.now());
+  const norm = (s?: string) => (s || "").trim().toLowerCase();
+  const hariIni = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date(sekarang));
+  const peta: Record<string, { sesi: Set<string>; terlewat: number; mulai: Date | null; laporan: number }> = {};
+  patrols.forEach((p) => {
+    if (!p.tanggal_shift || !p.shift) return;
+    const k = `${norm(p.petugas)}|${p.tanggal_shift}|${p.shift}`;
+    const e = (peta[k] ||= { sesi: new Set(), terlewat: 0, mulai: null, laporan: 0 });
+    if (p.sesi) e.sesi.add(p.sesi);
+    e.terlewat += p.area_terlewat?.length || 0;
+    e.laporan++;
+    const awal = p.scan_lantai?.[0]?.waktu ? new Date(p.scan_lantai[0].waktu) : p.waktu_laporan?.toDate() || null;
+    if (awal && (!e.mulai || awal < e.mulai)) e.mulai = awal;
+  });
+  const baris: { tgl: string; shift: string; nama: string; sesi: string[]; terlewat: number; mulai: Date | null; status: "Sempurna" | "Berjalan" | "Kurang sesi" }[] = [];
+  Object.keys(roster).filter((tgl) => tgl <= hariIni).sort().reverse().forEach((tgl) => {
+    Object.entries(roster[tgl] || {}).forEach(([nama, label]) => {
+      const shift = String(label).includes("Shift 1") ? "Shift 1" : String(label).includes("Shift 2") ? "Shift 2" : "";
+      if (!shift || (cari && !norm(nama).includes(norm(cari)))) return;
+      const e = peta[`${norm(nama)}|${tgl}|${shift}`];
+      const jumlah = e?.sesi.size || 0;
+      const akhir = new Date(shift === "Shift 1" ? `${tgl}T20:00:00+08:00` : `${tgl}T08:00:00+08:00`).getTime() + (shift === "Shift 2" ? 86400000 : 0);
+      const status = jumlah >= MINIMUM_SESI_PER_SHIFT ? "Sempurna" : akhir > sekarang ? "Berjalan" : "Kurang sesi";
+      baris.push({ tgl, shift, nama, sesi: e ? Array.from(e.sesi).sort() : [], terlewat: e?.terlewat || 0, mulai: e?.mulai || null, status });
+    });
+  });
+  const selesai = baris.filter((b) => b.status !== "Berjalan");
+  const sempurna = selesai.filter((b) => b.status === "Sempurna").length;
+  const warna = { "Sempurna": { bg: "var(--ok-50)", fg: "var(--ok)" }, "Berjalan": { bg: "var(--info-50)", fg: "var(--info)" }, "Kurang sesi": { bg: "var(--red-50)", fg: "var(--red-600)" } } as const;
+  return (
+    <div>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "12px" }}>
+        <div style={{ padding: "10px 14px", borderRadius: "12px", background: "var(--bg)" }}><div style={{ fontSize: "22px", fontWeight: 800, color: "var(--ok)" }}>{selesai.length ? Math.round((sempurna / selesai.length) * 100) : 0}%</div><div style={{ fontSize: "12px", color: "var(--muted)" }}>shift Sempurna ({sempurna}/{selesai.length})</div></div>
+        <div style={{ padding: "10px 14px", borderRadius: "12px", background: "var(--bg)" }}><div style={{ fontSize: "22px", fontWeight: 800, color: "var(--red-600)" }}>{selesai.length - sempurna}</div><div style={{ fontSize: "12px", color: "var(--muted)" }}>shift kurang sesi</div></div>
+        <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)", flex: "1 1 260px", alignSelf: "center" }}>Sempurna = minimal {MINIMUM_SESI_PER_SHIFT} sesi patroli dalam 1 shift. Periode mengikuti pilihan di tab Roster Danru. &quot;Mulai&quot; = jam scan QR lantai pertama (bila wajib) atau jam laporan pertama.</p>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table className="sec-table" style={{ minWidth: "640px" }}>
+          <thead><tr><th>Tanggal</th><th>Shift</th><th>Petugas</th><th>Sesi dilaporkan</th><th>Mulai</th><th>Titik terlewat</th><th>Status</th></tr></thead>
+          <tbody>
+            {baris.length === 0 ? <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--muted)" }}>Belum ada data roster pada periode ini.</td></tr> : baris.map((b) => (
+              <tr key={`${b.tgl}|${b.shift}|${b.nama}`}>
+                <td>{new Date(`${b.tgl}T12:00:00Z`).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}</td>
+                <td>{b.shift}</td>
+                <td style={{ fontWeight: 700 }}>{b.nama}</td>
+                <td>{b.sesi.length ? b.sesi.join(", ") : "—"}</td>
+                <td>{b.mulai ? jamID(b.mulai) : "—"}</td>
+                <td>{b.terlewat || "—"}</td>
+                <td><span style={{ fontSize: "11.5px", fontWeight: 800, padding: "3px 10px", borderRadius: "999px", background: warna[b.status].bg, color: warna[b.status].fg }}>{b.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export default function MonitorSecurityPage() {
@@ -417,7 +484,7 @@ export default function MonitorSecurityPage() {
           {activeTab !== "ROSTER" && (
             <div className="header-title-container no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
               <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700 }}>
-                {activeTab === "PATROLI" ? "Laporan Patroli Keliling" : activeTab === "TAMU" ? "Catatan Akses Keluar/Masuk" : "Penerimaan Paket & Dokumen"}
+                {activeTab === "PATROLI" ? "Laporan Patroli Keliling" : activeTab === "KEPATUHAN" ? `Kepatuhan Patroli · ${rosterBulan || "periode roster"}` : activeTab === "TAMU" ? "Catatan Akses Keluar/Masuk" : "Penerimaan Paket & Dokumen"}
               </h2>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                 {activeTab === "PATROLI" && (
@@ -437,7 +504,7 @@ export default function MonitorSecurityPage() {
                 )}
                 <label className="sa-search search-input-wrapper" style={{ width: "260px" }}>
                   <AdminIcon name="search" size={15} strokeWidth={2} />
-                  <input type="search" aria-label="Cari" placeholder={activeTab === "PATROLI" ? "Cari nama petugas…" : activeTab === "TAMU" ? "Cari nama / instansi…" : "Cari penerima / kurir…"} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  <input type="search" aria-label="Cari" placeholder={activeTab === "PATROLI" || activeTab === "KEPATUHAN" ? "Cari nama petugas…" : activeTab === "TAMU" ? "Cari nama / instansi…" : "Cari penerima / kurir…"} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                 </label>
               </div>
             </div>
@@ -623,6 +690,9 @@ export default function MonitorSecurityPage() {
             </div>
             </>
           )}
+
+          {/* §136 TAB KEPATUHAN */}
+          {activeTab === "KEPATUHAN" && <KepatuhanPatroli patrols={patrols} roster={rosterData} cari={searchQuery} />}
 
           {/* TAB 2: TAMU */}
           {activeTab === "TAMU" && (

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import AdminShell from "../../../components/admin/AdminShell";
-import { useTitikPatroli } from "../../../lib/titikPatroli";
+import { qrLantai, useTitikPatroli } from "../../../lib/titikPatroli";
 import { useChecklistOB } from "../../../lib/sopChecklist";
 
 
@@ -36,7 +36,8 @@ export default function AdminQRManagerPage() {
   };
 
   const { daftar: masterTitik } = useTitikPatroli();
-  const DATA_SECURITY = masterTitik.map((l) => ({ lantai: l.lantai, area: l.titik.map((x) => ({ id: x.id, nama: x.aktif === false ? `${x.nama} (nonaktif)` : x.nama })) }));
+  // §136 label pertama tiap lantai = QR LANTAI (wajib discan sebelum patroli lantai itu bila diaktifkan)
+  const DATA_SECURITY = masterTitik.map((l) => ({ lantai: l.lantai, area: [{ id: qrLantai(l.lantai), nama: `QR LANTAI · ${l.lantai} — scan sebelum patroli` }, ...l.titik.map((x) => ({ id: x.id, nama: x.aktif === false ? `${x.nama} (nonaktif)` : x.nama }))] }));
   const { nilai: masterOB } = useChecklistOB();
   const DATA_OB = masterOB.area.filter((a) => !a.area.toLowerCase().includes("pelayanan"))
     .map((a) => ({ lantai: a.area, area: a.segmen.filter((s) => s.aktif !== false).map((s) => s.nama) }));
@@ -50,7 +51,7 @@ export default function AdminQRManagerPage() {
       {/* ========================================================= */}
       {/* CSS KHUSUS PRINT (Mengatur ukuran label agar pas dipotong) */}
       {/* ========================================================= */}
-      <style jsx global>{`
+      <style jsx global>{`
         @media print {
           @page { margin: 10mm; size: A4 portrait; }
           .no-print { display: none !important; }
