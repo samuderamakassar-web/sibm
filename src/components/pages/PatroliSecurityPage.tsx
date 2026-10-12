@@ -245,6 +245,11 @@ export default function PatroliSecurityPage() {
   const sesiUnikSudahLapor = useMemo(() => Array.from(new Set(sesiSudahLapor)), [sesiSudahLapor]);
   const kepatuhanSesiTerpenuhi = sesiMinimumTerpenuhi(sesiSudahLapor);
   const daftarBatasSesi = useMemo(() => (shiftSesiInfo ? BATAS_SESI[shiftSesiInfo.shift] : []), [shiftSesiInfo]);
+  // §137 sesi yang sedang berjalan sudah dilaporkan -> form tidak ditampilkan lagi (dulu muncul kosong 0/N titik
+  // lengkap dengan isian alasan, seolah belum patroli)
+  const sesiIniSudah = !!shiftSesiInfo && sesiUnikSudahLapor.includes(shiftSesiInfo.sesi);
+  const semuaSesiSelesai = daftarBatasSesi.length > 0 && daftarBatasSesi.every((b) => sesiUnikSudahLapor.includes(b.sesi));
+  const sesiBerikut = shiftSesiInfo ? daftarBatasSesi[daftarBatasSesi.findIndex((b) => b.sesi === shiftSesiInfo.sesi) + 1] : undefined;
 
   // Pesan kepatuhan sesi yang SPESIFIK sesuai sesi mana yang kelewat (bukan cuma pesan generik
   // "selesaikan minimal 2 sesi") -- permintaan user biar lebih jelas apa yang harus dilakukan.
@@ -605,6 +610,27 @@ export default function PatroliSecurityPage() {
               </div>
             )}
 
+            {/* §137 SESI INI SUDAH DILAPORKAN */}
+            {sesiIniSudah && shiftSesiInfo && (
+              <div className="panel" style={{ marginBottom: "25px", textAlign: "center", border: "2px solid rgba(22,163,74,0.3)", background: "var(--ok-50)" }}>
+                <div style={{ fontSize: "34px", lineHeight: 1 }}>✅</div>
+                <h2 style={{ margin: "10px 0 6px", color: "var(--ok)", fontSize: "18px" }}>
+                  {semuaSesiSelesai ? "Semua sesi shift ini selesai dengan sempurna!" : `${shiftSesiInfo.sesi} sudah dilaporkan`}
+                </h2>
+                <p style={{ margin: 0, fontSize: "13.5px", color: "var(--ink-soft)", fontWeight: 600 }}>
+                  {semuaSesiSelesai
+                    ? `Anda menyelesaikan ${sesiUnikSudahLapor.length} dari ${daftarBatasSesi.length} sesi patroli ${shiftSesiInfo.shift}. Terima kasih, tidak ada yang perlu diisi lagi.`
+                    : kepatuhanSesiTerpenuhi
+                      ? `Sesi minimum shift ini sudah terpenuhi — sempurna.${sesiBerikut ? ` ${sesiBerikut.sesi} (${sesiBerikut.jam}) bisa dilaporkan saat waktunya.` : ""}`
+                      : sesiBerikut
+                        ? `Patroli berikutnya: ${sesiBerikut.sesi} (${sesiBerikut.jam}). Form terbuka otomatis saat sesi itu mulai.`
+                        : "Tidak ada sesi lagi di shift ini."}
+                </p>
+                <button type="button" className="sa-btn is-soft" style={{ marginTop: "14px" }} onClick={() => setActiveTab("HISTORY")}>Lihat riwayat laporan</button>
+              </div>
+            )}
+
+            {!sesiIniSudah && (<>
             {/* KARTU PROGRESS */}
             <div className="panel" style={{ marginBottom: "25px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
@@ -754,6 +780,7 @@ export default function PatroliSecurityPage() {
                 </div>
               </div>
             )}
+            </>)}
           </div>
         )}
 
