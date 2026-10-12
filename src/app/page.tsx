@@ -501,6 +501,17 @@ export default function PortalSIBM() {
     return () => unsubs.forEach((u) => u());
   }, [daftarDriver]);
 
+  // §135 driver yang divalidasi tidak masuk hari ini (Validasi Kehadiran Security) -> menimpa status lama
+  const [driverTidakMasuk, setDriverTidakMasuk] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!daftarDriver.length) return;
+    return onSnapshot(query(collection(db, "validasi_karyawan"), where("tanggal", "==", todayISO)), (snap) => {
+      const peta: Record<string, string> = {};
+      snap.docs.forEach((d) => { const x = d.data(); if (x.status === "tidak_masuk" && !x.otomatis && x.nama) peta[String(x.nama).trim().toLowerCase()] = String(x.alasan || "Tidak masuk"); });
+      setDriverTidakMasuk(peta);
+    }, (err) => console.error("[portal] validasi driver:", err));
+  }, [daftarDriver, todayISO]);
+
   // 🕘 ABSENSI TIM (§58T) -- label "Hadir" dulu cuma berarti "ada di plot", tidak dicek ke absensi.
   useEffect(() => {
     if (!FITUR_ABSENSI_AKTIF) return; // §68: fitur absensi dinonaktifkan
@@ -1117,14 +1128,24 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     return { key: `sec-${nama}`, nama, foto: staffFotoMap[nama], label: s.label, nada: s.nada, sub: s.ket };
   });
   const STATUS_DRIVER = (status: string): Pick<AnggotaTim, "label" | "nada"> & { ket: string } =>
-    status.includes("Keluar") ? { label: "KELUAR", nada: "warn", ket: "bertugas di luar" }
+    // §135 tidak masuk (dari Validasi Kehadiran Security) & Off Duty (pulang via Parkir) tidak lagi terbaca STANDBY
+    status.includes("Tidak Masuk") ? { label: (status.split("/")[1] || "Tidak masuk").trim().toUpperCase(), nada: "muted", ket: "tidak masuk hari ini" }
+    : status.includes("Off Duty") ? { label: "PULANG", nada: "muted", ket: "selesai tugas" }
+    : status.includes("Keluar") ? { label: "KELUAR", nada: "warn", ket: "bertugas di luar" }
     : status.includes("Bengkel") || status.includes("Service") ? { label: "BENGKEL", nada: "warn", ket: "kendaraan di bengkel" }
     : status.includes("Pulang") ? { label: "PULANG", nada: "muted", ket: "selesai tugas" }
     : { label: "STANDBY", nada: "ok", ket: "siaga di kantor" };
   const anggotaDriver: AnggotaTim[] = daftarDriver.map((nama) => {
     const st = driverStatusMap[nama];
     if (!st) return { key: `drv-${nama}`, nama, foto: staffFotoMap[nama], label: "…", nada: "muted" as NadaTim, sub: "memuat status" };
+    const alasanTidakMasuk = driverTidakMasuk[nama.trim().toLowerCase()];
+    if (alasanTidakMasuk) return { key: `drv-${nama}`, nama, foto: staffFotoMap[nama], label: alasanTidakMasuk.toUpperCase(), nada: "muted" as NadaTim, sub: "tidak masuk hari ini · divalidasi Security" };
     const s = STATUS_DRIVER(st.status);
+    // §135 status dari hari sebelumnya (selain sedang di luar/bengkel) bukan status hari ini
+    const tglStatus = st.waktu ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(st.waktu.toDate()) : "";
+    if (tglStatus && tglStatus < todayISO && s.label !== "KELUAR" && s.label !== "BENGKEL") {
+      return { key: `drv-${nama}`, nama, foto: staffFotoMap[nama], label: "BELUM UPDATE", nada: "muted" as NadaTim, sub: `belum update status hari ini · terakhir ${s.label.toLowerCase()} ${sejakWITA(st.waktu).replace("sejak ", "")}` };
+    }
     return { key: `drv-${nama}`, nama, foto: staffFotoMap[nama], label: s.label, nada: s.nada, sub: [s.ket, sejakWITA(st.waktu)].filter(Boolean).join(" · ") };
   });
   const kelompokTim: { key: string; judul: string; ket: string; anggota: AnggotaTim[]; kosong: string }[] = [

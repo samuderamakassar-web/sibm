@@ -12,7 +12,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
-import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { daerahTulis } from "../../lib/daerah";
 import { namaSecurity } from "../../lib/kehadiranSecurity";
 import { db } from "../../lib/firebase";
@@ -183,6 +183,11 @@ export default function ValidasiKaryawanPage() {
           divalidasi_oleh: petugas, waktu_validasi: serverTimestamp(),
         });
         showToast(`${aksi.v.nama} ditandai tidak masuk (${alasan}).`, "success");
+        // §135 Driver yang tidak masuk -> status driver ikut tersinkron (dulu tetap "Standby" dari hari sebelumnya)
+        if ((aksi.v.departemen || "").toLowerCase() === "driver") {
+          addDoc(collection(db, "driver_status_logs"), { daerah: daerahTulis(), nama_driver: aksi.v.nama, status: `Tidak Masuk / ${alasan}`, waktu_ubah: serverTimestamp(), petugas_security: `${petugas} (Validasi Kehadiran)` })
+            .catch((e) => console.error("[validasi] sinkron status driver:", e));
+        }
         // §67: kabari karyawan lewat email (tidak menghalangi simpan bila gagal / tidak ada email).
         const v = aksi.v;
         const ket = keterangan.trim();

@@ -134,6 +134,9 @@ function autoDriverStatus(statusKendaraan: string): string {
 }
 
 function classifyStatus(status: string): { label: string; bg: string; color: string } {
+  // §135 tidak masuk (Validasi Kehadiran) & Off Duty
+  if (status.includes("Tidak Masuk")) return { label: (status.split("/")[1] || "TIDAK MASUK").trim().toUpperCase(), bg: "var(--line)", color: "var(--muted)" };
+  if (status.includes("Off Duty")) return { label: "PULANG", bg: "rgba(124,58,237,0.12)", color: "var(--accent)" };
   if (status.includes("Bengkel") || status.includes("Service")) return { label: "SERVICE", bg: "var(--line)", color: "var(--ink-soft)" };
   if (status.includes("Pulang")) return { label: "PULANG", bg: "rgba(124,58,237,0.12)", color: "var(--accent)" };
   if (status.includes("Standby") || status.includes("Tiba")) return { label: "STANDBY", bg: "var(--ok-50)", color: "var(--ok)" };

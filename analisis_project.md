@@ -3190,3 +3190,10 @@ Tidak ada perubahan rules (koleksi sudah terbaca akun staf).
 ## 134. Tugas Tambahan Pilih dari Akun OB & CS + Temuan Wajib Foto & Keterangan (11 Oktober 2026)
 1. SOP Checklist > Tugas tambahan per staf: "Nama staf" kini dropdown dari users_master dept OB & CS (nama persis login); nama lama yang tidak punya akun tetap tampil dengan tanda "(tanpa akun)".
 2. Inspeksi mode temuan (gedung & alat): setiap temuan WAJIB foto (termasuk Hilang/Tidak Ada -> foto lokasi terakhirnya) dan WAJIB keterangan (kolom merah bila kosong).
+
+## 135. Status Driver Tersinkron dengan Validasi Kehadiran + Pengingat Sore "Driver Sudah Pulang?" (12 Oktober 2026)
+Laporan user: Renaldy sudah divalidasi Izin oleh Security tetapi Tim Bertugas portal tetap "STANDBY · sejak 8 Okt".
+1. ValidasiKaryawanPage: tandai "tidak masuk" untuk karyawan departemen Driver -> tambah driver_status_logs `Tidak Masuk / <alasan>` (Parkir, Menu Driver, portal ikut berubah). Penandaan otomatis 17:00 tidak mengubah status driver (bisa jadi sedang bertugas di luar).
+2. Portal Tim Bertugas: membaca validasi_karyawan hari ini (publik) -> driver tidak masuk (non-otomatis) tampil label alasan (IZIN/SAKIT/…); status "Tidak Masuk" & "Off Duty" tidak lagi terbaca STANDBY; status dari hari sebelumnya (selain Keluar/Bengkel) tampil "BELUM UPDATE · terakhir …".
+3. Parkir (Security): classifyStatus mengenali Tidak Masuk & Off Duty.
+4. scripts/driver-status-staleness.mjs `cekDriverPulang()`: Senin–Jumat 17:30–20:59, driver yang status terakhirnya bukan Pulang/Off Duty/Tidak Masuk -> push + in-app ke driver & Security jaga ("Driver Sudah Pulang?"), 1x per driver per hari (reminder_driver_pulang/{tanggal}). Pengingat kendaraan Keluar > 2 jam tetap seperti sebelumnya.

@@ -138,7 +138,45 @@ async function ambilKendaraanStale() {
   return stale;
 }
 
+// §135 Senin–Jumat 17:30–20:59: driver yang status terakhirnya masih Standby/Keluar (bukan Pulang/Off Duty/
+// Tidak Masuk) -> Security jaga & driver diminta memastikan sudah pulang atau masih bertugas. 1x per driver per hari
+// (penanda reminder_driver_pulang/{tanggal}). Security bisa mengubah status lewat menu Parkir (Pulang).
+async function cekDriverPulang() {
+  const hari = now.getDay();
+  const menit = now.getHours() * 60 + now.getMinutes();
+  if (hari === 0 || hari === 6 || menit < 17 * 60 + 30 || menit >= 21 * 60) return;
+  const drvSnap = await db.collection("users_master").where("departemen", "==", "Driver").get();
+  const driver = drvSnap.docs.map((d) => d.data().nama).filter(Boolean);
+  if (!driver.length) return;
+  const penandaRef = db.collection("reminder_driver_pulang").doc(hariIni);
+  const sudah = (await penandaRef.get()).data()?.nama || [];
+  const perlu = [];
+  for (const nama of driver) {
+    if (sudah.includes(nama)) continue;
+    const s = await db.collection("driver_status_logs").where("nama_driver", "==", nama).orderBy("waktu_ubah", "desc").limit(1).get();
+    const st = s.empty ? "" : String(s.docs[0].data().status || "");
+    if (!st || /Pulang|Off Duty|Tidak Masuk/i.test(st)) continue;
+    perlu.push({ nama, st });
+  }
+  if (!perlu.length) { console.log("Cek pulang driver: semua sudah pulang/tidak masuk."); return; }
+  const securityJaga = await ambilSecurityJaga();
+  const tokenSnap = await db.collection("fcm_tokens").get();
+  const tokenPerNama = {};
+  tokenSnap.forEach((d) => { const x = d.data(); if (x.token && x.pic_nama) tokenPerNama[x.pic_nama] = x.token; });
+  for (const p of perlu) {
+    const judul = "🚐 Driver Sudah Pulang?";
+    const pesan = `${p.nama} masih tercatat "${p.st}". Bila sudah pulang, Security/driver mohon ubah status (menu Parkir → Pulang); bila masih bertugas, abaikan.`;
+    const penerima = [p.nama, ...securityJaga];
+    await tulisNotifPersonal(penerima, judul, pesan);
+    const tokens = penerima.map((n) => tokenPerNama[n]).filter(Boolean);
+    if (tokens.length) await messaging.sendEachForMulticast({ tokens, notification: { title: judul, body: pesan }, webpush: { notification: { icon: "/icons/icon-192.png" } } });
+    console.log(`Cek pulang driver: ${p.nama} (${p.st}) -> ${penerima.join(", ")}`);
+  }
+  await penandaRef.set({ nama: [...sudah, ...perlu.map((p) => p.nama)] }, { merge: true });
+}
+
 async function jalankan() {
+  await cekDriverPulang().catch((e) => console.error("Cek pulang driver gagal:", e));
   const kendaraanStale = await ambilKendaraanStale();
   if (kendaraanStale.length === 0) {
     console.log("Tidak ada status kendaraan yang basi, skip.");
