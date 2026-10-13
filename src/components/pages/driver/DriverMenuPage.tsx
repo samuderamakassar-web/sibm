@@ -118,7 +118,7 @@ export default function DriverMenuPage() {
     warn: { bg: "var(--warn-50)", color: "var(--warn)" },
     ok: { bg: "var(--ok-50)", color: "var(--ok)" },
     red: { bg: "var(--red-50)", color: "var(--red-600)" },
-    accent: { bg: "#f5f3ff", color: "var(--accent)" },
+    accent: { bg: "var(--accent-50)", color: "var(--accent)" },
   };
 
   if (!isReady) return null;
@@ -216,10 +216,10 @@ export default function DriverMenuPage() {
           <p style={{ fontSize: "12px", color: "var(--ink-soft)", marginBottom: "15px", lineHeight: "1.5" }}>Tekan tombol di bawah jika Anda keluar/pulang <b>tanpa membawa armada kantor</b> (misal: naik motor/kendaraan pribadi). Kalau membawa mobil kantor, status Anda otomatis tersinkron lewat menu <b>Bawa Armada</b>.</p>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-            <button disabled={isLoadingPersonel} onClick={() => handleUpdateStatusPersonel("Keluar Beroperasi")} style={{ padding: "14px", background: "#fff5f5", color: "#c53030", border: "2px solid #feb2b2", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", transition: "0.2s", display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+            <button disabled={isLoadingPersonel} onClick={() => handleUpdateStatusPersonel("Keluar Beroperasi")} style={{ padding: "14px", background: "var(--red-50)", color: "var(--red-600)", border: "2px solid var(--red-600)", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", transition: "0.2s", display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
               <span style={{ fontSize: "20px" }}>🏃‍♂️</span> Keluar Pos
             </button>
-            <button disabled={isLoadingPersonel} onClick={() => handleUpdateStatusPersonel("Standby")} style={{ padding: "14px", background: "#f0fff4", color: "#2f855a", border: "2px solid #9ae6b4", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", transition: "0.2s", display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+            <button disabled={isLoadingPersonel} onClick={() => handleUpdateStatusPersonel("Standby")} style={{ padding: "14px", background: "var(--ok-50)", color: "var(--ok)", border: "2px solid var(--ok)", borderRadius: "14px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", transition: "0.2s", display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
               <span style={{ fontSize: "20px" }}>🛋️</span> Kembali Standby
             </button>
           </div>

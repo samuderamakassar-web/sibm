@@ -3205,3 +3205,9 @@ Laporan user: Renaldy sudah divalidasi Izin oleh Security tetapi Tim Bertugas po
 
 ## 137. Patroli: Sesi yang Sudah Dilaporkan Tidak Menampilkan Form Lagi (12 Oktober 2026)
 Laporan user: 3/2 sesi sudah selesai tetapi halaman Patroli masih menampilkan form Sesi 3 kosong (0/27 titik + isian alasan 27 titik). Sekarang bila sesi berjalan sudah ada laporannya (`sesiIniSudah`), progres/akordeon/review disembunyikan dan diganti kartu hijau: "Semua sesi shift ini selesai dengan sempurna!" (semua sesi), "Sesi minimum terpenuhi — sempurna" (>= minimum), atau info sesi berikutnya + jamnya; tombol Lihat riwayat. Form muncul lagi otomatis saat sesi berikutnya mulai.
+
+## 138. Admin Hub Tanpa Area Kosong + Warna Ikut Tema (13 Oktober 2026)
+1. Admin hub: "Perlu tindakan" jadi selebar halaman (span12, item berjajar `.tindakanGrid` auto-fit 230px) -- dulu kolom sempit yang memanjang kosong di samping panel Kehadiran; panel Kehadiran span12. Kartu sapaan diisi tanggal + jumlah hal menunggu tindakan (`.heroInfo`).
+2. KehadiranKaryawanPanel: kartu berjajar (auto-fill 260px); bila salah satu daftar (Lembur / Tidak masuk) kosong, daftar lain memakai lebar penuh -- tidak ada setengah panel kosong.
+3. Warna tidak ikut tema: latar ikon accent "#f5f3ff" (Dashboard OB, Menu Driver, Dashboard QHSE) -> var(--accent-50) (di mode gelap dulu tampil kotak putih); tombol status Driver (Keluar Pos / Kembali Standby) memakai token red/ok.
+Sisa warna tulis-langsung (belum disentuh): PengaturanJadwalSecurity, portal page.tsx, ToastProvider, SurveiKepuasan, QhseSbo, EskalasiShiftModal, Badge, EvaluasiManualButton, admin/atk.

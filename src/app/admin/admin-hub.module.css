@@ -39,6 +39,27 @@
 .span8 {
   grid-column: span 8;
 }
+/* §138 panel selebar halaman + item "Perlu tindakan" berjajar */
+.span12 {
+  grid-column: span 12;
+}
+.tindakanGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 4px 8px;
+  margin: 10px -10px 0;
+}
+.heroInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  opacity: 0.92;
+}
+.heroInfo b {
+  font-size: 15px;
+  font-weight: 800;
+}
 
 /* ---- Kotak sapaan (merah) ---- */
 .hero {

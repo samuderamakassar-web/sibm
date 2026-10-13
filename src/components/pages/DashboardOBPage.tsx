@@ -211,7 +211,7 @@ export default function DashboardOBPage() {
     warn: { bg: "var(--warn-50)", color: "var(--warn)" },
     ok: { bg: "var(--ok-50)", color: "var(--ok)" },
     red: { bg: "var(--red-50)", color: "var(--red-600)" },
-    accent: { bg: "#f5f3ff", color: "var(--accent)" },
+    accent: { bg: "var(--accent-50)", color: "var(--accent)" },
   };
 
 

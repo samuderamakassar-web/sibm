@@ -61,10 +61,11 @@ export default function KehadiranKaryawanPanel() {
           {data === null ? "Memuat…" : `${menunggu} menunggu validasi Security · ${susulan} input susulan`}
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+      {/* §138 bila salah satu daftar kosong, daftar lain memakai lebar penuh (kartu berjajar) */}
+      <div style={{ display: "grid", gridTemplateColumns: lembur.length > 0 && tidakMasuk.length > 0 ? "repeat(auto-fit, minmax(300px, 1fr))" : "minmax(0, 1fr)", gap: "16px" }}>
         <div>
           <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>Lembur ({lembur.length})</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "6px" }}>
             {lembur.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Tidak ada lembur tercatat.</div> : lembur.map((v) => (
               <Kartu key={v.id} v={v} isi={<>{v.departemen} · {v.area || "-"} · {v.status === "lanjut" ? "masih di gedung" : "sudah check-out"}<br />divalidasi {v.divalidasi_oleh || "-"} {jam(v.waktu_validasi)}</>} />
             ))}
@@ -72,7 +73,7 @@ export default function KehadiranKaryawanPanel() {
         </div>
         <div>
           <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>Tidak masuk hari ini ({tidakMasuk.length})</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "6px" }}>
             {tidakMasuk.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Belum ada yang ditandai tidak masuk.</div> : tidakMasuk.map((v) => (
               <Kartu key={v.id} v={v} isi={<>{v.departemen} · <b style={{ color: "var(--ink-soft)" }}>{v.alasan || "-"}</b>{v.keterangan ? ` — ${v.keterangan}` : ""}<br />dicek {v.divalidasi_oleh || "-"} {jam(v.waktu_validasi)}</>} />
             ))}

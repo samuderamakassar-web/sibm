@@ -343,6 +343,11 @@ export default function AdminDashboardPage() {
                 Gedung aman hari ini?
               </h1>
             </div>
+            {/* §138 isi ruang kosong kartu sapaan: tanggal + ringkasan yang menunggu tindakan */}
+            <div className={styles.heroInfo}>
+              <span>{new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Makassar" })}</span>
+              <b>{(() => { const n = TINDAKAN.reduce((s, x) => s + (typeof hitungan[x.key] === "number" ? (hitungan[x.key] as number) : 0), 0); return n > 0 ? `${n} hal menunggu tindakan` : "Tidak ada yang menunggu tindakan"; })()}</b>
+            </div>
             {FITUR_ABSENSI_AKTIF && (
               <div className={styles.heroAbsensi}>
                 <AbsensiCard picName={adminName} departemen={session.dept || "Admin GA"} />
@@ -380,9 +385,10 @@ export default function AdminDashboardPage() {
             </div>
           </Tile>
 
-          <Tile className={styles.span4}>
+          {/* §138 selebar halaman, item berjajar -- dulu kolom sempit yang memanjang kosong di samping Kehadiran */}
+          <Tile className={styles.span12}>
             <h2 className={styles.tileTitle}>Perlu tindakan</h2>
-            <div className={styles.menuList}>
+            <div className={styles.tindakanGrid}>
               {TINDAKAN.map((t) => {
                 const v = hitungan[t.key];
                 const ada = typeof v === "number" && v > 0;
@@ -408,7 +414,7 @@ export default function AdminDashboardPage() {
           </Tile>
 
           {/* §67 Kehadiran & lembur karyawan (versi lengkap: foto & alasan -- khusus login) */}
-          <Tile className={styles.span8}>
+          <Tile className={styles.span12}>
             <KehadiranKaryawanPanel />
           </Tile>
 
