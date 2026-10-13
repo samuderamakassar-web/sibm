@@ -19,6 +19,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { bukaDokumenAtk } from "@/lib/dokumenAtk";
 
 
 interface KontakKaryawan {
@@ -419,6 +420,19 @@ export default function AdminAtkPage() {
   };
   // catatan default versi lama tidak perlu ditampilkan ulang
   const catatanTampil = (c?: string) => (c && c !== "Jumlah / daftar barang disesuaikan Admin GA" ? c : "");
+  // §139 dokumen arsip berformat PO (cetak / simpan PDF) untuk tiap permintaan
+  const cetakDokumen = (req: AtkRequest) => {
+    const ok = bukaDokumenAtk({
+      resi: req.resi, tanggal: req.waktu_request ? req.waktu_request.toDate() : null, pemohon: req.nama_pemohon, departemen: req.departemen, status: req.status,
+      catatanAdmin: catatanTampil(req.catatan_admin), alasanBatal: req.status.includes("Batal") ? req.alasan_batal || "-" : undefined, dicetakOleh: adminName || "Admin GA",
+      baris: (req.items || []).map((it) => {
+        const m = masterPerNama.get(it.nama_barang);
+        const satuan = it.satuan || satuanDari(m)[0];
+        return { nama: it.nama_barang, keterangan: it.deskripsi || "", satuan, jumlah: parseInt(it.jumlah, 10) || 0, harga: m?.harga?.[satuan] ?? null };
+      }),
+    });
+    if (!ok) showToast("Popup diblokir browser. Izinkan popup untuk situs ini lalu coba lagi.", "warning");
+  };
 
   if (!isReady) return null;
 
@@ -527,6 +541,7 @@ export default function AdminAtkPage() {
                         <span className="atk-resi">{req.resi}</span>
                         <span className="atk-status" style={{ background: tone.bg, color: tone.fg }}>{req.status}</span>
                         <span className="atk-waktu">{formatJam(req.waktu_request)}</span>
+                        <button type="button" onClick={() => cetakDokumen(req)} className="atk-btn" style={{ marginLeft: "auto", height: "28px", padding: "0 10px", background: "var(--surface)", color: "var(--ink-soft)" }} title="Dokumen arsip berformat PO">🖨 Dokumen</button>
                       </div>
                       <div className="atk-pemohon"><b>{req.nama_pemohon}</b><span> · {req.departemen}</span>{estimasiBiaya(req.items) !== null && <span className="atk-estimasi">≈ {rupiah(estimasiBiaya(req.items)!)}</span>}</div>
                       <ul className="atk-items" style={{ opacity: isBatal ? 0.55 : 1, textDecoration: isBatal ? "line-through" : "none" }}>
