@@ -61,6 +61,7 @@ interface VisitorLog {
   waktu_masuk: Timestamp | null;
   waktu_keluar: Timestamp | null;
   pic_bertugas: string;
+  no_kendaraan?: string;
 }
 
 interface PackageLog {
@@ -232,10 +233,8 @@ export default function MonitorSecurityPage() {
   useEffect(() => {
     if (!isReady || !session) return;
 
-    // §61: tamu & paket dibatasi 500 terakhir (dulu SELURUH koleksi); patroli dimuat per rentang filter (efek di bawah).
-    const unsubVisitor = onSnapshot(query(collection(db, "security_visitor_logs"), orderBy("waktu_masuk", "desc"), limit(500)), (snap) => {
-      setVisitors(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as VisitorLog[]);
-    });
+    // §61: paket dibatasi 500 terakhir; patroli per rentang filter. §140: buku tamu per rentang tanggal (efek di bawah)
+    // -- dulu hanya 500 catatan terakhir (± 1 minggu karena check-in karyawan ikut tercatat), data lama tidak tampil.
 
     const unsubPackage = onSnapshot(query(collection(db, "packages"), orderBy("waktu_diterima", "desc"), limit(500)), (snap) => {
       setPackages(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as PackageLog[]);
@@ -246,8 +245,26 @@ export default function MonitorSecurityPage() {
       setRosterDocsTersedia(snap.docs.map((d) => d.id).sort().reverse());
     }).catch((e) => console.error(e));
 
-    return () => { unsubVisitor(); unsubPackage(); };
+    return () => { unsubPackage(); };
   }, [isReady, session]);
+
+  // §140 Buku Tamu per rentang tanggal (WITA), filter 1 field (waktu_masuk) -> tanpa index komposit
+  const isoWITA = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(d);
+  const [tamuDari, setTamuDari] = useState(() => isoWITA(new Date(Date.now() - 6 * 86400000)));
+  const [tamuSampai, setTamuSampai] = useState(() => isoWITA(new Date()));
+  const [tamuJenis, setTamuJenis] = useState("SEMUA");
+  const [tamuMemuat, setTamuMemuat] = useState(false);
+  useEffect(() => {
+    if (!isReady || !session || !tamuDari || !tamuSampai || tamuDari > tamuSampai) return;
+    const awal = Timestamp.fromDate(new Date(`${tamuDari}T00:00:00+08:00`));
+    const akhir = Timestamp.fromMillis(new Date(`${tamuSampai}T00:00:00+08:00`).getTime() + 86400000);
+    const tm = setTimeout(() => setTamuMemuat(true), 0);
+    const unsub = onSnapshot(query(collection(db, "security_visitor_logs"), where("waktu_masuk", ">=", awal), where("waktu_masuk", "<", akhir), orderBy("waktu_masuk", "desc")), (snap) => {
+      setVisitors(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as VisitorLog[]);
+      setTamuMemuat(false);
+    }, (e) => { console.error("[monitor] buku tamu:", e); setTamuMemuat(false); });
+    return () => { clearTimeout(tm); unsub(); };
+  }, [isReady, session, tamuDari, tamuSampai]);
 
   // Log patroli sesuai filter bulan/tahun (default 60 hari terakhir), bukan seluruh histori.
   const rentangPatroli = rentangBulanTahun(filterBulanPatroli, filterTahunPatroli, "SEMUA");
@@ -302,7 +319,19 @@ export default function MonitorSecurityPage() {
     const matchSearch = p.petugas?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchBulan && matchTahun && matchSearch;
   });
-  const fVisitors = visitors.filter(v => v.nama?.toLowerCase().includes(searchQuery.toLowerCase()) || v.instansi_dept?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const fVisitors = visitors.filter(v => (tamuJenis === "SEMUA" || (tamuJenis === "KARYAWAN" ? v.jenis === "Karyawan" : v.jenis !== "Karyawan"))
+    && (v.nama?.toLowerCase().includes(searchQuery.toLowerCase()) || v.instansi_dept?.toLowerCase().includes(searchQuery.toLowerCase())));
+  // §140 unduh data tamu sesuai filter (CSV dibuka Excel)
+  const exportTamu = () => {
+    const aman = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const tgl = (ts: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Makassar" }) : "");
+    const jam = (ts: Timestamp | null) => (ts ? ts.toDate().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Makassar" }) : "");
+    const baris = [["Tanggal", "Jam Masuk", "Jam Keluar", "Nama", "Jenis", "Instansi / Dept", "Tujuan", "Bertemu Dengan", "No. Kendaraan", "Status", "Petugas"].map(aman).join(";"),
+      ...fVisitors.map((v) => [tgl(v.waktu_masuk), jam(v.waktu_masuk), jam(v.waktu_keluar), v.nama, v.jenis, v.instansi_dept, v.tujuan, v.bertemu_dengan || "", v.no_kendaraan || "", v.status, v.pic_bertugas].map(aman).join(";"))];
+    const url = URL.createObjectURL(new Blob(["\uFEFFsep=;\r\n" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = `buku-tamu_${tamuDari}_sd_${tamuSampai}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
   const fPackages = packages.filter(p => p.penerima?.toLowerCase().includes(searchQuery.toLowerCase()) || p.kurir?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   // Tanggal yang ditampilkan di tabel Roster -- PERSIS rentang siklus (11 s.d. 10 bulan berikutnya),
@@ -500,6 +529,19 @@ export default function MonitorSecurityPage() {
                     <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
                       <AdminIcon name="printer" size={16} /> Export PDF
                     </button>
+                  </>
+                )}
+                {activeTab === "TAMU" && (
+                  <>
+                    <input type="date" className="sa-field" aria-label="Dari tanggal" value={tamuDari} max={tamuSampai} onChange={(e) => setTamuDari(e.target.value)} />
+                    <span style={{ color: "var(--muted)", fontSize: "12px" }}>s.d.</span>
+                    <input type="date" className="sa-field" aria-label="Sampai tanggal" value={tamuSampai} min={tamuDari} onChange={(e) => setTamuSampai(e.target.value)} />
+                    <select className="sa-field" aria-label="Jenis" value={tamuJenis} onChange={(e) => setTamuJenis(e.target.value)}>
+                      <option value="SEMUA">Semua jenis</option>
+                      <option value="TAMU">Tamu / non-karyawan</option>
+                      <option value="KARYAWAN">Karyawan</option>
+                    </select>
+                    <button type="button" className="sa-btn is-primary" onClick={exportTamu} disabled={fVisitors.length === 0}>Export Excel ({fVisitors.length})</button>
                   </>
                 )}
                 <label className="sa-search search-input-wrapper" style={{ width: "260px" }}>
@@ -724,7 +766,7 @@ export default function MonitorSecurityPage() {
                       </td>
                       <td style={{ color: "var(--muted)", fontSize: "12px", fontWeight: "bold" }}>{v.pic_bertugas}</td>
                     </tr>
-                  )) : <tr><td colSpan={4} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Belum ada log akses masuk.</td></tr>}
+                  )) : <tr><td colSpan={4} style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>{tamuMemuat ? "Memuat…" : "Tidak ada catatan tamu pada rentang tanggal & filter ini."}</td></tr>}
                 </tbody>
               </table>
             </div>
