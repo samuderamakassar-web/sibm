@@ -3217,3 +3217,7 @@ src/lib/dokumenAtk.ts (`bukaDokumenAtk`): dokumen A4 di tab baru (cetak / simpan
 
 ## 140. Admin: Buku Tamu per Rentang Tanggal + Export (13 Oktober 2026)
 Laporan user: data tamu 14 September tidak muncul di Admin Pantau Security. Sebab: tab Buku Tamu hanya memuat 500 catatan terakhir (§61) -- check-in karyawan ikut tercatat di security_visitor_logs sehingga 500 catatan ≈ 1 minggu; data lama tidak terhapus, hanya tidak dimuat. Sekarang: filter Dari–Sampai tanggal (WITA, bawaan 7 hari terakhir; query waktu_masuk 1 field, tanpa index komposit), filter jenis (Semua / Tamu non-karyawan / Karyawan), tombol Export Excel (CSV ber-BOM, pemisah ";" + baris sep=) berisi tanggal, jam masuk/keluar, nama, jenis, instansi, tujuan, bertemu, no. kendaraan, status, petugas. Isi data produksi tidak diperiksa (aturan: tidak membaca data produksi) -- user mengecek sendiri tanggal 14 Sep lewat filter.
+
+## 141. Tabel Master Kendaraan Dirapikan + Badge Ikut Tema (13 Oktober 2026)
+1. src/components/ui/Badge.tsx: warna memakai token tema (ok/warn/red/info/line) dengan fallback warna lama -- dulu warna terang tetap sehingga "Di kantor", "Sewa", "Belum diisi" mencolok/putih di mode gelap. Berlaku di semua halaman pemakai Badge.
+2. Admin Kendaraan: kolom Sewa & Pajak jadi dua baris sejajar (label lebar tetap "Status"/"Pajak" + badge + keterangan satu baris, "tgl. akhir belum diisi"); tipe kendaraan tidak patah baris; nama PIC ditebalkan, lebar kolom dibatasi; tombol aksi seragam `.kd-aksi` (Riwayat / Edit / Hapus) tanpa tiga warna berbeda.

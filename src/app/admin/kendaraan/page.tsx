@@ -1017,6 +1017,11 @@ export default function ManajemenKendaraanPage() {
     >
       <style dangerouslySetInnerHTML={{__html: `
         .print-only { display: none; }
+        /* §141 tombol aksi tabel: seragam, ikut tema */
+        .kd-aksi { height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .kd-aksi:hover { background: var(--hover); color: var(--ink); }
+        .kd-aksi.is-hapus { color: var(--red-600); }
+        .kd-aksi.is-hapus:hover { background: var(--red-50); }
         /* §99 ringkasan kondisi armada */
         .kd-ringkas { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px; }
         .kd-kotak { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-family: inherit; text-align: left; }
@@ -1122,7 +1127,7 @@ export default function ManajemenKendaraanPage() {
                           </div>
                           <div>
                             <div style={{ fontWeight: 800, color: "var(--ink)", fontSize: "15px", whiteSpace: "nowrap" }}>{k.plat_nomor || k.kendaraan}</div>
-                            <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.jenis || "-"}{k.dikelola_driver ? " • armada driver" : ""}</div>
+                            <div style={{ fontSize: "12px", color: "var(--muted)", whiteSpace: "nowrap" }}>{k.jenis || "-"}{k.dikelola_driver ? " • armada driver" : ""}</div>
                             {(k.no_rangka || k.no_mesin) && (
                               <div style={{ fontSize: "11px", color: "var(--muted)" }}>
                                 {k.no_rangka ? `Rangka: ${k.no_rangka}` : ""}{k.no_rangka && k.no_mesin ? " • " : ""}{k.no_mesin ? `Mesin: ${k.no_mesin}` : ""}
@@ -1141,33 +1146,27 @@ export default function ManajemenKendaraanPage() {
                           {c.servisJatuhTempo && <span className="kd-chip" style={{ background: c.servisJatuhTempo === "lewat" ? "var(--red-50)" : "var(--warn-50)", color: c.servisJatuhTempo === "lewat" ? "var(--red-600)" : "var(--warn)" }}>Servis {c.servisJatuhTempo === "lewat" ? "lewat jadwal" : "≤ 7 hari"}</span>}
                         </div>
                       </Td>
-                      <Td style={{ color: "var(--ink-soft)", fontSize: "13px" }}>
-                        <div>{k.pic_kendaraan || <span style={{ opacity: 0.5 }}>PIC belum diisi</span>}</div>
+                      <Td style={{ fontSize: "13px", minWidth: "170px", maxWidth: "240px" }}>
+                        <div style={{ fontWeight: 700, color: "var(--ink)" }}>{k.pic_kendaraan || <span style={{ opacity: 0.5, fontWeight: 400 }}>PIC belum diisi</span>}</div>
                         <div style={{ fontSize: "12px", color: "var(--muted)" }}>{k.unit_bisnis || "-"}</div>
                       </Td>
-                      <Td style={{ fontSize: "12px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}><Badge tone={kepemilikan.tone}>{kepemilikan.label}</Badge><span style={{ fontSize: "11px", color: "var(--muted)" }}>{kepemilikan.sub || ""}</span></div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}><span style={{ fontSize: "11px", color: "var(--muted)" }}>Pajak</span><Badge tone={pajak.tone}>{pajak.label}</Badge>{k.tanggal_pajak && <span style={{ fontSize: "11px", color: "var(--muted)" }}>{k.tanggal_pajak.split("-").reverse().join("/")}</span>}</div>
+                      <Td style={{ fontSize: "12px", minWidth: "230px" }}>
+                        {/* §141 dua baris sejajar: label lebar tetap + badge + keterangan satu baris */}
+                        <div style={{ display: "grid", gridTemplateColumns: "42px auto 1fr", gap: "6px 8px", alignItems: "center", whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>Status</span>
+                          <Badge tone={kepemilikan.tone}>{kepemilikan.label}</Badge>
+                          <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>{kepemilikan.sub ? kepemilikan.sub.replace("Tanggal berakhir belum diisi", "tgl. akhir belum diisi") : ""}</span>
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>Pajak</span>
+                          <Badge tone={pajak.tone}>{pajak.label}</Badge>
+                          <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>{k.tanggal_pajak ? k.tanggal_pajak.split("-").reverse().join("/") : ""}</span>
+                        </div>
                       </Td>
                       <Td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                        <button
-                          onClick={() => bukaRiwayat(k)}
-                          style={{ background: "var(--ok-50)", color: "var(--ok)", border: "1px solid rgba(22,163,74,0.2)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", marginRight: "6px" }}
-                        >
-                          📊 Riwayat
-                        </button>
-                        <button
-                          onClick={() => handleMulaiEdit(k)}
-                          style={{ background: "var(--warn-50)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.2)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", marginRight: "6px" }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleHapusKendaraan(k.id, k.kendaraan)}
-                          style={{ background: "var(--red-50)", color: "var(--red-600)", border: "1px solid rgba(220,38,38,0.2)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
-                        >
-                          Hapus
-                        </button>
+                        <div style={{ display: "inline-flex", gap: "6px" }}>
+                          <button type="button" className="kd-aksi" onClick={() => bukaRiwayat(k)}>Riwayat</button>
+                          <button type="button" className="kd-aksi" onClick={() => handleMulaiEdit(k)}>Edit</button>
+                          <button type="button" className="kd-aksi is-hapus" onClick={() => handleHapusKendaraan(k.id, k.kendaraan)} aria-label={`Hapus ${k.plat_nomor || k.kendaraan}`}>Hapus</button>
+                        </div>
                       </Td>
                     </Tr>
                     );

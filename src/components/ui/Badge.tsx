@@ -3,11 +3,12 @@ import { ReactNode, CSSProperties } from "react";
 type BadgeTone = "success" | "warning" | "danger" | "info" | "neutral";
 
 const TONE_COLORS: Record<BadgeTone, { bg: string; color: string }> = {
-  success: { bg: "#c6f6d5", color: "#22543d" },
-  warning: { bg: "#feebc8", color: "#9c4221" },
-  danger: { bg: "#fed7d7", color: "#9b2c2c" },
-  info: { bg: "#bee3f8", color: "#2b6cb0" },
-  neutral: { bg: "#edf2f7", color: "#4a5568" },
+  // §141 token tema (admin-theme.css) + fallback warna lama bila dipakai di luar .sibm-admin
+  success: { bg: "var(--ok-50, #c6f6d5)", color: "var(--ok, #22543d)" },
+  warning: { bg: "var(--warn-50, #feebc8)", color: "var(--warn, #9c4221)" },
+  danger: { bg: "var(--red-50, #fed7d7)", color: "var(--red-600, #9b2c2c)" },
+  info: { bg: "var(--info-50, #bee3f8)", color: "var(--info, #2b6cb0)" },
+  neutral: { bg: "var(--line, #edf2f7)", color: "var(--ink-soft, #4a5568)" },
 };
 
 interface BadgeProps {
