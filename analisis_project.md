@@ -3267,3 +3267,4 @@ Laporan user: pemindahan file lama gagal sebagian (Memindahkan 15/38). Cek heade
 
 ## 149. Pemindahan File Lama Ditolak Izin -- Perlu IAM Cross-Service Storage (14 Oktober 2026)
 Hasil pemindahan: 38/38 "ditolak penyimpanan (izin)". storage.rules memakai firestore.get/exists (cek users_master Admin GA); rules lintas layanan butuh role "Firebase Rules Firestore Service Agent" untuk service agent Storage service-98949286064@gcp-sa-firebasestorage.iam.gserviceaccount.com. Deploy CLI non-interaktif (termasuk --force) tidak menawarkan pemberian role. Langkah user: Firebase Console > Storage > Rules > Publish (menerima tawaran izin), atau Google Cloud IAM > Grant access ke service agent tsb dengan role di atas. Unggah dokumen legal BARU juga terdampak sampai izin diberikan.
+- (14 Okt 2026) Izin IAM diberikan user; pemindahan file lama berhasil. Unggah/buka file legal berjalan normal. Ingatkan user mematikan lagi Cloudinary "Allow delivery of PDF and ZIP files".
