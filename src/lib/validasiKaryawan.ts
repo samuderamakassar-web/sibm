@@ -58,6 +58,8 @@ export interface ValidasiKaryawan {
   area?: string;
   overtime_id?: string;
   divalidasi_oleh?: string;
+  /** §150 false = lembur pulang <= 19:30, tidak dihitung lembur gedung */
+  dihitung?: boolean;
   waktu_validasi?: Timestamp | null;
   ditanya_ulang?: number;
   dibuat_pada?: Timestamp | null;
@@ -70,6 +72,11 @@ export const tanggalWITA = (d: Date) => FMT_TANGGAL.format(d);
 export const jamWITA = (d: Date) => FMT_JAM.format(d);
 /** Timestamp untuk jam "HH:MM" WITA pada tanggal ISO tertentu. */
 export const waktuWITA = (tanggalISO: string, jam: string) => new Date(`${tanggalISO}T${jam}:00+08:00`);
+/** §150 keputusan user: check-out sampai 19:30 tetap divalidasi Security tetapi TIDAK dihitung lembur gedung.
+ *  DIDUPLIKASI di scripts/validasi-karyawan.mjs. */
+export const BATAS_LEMBUR_DIHITUNG = "19:30";
+export const STATUS_LEMBUR_TIDAK_DIHITUNG = "Dibatalkan otomatis (pulang ≤ 19:30)";
+export const lemburDihitung = (tanggalCheckIn: string, waktuKeluar: Date) => waktuKeluar.getTime() > waktuWITA(tanggalCheckIn, BATAS_LEMBUR_DIHITUNG).getTime();
 
 /** Lembur dihitung sejak 18:00 tanggal check-in, atau sejak check-in kalau masuknya setelah 18:00. */
 export function mulaiLembur(waktuMasuk: Date): Date {
@@ -107,6 +114,15 @@ export async function selesaikanLemburSaatCheckout(visitorLogId: string, waktuMa
   const v = { id: d.id, ...d.data() } as ValidasiKaryawan;
   if (v.status === "selesai") return;
 
+  // §150 pulang <= 19:30: lembur tidak dihitung (catatan overtime ditandai dibatalkan otomatis, tanpa email)
+  if (v.status === "lanjut" && v.overtime_id && !lemburDihitung(tanggal, waktuKeluar)) {
+    await updateDoc(doc(db, "ga_overtime_requests", v.overtime_id), {
+      jam_selesai: jamWITA(waktuKeluar), tanggal_selesai: tanggalWITA(waktuKeluar), waktu_selesai: Timestamp.fromDate(waktuKeluar),
+      durasi_tagih_jam: 0, status: STATUS_LEMBUR_TIDAK_DIHITUNG,
+    });
+    await updateDoc(doc(db, "validasi_karyawan", v.id), { status: "selesai", waktu_keluar: Timestamp.fromDate(waktuKeluar), dihitung: false });
+    return;
+  }
   if (v.status === "lanjut" && v.overtime_id) {
     const mulai = mulaiLembur(waktuMasuk);
     const jamTagih = jamTagihLembur(mulai, waktuKeluar);

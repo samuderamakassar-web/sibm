@@ -45,6 +45,9 @@ const FMT_JAM = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", ho
 const tanggalWITA = (d) => FMT_TGL.format(d);
 const jamWITA = (d) => FMT_JAM.format(d);
 const waktuWITA = (tgl, jam) => new Date(`${tgl}T${jam}:00+08:00`);
+// §150 SAMA dengan BATAS_LEMBUR_DIHITUNG di src/lib/validasiKaryawan.ts
+const BATAS_LEMBUR_DIHITUNG = "19:30";
+const STATUS_LEMBUR_TIDAK_DIHITUNG = "Dibatalkan otomatis (pulang ≤ 19:30)";
 const mulaiLembur = (masuk) => { const b = waktuWITA(tanggalWITA(masuk), JAM_MULAI_LEMBUR); return masuk > b ? masuk : b; };
 const jamTagih = (mulai, selesai) => { const m = (selesai - mulai) / 60000; return m <= 0 ? 0 : Math.ceil(m / 60); };
 const fmtJamDesimal = (j) => `${Math.floor(j)} jam ${Math.round((j % 1) * 60)} mnt`;
@@ -269,14 +272,15 @@ async function tutupLemburSelesai() {
       const x = log.data();
       if (!x || x.status === "Di Dalam Area" || !x.waktu_keluar) continue;
       const keluar = x.waktu_keluar.toDate();
+      const dihitung = keluar.getTime() > waktuWITA(tanggalWITA(x.waktu_masuk.toDate()), BATAS_LEMBUR_DIHITUNG).getTime();
       if (status === "lanjut" && v.overtime_id) {
         const mulai = mulaiLembur(x.waktu_masuk.toDate());
         await db.collection("ga_overtime_requests").doc(v.overtime_id).update({
           jam_selesai: jamWITA(keluar), tanggal_selesai: tanggalWITA(keluar), waktu_selesai: x.waktu_keluar,
-          durasi_tagih_jam: jamTagih(mulai, keluar), status: "Tercatat",
+          durasi_tagih_jam: dihitung ? jamTagih(mulai, keluar) : 0, status: dihitung ? "Tercatat" : STATUS_LEMBUR_TIDAK_DIHITUNG,
         });
       }
-      await d.ref.update({ status: "selesai", waktu_keluar: x.waktu_keluar });
+      await d.ref.update({ status: "selesai", waktu_keluar: x.waktu_keluar, ...(status === "lanjut" && !dihitung ? { dihitung: false } : {}) });
       console.log(`  ditutup: ${v.nama} (${status})`);
     }
   }

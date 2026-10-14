@@ -79,7 +79,7 @@ export default function DashboardEksekutifPage() {
       onSnapshot(collection(db, "employees_directory"), (s) => setKaryawan(s.docs.map((d) => d.data() as Karyawan))),
       onSnapshot(query(collection(db, "security_visitor_logs"), where("waktu_masuk", ">=", tsHari)), (s) => setHadir(new Set(s.docs.map((d) => d.data()).filter((x) => x.jenis === "Karyawan").map((x) => norm(x.nama))))),
       onSnapshot(query(collection(db, "validasi_karyawan"), where("tanggal", "==", hariIni)), (s) => setTidakMasuk(s.docs.map((d) => d.data()).filter((x) => x.jenis === "belum_input" && x.status === "tidak_masuk").map((x) => ({ nama: x.nama, alasan: x.alasan })))),
-      onSnapshot(query(collection(db, "ga_overtime_requests"), where("tanggal", ">=", awalBulan)), (s) => setLembur(map(s) as Lembur[])),
+      onSnapshot(query(collection(db, "ga_overtime_requests"), where("tanggal", ">=", awalBulan)), (s) => setLembur((map(s) as Lembur[]).filter((l) => !/ditolak|batal|rejected/i.test(l.status || "")))), // §150
       onSnapshot(query(collection(db, "ga_atk_requests"), where("waktu_request", ">=", tsBulan)), (s) => setAtkBulan(s.docs.map((d) => d.data() as { departemen?: string; status: string }))),
       onSnapshot(doc(db, "okupansi_gedung", "data"), (s) => setLantai(((s.data()?.lantai as Lantai[]) || []))),
       onSnapshot(collection(db, "project_tracker"), (s) => {

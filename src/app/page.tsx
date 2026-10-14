@@ -364,6 +364,7 @@ export default function PortalSIBM() {
       query(collection(db, "ga_overtime_requests"), where("tanggal", ">=", seninMingguIni), where("tanggal", "<=", mingguMingguIni)),
       (snapshot) => {
         const otData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeLog))
+          .filter((o) => !/batal/i.test((o as OvertimeLog & { status?: string }).status || "")) // §150 pulang ≤ 19:30 tidak dihitung
           .sort((a, b) => a.tanggal === b.tanggal ? a.jam_mulai.localeCompare(b.jam_mulai) : a.tanggal.localeCompare(b.tanggal));
         setOvertimeMingguIni(otData);
       }

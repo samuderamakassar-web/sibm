@@ -31,7 +31,16 @@ export default function KehadiranKaryawanPanel() {
   }, [hariIni, kemarin]);
 
   const semua = data || [];
-  const lembur = semua.filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || (v.status === "selesai" && v.overtime_id)));
+  // §150 kemarin hanya yang masih di gedung (lewat tengah malam / lupa check-out); 1 kartu per orang per tanggal
+  const lemburMentah = semua.filter((v) => v.jenis === "lembur" && (v.status === "lanjut" || (v.status === "selesai" && v.overtime_id)) && (v.tanggal === hariIni || v.status === "lanjut"));
+  const perOrang = new Map<string, ValidasiKaryawan>();
+  lemburMentah.forEach((v) => {
+    const k = `${v.tanggal}|${v.nama.trim().toLowerCase()}`;
+    const lama = perOrang.get(k);
+    const waktu = (x: ValidasiKaryawan) => (x as ValidasiKaryawan & { waktu_validasi?: { toMillis: () => number } }).waktu_validasi?.toMillis?.() || 0;
+    if (!lama || (lama.status === "selesai" && v.status === "lanjut") || (lama.status === v.status && waktu(v) > waktu(lama))) perOrang.set(k, v);
+  });
+  const lembur = Array.from(perOrang.values()).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || a.nama.localeCompare(b.nama));
   const tidakMasuk = semua.filter((v) => v.jenis === "belum_input" && v.tanggal === hariIni && v.status === "tidak_masuk");
   const menunggu = semua.filter((v) => v.status === "menunggu" && (v.jenis === "lembur" || v.tanggal === hariIni)).length;
   const susulan = semua.filter((v) => v.jenis === "belum_input" && v.tanggal === hariIni && v.status === "diinput_susulan").length;
@@ -67,7 +76,7 @@ export default function KehadiranKaryawanPanel() {
           <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>Lembur ({lembur.length})</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "6px" }}>
             {lembur.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Tidak ada lembur tercatat.</div> : lembur.map((v) => (
-              <Kartu key={v.id} v={v} isi={<>{v.departemen} · {v.area || "-"} · {v.status === "lanjut" ? "masih di gedung" : "sudah check-out"}<br />divalidasi {v.divalidasi_oleh || "-"} {jam(v.waktu_validasi)}</>} />
+              <Kartu key={v.id} v={v} isi={<>{v.tanggal !== hariIni && <b style={{ color: "var(--warn)" }}>Kemarin · </b>}{v.departemen} · {v.area || "-"} · {v.status === "lanjut" ? (v.tanggal !== hariIni ? "belum check-out sejak kemarin" : "masih di gedung") : v.dihitung === false ? <b style={{ color: "var(--muted)" }}>pulang ≤ 19:30 · tidak dihitung lembur</b> : "sudah check-out"}<br />divalidasi {v.divalidasi_oleh || "-"} {jam(v.waktu_validasi)}</>} />
             ))}
           </div>
         </div>
