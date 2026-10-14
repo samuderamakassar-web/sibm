@@ -13,6 +13,7 @@ export const DAFTAR_UNIT_BISNIS = [
   "PT Samudera Kendari Logistik",
   "PT Masaji Kargosentra Tama",
   "PT PAD Samudera Perdana",
+  "PT Samudera Properti Indonesia", // §143
 ];
 
 // Kategori internal gedung — buat staf yang bekerja langsung di bawah Building Management/GA

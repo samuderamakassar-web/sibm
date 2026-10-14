@@ -16,6 +16,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
+import DokumenLegalPT from "../../../components/DokumenLegalPT";
 import { KONFIG_BAWAAN, WARNA_STATUS, progressKuartal, progressTask, type KonfigTracker, type TargetPT, type TaskPT, type StatusTarget } from "../../../lib/projectTracker";
 
 interface Tiket { id: string; lokasi: string; deskripsi: string; status: string; departemen?: string; waktu_lapor?: Timestamp | null; waktu_selesai?: Timestamp | null }
@@ -264,6 +265,9 @@ export default function DashboardEksekutifPage() {
               <Angka label="Permintaan ATK" nilai={`${atkPt.length}`} sub={`${atkPt.filter((a) => a.status === "Selesai / Diambil").length} sudah diambil`} />
             </div>
           </Tile>
+
+          {/* §143 dokumen legal PT ini (daftar & status saja) */}
+          <DokumenLegalPT pt={pt} />
         </div>
       )}
     </AdminShell>

@@ -80,7 +80,7 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { title: "Kendaraan & Uji Emisi", desc: "Foto, PIC, odometer, servis, uji emisi", path: "/admin/kendaraan", icon: "truck" },
       { title: "Master Data Laptop", desc: "Masa sewa laptop tiap user", path: "/admin/laptop", icon: "laptop" },
-      { title: "Legalitas & Perizinan", desc: "Dokumen legal + riwayat versi", path: "/admin/legalitas", icon: "stamp" },
+      { title: "Bank Dokumen Legal", desc: "Legalitas, izin, perjanjian & BA per PT", path: "/admin/legalitas", icon: "stamp" },
     ],
   },
   {
@@ -208,7 +208,7 @@ async function muatHitungan(): Promise<Hitungan> {
     overtime: () => hitung(query(collection(db, "ga_overtime_requests"), where("status", "==", "Menunggu Approval GA"))),
     helpdesk: () => hitung(query(collection(db, "helpdesk_tickets"), where("status", "in", ["Menunggu", "Sedang Dikerjakan"]))), // §105
     atk: () => hitung(query(collection(db, "ga_atk_requests"), where("status", "==", "Menunggu Disiapkan"))),
-    legalitas: () => hitung(query(collection(db, "master_legalitas"), where("tanggal_berakhir_aktif", "<=", isoTambahHari(hariIni, 60)))),
+    legalitas: () => hitung(query(collection(db, "master_legalitas"), where("tanggal_berakhir_aktif", ">", ""), where("tanggal_berakhir_aktif", "<=", isoTambahHari(hariIni, 60)))),
     laptop: async () => {
       const snap = await getDocs(query(collection(db, "master_laptop"), where("tanggal_berakhir", "<=", isoTambahHari(hariIni, 90))));
       return snap.docs.filter((d) => !d.data().dikembalikan).length;

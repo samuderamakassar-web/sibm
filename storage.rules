@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// §143 Bank Dokumen Legal: file legal (akta, NPWP, kontrak, izin) TIDAK publik -- hanya Admin GA / Administrator
+// yang login (dicek ke users_master). Eksekutif Tenant hanya melihat daftar dokumen (Firestore), tidak mengunduh file.
+// Path lain ditutup (aplikasi belum memakai Firebase Storage untuk keperluan lain; foto tetap di Cloudinary).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function profil() {
+      return firestore.get(/databases/(default)/documents/users_master/$(request.auth.uid)).data;
+    }
+    function adminGA() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users_master/$(request.auth.uid))
+        && (profil().get('departemen', '') == 'Admin GA' || profil().get('role', '').lower().matches('.*admin.*'));
+    }
+
+    match /legal/{allPaths=**} {
+      allow read: if adminGA();
+      // maks 20 MB per file; PDF / gambar / dokumen Office
+      allow write: if adminGA()
+        && (request.resource == null || (request.resource.size < 20 * 1024 * 1024
+          && request.resource.contentType.matches('application/pdf|image/.*|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-excel')));
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

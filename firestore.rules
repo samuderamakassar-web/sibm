@@ -110,6 +110,20 @@ service cloud.firestore {
     }
 
     // --------------------------------------------------------------------
+    // §143 Bank Dokumen Legal (master_legalitas) -- dulu ikut koleksiOperasional (semua akun staf bisa
+    // baca & ubah). Sekarang: Admin GA / Administrator penuh; Eksekutif Tenant hanya BACA dokumen yang
+    // PT-nya (users_master.unit_bisnis) ada di field pt[] (query array-contains pt, lihat DokumenLegalPT).
+    // Cron (firebase-admin) tidak terkena rules.
+    function isAdminGA() {
+      return hasProfile() && (myDept() == 'Admin GA' || isAdmin());
+    }
+    match /master_legalitas/{docId} {
+      allow read: if isAdminGA()
+        || (isEksekutif() && myProfile().get('unit_bisnis', '') != '' && myProfile().get('unit_bisnis', '') in resource.data.get('pt', []));
+      allow create, update, delete: if isAdminGA();
+    }
+
+    // --------------------------------------------------------------------
     // apar_units -- SENGAJA public read: dipakai halaman tanpa login
     // /qr-apar (src/app/qr-apar/page.tsx) yang discan dari QR fisik yang
     // ditempel di lokasi APAR, oleh siapa pun (bukan cuma karyawan login).
@@ -153,7 +167,7 @@ service cloud.firestore {
           'fcm_tokens', 'notifikasi_dadakan_siram', 'attendance_logs',
           'staff_points_bulanan', 'survei_kepuasan_gedung', 'security_shift_handover',
           'pengumuman_gedung', 'notifikasi_personal', 'security_shift_extend',
-          'handbook_magang', 'evaluasi_manual', 'master_laptop', 'master_legalitas',
+          'handbook_magang', 'evaluasi_manual', 'master_laptop',
           // §59 Validasi Karyawan (Security) & Pemantauan Jam Kerja (QHSE)
           'validasi_karyawan', 'pemantauan_jam_kerja',
           // §80 Booking kendaraan & ruangan

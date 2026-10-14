@@ -150,7 +150,9 @@ async function jalankan() {
     const sisaHari = hitungSisaHari(data.tanggal_berakhir_aktif);
     if (sisaHari > AMBANG_HARI_MULAI) return;
     if (!perluDikirimHariIni(data, sisaHari)) return;
-    daftarDue.push({ id: d.id, nama_dokumen: data.nama_dokumen, jenis: data.jenis, tanggal_berakhir_aktif: data.tanggal_berakhir_aktif, sisaHari });
+    // §143 sertakan kode arsip & PT di pesan (bank dokumen multi-perusahaan)
+    const ptLabel = Array.isArray(data.pt) && data.pt.length ? ` (${data.pt.join(", ")})` : "";
+    daftarDue.push({ id: d.id, nama_dokumen: `${data.kode_arsip ? data.kode_arsip + " · " : ""}${data.nama_dokumen}${ptLabel}`, jenis: data.jenis, tanggal_berakhir_aktif: data.tanggal_berakhir_aktif, sisaHari });
   });
 
   if (daftarDue.length === 0) {

@@ -1,392 +1,325 @@
 "use client";
 
-import { useEffect, useState } from "react";
+/**
+ * Bank Dokumen Legal (§143) -- multi-perusahaan: PT -> Kategori -> Dokumen (riwayat versi). Lihat src/lib/legalBank.ts.
+ * Data lama (tanpa PT) tampil sebagai "Belum ditentukan" dan dilengkapi lewat tombol Ubah.
+ */
+
+import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
-import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "../../../lib/uploadDokumen";
 import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
 import { daerahTulis } from "@/lib/daerah";
+import {
+  KATEGORI_LEGAL, MAX_FILE_LEGAL_MB, PERUSAHAAN_LEGAL, PT_BELUM, RISIKO_LEGAL, bukaFileLegal, kategoriDari, kodeArsipBerikut, kodePT,
+  labelKategori, unggahFileLegal, type DokumenLegal, type KategoriLegal, type RisikoLegal, type VersiLegal,
+} from "@/lib/legalBank";
 
-type Jenis = "Legalitas" | "Perizinan" | "Perjanjian";
+const BATAS_HARI = 60;
+const todayISO = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
+const fmt = (iso?: string) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : "-");
 
-interface RiwayatVersi {
-  tanggal_mulai: string;
-  tanggal_berakhir: string;
-  file_url: string;
-  catatan: string;
-  diupload_pada: string; // ISO date
+type Status = { kunci: "AKTIF" | "PERLU" | "KADALUARSA" | "TETAP"; label: string; bg: string; fg: string; sisa: number | null };
+function statusDok(d: DokumenLegal): Status {
+  if (d.tanpa_masa_berlaku || !d.tanggal_berakhir_aktif) return { kunci: "TETAP", label: "TANPA MASA BERLAKU", bg: "var(--line)", fg: "var(--ink-soft)", sisa: null };
+  const sisa = Math.ceil((new Date(d.tanggal_berakhir_aktif).getTime() - new Date(todayISO()).getTime()) / 86400000);
+  if (sisa < 0) return { kunci: "KADALUARSA", label: "KADALUARSA", bg: "var(--red-50)", fg: "var(--red-600)", sisa };
+  if (sisa <= BATAS_HARI) return { kunci: "PERLU", label: "PERLU DIPERPANJANG", bg: "var(--warn-50)", fg: "var(--warn)", sisa };
+  return { kunci: "AKTIF", label: "AKTIF", bg: "var(--ok-50)", fg: "var(--ok)", sisa };
 }
+const WARNA_RISIKO: Record<RisikoLegal, { bg: string; fg: string }> = {
+  Kritis: { bg: "var(--red-50)", fg: "var(--red-600)" }, Penting: { bg: "var(--warn-50)", fg: "var(--warn)" }, Biasa: { bg: "var(--line)", fg: "var(--ink-soft)" },
+};
 
-interface Legalitas {
-  id: string;
-  nama_dokumen: string;
-  jenis: Jenis;
-  riwayat: RiwayatVersi[];
-  tanggal_mulai_aktif: string;
-  tanggal_berakhir_aktif: string;
-  file_url_aktif: string;
-  catatan_aktif: string;
-}
-
-const FORM_KOSONG = { nama_dokumen: "", jenis: "Legalitas" as Jenis, tanggal_mulai: "", tanggal_berakhir: "", file_url: "", catatan: "" };
-const BATAS_HARI_PERLU_DIPERPANJANG = 60;
-
-function todayISO(): string {
-  // §70: tanggal WITA -- dulu toISOString() (UTC) -> sebelum 08:00 WITA masih "kemarin", sisa hari meleset 1.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
-}
-
-function hitungStatus(item: Legalitas): { label: string; bg: string; color: string; sisaHari: number } {
-  const hariIni = new Date(todayISO());
-  const akhir = new Date(item.tanggal_berakhir_aktif);
-  const sisaHari = Math.ceil((akhir.getTime() - hariIni.getTime()) / (1000 * 60 * 60 * 24));
-  if (sisaHari < 0) return { label: "KADALUARSA", bg: "var(--red-50)", color: "var(--red-600)", sisaHari };
-  if (sisaHari <= BATAS_HARI_PERLU_DIPERPANJANG) return { label: "PERLU DIPERPANJANG", bg: "var(--warn-50)", color: "var(--warn)", sisaHari };
-  return { label: "AKTIF", bg: "var(--ok-50)", color: "var(--ok)", sisaHari };
-}
-
-function formatTanggal(iso: string): string {
-  if (!iso) return "-";
-  return new Date(iso).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-const jenisWarna: Record<Jenis, { bg: string; color: string }> = {
-  Legalitas: { bg: "var(--accent-50)", color: "var(--accent)" },
-  Perizinan: { bg: "var(--info-50)", color: "var(--info)" },
-  Perjanjian: { bg: "var(--ok-50)", color: "var(--ok)" },
+const FORM_KOSONG = {
+  nama_dokumen: "", pt: [] as string[], ptLain: "", kategori: "IZN" as KategoriLegal, nomor_dokumen: "", tanggal_terbit: "",
+  tanpa_masa_berlaku: false, tanggal_mulai: "", tanggal_berakhir: "", penerbit: "", pic: "", lokasi_arsip: "", risiko: "Penting" as RisikoLegal, catatan: "",
 };
 
 export default function AdminLegalitasPage() {
   const showToast = useToast();
   const confirm = useConfirm();
-  const { session, isReady } = useAuthGuard({
-    roles: ["Admin"],
-    depts: ["Admin GA"],
-    redirectTo: "/",
-    deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA.",
-  });
+  const { session, isReady } = useAuthGuard({ roles: ["Admin"], depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA." });
 
-  const [daftar, setDaftar] = useState<Legalitas[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterJenis, setFilterJenis] = useState<"SEMUA" | Jenis>("SEMUA");
+  const [daftar, setDaftar] = useState<DokumenLegal[]>([]);
+  const [ptAktif, setPtAktif] = useState("SEMUA");
+  const [kategoriAktif, setKategoriAktif] = useState("SEMUA");
   const [filterStatus, setFilterStatus] = useState("SEMUA");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [cari, setCari] = useState("");
+  const [bukaRiwayat, setBukaRiwayat] = useState<string | null>(null);
 
-  const [showModal, setShowModal] = useState(false);
-  const [modalMode, setModalMode] = useState<"baru" | "perbarui">("baru");
-  const [targetGroup, setTargetGroup] = useState<Legalitas | null>(null);
-  const [formData, setFormData] = useState(FORM_KOSONG);
-  const [isUploadingFile, setIsUploadingFile] = useState(false);
-  const [namaFile, setNamaFile] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [mode, setMode] = useState<"baru" | "versi" | "ubah" | null>(null);
+  const [target, setTarget] = useState<DokumenLegal | null>(null);
+  const [form, setForm] = useState(FORM_KOSONG);
+  const [file, setFile] = useState<File | null>(null);
+  const [menyimpan, setMenyimpan] = useState(false);
 
   useEffect(() => {
     if (!isReady || !session) return;
-    const unsub = onSnapshot(query(collection(db, "master_legalitas"), orderBy("tanggal_berakhir_aktif", "asc")), (snap) => {
-      setDaftar(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Legalitas)));
-    });
-    return () => unsub();
+    return onSnapshot(query(collection(db, "master_legalitas"), orderBy("tanggal_berakhir_aktif", "asc")), (snap) => {
+      setDaftar(snap.docs.map((d) => ({ id: d.id, ...d.data() } as DokumenLegal)));
+    }, (e) => console.error("[legal]", e));
   }, [isReady, session]);
 
-  const bukaTambah = () => {
-    setModalMode("baru");
-    setTargetGroup(null);
-    setFormData(FORM_KOSONG);
-    setNamaFile("");
-    setShowModal(true);
+  const ptDari = (d: DokumenLegal) => (d.pt && d.pt.length ? d.pt : [PT_BELUM]);
+  // PT: daftar resmi + PT lain yang pernah diketik + "Belum ditentukan" bila ada data lama
+  const daftarPT = useMemo(() => {
+    const lain = Array.from(new Set(daftar.flatMap((d) => d.pt || []))).filter((n) => !PERUSAHAAN_LEGAL.some((p) => p.nama === n)).sort();
+    return [...PERUSAHAAN_LEGAL.map((p) => p.nama), ...lain, ...(daftar.some((d) => !d.pt?.length) ? [PT_BELUM] : [])];
+  }, [daftar]);
+
+  const cocokCari = (d: DokumenLegal) => {
+    const q = cari.trim().toLowerCase();
+    return !q || [d.nama_dokumen, d.nomor_dokumen, d.kode_arsip, d.penerbit, d.pic, ...(d.pt || [])].some((x) => (x || "").toLowerCase().includes(q));
+  };
+  const tampil = daftar.filter((d) => (ptAktif === "SEMUA" || ptDari(d).includes(ptAktif))
+    && (kategoriAktif === "SEMUA" || kategoriDari(d) === kategoriAktif)
+    && (filterStatus === "SEMUA" || statusDok(d).kunci === filterStatus) && cocokCari(d));
+  const ringkasPT = (nama: string) => {
+    const ds = daftar.filter((d) => ptDari(d).includes(nama));
+    return { total: ds.length, perlu: ds.filter((d) => statusDok(d).kunci === "PERLU").length, lewat: ds.filter((d) => statusDok(d).kunci === "KADALUARSA").length };
   };
 
-  const bukaPerbarui = (item: Legalitas) => {
-    setModalMode("perbarui");
-    setTargetGroup(item);
-    setFormData({ nama_dokumen: item.nama_dokumen, jenis: item.jenis, tanggal_mulai: "", tanggal_berakhir: "", file_url: "", catatan: "" });
-    setNamaFile("");
-    setShowModal(true);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > MAX_UKURAN_DOKUMEN_MB * 1024 * 1024) {
-      return showToast(`File terlalu besar (maks ${MAX_UKURAN_DOKUMEN_MB}MB).`, "warning");
-    }
-    handleDokumenUpload(
-      file,
-      "sibm/legalitas",
-      () => setIsUploadingFile(true),
-      (url, nama) => { setFormData((f) => ({ ...f, file_url: url })); setNamaFile(nama); },
-      (err) => { console.error(err); showToast(err instanceof Error ? err.message : "Gagal upload file, coba lagi.", "error"); },
-      () => setIsUploadingFile(false)
-    );
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.nama_dokumen.trim() || !formData.tanggal_mulai || !formData.tanggal_berakhir || !formData.file_url) {
-      return showToast("Lengkapi dulu Nama Dokumen, Masa Berlaku, dan Upload Scan.", "warning");
-    }
-    if (isUploadingFile) return showToast("Tunggu upload file selesai dulu.", "warning");
-
-    setIsSaving(true);
-    try {
-      const versiBaru: RiwayatVersi = {
-        tanggal_mulai: formData.tanggal_mulai,
-        tanggal_berakhir: formData.tanggal_berakhir,
-        file_url: formData.file_url,
-        catatan: formData.catatan.trim(),
-        diupload_pada: todayISO(),
-      };
-      if (modalMode === "baru") {
-        await addDoc(collection(db, "master_legalitas"), { daerah: daerahTulis(),
-          nama_dokumen: formData.nama_dokumen.trim(),
-          jenis: formData.jenis,
-          riwayat: [versiBaru],
-          tanggal_mulai_aktif: versiBaru.tanggal_mulai,
-          tanggal_berakhir_aktif: versiBaru.tanggal_berakhir,
-          file_url_aktif: versiBaru.file_url,
-          catatan_aktif: versiBaru.catatan,
-        });
-        showToast("Dokumen baru berhasil ditambahkan.", "success");
-      } else if (targetGroup) {
-        await updateDoc(doc(db, "master_legalitas", targetGroup.id), {
-          riwayat: [...(targetGroup.riwayat || []), versiBaru],
-          tanggal_mulai_aktif: versiBaru.tanggal_mulai,
-          tanggal_berakhir_aktif: versiBaru.tanggal_berakhir,
-          file_url_aktif: versiBaru.file_url,
-          catatan_aktif: versiBaru.catatan,
-        });
-        showToast(`"${targetGroup.nama_dokumen}" berhasil diperbarui dengan versi baru.`, "success");
-      }
-      setShowModal(false);
-    } catch (error) {
-      console.error(error);
-      showToast("Gagal menyimpan data.", "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async (item: Legalitas) => {
-    const yakin = await confirm({
-      title: "Hapus Dokumen",
-      message: `Yakin ingin menghapus "${item.nama_dokumen}" beserta SELURUH riwayat versinya? Tindakan ini tidak bisa dibatalkan.`,
-      confirmText: "Ya, Hapus",
-      variant: "danger",
-    });
-    if (!yakin) return;
-    try {
-      await deleteDoc(doc(db, "master_legalitas", item.id));
-      showToast("Dokumen berhasil dihapus.", "success");
-    } catch (error) {
-      console.error(error);
-      showToast("Gagal menghapus data.", "error");
-    }
-  };
-
-  const filtered = daftar.filter((d) => {
-    const q = searchQuery.toLowerCase();
-    const matchSearch = !q || d.nama_dokumen.toLowerCase().includes(q);
-    const matchJenis = filterJenis === "SEMUA" || d.jenis === filterJenis;
-    const st = hitungStatus(d).label;
-    const stKey = st === "AKTIF" ? "AKTIF" : st === "PERLU DIPERPANJANG" ? "PERLU" : "KADALUARSA";
-    const matchStatus = filterStatus === "SEMUA" || stKey === filterStatus;
-    return matchSearch && matchJenis && matchStatus;
+  const isiForm = (d: DokumenLegal) => ({
+    ...FORM_KOSONG, nama_dokumen: d.nama_dokumen, pt: d.pt || [], kategori: kategoriDari(d), nomor_dokumen: d.nomor_dokumen || "", tanggal_terbit: d.tanggal_terbit || "",
+    tanpa_masa_berlaku: !!d.tanpa_masa_berlaku, penerbit: d.penerbit || "", pic: d.pic || "", lokasi_arsip: d.lokasi_arsip || "", risiko: d.risiko || "Penting",
   });
-
-  const jumlah = {
-    total: daftar.length,
-    aktif: daftar.filter((d) => hitungStatus(d).label === "AKTIF").length,
-    perlu: daftar.filter((d) => hitungStatus(d).label === "PERLU DIPERPANJANG").length,
-    kadaluarsa: daftar.filter((d) => hitungStatus(d).label === "KADALUARSA").length,
+  const buka = (m: "baru" | "versi" | "ubah", d: DokumenLegal | null) => {
+    setMode(m); setTarget(d); setFile(null);
+    setForm(d ? isiForm(d) : { ...FORM_KOSONG, pt: ptAktif !== "SEMUA" && ptAktif !== PT_BELUM ? [ptAktif] : [], kategori: kategoriAktif !== "SEMUA" ? (kategoriAktif as KategoriLegal) : "IZN" });
   };
+  const togglePT = (nama: string) => setForm((f) => ({ ...f, pt: f.pt.includes(nama) ? f.pt.filter((x) => x !== nama) : [...f.pt, nama] }));
+
+  const simpan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pt = [...form.pt, ...(form.ptLain.trim() ? [form.ptLain.trim().replace(/^(?!PT\s)/i, "PT ")] : [])].filter((v, i, a) => a.indexOf(v) === i);
+    const butuhVersi = mode !== "ubah";
+    if (mode !== "versi" && (!form.nama_dokumen.trim() || !pt.length)) return showToast("Isi nama dokumen & pilih minimal 1 perusahaan.", "warning");
+    if (butuhVersi && !form.tanpa_masa_berlaku && (!form.tanggal_mulai || !form.tanggal_berakhir)) return showToast("Isi masa berlaku, atau centang Tanpa masa berlaku.", "warning");
+    if (butuhVersi && !file) return showToast("Pilih file scan dokumen.", "warning");
+    setMenyimpan(true);
+    try {
+      const kodeArsip = target?.kode_arsip || kodeArsipBerikut(pt[0] || PT_BELUM, form.kategori, (form.tanggal_terbit || form.tanggal_mulai || todayISO()).slice(0, 4), daftar);
+      const meta = {
+        nama_dokumen: form.nama_dokumen.trim(), pt, kategori: form.kategori, kode_arsip: kodeArsip, nomor_dokumen: form.nomor_dokumen.trim(), tanggal_terbit: form.tanggal_terbit,
+        tanpa_masa_berlaku: form.tanpa_masa_berlaku, penerbit: form.penerbit.trim(), pic: form.pic.trim(), lokasi_arsip: form.lokasi_arsip.trim(), risiko: form.risiko,
+        jenis: labelKategori(form.kategori),
+      };
+      if (mode === "ubah" && target) {
+        await updateDoc(doc(db, "master_legalitas", target.id), { ...meta, ...(form.tanpa_masa_berlaku ? { tanggal_berakhir_aktif: "" } : {}) });
+        showToast("Data dokumen diperbarui.", "success");
+      } else {
+        const unggah = await unggahFileLegal(file as File, kodeArsip);
+        const versi: VersiLegal = {
+          tanggal_mulai: form.tanpa_masa_berlaku ? "" : form.tanggal_mulai, tanggal_berakhir: form.tanpa_masa_berlaku ? "" : form.tanggal_berakhir,
+          catatan: form.catatan.trim(), diupload_pada: todayISO(), file_path: unggah.path, nama_file: unggah.nama,
+        };
+        const aktif = { tanggal_mulai_aktif: versi.tanggal_mulai, tanggal_berakhir_aktif: versi.tanggal_berakhir, catatan_aktif: versi.catatan, file_path_aktif: versi.file_path, file_url_aktif: "" };
+        if (mode === "baru") {
+          await addDoc(collection(db, "master_legalitas"), { daerah: daerahTulis(), ...meta, riwayat: [versi], ...aktif });
+          showToast(`Dokumen tersimpan · kode arsip ${kodeArsip}`, "success");
+        } else if (target) {
+          await updateDoc(doc(db, "master_legalitas", target.id), { ...meta, riwayat: [...(target.riwayat || []), versi], ...aktif });
+          showToast("Versi baru tersimpan, versi lama masuk riwayat.", "success");
+        }
+      }
+      setMode(null);
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : "Gagal menyimpan.", "error");
+    } finally { setMenyimpan(false); }
+  };
+
+  const hapus = async (d: DokumenLegal) => {
+    if (!(await confirm({ title: "Hapus Dokumen", message: `Hapus "${d.nama_dokumen}" (${d.kode_arsip || "tanpa kode"}) beserta seluruh riwayat versinya? Tidak bisa dibatalkan.`, confirmText: "Ya, Hapus", variant: "danger" }))) return;
+    try { await deleteDoc(doc(db, "master_legalitas", d.id)); showToast("Dokumen dihapus.", "success"); }
+    catch (e) { console.error(e); showToast("Gagal menghapus.", "error"); }
+  };
+  const lihat = (v: { file_path?: string; file_url?: string }) => bukaFileLegal(v).catch((e) => { console.error(e); showToast("File tidak bisa dibuka (Storage belum aktif atau tidak berhak).", "error"); });
 
   if (!isReady || !session) return null;
+  const kategoriTampil = KATEGORI_LEGAL.filter((k) => tampil.some((d) => kategoriDari(d) === k.kode));
+  const katInfo = KATEGORI_LEGAL.find((k) => k.kode === form.kategori);
 
   return (
-    <AdminShell
-      title="Legalitas & Perizinan"
-      subtitle="Dokumen legalitas, perizinan & perjanjian — tiap diperpanjang, riwayat versi lama tetap tersimpan"
+    <AdminShell title="Bank Dokumen Legal" subtitle="Legalitas, perizinan, perjanjian, berita acara & dokumen resmi tiap perusahaan — riwayat versi tersimpan"
       userName={session.nama || "Admin"}
-      actions={
-        <button type="button" className="sa-btn is-primary" onClick={bukaTambah}>
-          <AdminIcon name="stamp" size={16} /> Tambah Dokumen
-        </button>
-      }
-    >
+      actions={<button type="button" className="sa-btn is-primary" onClick={() => buka("baru", null)}><AdminIcon name="stamp" size={16} /> Tambah Dokumen</button>}>
       <style dangerouslySetInnerHTML={{ __html: `
-        * { box-sizing: border-box; }
-        .stat-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
-        .stat-card { border-radius: 22px; padding: 16px; }
-        .stat-num { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
-        .stat-label { font-size: 12px; font-weight: 700; margin-top: 4px; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .form-field > label:first-child { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
-        .form-field input:not([type="file"]), .form-field select { width: 100%; height: 44px; padding: 0 13px; border-radius: 12px; border: 1px solid var(--line); font-size: 13.5px; background: var(--bg); outline: none; box-sizing: border-box; font-family: inherit; }
-        @media (max-width: 768px) {
-          .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .header-title-container { flex-direction: column; align-items: stretch !important; gap: 12px; }
-          .search-input-wrapper { width: 100% !important; }
-          .form-grid { grid-template-columns: 1fr; }
-        }
-      `}} />
+        .lg-pt { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-bottom: 14px; }
+        .lg-ptk { text-align: left; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-family: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 2px; }
+        .lg-ptk.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+        .lg-ptk b { font-size: 13px; } .lg-ptk small { font-size: 11.5px; color: var(--muted); }
+        .lg-kode { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; background: var(--bg); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+        .lg-chip { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+        .lg-kartu { background: var(--bg); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+        .lg-aksi { display: flex; gap: 6px; flex-wrap: wrap; }
+        .lg-btn { height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .lg-btn:hover { background: var(--hover); color: var(--ink); }
+        .lg-btn.hapus { color: var(--red-600); }
+        .lg-form { display: flex; flex-direction: column; gap: 12px; }
+        .lg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .lg-f label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 5px; }
+        .lg-f input, .lg-f select { width: 100%; height: 42px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13.5px; font-family: inherit; box-sizing: border-box; }
+        .lg-pilih { display: flex; flex-wrap: wrap; gap: 6px; }
+        .lg-pilih button { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--ink-soft); font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .lg-pilih button.on { background: var(--ink); color: var(--surface); border-color: transparent; }
+        @media (max-width: 640px) { .lg-grid { grid-template-columns: 1fr; } }
+      ` }} />
 
-      <div className="stat-grid">
-        {[
-          { label: "Total Dokumen", n: jumlah.total, bg: "var(--tile)", fg: "var(--ink)" },
-          { label: "Aktif", n: jumlah.aktif, bg: "var(--ok-50)", fg: "var(--ok)" },
-          { label: `Perlu Diperpanjang (≤${BATAS_HARI_PERLU_DIPERPANJANG} hari)`, n: jumlah.perlu, bg: "var(--warn-50)", fg: "var(--warn)" },
-          { label: "Kadaluarsa", n: jumlah.kadaluarsa, bg: "var(--red-50)", fg: "var(--red-600)" },
-        ].map((s) => (
-          <div key={s.label} className="stat-card" style={{ background: s.bg, color: s.fg }}>
-            <div className="stat-num">{s.n}</div>
-            <div className="stat-label">{s.label}</div>
-          </div>
-        ))}
+      {/* Tingkat 1: Perusahaan */}
+      <div className="lg-pt" role="tablist" aria-label="Perusahaan">
+        <button type="button" role="tab" aria-selected={ptAktif === "SEMUA"} className={`lg-ptk${ptAktif === "SEMUA" ? " on" : ""}`} onClick={() => setPtAktif("SEMUA")}>
+          <b>Semua perusahaan</b><small>{daftar.length} dokumen · {daftar.filter((d) => statusDok(d).kunci === "PERLU").length} perlu diperpanjang · {daftar.filter((d) => statusDok(d).kunci === "KADALUARSA").length} kadaluarsa</small>
+        </button>
+        {daftarPT.map((nama) => {
+          const r = ringkasPT(nama);
+          return (
+            <button key={nama} type="button" role="tab" aria-selected={ptAktif === nama} className={`lg-ptk${ptAktif === nama ? " on" : ""}`} onClick={() => setPtAktif(nama)}>
+              <span style={{ display: "flex", gap: "6px", alignItems: "center" }}>{nama !== PT_BELUM && <span className="lg-kode">{kodePT(nama)}</span>}<b>{nama.replace(/^PT /, "")}</b></span>
+              <small>{r.total} dokumen{r.perlu ? ` · ${r.perlu} perlu diperpanjang` : ""}{r.lewat ? ` · ${r.lewat} kadaluarsa` : ""}</small>
+            </button>
+          );
+        })}
       </div>
 
       <Tile>
-        <div className="header-title-container" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-          <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700 }}>Daftar Dokumen</h2>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-            <select className="sa-field" aria-label="Filter jenis" value={filterJenis} onChange={(e) => setFilterJenis(e.target.value as "SEMUA" | Jenis)}>
-              <option value="SEMUA">Semua Jenis</option>
-              <option value="Legalitas">Legalitas</option>
-              <option value="Perizinan">Perizinan</option>
-              <option value="Perjanjian">Perjanjian</option>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
+          <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800 }}>{ptAktif === "SEMUA" ? "Semua perusahaan" : ptAktif} <span style={{ fontSize: "12.5px", color: "var(--muted)", fontWeight: 600 }}>· {tampil.length} dokumen</span></h2>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+            <select className="sa-field" aria-label="Kategori" value={kategoriAktif} onChange={(e) => setKategoriAktif(e.target.value)}>
+              <option value="SEMUA">Semua kategori</option>
+              {KATEGORI_LEGAL.map((k) => <option key={k.kode} value={k.kode}>{k.label}</option>)}
             </select>
-            <select className="sa-field" aria-label="Filter status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-              <option value="SEMUA">Semua Status</option>
-              <option value="AKTIF">Aktif</option>
-              <option value="PERLU">Perlu Diperpanjang</option>
-              <option value="KADALUARSA">Kadaluarsa</option>
+            <select className="sa-field" aria-label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="SEMUA">Semua status</option><option value="AKTIF">Aktif</option><option value="PERLU">Perlu diperpanjang</option>
+              <option value="KADALUARSA">Kadaluarsa</option><option value="TETAP">Tanpa masa berlaku</option>
             </select>
-            <label className="sa-search search-input-wrapper" style={{ width: "240px" }}>
+            <label className="sa-search" style={{ width: "240px" }}>
               <AdminIcon name="search" size={15} strokeWidth={2} />
-              <input type="search" aria-label="Cari dokumen" placeholder="Cari nama dokumen…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input type="search" aria-label="Cari dokumen" placeholder="Nama, nomor, kode arsip, penerbit…" value={cari} onChange={(e) => setCari(e.target.value)} />
             </label>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {filtered.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px" }}>
-              {searchQuery || filterJenis !== "SEMUA" || filterStatus !== "SEMUA" ? "Data tidak ditemukan." : 'Belum ada dokumen. Klik "Tambah Dokumen" untuk mulai mendata.'}
+        {tampil.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "36px 16px", color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: "16px" }}>
+            {daftar.length ? "Tidak ada dokumen pada filter ini." : 'Belum ada dokumen. Tekan "Tambah Dokumen".'}
+          </div>
+        ) : kategoriTampil.map((k) => (
+          <section key={k.kode} style={{ marginBottom: "16px" }}>
+            {/* Tingkat 2: Kategori */}
+            <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em", margin: "4px 0 8px" }}>{k.label} · {tampil.filter((d) => kategoriDari(d) === k.kode).length}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {tampil.filter((d) => kategoriDari(d) === k.kode).map((d) => {
+                const st = statusDok(d);
+                const lama = (d.riwayat || []).slice(0, -1).reverse();
+                return (
+                  <article key={d.id} className="lg-kartu">
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                      {d.kode_arsip ? <span className="lg-kode">{d.kode_arsip}</span> : <span className="lg-kode" style={{ color: "var(--warn)" }}>belum ada kode</span>}
+                      <b style={{ fontSize: "15px" }}>{d.nama_dokumen}</b>
+                      <span className="lg-chip" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
+                      {d.risiko && <span className="lg-chip" style={{ background: WARNA_RISIKO[d.risiko].bg, color: WARNA_RISIKO[d.risiko].fg }}>{d.risiko}</span>}
+                    </div>
+                    <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>
+                      {d.nomor_dokumen ? `No. ${d.nomor_dokumen} · ` : ""}{d.penerbit ? `${d.penerbit} · ` : ""}
+                      {st.kunci === "TETAP" ? `Terbit ${fmt(d.tanggal_terbit || d.tanggal_mulai_aktif)}` : <>Berlaku {fmt(d.tanggal_mulai_aktif)} → {fmt(d.tanggal_berakhir_aktif)} <b style={{ color: st.fg }}>({(st.sisa ?? 0) < 0 ? `lewat ${Math.abs(st.sisa ?? 0)} hari` : `${st.sisa} hari lagi`})</b></>}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                      {ptDari(d).join(", ")}{d.pic ? ` · PIC ${d.pic}` : ""}{d.lokasi_arsip ? ` · Arsip fisik: ${d.lokasi_arsip}` : ""}{d.catatan_aktif ? ` · ${d.catatan_aktif}` : ""}
+                    </div>
+                    <div className="lg-aksi">
+                      {(d.file_path_aktif || d.file_url_aktif) && <button type="button" className="lg-btn" onClick={() => lihat({ file_path: d.file_path_aktif, file_url: d.file_url_aktif })}>Lihat file</button>}
+                      <button type="button" className="lg-btn" onClick={() => buka("versi", d)}>{st.kunci === "TETAP" ? "Unggah versi baru" : "Perbarui / perpanjang"}</button>
+                      <button type="button" className="lg-btn" onClick={() => buka("ubah", d)}>Ubah data</button>
+                      {lama.length > 0 && <button type="button" className="lg-btn" aria-expanded={bukaRiwayat === d.id} onClick={() => setBukaRiwayat(bukaRiwayat === d.id ? null : d.id)}>Riwayat {lama.length} versi</button>}
+                      <button type="button" className="lg-btn hapus" onClick={() => hapus(d)}>Hapus</button>
+                    </div>
+                    {bukaRiwayat === d.id && (
+                      <div style={{ background: "var(--surface)", borderRadius: "12px", padding: "6px 12px" }}>
+                        {lama.map((v, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: "8px", padding: "7px 0", borderBottom: i < lama.length - 1 ? "1px dashed var(--line)" : "none", fontSize: "12.5px", flexWrap: "wrap" }}>
+                            <span style={{ color: "var(--ink-soft)" }}>{v.tanggal_berakhir ? `${fmt(v.tanggal_mulai)} → ${fmt(v.tanggal_berakhir)}` : `diunggah ${fmt(v.diupload_pada)}`}{v.catatan ? ` · ${v.catatan}` : ""}</span>
+                            <button type="button" className="lg-btn" style={{ height: "26px" }} onClick={() => lihat(v)}>Lihat file</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
-          ) : filtered.map((item) => {
-            const st = hitungStatus(item);
-            const isExpanded = expandedId === item.id;
-            const riwayatLama = (item.riwayat || []).slice(0, -1).reverse();
-            return (
-              <div key={item.id} style={{ background: "var(--bg)", borderRadius: "20px", overflow: "hidden" }}>
-                <div style={{ padding: "16px 18px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
-                        <span style={{ fontSize: "15.5px", fontWeight: 800, color: "var(--ink)" }}>{item.nama_dokumen}</span>
-                        <span style={{ background: jenisWarna[item.jenis].bg, color: jenisWarna[item.jenis].color, padding: "3px 9px", borderRadius: "20px", fontSize: "11px", fontWeight: 700 }}>{item.jenis}</span>
-                        <span style={{ background: st.bg, color: st.color, padding: "3px 9px", borderRadius: "8px", fontSize: "11px", fontWeight: 800 }}>{st.label}</span>
-                      </div>
-                      <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>
-                        Berlaku {formatTanggal(item.tanggal_mulai_aktif)} &rarr; {formatTanggal(item.tanggal_berakhir_aktif)}
-                        <span style={{ marginLeft: "8px", fontWeight: 700, color: st.sisaHari < 0 ? "var(--red-600)" : st.sisaHari <= BATAS_HARI_PERLU_DIPERPANJANG ? "var(--warn)" : "var(--muted)" }}>
-                          ({st.sisaHari < 0 ? `lewat ${Math.abs(st.sisaHari)} hari` : `${st.sisaHari} hari lagi`})
-                        </span>
-                      </div>
-                      {item.catatan_aktif && <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px", fontStyle: "italic" }}>{item.catatan_aktif}</div>}
-                      <a href={item.file_url_aktif} target="_blank" rel="noopener noreferrer" style={{ fontSize: "12px", fontWeight: 600, color: "var(--info)", display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "8px" }}>
-                        <AdminIcon name="fileText" size={14} /> Lihat Scan Terbaru
-                      </a>
-                    </div>
-                    <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-                      <button type="button" className="sa-btn is-soft" onClick={() => bukaPerbarui(item)} style={{ height: "38px", fontSize: "12.5px", background: "var(--info-50)", color: "var(--info)" }}>
-                        <AdminIcon name="refresh" size={14} strokeWidth={2} /> Perbarui
-                      </button>
-                      <button type="button" onClick={() => handleDelete(item)} title="Hapus" aria-label={`Hapus ${item.nama_dokumen}`} style={{ background: "var(--red-50)", color: "var(--red-600)", border: "none", width: "38px", height: "38px", borderRadius: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {riwayatLama.length > 0 && (
-                    <button type="button" aria-expanded={isExpanded} onClick={() => setExpandedId(isExpanded ? null : item.id)} style={{ marginTop: "10px", background: "none", border: "none", cursor: "pointer", color: "var(--ink-soft)", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px", padding: "4px 0", fontFamily: "inherit" }}>
-                      <AdminIcon name="chevronRight" size={13} strokeWidth={2.2} style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
-                      Riwayat {riwayatLama.length} versi sebelumnya
-                    </button>
-                  )}
-                </div>
-
-                {isExpanded && riwayatLama.length > 0 && (
-                  <div style={{ background: "var(--surface)", margin: "0 10px 10px", borderRadius: "14px", padding: "6px 14px" }}>
-                    {riwayatLama.map((v, idx) => (
-                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: idx < riwayatLama.length - 1 ? "1px dashed var(--line)" : "none", fontSize: "12.5px", flexWrap: "wrap", gap: "6px" }}>
-                        <span style={{ color: "var(--ink-soft)" }}>{formatTanggal(v.tanggal_mulai)} &rarr; {formatTanggal(v.tanggal_berakhir)}{v.catatan && <span style={{ color: "var(--muted)", fontStyle: "italic" }}> &middot; {v.catatan}</span>}</span>
-                        <a href={v.file_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)", fontWeight: 600, flexShrink: 0 }}>Lihat Scan &rarr;</a>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+          </section>
+        ))}
       </Tile>
 
-      <Modal open={showModal} onClose={() => !isSaving && setShowModal(false)} maxWidth="520px">
-        <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: 800, color: "var(--ink)" }}>
-          {modalMode === "baru" ? "Tambah Dokumen Baru" : `Perbarui: ${targetGroup?.nama_dokumen}`}
-        </h3>
-        {modalMode === "perbarui" && <p style={{ margin: "0 0 16px 0", fontSize: "12.5px", color: "var(--muted)" }}>Versi lama otomatis tersimpan di riwayat, versi baru ini yang jadi aktif.</p>}
-        {modalMode === "baru" && <div style={{ height: "16px" }} />}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          {modalMode === "baru" && (
-            <div className="form-grid">
-              <div className="form-field">
-                <label htmlFor="leg-nama">Nama Dokumen *</label>
-                <input id="leg-nama" type="text" required value={formData.nama_dokumen} onChange={(e) => setFormData({ ...formData, nama_dokumen: e.target.value })} placeholder="Cth: PMKU" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="leg-jenis">Jenis *</label>
-                <select id="leg-jenis" value={formData.jenis} onChange={(e) => setFormData({ ...formData, jenis: e.target.value as Jenis })}>
-                  <option value="Legalitas">Legalitas</option>
-                  <option value="Perizinan">Perizinan</option>
-                  <option value="Perjanjian">Perjanjian</option>
-                </select>
-              </div>
+      <Modal open={!!mode} onClose={() => !menyimpan && setMode(null)} maxWidth="620px">
+        {mode && (
+          <form onSubmit={simpan} className="lg-form">
+            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800 }}>
+              {mode === "baru" ? "Tambah Dokumen" : mode === "versi" ? `Versi baru: ${target?.nama_dokumen}` : `Ubah data: ${target?.nama_dokumen}`}
+            </h3>
+            {target?.kode_arsip && <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Kode arsip <b style={{ color: "var(--ink)" }}>{target.kode_arsip}</b>{mode === "versi" ? " · versi lama otomatis masuk riwayat" : ""}</div>}
+
+            {mode !== "versi" && (
+              <>
+                <div className="lg-f"><label>Perusahaan * (bisa lebih dari satu)</label>
+                  <div className="lg-pilih">
+                    {PERUSAHAAN_LEGAL.map((p) => <button key={p.kode} type="button" className={form.pt.includes(p.nama) ? "on" : ""} onClick={() => togglePT(p.nama)}>{p.kode} · {p.nama.replace(/^PT /, "")}</button>)}
+                    {form.pt.filter((n) => !PERUSAHAAN_LEGAL.some((p) => p.nama === n)).map((n) => <button key={n} type="button" className="on" onClick={() => togglePT(n)}>{n} ×</button>)}
+                  </div>
+                  <input style={{ marginTop: "6px" }} placeholder="Lainnya — ketik nama PT bila tidak ada di daftar" value={form.ptLain} onChange={(e) => setForm({ ...form, ptLain: e.target.value })} />
+                </div>
+                <div className="lg-f"><label>Kategori *</label>
+                  <div className="lg-pilih">{KATEGORI_LEGAL.map((k) => <button key={k.kode} type="button" className={form.kategori === k.kode ? "on" : ""} onClick={() => setForm({ ...form, kategori: k.kode, tanpa_masa_berlaku: mode === "baru" ? !k.masaBerlaku : form.tanpa_masa_berlaku })}>{k.label}</button>)}</div>
+                  {katInfo && <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "4px" }}>Contoh: {katInfo.contoh}</div>}
+                </div>
+                <div className="lg-grid">
+                  <div className="lg-f"><label>Nama dokumen *</label><input value={form.nama_dokumen} onChange={(e) => setForm({ ...form, nama_dokumen: e.target.value })} placeholder="Mis. NIB, SLF Gedung, Sewa Gudang" /></div>
+                  <div className="lg-f"><label>Nomor dokumen</label><input value={form.nomor_dokumen} onChange={(e) => setForm({ ...form, nomor_dokumen: e.target.value })} /></div>
+                  <div className="lg-f"><label>Penerbit / pihak lawan</label><input value={form.penerbit} onChange={(e) => setForm({ ...form, penerbit: e.target.value })} placeholder="Mis. DPMPTSP Kota Makassar" /></div>
+                  <div className="lg-f"><label>Tanggal terbit</label><input type="date" value={form.tanggal_terbit} onChange={(e) => setForm({ ...form, tanggal_terbit: e.target.value })} /></div>
+                  <div className="lg-f"><label>PIC internal</label><input value={form.pic} onChange={(e) => setForm({ ...form, pic: e.target.value })} /></div>
+                  <div className="lg-f"><label>Lokasi arsip fisik</label><input value={form.lokasi_arsip} onChange={(e) => setForm({ ...form, lokasi_arsip: e.target.value })} placeholder="Mis. Lemari GA-2, map MJS" /></div>
+                </div>
+                <div className="lg-f"><label>Tingkat risiko bila lewat masa berlaku</label>
+                  <div className="lg-pilih">{RISIKO_LEGAL.map((r) => <button key={r} type="button" className={form.risiko === r ? "on" : ""} onClick={() => setForm({ ...form, risiko: r })}>{r}</button>)}</div>
+                </div>
+              </>
+            )}
+
+            {mode !== "ubah" && (
+              <>
+                <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px", fontWeight: 700, color: "var(--ink-soft)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.tanpa_masa_berlaku} onChange={(e) => setForm({ ...form, tanpa_masa_berlaku: e.target.checked })} /> Tanpa masa berlaku (akta, berita acara, surat resmi)
+                </label>
+                {!form.tanpa_masa_berlaku && (
+                  <div className="lg-grid">
+                    <div className="lg-f"><label>Mulai berlaku *</label><input type="date" value={form.tanggal_mulai} onChange={(e) => setForm({ ...form, tanggal_mulai: e.target.value })} /></div>
+                    <div className="lg-f"><label>Berakhir *</label><input type="date" value={form.tanggal_berakhir} onChange={(e) => setForm({ ...form, tanggal_berakhir: e.target.value })} /></div>
+                  </div>
+                )}
+                <div className="lg-f"><label>Catatan versi</label><input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Mis. diperpanjang via notaris X" /></div>
+                <div className="lg-f"><label>File scan * (PDF / gambar / Word / Excel, maks {MAX_FILE_LEGAL_MB} MB — tersimpan privat)</label>
+                  <input type="file" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ height: "auto", padding: "10px" }} />
+                </div>
+              </>
+            )}
+            {mode === "ubah" && <div style={{ fontSize: "12px", color: "var(--muted)" }}>Mengubah data tidak mengganti file. Untuk file / masa berlaku baru gunakan &quot;Perbarui&quot;.</div>}
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setMode(null)} disabled={menyimpan}>Batal</button>
+              <button type="submit" className="sa-btn is-primary" style={{ flex: 2 }} disabled={menyimpan}>{menyimpan ? "Menyimpan…" : mode === "ubah" ? "Simpan data" : "Simpan dokumen"}</button>
             </div>
-          )}
-          <div className="form-grid">
-            <div className="form-field">
-              <label htmlFor="leg-mulai">Tanggal Mulai Berlaku *</label>
-              <input id="leg-mulai" type="date" required value={formData.tanggal_mulai} onChange={(e) => setFormData({ ...formData, tanggal_mulai: e.target.value })} />
-            </div>
-            <div className="form-field">
-              <label htmlFor="leg-akhir">Tanggal Berakhir *</label>
-              <input id="leg-akhir" type="date" required value={formData.tanggal_berakhir} onChange={(e) => setFormData({ ...formData, tanggal_berakhir: e.target.value })} />
-            </div>
-          </div>
-          <div className="form-field">
-            <label htmlFor="leg-catatan">Catatan (opsional)</label>
-            <input id="leg-catatan" type="text" value={formData.catatan} onChange={(e) => setFormData({ ...formData, catatan: e.target.value })} placeholder="Cth: Diperpanjang via notaris X" />
-          </div>
-          <div className="form-field">
-            <label>Upload Scan * (PDF/Gambar, maks {MAX_UKURAN_DOKUMEN_MB}MB)</label>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", minHeight: "48px", padding: "12px 16px", borderRadius: "14px", border: "1px dashed var(--info)", background: "var(--info-50)", color: "var(--info)", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
-              <AdminIcon name="fileText" size={16} />
-              {isUploadingFile ? "Mengunggah..." : formData.file_url ? `✓ ${namaFile}` : "Pilih File"}
-              <input type="file" accept=".pdf,image/*" onChange={handleFileChange} disabled={isUploadingFile} style={{ display: "none" }} />
-            </label>
-          </div>
-          <button type="submit" className="sa-btn is-primary" disabled={isSaving || isUploadingFile} style={{ marginTop: "6px", height: "48px", fontSize: "14px", opacity: isSaving || isUploadingFile ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}>
-            {isSaving ? "Menyimpan..." : modalMode === "baru" ? "Simpan Dokumen" : "Simpan Versi Baru"}
-          </button>
-        </form>
+          </form>
+        )}
       </Modal>
     </AdminShell>
   );
