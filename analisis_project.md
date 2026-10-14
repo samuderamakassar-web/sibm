@@ -3251,3 +3251,13 @@ Catatan Cloudinary: file legal lama (Cloudinary, /image/upload/*.pdf) mengembali
 
 ## 146. Panduan PDF per Peran (14 Oktober 2026)
 Folder `panduan/` berisi 9 PDF A4: 01 Input Dokumen Legal (Admin GA & Magang GA), 02 Security, 03 OB & CS, 04 Koordinator OB, 05 Driver, 06 QHSE, 07 Admin GA (+ Magang GA), 08 Eksekutif Tenant, 09 Karyawan/Portal. Dibuat dari `scripts/buat-panduan.mjs <folder-html>` (isi per peran di array PANDUAN) lalu dicetak Chrome headless: chrome --headless=new --no-pdf-header-footer --print-to-pdf=<pdf> <html>. Perbarui isi skrip bila fitur berubah.
+
+## 147. Bank Dokumen Legal Tahap 2 + Pindahkan File Lama Otomatis (14 Oktober 2026)
+1. Ringkasan risiko (ikut PT terpilih): dokumen Kritis perlu diperpanjang/kadaluarsa, sedang diurus (+macet), kewajiban berkala ≤30 hari/lewat (+daftar terdekat), biaya legal tahun berjalan.
+2. Proses perpanjangan: field `proses` {status "Sedang diurus", sejak, nomor_pengajuan, catatan, oleh}; tombol Mulai urus / Batalkan proses / "Selesai — unggah izin baru" (versi baru menutup proses & mereset centang syarat). Status SEDANG DIURUS / DIURUS · MACET (lewat lama_proses_hari atau 60 hari).
+3. Ambang pengingat per dokumen (ambangHari, sama di lib & reminder): PRJ masa_pemberitahuan_hari + 14; lama_proses_hari + 30; bawaan 60. Status PERLU memakai ambang ini.
+4. Modal "Syarat & kewajiban": checklist `syarat` [{nama, selesai}] & `kewajiban` [{id, nama, interval_bulan, jatuh_tempo, terakhir}] (Tandai selesai -> jatuh tempo + interval). Magang tidak bisa menghapus baris.
+5. Biaya versi (opsional) -> realisasi_biaya {kategori "Legal", item_id "", sumber_legal, uraian "Legal · kode · nama (PT)"} untuk dialokasikan di menu Anggaran.
+6. scripts/legalitas-reminder.mjs: ambang per dokumen; diam bila sedang diurus & proses wajar & belum lewat; kewajiban berkala diingatkan di H-30/14/7/1/0 & tiap 7 hari setelah lewat (push "📌 Kewajiban Legal Berkala" + baris di email).
+7. Tombol "Pindahkan file lama (N)": versi dengan file_url Cloudinary tanpa file_path -> fetch -> unggahBlobLegal (Storage legal/<kode>/lama_…) -> file_path di riwayat & file_path_aktif. Syarat: user mengaktifkan sementara Cloudinary "Allow delivery of PDF and ZIP files".
+8. Panduan PDF 01 diperbarui (proses, syarat/kewajiban/biaya, pindahkan file lama).

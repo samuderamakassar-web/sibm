@@ -98,3 +98,39 @@ export async function bukaFileLegal(v: { file_path?: string; file_url?: string }
   }
   if (v.file_url) window.open(v.file_url, "_blank", "noopener");
 }
+
+// ===================== §147 Tahap 2 =====================
+export interface ProsesLegal { status: "Sedang diurus"; sejak: string; nomor_pengajuan?: string; catatan?: string; oleh?: string }
+export interface SyaratLegal { nama: string; selesai: boolean }
+export interface KewajibanLegal { id: string; nama: string; interval_bulan: number; jatuh_tempo: string; terakhir?: string }
+export interface DokumenLegalT2 extends DokumenLegal {
+  lama_proses_hari?: number; masa_pemberitahuan_hari?: number; proses?: ProsesLegal | null;
+  syarat?: SyaratLegal[]; kewajiban?: KewajibanLegal[];
+}
+export interface VersiLegalT2 extends VersiLegal { biaya?: number }
+
+/** Hari sebelum berakhir saat pengingat mulai: perjanjian = masa pemberitahuan + 14; lainnya = lama proses + 30; bawaan 60.
+ *  SAMA dengan scripts/legalitas-reminder.mjs. */
+export function ambangHari(d: Pick<DokumenLegalT2, "kategori" | "lama_proses_hari" | "masa_pemberitahuan_hari">): number {
+  if (d.kategori === "PRJ" && Number(d.masa_pemberitahuan_hari) > 0) return Number(d.masa_pemberitahuan_hari) + 14;
+  if (Number(d.lama_proses_hari) > 0) return Number(d.lama_proses_hari) + 30;
+  return 60;
+}
+/** Proses dianggap macet bila diurus lebih lama dari lama proses (bawaan 60 hari). */
+export function prosesMacet(d: DokumenLegalT2, hariIni: string): boolean {
+  if (!d.proses?.sejak) return false;
+  const lama = Math.floor((new Date(hariIni).getTime() - new Date(d.proses.sejak).getTime()) / 86400000);
+  return lama > (Number(d.lama_proses_hari) > 0 ? Number(d.lama_proses_hari) : 60);
+}
+/** Tanggal + n bulan (YYYY-MM-DD). */
+export function tambahBulan(iso: string, n: number): string {
+  const d = new Date(`${iso}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10);
+}
+
+/** Unggah blob (dipakai pemindahan file lama Cloudinary -> Storage). */
+export async function unggahBlobLegal(blob: Blob, nama: string, kodeArsip: string): Promise<string> {
+  const bersih = nama.replace(/[^\w.\-]+/g, "_").slice(-80);
+  const path = `legal/${kodeArsip || "tanpa-kode"}/lama_${Date.now()}_${bersih}`;
+  await uploadBytes(ref(storage, path), blob, { contentType: blob.type || "application/pdf" });
+  return path;
+}

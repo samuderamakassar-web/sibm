@@ -64,6 +64,16 @@ function hitungSisaHari(tanggalBerakhir) {
   return Math.ceil((new Date(tanggalBerakhir).getTime() - hariIniTgl.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// §147 ambang per dokumen -- SAMA dengan ambangHari() di src/lib/legalBank.ts
+function ambangHari(data) {
+  if (data.kategori === "PRJ" && Number(data.masa_pemberitahuan_hari) > 0) return Number(data.masa_pemberitahuan_hari) + 14;
+  if (Number(data.lama_proses_hari) > 0) return Number(data.lama_proses_hari) + 30;
+  return AMBANG_HARI_MULAI;
+}
+function hariSejak(iso) {
+  return Math.floor((hariIniTgl.getTime() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
+}
+
 function perluDikirimHariIni(data, sisaHari) {
   const cp = data.notif_legalitas_terakhir;
   const sudahAdaCheckpointUntukTanggalIni = cp && cp.untuk_tanggal === data.tanggal_berakhir_aktif;
@@ -144,28 +154,43 @@ async function kirimPushAdminGA(judul, pesan) {
 async function jalankan() {
   const snap = await db.collection("master_legalitas").get();
   const daftarDue = [];
+  const kewajibanDue = [];
   snap.forEach((d) => {
     const data = d.data();
+    // §147 kewajiban berkala: pengingat 30/14/7/1/0 hari sebelum & tiap 7 hari setelah lewat
+    for (const k of Array.isArray(data.kewajiban) ? data.kewajiban : []) {
+      if (!k?.jatuh_tempo) continue;
+      const s = hitungSisaHari(k.jatuh_tempo);
+      if ([30, 14, 7, 1, 0].includes(s) || (s < 0 && (-s) % 7 === 0)) {
+        kewajibanDue.push({ nama_dokumen: `${k.nama} — ${data.kode_arsip ? data.kode_arsip + " · " : ""}${data.nama_dokumen}`, jenis: "Kewajiban berkala", tanggal_berakhir_aktif: k.jatuh_tempo, sisaHari: s });
+      }
+    }
     if (!data.tanggal_berakhir_aktif) return;
     const sisaHari = hitungSisaHari(data.tanggal_berakhir_aktif);
-    if (sisaHari > AMBANG_HARI_MULAI) return;
+    if (sisaHari > ambangHari(data)) return;
+    // §147 sedang diurus: diam selama proses wajar (<= lama proses / 60 hari) & belum lewat masa berlaku
+    if (data.proses?.status === "Sedang diurus" && data.proses.sejak) {
+      const batas = Number(data.lama_proses_hari) > 0 ? Number(data.lama_proses_hari) : 60;
+      if (hariSejak(data.proses.sejak) <= batas && sisaHari >= 0) return;
+    }
     if (!perluDikirimHariIni(data, sisaHari)) return;
     // §143 sertakan kode arsip & PT di pesan (bank dokumen multi-perusahaan)
     const ptLabel = Array.isArray(data.pt) && data.pt.length ? ` (${data.pt.join(", ")})` : "";
     daftarDue.push({ id: d.id, nama_dokumen: `${data.kode_arsip ? data.kode_arsip + " · " : ""}${data.nama_dokumen}${ptLabel}`, jenis: data.jenis, tanggal_berakhir_aktif: data.tanggal_berakhir_aktif, sisaHari });
   });
 
-  if (daftarDue.length === 0) {
-    console.log("Tidak ada dokumen legalitas yang perlu diingatkan hari ini.");
+  if (daftarDue.length === 0 && kewajibanDue.length === 0) {
+    console.log("Tidak ada dokumen legalitas / kewajiban berkala yang perlu diingatkan hari ini.");
     return;
   }
+  const semuaDue = [...daftarDue, ...kewajibanDue];
   console.log(`Ditemukan ${daftarDue.length} dokumen perlu diingatkan:`, daftarDue.map((d) => `${d.nama_dokumen} (${d.sisaHari}H)`).join(", "));
 
   const adminGA = await ambilEmailAdminGA();
   if (adminGA.length === 0) {
     console.log("Tidak ada email Admin GA terdaftar di users_master, skip email.");
   } else {
-    const html = htmlEmailLegalitas(daftarDue);
+    const html = htmlEmailLegalitas(semuaDue);
     for (const admin of adminGA) {
       try {
         await kirimEmailViaRestApi(admin.email, admin.nama, "Dokumen Legalitas Perlu Diperpanjang", html);
@@ -176,6 +201,10 @@ async function jalankan() {
     }
   }
 
+  if (kewajibanDue.length) {
+    await kirimPushAdminGA("📌 Kewajiban Legal Berkala", kewajibanDue.length === 1 ? `${kewajibanDue[0].nama_dokumen}: ${kewajibanDue[0].sisaHari < 0 ? "lewat " + Math.abs(kewajibanDue[0].sisaHari) + " hari" : kewajibanDue[0].sisaHari + " hari lagi"}.` : `${kewajibanDue.length} kewajiban berkala jatuh tempo. Cek Bank Dokumen Legal.`);
+  }
+  if (daftarDue.length === 0) return;
   const pesanPush = daftarDue.length === 1
     ? `Dokumen "${daftarDue[0].nama_dokumen}" ${daftarDue[0].sisaHari < 0 ? "sudah lewat" : "sisa " + daftarDue[0].sisaHari + " hari"} masa berlakunya.`
     : `${daftarDue.length} dokumen legalitas/perizinan perlu diperpanjang. Cek menu Legalitas & Perizinan untuk detail.`;
