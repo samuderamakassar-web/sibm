@@ -12,6 +12,7 @@ import { normalizePlat } from "../../lib/platUtils";
 import AdminShell from "../admin/AdminShell";
 import { jamWITA, normalNama, selesaikanLemburSaatCheckout, tanggalWITA } from "../../lib/validasiKaryawan";
 import { daerahTulis } from "@/lib/daerah";
+import { MODA_KELUAR, STATUS_KELUAR_KENDARAAN, STATUS_TIBA_KENDARAAN, catatKendaraanDariBukuTamu, kendaraanSedangDipakai, pesanDipakai, tandaiKeluar, tandaiKembali } from "@/lib/keluarKaryawan";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -85,6 +86,8 @@ interface VisitorLog {
   waktu_masuk: Timestamp | null;
   waktu_keluar: Timestamp | null;
   pic_bertugas: string;
+  // §144 keluar sementara (tetap "Di Dalam Area" untuk validasi, tapi tidak dihitung di gedung)
+  sedang_keluar?: boolean; keluar_tujuan?: string; keluar_moda?: string; keluar_kendaraan?: string; keluar_sejak?: Timestamp | null;
 }
 
 interface EmployeeData {
@@ -170,6 +173,10 @@ export default function BukuTamuSecurity() {
 
   // 💡 Master kendaraan (buat sinkronisasi otomatis: Karyawan check-in dengan kendaraan -> Standby)
   const [kendaraanDB, setKendaraanDB] = useState<{ id: string; kendaraan: string; plat_nomor: string }[]>([]);
+  // §144 keluar sebentar
+  const [keluarTarget, setKeluarTarget] = useState<VisitorLog | null>(null);
+  const [keluarForm, setKeluarForm] = useState({ tujuan: "", moda: "Kendaraan kantor" as string, kendaraan: "" });
+  const [menyimpanKeluar, setMenyimpanKeluar] = useState(false);
 
   // State Form & Kamera
   const [jenisPengunjung, setJenisPengunjung] = useState<"Tamu Eksternal" | "Karyawan">("Tamu Eksternal");
@@ -490,6 +497,36 @@ export default function BukuTamuSecurity() {
     }
   };
 
+  // §144 keluar sementara: kendaraan kantor dicek & dikunci (log armada Keluar Beroperasi atas nama karyawan)
+  const bukaKeluar = (v: VisitorLog) => { setKeluarTarget(v); setKeluarForm({ tujuan: "", moda: v.jenis === "Karyawan" ? "Kendaraan kantor" : "Jalan kaki / lainnya", kendaraan: "" }); };
+  const simpanKeluar = async () => {
+    if (!keluarTarget) return;
+    const pakaiKantor = keluarForm.moda === "Kendaraan kantor";
+    if (pakaiKantor && !keluarForm.kendaraan) return showToast("Pilih kendaraan kantor yang dipakai.", "warning");
+    setMenyimpanKeluar(true);
+    try {
+      if (pakaiKantor) {
+        const dipakai = await kendaraanSedangDipakai(keluarForm.kendaraan);
+        if (dipakai) { await confirm({ title: "Kendaraan sedang dipakai", message: pesanDipakai(dipakai), confirmText: "Mengerti" }); return; }
+        await catatKendaraanDariBukuTamu(keluarForm.kendaraan, STATUS_KELUAR_KENDARAAN, keluarTarget.nama, keluarForm.tujuan.trim(), picName);
+      }
+      await tandaiKeluar(keluarTarget.nama, { tujuan: keluarForm.tujuan, moda: keluarForm.moda, kendaraan: pakaiKantor ? keluarForm.kendaraan : "", oleh: picName });
+      showToast(`${keluarTarget.nama} dicatat sedang keluar.`, "success");
+      setKeluarTarget(null);
+    } catch (e) { console.error(e); showToast("Gagal mencatat keluar.", "error"); }
+    finally { setMenyimpanKeluar(false); }
+  };
+  const catatKembali = async (v: VisitorLog) => {
+    try {
+      if (v.keluar_kendaraan) {
+        const dipakai = await kendaraanSedangDipakai(v.keluar_kendaraan);
+        if (dipakai && dipakai.oleh.trim().toLowerCase() === v.nama.trim().toLowerCase()) await catatKendaraanDariBukuTamu(v.keluar_kendaraan, STATUS_TIBA_KENDARAAN, v.nama, "-", picName);
+      }
+      await tandaiKembali(v.nama, picName);
+      showToast(`${v.nama} sudah kembali ke gedung.`, "success");
+    } catch (e) { console.error(e); showToast("Gagal mencatat kembali.", "error"); }
+  };
+
   const handleCheckOut = async (id: string, namaPengunjung: string) => {
     const yakin = await confirm({
       title: "Konfirmasi Check-Out",
@@ -728,7 +765,7 @@ export default function BukuTamuSecurity() {
               <IconEdit size={14} /> Input Kedatangan
             </button>
             <button onClick={() => { setActiveTab("aktif"); setSearchNamaTamu(""); setSearchTanggalTamu(""); }} className={`tab-pill ${activeTab === "aktif" ? "active" : ""}`} style={activeTab === "aktif" ? { color: "var(--ok)" } : {}}>
-              <IconUsers size={14} /> Di Dalam Area <span className="count aktif">{visitorLogs.filter(l => l.status === "Di Dalam Area").length}</span>
+              <IconUsers size={14} /> Di Dalam Area <span className="count aktif">{visitorLogs.filter(l => l.status === "Di Dalam Area" && !l.sedang_keluar).length}</span>{visitorLogs.some(l => l.status === "Di Dalam Area" && l.sedang_keluar) && <span className="count riwayat" title="Sedang keluar sementara">{visitorLogs.filter(l => l.status === "Di Dalam Area" && l.sedang_keluar).length} keluar</span>}
             </button>
             <button onClick={() => { setActiveTab("riwayat"); resetFilterRiwayat(); }} className={`tab-pill ${activeTab === "riwayat" ? "active" : ""}`} style={activeTab === "riwayat" ? { color: "var(--warn)" } : {}}>
               <IconHistory size={14} /> Riwayat Keluar <span className="count riwayat">{visitorLogs.filter(l => l.status === "Selesai / Keluar").length}</span>
@@ -954,6 +991,7 @@ export default function BukuTamuSecurity() {
                         </div>
                         <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}><IconBuilding size={12} /> {visitor.instansi_dept}</div>
                         {visitor.no_kendaraan && <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }}><IconCar size={11} /> {visitor.no_kendaraan}</div>}
+                        {visitor.sedang_keluar && <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--warn)", background: "var(--warn-50)", padding: "3px 8px", borderRadius: "8px", marginTop: "4px", display: "inline-block" }}>Sedang keluar{visitor.keluar_tujuan ? ` · ${visitor.keluar_tujuan}` : ""} · {visitor.keluar_kendaraan ? visitor.keluar_kendaraan.split(" - ")[0] : visitor.keluar_moda}{visitor.keluar_sejak ? ` · sejak ${formatJam(visitor.keluar_sejak)}` : ""}</div>}
                       </td>
 
                       <td>
@@ -967,6 +1005,11 @@ export default function BukuTamuSecurity() {
                       </td>
 
                       <td style={{ textAlign: "center" }}>
+                        {/* §144 keluar sementara / kembali */}
+                        <button type="button" onClick={() => visitor.sedang_keluar ? catatKembali(visitor) : bukaKeluar(visitor)}
+                          style={{ padding: "8px 12px", marginBottom: "6px", background: visitor.sedang_keluar ? "var(--ok-50)" : "var(--warn-50)", color: visitor.sedang_keluar ? "var(--ok)" : "var(--warn)", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "11px", display: "block", width: "100%" }}>
+                          {visitor.sedang_keluar ? "Kembali ✓" : "Keluar sebentar"}
+                        </button>
                         <button
                           onClick={() => handleCheckOut(visitor.id, visitor.nama)}
                           style={{ padding: "8px 14px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "11px", boxShadow: "0 2px 4px rgba(220,38,38,0.2)", transition: "0.2s", whiteSpace: "nowrap" }}
@@ -1140,6 +1183,31 @@ export default function BukuTamuSecurity() {
         </div>
       </Modal>
 
+      {/* §144 MODAL KELUAR SEBENTAR */}
+      <Modal open={!!keluarTarget} onClose={() => !menyimpanKeluar && setKeluarTarget(null)} maxWidth="440px">
+        {keluarTarget && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <h3 style={{ margin: 0, fontSize: "18px", color: "var(--ink)" }}>Keluar sebentar · {keluarTarget.nama}</h3>
+            <p style={{ margin: 0, fontSize: "12.5px", color: "var(--muted)" }}>Belum check-out — tidak dihitung berada di gedung sampai ditandai kembali.</p>
+            <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Tujuan / keterangan (opsional)
+              <input value={keluarForm.tujuan} onChange={(e) => setKeluarForm({ ...keluarForm, tujuan: e.target.value })} placeholder="Mis. ke bank, meeting klien, makan siang" style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "4px", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "14px", fontFamily: "inherit" }} />
+            </label>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Menggunakan</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {MODA_KELUAR.filter((m) => m !== "Kendaraan kantor" || keluarTarget.jenis === "Karyawan").map((m) => (
+                <button key={m} type="button" onClick={() => setKeluarForm({ ...keluarForm, moda: m })} style={{ padding: "7px 11px", borderRadius: "999px", border: "1px solid var(--line)", background: keluarForm.moda === m ? "var(--ink)" : "var(--bg)", color: keluarForm.moda === m ? "var(--surface)" : "var(--ink-soft)", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{m}</button>
+              ))}
+            </div>
+            {keluarForm.moda === "Kendaraan kantor" && (
+              <select value={keluarForm.kendaraan} onChange={(e) => setKeluarForm({ ...keluarForm, kendaraan: e.target.value })} aria-label="Kendaraan kantor" style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", fontSize: "14px", fontFamily: "inherit" }}>
+                <option value="">— Pilih kendaraan —</option>
+                {kendaraanDB.map((k) => <option key={k.id} value={k.kendaraan}>{k.kendaraan}</option>)}
+              </select>
+            )}
+            <button type="button" className="sa-btn is-primary" style={{ height: "46px" }} disabled={menyimpanKeluar} onClick={simpanKeluar}>{menyimpanKeluar ? "Menyimpan…" : "Catat keluar"}</button>
+          </div>
+        )}
+      </Modal>
     </AdminShell>
   );
 }

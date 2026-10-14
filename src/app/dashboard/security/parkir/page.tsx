@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, Timestamp, where, limit, getDocs } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { useToast } from "../../../../components/ui/ToastProvider";
+import { useConfirm } from "../../../../components/ui/ConfirmProvider";
+import { kendaraanDiLuar, kendaraanSedangDipakai, pesanDipakai, tandaiKeluar, tandaiKembali } from "../../../../lib/keluarKaryawan";
 import { normalizePlat } from "../../../../lib/platUtils";
 import AdminShell from "../../../../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
@@ -146,6 +148,7 @@ function classifyStatus(status: string): { label: string; bg: string; color: str
 function LogOperasionalPage() {
   const router = useRouter();
   const showToast = useToast();
+  const confirm = useConfirm();
 
   const [picName, setPicName] = useState<string>("");
   const [waktuSekarang, setWaktuSekarang] = useState<string>("");
@@ -328,6 +331,12 @@ function LogOperasionalPage() {
 
   // Buka modal aksi cepat untuk 1 kendaraan + 1 status tujuan
   const bukaModalAksi = (kendaraan: KendaraanMaster, status: string, label: string) => {
+    // §144 kendaraan yang sedang dipakai/di bengkel tidak bisa dikeluarkan lagi
+    const terkini = statusPerKendaraan[kendaraan.kendaraan];
+    if (kendaraanDiLuar(status) && terkini && kendaraanDiLuar(terkini.status_kendaraan)) {
+      confirm({ title: "Kendaraan sedang dipakai", message: pesanDipakai({ kendaraan: kendaraan.kendaraan, status: terkini.status_kendaraan, oleh: terkini.driver_bertugas || "-", tujuan: terkini.tujuan_keperluan || "-", sejak: terkini.waktu_catat?.toDate?.() || null }), confirmText: "Mengerti" });
+      return;
+    }
     setDriverMobil(DAFTAR_DRIVER[0]);
     setNamaKaryawan("");
     setTujuan("");
@@ -370,6 +379,8 @@ function LogOperasionalPage() {
           petugas_security: picName + " (Sistem Auto-Sync)",
         });
       }
+      // §144 pembawa kendaraan kembali -> Buku Tamu: tidak lagi "sedang keluar"
+      if (dariLuar && driverTerakhir !== "-") tandaiKembali(driverTerakhir, picName).catch((e) => console.error("[parkir] tandai kembali:", e));
 
       if (aksi.key === "standby") {
         await syncKaryawanHadir(kendaraan);
@@ -402,6 +413,9 @@ function LogOperasionalPage() {
 
     setIsLoadingAksi(true);
     try {
+      // §144 cek ulang di server (bisa saja baru dikeluarkan dari Buku Tamu / Aplikasi Driver)
+      const dipakai = kendaraanDiLuar(modalAksi.status) ? await kendaraanSedangDipakai(modalAksi.kendaraan.kendaraan) : null;
+      if (dipakai) { await confirm({ title: "Kendaraan sedang dipakai", message: pesanDipakai(dipakai), confirmText: "Mengerti" }); setModalAksi(null); return; }
       await addDoc(collection(db, "operational_vehicle_logs"), { daerah: daerahTulis(),
         petugas_security: picName,
         waktu_catat: serverTimestamp(),
@@ -422,6 +436,10 @@ function LogOperasionalPage() {
         });
       }
 
+      // §144 pembawa kendaraan -> Buku Tamu: sedang keluar (tujuan & kendaraan)
+      if (modalAksi.status === "Keluar Beroperasi" && driverBertugasFinal) {
+        tandaiKeluar(driverBertugasFinal, { tujuan, moda: "Kendaraan kantor", kendaraan: modalAksi.kendaraan.kendaraan, oleh: picName }).catch((e) => console.error("[parkir] tandai keluar:", e));
+      }
       showToast(`Berhasil dicatat: ${modalAksi.kendaraan.kendaraan.split(" - ")[0]} — ${modalAksi.label}`, "success");
       setModalAksi(null);
     } catch (error) {

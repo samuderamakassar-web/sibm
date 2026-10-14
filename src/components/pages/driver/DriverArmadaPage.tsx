@@ -7,6 +7,8 @@ import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useFcmSetup } from "../../../hooks/useFcmSetup";
 import { useToast } from "../../ui/ToastProvider";
+import { useConfirm } from "../../ui/ConfirmProvider";
+import { kendaraanDiLuar, kendaraanSedangDipakai, pesanDipakai, tandaiKeluar, tandaiKembali } from "../../../lib/keluarKaryawan";
 import { normalizePlat } from "../../../lib/platUtils";
 import AdminShell from "../../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
@@ -118,6 +120,7 @@ function classifyStatus(status: string): { label: string; bg: string; color: str
 export default function DriverArmadaPage() {
   const router = useRouter();
   const showToast = useToast();
+  const confirm = useConfirm();
 
   const { session, isReady } = useAuthGuard({
     depts: ["Driver"],
@@ -278,6 +281,12 @@ export default function DriverArmadaPage() {
   };
 
   const bukaModalAksi = (kendaraan: KendaraanMaster, status: string, label: string) => {
+    // §144 kendaraan yang sedang dipakai orang lain / di bengkel tidak bisa dikeluarkan lagi
+    const terkini = statusPerKendaraan[kendaraan.kendaraan];
+    if (kendaraanDiLuar(status) && terkini && kendaraanDiLuar(terkini.status_kendaraan)) {
+      confirm({ title: "Kendaraan sedang dipakai", message: pesanDipakai({ kendaraan: kendaraan.kendaraan, status: terkini.status_kendaraan, oleh: terkini.driver_bertugas || "-", tujuan: terkini.tujuan_keperluan || "-", sejak: terkini.waktu_catat?.toDate?.() || null }), confirmText: "Mengerti" });
+      return;
+    }
     setTujuan("");
     setKilometer("");
     setModalAksi({ kendaraan, status, label });
@@ -293,6 +302,8 @@ export default function DriverArmadaPage() {
       const kembaliDariLuar = !!sebelumnya && sebelumnya.driver_bertugas === activeDriver &&
         (sebelumnya.status_kendaraan === "Keluar Beroperasi" || sebelumnya.status_kendaraan === "Masuk Bengkel / Service");
       await catatPergerakan(kendaraan.kendaraan, aksi.status, "-", "Tidak dicatat", kembaliDariLuar);
+      // §144 kembali -> Buku Tamu: tidak lagi "sedang keluar"
+      if (kembaliDariLuar) tandaiKembali(activeDriver, "Aplikasi Driver").catch((e) => console.error("[armada] tandai kembali:", e));
       if (aksi.key === "standby") {
         await syncKaryawanHadir(kendaraan);
       }
@@ -315,7 +326,11 @@ export default function DriverArmadaPage() {
 
     setIsLoadingAksi(true);
     try {
+      // §144 cek ulang di server (bisa saja baru dikeluarkan dari Buku Tamu / Parkir)
+      const dipakai = kendaraanDiLuar(modalAksi.status) ? await kendaraanSedangDipakai(modalAksi.kendaraan.kendaraan) : null;
+      if (dipakai) { await confirm({ title: "Kendaraan sedang dipakai", message: pesanDipakai(dipakai), confirmText: "Mengerti" }); setModalAksi(null); return; }
       await catatPergerakan(modalAksi.kendaraan.kendaraan, modalAksi.status, tujuan, kilometer, true);
+      if (modalAksi.status === "Keluar Beroperasi") tandaiKeluar(activeDriver, { tujuan, moda: "Kendaraan kantor", kendaraan: modalAksi.kendaraan.kendaraan, oleh: "Aplikasi Driver" }).catch((e) => console.error("[armada] tandai keluar:", e));
       showToast(`Berhasil dicatat: ${modalAksi.kendaraan.kendaraan.split(" - ")[0]} — ${modalAksi.label}`, "success");
       setModalAksi(null);
     } catch (error) {

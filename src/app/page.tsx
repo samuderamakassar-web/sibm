@@ -33,7 +33,7 @@ import { daerahTulis } from "@/lib/daerah";
 // ==========================================
 interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; petugas_security?: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; _riwayatTerakhir?: KendaraanLog; }
 interface DriverStatusLog { nama_driver: string; status: string; waktu_ubah?: Timestamp | null; }
-interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: string; waktu_masuk?: Timestamp | null; waktu_keluar?: Timestamp | null; }
+interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: string; waktu_masuk?: Timestamp | null; waktu_keluar?: Timestamp | null; sedang_keluar?: boolean; keluar_tujuan?: string; keluar_moda?: string; keluar_kendaraan?: string; }
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
 interface ObStatusData { nama: string; status: string; lokasi: string[]; }
 interface Employee { id: string; nama: string; departemen: string; email?: string; }
@@ -2334,7 +2334,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                     {tamuTampil.length > 0 ? tamuTampil.map(tm => (
                       <Tr key={tm.id}>
                         <Td><div style={{ fontWeight: "bold", color: "var(--ink)" }}>{tm.nama}</div><div style={{ fontSize: "11px", color: "var(--ink-soft)" }}>{tm.instansi_dept}</div></Td>
-                        <Td style={{ color: "var(--ink-soft)" }}>{tm.tujuan}</Td>
+                        <Td style={{ color: "var(--ink-soft)" }}>{tm.tujuan}{tm.sedang_keluar && !tm.waktu_keluar && <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--warn)", marginTop: "2px" }}>Sedang keluar{tm.keluar_tujuan ? ` · ${tm.keluar_tujuan}` : ""} · {tm.keluar_kendaraan ? tm.keluar_kendaraan.split(" - ")[0] : tm.keluar_moda}</div>}</Td>
                         <Td><div style={{ fontSize: "11px", display: "flex", flexDirection: "column", gap: "2px" }}><span><b style={{ color: "var(--ok)" }}>Masuk:</b> {formatJam(tm.waktu_masuk)}</span><span><b style={{ color: "var(--red-600)" }}>Keluar:</b> {tm.waktu_keluar ? formatJam(tm.waktu_keluar) : "Masih di dalam"}</span></div></Td>
                       </Tr>
                     )) : <Tr><Td colSpan={3} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>{isSearching ? "Memuat..." : "Tidak ada tamu yang cocok."}</Td></Tr>}
