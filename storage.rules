@@ -1,4 +1,5 @@
 rules_version = '2';
+// §149 cross-service (firestore.get) butuh IAM role Firebase Rules Firestore Service Agent untuk service agent Storage
 
 // §143 Bank Dokumen Legal: file legal (akta, NPWP, kontrak, izin) TIDAK publik -- hanya Admin GA / Administrator
 // yang login (dicek ke users_master). Eksekutif Tenant hanya melihat daftar dokumen (Firestore), tidak mengunduh file.
