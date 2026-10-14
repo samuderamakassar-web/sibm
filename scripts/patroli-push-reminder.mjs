@@ -94,7 +94,48 @@ async function hitungSesiTerpenuhi(namaPetugas) {
   return sesiUnik.size >= MINIMUM_SESI_PER_SHIFT;
 }
 
+// §142 Lapor ke Danru: dalam 60 menit setelah sebuah sesi berakhir, petugas roster yang TIDAK melaporkan sesi itu
+// dikabarkan ke Danru/Koordinator Security (push + in-app), 1x per sesi (penanda lapor_danru_patroli/{tgl}_{shift}_{sesi}).
+async function laporDanru() {
+  const MULAI = { "Shift 1": 8, "Shift 2": 20 };
+  const jamSejakMulai = (jam - MULAI[shiftLabel] + 24) % 24;
+  const idx = Math.floor(jamSejakMulai / 4); // 0..2 = sesi berjalan
+  const menitSejakBatas = (jamSejakMulai % 4) * 60 + now.getMinutes();
+  if (menitSejakBatas >= 60) return;
+  let sesiLalu, shiftLalu, tanggalLalu;
+  if (idx > 0) { sesiLalu = `Sesi ${idx}`; shiftLalu = shiftLabel; tanggalLalu = tanggalShift; }
+  else if (shiftLabel === "Shift 1") { sesiLalu = "Sesi 3"; shiftLalu = "Shift 2"; tanggalLalu = kemarin; }
+  else { sesiLalu = "Sesi 3"; shiftLalu = "Shift 1"; tanggalLalu = hariIni; }
+
+  const penandaRef = db.collection("lapor_danru_patroli").doc(`${tanggalLalu}_${shiftLalu.replace(" ", "")}_${sesiLalu.replace(" ", "")}`);
+  if ((await penandaRef.get()).exists) return;
+
+  const monthSnap = await db.collection("security_monthly_schedules").doc(tanggalLalu.substring(0, 7)).get();
+  const plot = (monthSnap.exists && monthSnap.data().data_hari?.[tanggalLalu]) || {};
+  const petugas = Object.keys(plot).filter((n) => String(plot[n]).includes(shiftLalu));
+  if (!petugas.length) { await penandaRef.set({ dicek: true, kosong: true }); return; }
+
+  const laporSnap = await db.collection("security_patrols").where("tanggal_shift", "==", tanggalLalu).where("shift", "==", shiftLalu).get();
+  const sudah = new Set(laporSnap.docs.map((d) => d.data()).filter((x) => x.sesi === sesiLalu).map((x) => String(x.petugas || "").trim().toLowerCase()));
+  const absen = petugas.filter((n) => !sudah.has(n.trim().toLowerCase()));
+  await penandaRef.set({ dicek: true, absen, waktu: new Date().toISOString() });
+  if (!absen.length) { console.log(`Lapor Danru: ${shiftLalu} ${sesiLalu} lengkap.`); return; }
+
+  const usersSnap = await db.collection("users_master").where("departemen", "==", "Security").get();
+  const danru = usersSnap.docs.map((d) => d.data()).filter((u) => /danru|koordinator/i.test(u.role || "")).map((u) => u.nama).filter(Boolean);
+  if (!danru.length) { console.log("Lapor Danru: belum ada akun Danru/Koordinator Security."); return; }
+  const jamSesi = { "Shift 1": ["08:00–12:00", "12:00–16:00", "16:00–20:00"], "Shift 2": ["20:00–00:00", "00:00–04:00", "04:00–08:00"] }[shiftLalu][Number(sesiLalu.slice(-1)) - 1];
+  const judul = "🛡️ Sesi Patroli Terlewat";
+  const pesan = `${shiftLalu} ${sesiLalu} (${jamSesi}, ${tanggalLalu.split("-").reverse().join("/")}) berakhir tanpa laporan patroli dari: ${absen.join(", ")}. Mohon ditindaklanjuti.`;
+  await tulisNotifPersonal(danru, judul, pesan);
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "Security").get();
+  const tokens = tokenSnap.docs.map((d) => d.data()).filter((x) => x.token && danru.includes(x.pic_nama)).map((x) => x.token);
+  if (tokens.length) await messaging.sendEachForMulticast({ tokens, notification: { title: judul, body: pesan }, webpush: { notification: { icon: "/icons/icon-192.png" } } });
+  console.log(`Lapor Danru (${danru.join(", ")}): ${pesan}`);
+}
+
 async function jalankan() {
+  await laporDanru().catch((e) => console.error("Lapor Danru gagal:", e));
   const daftarNama = await ambilPicShift();
   if (daftarNama.length === 0) {
     console.log(`Tidak ada petugas terjadwal ${shiftLabel} (${tanggalShift}), skip.`);

@@ -3221,3 +3221,6 @@ Laporan user: data tamu 14 September tidak muncul di Admin Pantau Security. Seba
 ## 141. Tabel Master Kendaraan Dirapikan + Badge Ikut Tema (13 Oktober 2026)
 1. src/components/ui/Badge.tsx: warna memakai token tema (ok/warn/red/info/line) dengan fallback warna lama -- dulu warna terang tetap sehingga "Di kantor", "Sewa", "Belum diisi" mencolok/putih di mode gelap. Berlaku di semua halaman pemakai Badge.
 2. Admin Kendaraan: kolom Sewa & Pajak jadi dua baris sejajar (label lebar tetap "Status"/"Pajak" + badge + keterangan satu baris, "tgl. akhir belum diisi"); tipe kendaraan tidak patah baris; nama PIC ditebalkan, lebar kolom dibatasi; tombol aksi seragam `.kd-aksi` (Riwayat / Edit / Hapus) tanpa tiga warna berbeda.
+
+## 142. Lapor ke Danru Bila Sesi Patroli Terlewat (14 Oktober 2026)
+scripts/patroli-push-reminder.mjs `laporDanru()`: dalam 60 menit setelah batas sesi (4 jam, mulai 08:00 / 20:00; sesi 3 shift sebelumnya dicek di awal shift berikutnya), petugas roster shift itu yang tidak punya laporan security_patrols untuk sesi tsb -> push + in-app ke akun Security ber-role Danru/Koordinator: "🛡️ Sesi Patroli Terlewat — Shift X Sesi Y (jam, tanggal) berakhir tanpa laporan dari: …". 1x per sesi (penanda lapor_danru_patroli/{tgl}_{shift}_{sesi}, juga dicatat bila lengkap/kosong). Jalan tiap 30 menit via cron-job.org.
