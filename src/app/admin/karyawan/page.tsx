@@ -5,7 +5,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, order
 import { db } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { isMagangSaatIni, useAuthGuard } from "../../../hooks/useAuthGuard";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../components/ui/Table";
@@ -179,6 +179,7 @@ export default function ManajemenKaryawanPage() {
   };
 
   const handleHapusKaryawan = async (id: string, nama: string) => {
+    if (isMagangSaatIni()) return showToast("Akun magang tidak dapat menghapus data. Hubungi Admin GA.", "warning"); // §145
     const yakin = await confirm({
       title: "Hapus Data Karyawan",
       message: `Yakin ingin menghapus data karyawan atas nama ${nama}? Tindakan ini tidak bisa dibatalkan.`,

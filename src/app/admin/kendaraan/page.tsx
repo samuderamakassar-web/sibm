@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { useAuthGuard, isMagangSaatIni } from "../../../hooks/useAuthGuard";
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
 import Input from "../../../components/ui/Input";
@@ -1165,7 +1165,7 @@ export default function ManajemenKendaraanPage() {
                         <div style={{ display: "inline-flex", gap: "6px" }}>
                           <button type="button" className="kd-aksi" onClick={() => bukaRiwayat(k)}>Riwayat</button>
                           <button type="button" className="kd-aksi" onClick={() => handleMulaiEdit(k)}>Edit</button>
-                          <button type="button" className="kd-aksi is-hapus" onClick={() => handleHapusKendaraan(k.id, k.kendaraan)} aria-label={`Hapus ${k.plat_nomor || k.kendaraan}`}>Hapus</button>
+                          {!isMagangSaatIni() && <button type="button" className="kd-aksi is-hapus" onClick={() => handleHapusKendaraan(k.id, k.kendaraan)} aria-label={`Hapus ${k.plat_nomor || k.kendaraan}`}>Hapus</button>}
                         </div>
                       </Td>
                     </Tr>

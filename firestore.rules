@@ -117,10 +117,15 @@ service cloud.firestore {
     function isAdminGA() {
       return hasProfile() && (myDept() == 'Admin GA' || isAdmin());
     }
+    // §145 akun magang (Security / Magang GA) tidak boleh menghapus data apa pun
+    function isMagang() {
+      return hasProfile() && myProfile().get('role', '').lower().matches('.*magang.*');
+    }
     match /master_legalitas/{docId} {
       allow read: if isAdminGA()
         || (isEksekutif() && myProfile().get('unit_bisnis', '') != '' && myProfile().get('unit_bisnis', '') in resource.data.get('pt', []));
-      allow create, update, delete: if isAdminGA();
+      allow create, update: if isAdminGA();
+      allow delete: if isAdminGA() && !isMagang();
     }
 
     // --------------------------------------------------------------------
@@ -217,7 +222,8 @@ service cloud.firestore {
       // §108 Eksekutif Tenant: akun read-only -- hanya koleksi publik + koleksiBacaEksekutif(), tanpa hak tulis.
       allow read: if col in koleksiOperasional() && (col in koleksiBacaPublik() || (hasProfile() && (!isEksekutif() || col in koleksiBacaEksekutif())));
       allow create: if col in koleksiOperasional() && (col in koleksiFormPublik() || (hasProfile() && !isEksekutif()));
-      allow update, delete: if col in koleksiOperasional() && hasProfile() && !isEksekutif();
+      allow update: if col in koleksiOperasional() && hasProfile() && !isEksekutif();
+      allow delete: if col in koleksiOperasional() && hasProfile() && !isEksekutif() && !isMagang();
     }
 
     // --------------------------------------------------------------------

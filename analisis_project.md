@@ -3240,3 +3240,11 @@ Masalah: karyawan yang keluar sebentar (masih check-in) tetap dihitung di dalam 
 2. Buku Tamu: tombol "Keluar sebentar" (modal tujuan + moda; kendaraan kantor -> cek dipakai, lalu log armada Keluar Beroperasi atas nama karyawan, petugas "(Buku Tamu)") & "Kembali ✓" (kendaraan dicatat Tiba di Kantor bila masih atas nama ybs); label "Sedang keluar · tujuan · kendaraan/moda · sejak"; hitungan Di Dalam Area tidak termasuk yang sedang keluar (+ badge "N keluar").
 3. Parkir (Security) & Armada (Driver): Keluar/Service pada kendaraan yang status terakhirnya masih di luar -> modal "Kendaraan sedang dipakai oleh X sejak … (tujuan …)" (cek di UI + cek ulang ke server saat simpan). Keluar Beroperasi -> pembawa (karyawan/driver) ditandai sedang keluar di Buku Tamu dengan tujuan & kendaraan; kendaraan kembali (Tiba/Pulang dari luar) -> pembawa ditandai kembali.
 4. Portal Lacak Tamu: baris menampilkan "Sedang keluar · tujuan · kendaraan/moda".
+
+## 145. Role Magang GA + Akun Magang Tidak Bisa Menghapus (14 Oktober 2026)
+Keputusan user: Magang GA (departemen Admin GA + role "Magang") boleh input dokumen legal, kendaraan, tambah karyawan, master laptop.
+1. useAuthGuard: HALAMAN_MAGANG_GA = /admin, /admin/legalitas, /admin/kendaraan, /admin/karyawan, /admin/laptop -- Magang GA lolos di sana walau halaman mensyaratkan role Admin, dan DITOLAK di halaman /admin lain. Helper isMagangGA(), isMagangSaatIni().
+2. Admin hub untuk Magang GA: hanya kartu menu yang boleh (panel Pantau, Perlu tindakan, Kehadiran disembunyikan).
+3. Tombol/aksi hapus: disembunyikan (legal, kendaraan) atau ditolak dengan pesan (karyawan, laptop) untuk akun magang.
+4. firestore.rules: isMagang(); master_legalitas delete & delete generik koleksiOperasional mensyaratkan !isMagang(). Uji REST tanpa login: master_legalitas 403, master_kendaraan/booking/settings 200.
+Catatan Cloudinary: file legal lama (Cloudinary, /image/upload/*.pdf) mengembalikan 401 karena pengaturan akun Cloudinary "Allow delivery of PDF and ZIP files" mati -- perlu diaktifkan user (sementara), lalu file dipindah ke Storage lewat "Perbarui".

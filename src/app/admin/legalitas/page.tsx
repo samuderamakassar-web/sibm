@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { isMagangSaatIni, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
@@ -240,7 +240,7 @@ export default function AdminLegalitasPage() {
                       <button type="button" className="lg-btn" onClick={() => buka("versi", d)}>{st.kunci === "TETAP" ? "Unggah versi baru" : "Perbarui / perpanjang"}</button>
                       <button type="button" className="lg-btn" onClick={() => buka("ubah", d)}>Ubah data</button>
                       {lama.length > 0 && <button type="button" className="lg-btn" aria-expanded={bukaRiwayat === d.id} onClick={() => setBukaRiwayat(bukaRiwayat === d.id ? null : d.id)}>Riwayat {lama.length} versi</button>}
-                      <button type="button" className="lg-btn hapus" onClick={() => hapus(d)}>Hapus</button>
+                      {!isMagangSaatIni() && <button type="button" className="lg-btn hapus" onClick={() => hapus(d)}>Hapus</button>}
                     </div>
                     {bukaRiwayat === d.id && (
                       <div style={{ background: "var(--surface)", borderRadius: "12px", padding: "6px 12px" }}>

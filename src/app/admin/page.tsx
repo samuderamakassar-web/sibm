@@ -14,7 +14,7 @@ import {
 import { db } from "../../lib/firebase";
 import { tanggalISOWITASekarang } from "../../lib/shift";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard, HALAMAN_MAGANG_GA, isMagangGA } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
 import KehadiranKaryawanPanel from "../../components/KehadiranKaryawanPanel";
 import { FITUR_ABSENSI_AKTIF } from "../../lib/fitur";
@@ -287,6 +287,9 @@ export default function AdminDashboardPage() {
   }, [cari]);
 
   if (!isReady || !session) return null;
+  // §145 Magang GA: hanya menu yang boleh, tanpa panel pantau/tindakan/kehadiran
+  const magangGA = isMagangGA(session.role, session.dept);
+  const grupTampil = magangGA ? MENU_GROUPS.map((g) => ({ ...g, items: g.items.filter((m) => HALAMAN_MAGANG_GA.includes(m.path)) })).filter((g) => g.items.length) : MENU_GROUPS;
   const adminName = session.nama || "Admin";
   const namaDepan = adminName.split(/\s+/)[0];
   const wilayah = session.daerah === "PUSAT" ? "Super Admin · Semua wilayah" : session.daerah ? `Wilayah ${session.daerah}` : "Admin GA";
@@ -355,6 +358,7 @@ export default function AdminDashboardPage() {
             )}
           </Tile>
 
+{!magangGA && (<>
           <Tile className={styles.pantau}>
             <div className={styles.tileHead}>
               <h2 className={styles.tileTitle}>Pantau laporan tim</h2>
@@ -385,6 +389,9 @@ export default function AdminDashboardPage() {
             </div>
           </Tile>
 
+</>)}
+
+{!magangGA && (<>
           {/* §138 selebar halaman, item berjajar -- dulu kolom sempit yang memanjang kosong di samping Kehadiran */}
           <Tile className={styles.span12}>
             <h2 className={styles.tileTitle}>Perlu tindakan</h2>
@@ -418,7 +425,9 @@ export default function AdminDashboardPage() {
             <KehadiranKaryawanPanel />
           </Tile>
 
-          {MENU_GROUPS.map((g) => (
+</>)}
+
+          {grupTampil.map((g) => (
             <Tile key={g.name} className={styles.span4}>
               <div className={styles.tileHead}>
                 <h2 className={styles.tileTitle}>{g.name}</h2>

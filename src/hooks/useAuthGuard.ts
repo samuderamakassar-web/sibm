@@ -52,6 +52,13 @@ export function getStoredSession(): AuthSession {
   };
 }
 
+// §145 Magang GA (departemen "Admin GA" + role mengandung "Magang"): hanya halaman di bawah ini (keputusan user
+// 14 Okt 2026: input dokumen legal, kendaraan, tambah karyawan, master laptop), tanpa hak hapus (UI + firestore.rules).
+export const HALAMAN_MAGANG_GA = ["/admin", "/admin/legalitas", "/admin/kendaraan", "/admin/karyawan", "/admin/laptop"];
+export const isMagangGA = (role: string, dept: string) => dept === "Admin GA" && /magang/i.test(role || "");
+/** Magang (bagian mana pun) tidak boleh menghapus data -- dipakai untuk menyembunyikan tombol hapus. */
+export const isMagangSaatIni = () => /magang/i.test(getStoredSession().role);
+
 /** Administrator dianggap superuser: lolos cek role DAN dept apapun secara default.
  *  Ini yang bikin akun Admin bisa buka halaman dept manapun (fix untuk bug plotting OB). */
 export function isAdministrator(role: string): boolean {
@@ -127,12 +134,17 @@ export function useAuthGuard(options: AuthGuardOptions = {}): AuthGuardResult {
       const { nama, role, dept, daerah } = getStoredSession();
       const adminBypass = options.adminBypass !== false && isAdministrator(role);
 
-      const roleOk = !options.roles || options.roles.length === 0 || roleMatches(role, options.roles) || adminBypass;
-      const deptOk = !options.depts || options.depts.length === 0 || options.depts.includes(dept) || adminBypass;
+      // §145 Magang GA: lolos hanya di HALAMAN_MAGANG_GA, ditolak di halaman /admin lain
+      const jalur = (typeof window !== "undefined" ? window.location.pathname : "").replace(/\/+$/, "") || "/";
+      const magangGA = isMagangGA(role, dept);
+      const magangBoleh = magangGA && HALAMAN_MAGANG_GA.includes(jalur);
+      const roleOk = !options.roles || options.roles.length === 0 || roleMatches(role, options.roles) || adminBypass || magangBoleh;
+      const deptOk = !options.depts || options.depts.length === 0 || options.depts.includes(dept) || adminBypass || magangBoleh;
       const sudahLogin = !!firebaseUser && nama.trim().length > 0;
+      const magangDitolak = magangGA && jalur.startsWith("/admin") && !magangBoleh;
 
       if (!sudahLogin && sedangLogout) return; // logout disengaja -- navigasi sudah diurus logout()
-      if (!sudahLogin || !roleOk || !deptOk) {
+      if (!sudahLogin || !roleOk || !deptOk || magangDitolak) {
         showToast(options.deniedMessage || "Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman ini.", "error");
         redirectTimer = setTimeout(() => router.push(options.redirectTo || "/"), 1200);
         return;

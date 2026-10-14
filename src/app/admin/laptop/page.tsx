@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { isMagangSaatIni, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import Modal from "../../../components/ui/Modal";
@@ -146,6 +146,7 @@ export default function AdminLaptopPage() {
   };
 
   const handleDelete = async (item: LaptopDevice) => {
+    if (isMagangSaatIni()) return showToast("Akun magang tidak dapat menghapus data. Hubungi Admin GA.", "warning"); // §145
     const yakin = await confirm({
       title: "Hapus Data Laptop",
       message: `Yakin ingin menghapus data laptop "${item.merk_model}" milik ${item.nama_user}? Tindakan ini tidak bisa dibatalkan.`,
