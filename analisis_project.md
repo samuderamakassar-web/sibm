@@ -3248,3 +3248,6 @@ Keputusan user: Magang GA (departemen Admin GA + role "Magang") boleh input doku
 3. Tombol/aksi hapus: disembunyikan (legal, kendaraan) atau ditolak dengan pesan (karyawan, laptop) untuk akun magang.
 4. firestore.rules: isMagang(); master_legalitas delete & delete generik koleksiOperasional mensyaratkan !isMagang(). Uji REST tanpa login: master_legalitas 403, master_kendaraan/booking/settings 200.
 Catatan Cloudinary: file legal lama (Cloudinary, /image/upload/*.pdf) mengembalikan 401 karena pengaturan akun Cloudinary "Allow delivery of PDF and ZIP files" mati -- perlu diaktifkan user (sementara), lalu file dipindah ke Storage lewat "Perbarui".
+
+## 146. Panduan PDF per Peran (14 Oktober 2026)
+Folder `panduan/` berisi 9 PDF A4: 01 Input Dokumen Legal (Admin GA & Magang GA), 02 Security, 03 OB & CS, 04 Koordinator OB, 05 Driver, 06 QHSE, 07 Admin GA (+ Magang GA), 08 Eksekutif Tenant, 09 Karyawan/Portal. Dibuat dari `scripts/buat-panduan.mjs <folder-html>` (isi per peran di array PANDUAN) lalu dicetak Chrome headless: chrome --headless=new --no-pdf-header-footer --print-to-pdf=<pdf> <html>. Perbarui isi skrip bila fitur berubah.
