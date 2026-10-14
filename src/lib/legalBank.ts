@@ -78,7 +78,7 @@ export async function unggahFileLegal(file: File, kodeArsip: string): Promise<{ 
   const bersih = file.name.replace(/[^\w.\-]+/g, "_").slice(-80);
   const path = `legal/${kodeArsip || "tanpa-kode"}/${Date.now()}_${bersih}`;
   try {
-    await uploadBytes(ref(storage, path), file, { contentType: file.type || "application/pdf" });
+    await uploadBytes(ref(storage, path), file, { contentType: jenisFile(file.name, file.type) });
   } catch (e) {
     const kode = (e as { code?: string }).code || "";
     if (kode.includes("unauthorized")) throw new Error("Tidak berhak mengunggah (khusus Admin GA).");
@@ -131,6 +131,20 @@ export function tambahBulan(iso: string, n: number): string {
 export async function unggahBlobLegal(blob: Blob, nama: string, kodeArsip: string): Promise<string> {
   const bersih = nama.replace(/[^\w.\-]+/g, "_").slice(-80);
   const path = `legal/${kodeArsip || "tanpa-kode"}/lama_${Date.now()}_${bersih}`;
-  await uploadBytes(ref(storage, path), blob, { contentType: blob.type || "application/pdf" });
+  await uploadBytes(ref(storage, path), blob, { contentType: jenisFile(nama, blob.type) });
   return path;
+}
+
+/** §147 tipe file untuk Storage (rules hanya menerima PDF / gambar / Office): Cloudinary kadang mengirim
+ *  application/octet-stream -> tentukan dari ekstensi nama file. */
+const JENIS_EKSTENSI: Record<string, string> = {
+  pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", heic: "image/heic",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+export function jenisFile(nama: string, tipeAsli?: string): string {
+  const eks = (nama.split("?")[0].split(".").pop() || "").toLowerCase();
+  if (JENIS_EKSTENSI[eks]) return JENIS_EKSTENSI[eks];
+  if (tipeAsli && /^(application\/pdf|image\/|application\/msword|application\/vnd\.)/.test(tipeAsli)) return tipeAsli;
+  return "application/pdf";
 }

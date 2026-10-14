@@ -214,6 +214,9 @@ export default function AdminLegalitasPage() {
     if (!(await confirm({ title: "Pindahkan file lama", message: `${fileLama} file lama akan diunduh dari Cloudinary lalu disimpan ke penyimpanan privat. Pastikan pengaturan Cloudinary "Allow delivery of PDF and ZIP files" sedang AKTIF. Jangan tutup halaman sampai selesai.`, confirmText: "Mulai" }))) return;
     setMigrasi({ jalan: true, selesai: 0, total: fileLama });
     let ok = 0, gagal = 0;
+    // §148 alasan gagal dihitung per jenis agar bisa ditindaklanjuti
+    const alasan: Record<string, number> = {};
+    const catat = (a: string) => { alasan[a] = (alasan[a] || 0) + 1; };
     for (const d of daftar) {
       const riwayat = [...(d.riwayat || [])] as VersiLegalT2[];
       let berubah = false;
@@ -221,13 +224,15 @@ export default function AdminLegalitasPage() {
         const v = riwayat[i];
         if (!v.file_url || v.file_path) continue;
         try {
-          const res = await fetch(v.file_url);
-          if (!res.ok) throw new Error(String(res.status));
+          let res: Response;
+          try { res = await fetch(v.file_url); } catch { catat("tidak bisa diunduh dari Cloudinary"); gagal++; setMigrasi({ jalan: true, selesai: ok + gagal, total: fileLama }); continue; }
+          if (!res.ok) { catat(res.status === 404 ? "file sudah tidak ada di Cloudinary (404)" : `Cloudinary menolak (${res.status})`); gagal++; setMigrasi({ jalan: true, selesai: ok + gagal, total: fileLama }); continue; }
           const blob = await res.blob();
+          if (blob.size > MAX_FILE_LEGAL_MB * 1024 * 1024) { catat(`lebih dari ${MAX_FILE_LEGAL_MB} MB`); gagal++; setMigrasi({ jalan: true, selesai: ok + gagal, total: fileLama }); continue; }
           const nama = v.file_url.split("/").pop() || `dokumen_${i}.pdf`;
           riwayat[i] = { ...v, file_path: await unggahBlobLegal(blob, nama, d.kode_arsip || d.id), nama_file: nama };
           berubah = true; ok++;
-        } catch (e) { console.error("[migrasi]", d.nama_dokumen, e); gagal++; }
+        } catch (e) { console.error("[migrasi]", d.nama_dokumen, e); catat(String((e as { code?: string }).code || "").includes("unauthorized") ? "ditolak penyimpanan (izin)" : "gagal disimpan"); gagal++; }
         setMigrasi({ jalan: true, selesai: ok + gagal, total: fileLama });
       }
       if (berubah) {
@@ -236,7 +241,9 @@ export default function AdminLegalitasPage() {
       }
     }
     setMigrasi(null);
-    showToast(gagal ? `${ok} file dipindahkan, ${gagal} gagal (cek pengaturan Cloudinary, lalu ulangi).` : `${ok} file dipindahkan. Sekarang matikan lagi pengaturan PDF di Cloudinary.`, gagal ? "warning" : "success");
+    if (gagal) {
+      await confirm({ title: "Hasil pemindahan", message: `${ok} file berhasil dipindahkan, ${gagal} gagal: ${Object.entries(alasan).map(([a, n]) => `${n} ${a}`).join("; ")}. File yang berhasil tidak akan diulang — tekan tombol lagi untuk mencoba sisanya.`, confirmText: "Mengerti" });
+    } else showToast(`${ok} file dipindahkan. Sekarang matikan lagi pengaturan PDF di Cloudinary.`, "success");
   };
 
   if (!isReady || !session) return null;
