@@ -3275,3 +3275,7 @@ Keputusan user: check-out 18:00–19:30 tetap divalidasi Security (memastikan) t
 2. Konsumen: RekapLemburGedung sudah membuang status /batal/; Dashboard Eksekutif & portal "Overtime minggu ini" kini juga membuang status batal/ditolak.
 3. KehadiranKaryawanPanel: kartu kemarin hanya bila masih "lanjut" (label "Kemarin · belum check-out sejak kemarin"); satu kartu per orang per tanggal (utamakan yang masih di gedung / validasi terbaru) -- dulu nama tampil dua kali (kemarin & hari ini tanpa label); label "pulang ≤ 19:30 · tidak dihitung lembur".
 Catatan: lembur yang sudah tercatat sebelum perubahan ini tidak diubah otomatis.
+
+## 151. Panel Kehadiran & Lembur: Pilih Hari + Hanya Lembur Lewat 19:30 (14 Oktober 2026)
+User menegaskan aturan tagihan overtime gedung (sudah sesuai §150): validasi mulai 18:00; pulang 18:00–19:30 tidak tercatat overtime; tetap di gedung lewat 19:30 tercatat (dihitung dari 18:00). Fungsi panel: siapa tidak hadir & siapa masih lembur sampai malam.
+KehadiranKaryawanPanel: pemilih tanggal (‹ tanggal › + "Hari ini", maks hari ini); lembur tampil hanya yang masih di gedung atau pulang lewat 19:30 (data lama tanpa field dihitung dinilai dari waktu_keluar); yang pulang ≤ 19:30 cukup jumlahnya di judul; kartu "pulang HH:MM" untuk yang sudah check-out; hari ini menyertakan kartu kemarin yang belum check-out; satu kartu per orang per tanggal; panel Security (roster & tukar jaga) hanya untuk hari ini.
