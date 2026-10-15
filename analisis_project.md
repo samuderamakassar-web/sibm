@@ -3287,3 +3287,6 @@ Keputusan user: tugas siram tanaman tidak signifikan untuk penilaian.
 3. scripts/security-tugas-reminder.mjs: slot siram pagi/malam dihapus (tinggal cek AC pagi hari kerja).
 4. Panduan PDF 02 Security & 07 Admin GA diperbarui.
 Tidak diubah: titik patroli "Siram Tanaman" di Sesi 1 (bagian daftar patroli, bukan menu dadakan); data lama notifikasi_dadakan_siram dibiarkan.
+
+## 153. Titik Patroli "Siram Tanaman" Dihapus (15 Oktober 2026)
+Atas permintaan user, titik tambahan "Parkiran::Siram Tanaman" yang disisipkan di Sesi 1 (buatGroupedPatroli) dihapus bersama parameternya. Titik "Cek AC Menyala" Shift 2 hari kerja tetap.

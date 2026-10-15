@@ -65,15 +65,12 @@ function isWeekend(now: Date): boolean {
   return hari === 0 || hari === 6;
 }
 
-// Siram Tanaman: dulu titik weekend-only di Pantry Lt 1/2, sekarang dipindah jadi bagian
-// grup "Parkiran" dan cuma muncul di Sesi 1 (baik Sesi 1 Shift 1 maupun Sesi 1 Shift 2) --
-// bukan lagi tergantung weekend/weekday. Notifikasi "dadakan" siram tanaman yang terpisah
-// (dengan wajib foto bukti) ditangani sendiri, lihat NotifikasiDadakanBanner / scripts terkait.
+// §153 titik tambahan "Siram Tanaman" (Sesi 1) dihapus atas keputusan user bersama notifikasi dadakan (§152).
 // Cek AC menyala jam 07:20 -- cuma Senin-Jumat, khusus petugas Shift 2 (kerja sampai jam
 // 08:00 pagi) yang masih standby pas jam segitu.
 // §133 titik kritis wajib di setiap sesi; titik lain dibagi bergilir ke Sesi 1/2/3 (urutan master, indeks mod 3)
 // supaya 1 sesi tidak harus mengelilingi semua titik. Berlaku setelah Admin menandai minimal 1 titik kritis.
-function buatGroupedPatroli(master: LantaiPatroli[], sertakanSiramTanaman: boolean, sertakanCekAC: boolean, nomorSesi = 0): Record<string, { id: string, nama: string, kritis?: boolean }[]> {
+function buatGroupedPatroli(master: LantaiPatroli[], sertakanCekAC: boolean, nomorSesi = 0): Record<string, { id: string, nama: string, kritis?: boolean }[]> {
   const hasil: Record<string, { id: string, nama: string, kritis?: boolean }[]> = {};
   const modeGilir = nomorSesi > 0 && master.some((l) => l.titik.some((x) => x.aktif !== false && x.kritis));
   let urutGilir = 0;
@@ -84,13 +81,6 @@ function buatGroupedPatroli(master: LantaiPatroli[], sertakanSiramTanaman: boole
     }).map((x) => ({ id: x.id, nama: x.nama, ...(x.kritis ? { kritis: true } : {}) }));
     if (aktif.length) hasil[l.lantai] = aktif;
   });
-
-  if (sertakanSiramTanaman) {
-    hasil["Parkiran"] = [
-      ...(hasil["Parkiran"] || []),
-      { id: "Parkiran::Siram Tanaman", nama: "Siram Tanaman" },
-    ];
-  }
 
   if (sertakanCekAC) {
     hasil["Tugas Shift Pagi"] = [
@@ -173,7 +163,7 @@ export default function PatroliSecurityPage() {
   const perluScanLantai = (lantai: string) => qrLantaiAktif && masterTitik.some((l) => l.lantai === lantai) && !scanLantai[lantai];
   const GROUPED_PATROLI = useMemo(() => {
     const [sesi, shift, hari] = kunciSesi.split("|");
-    return buatGroupedPatroli(masterTitik, sesi === "Sesi 1", hari === "wd" && shift === "Shift 2", Number(String(sesi).replace(/\D/g, "")) || 0);
+    return buatGroupedPatroli(masterTitik, hari === "wd" && shift === "Shift 2", Number(String(sesi).replace(/\D/g, "")) || 0);
   }, [kunciSesi, masterTitik]);
   const totalTitikKeseluruhan = useMemo(() => Object.values(GROUPED_PATROLI).reduce((acc, curr) => acc + curr.length, 0), [GROUPED_PATROLI]);
   const semuaTitikPatroli = useMemo(() => Object.values(GROUPED_PATROLI).flat(), [GROUPED_PATROLI]);
