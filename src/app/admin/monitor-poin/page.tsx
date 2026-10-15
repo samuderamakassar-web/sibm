@@ -246,7 +246,7 @@ export default function MonitorPoinPage() {
           <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: "14px", color: "var(--ink)" }}>Aturan potongan poin (otomatis, dihitung tiap pagi untuk hari kemarin)</summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginTop: "12px", fontSize: "12.5px", color: "var(--ink-soft)", lineHeight: 1.6 }}>
             <div><b style={{ color: "var(--ink)" }}>OB & CS</b><br />−5 per sesi checklist (Pagi/Siang/Sore) yang tidak dilaporkan sesuai plot.</div>
-            <div><b style={{ color: "var(--ink)" }}>Security</b><br />−10 per shift di bawah minimum 2 sesi patroli.<br />−5 per jendela Siram Tanaman yang tidak diselesaikan.</div>
+            <div><b style={{ color: "var(--ink)" }}>Security</b><br />−10 per shift di bawah minimum 2 sesi patroli.</div>
             <div><b style={{ color: "var(--ink)" }}>Driver</b> <span style={{ fontSize: "11px" }}>(hanya kendaraan bertanda &quot;dikelola tim Driver&quot; di Master Kendaraan)</span><br />
               −3 per trip &quot;Keluar&quot; yang tidak dicatat tiba/pulang dalam 12 jam (driver pembawa).<br />
               −2 per catatan keluar tanpa tujuan / tanpa KM (driver pembawa).<br />

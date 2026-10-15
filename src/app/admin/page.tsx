@@ -119,7 +119,6 @@ type KunciHitungan =
   | "ob"
   | "security"
   | "driver"
-  | "siram"
   | "tukarShift"
   | "overtime"
   | "helpdesk"
@@ -140,7 +139,6 @@ const PANTAU: PantauItem[] = [
   { key: "ob", title: "OB & CS", sub: "checklist hari ini", path: "/admin/monitor-ob", icon: "broom", tone: "ok" },
   { key: "security", title: "Security", sub: "laporan patroli hari ini", path: "/admin/monitor-security", icon: "shield", tone: "info" },
   { key: "driver", title: "Driver", sub: "catatan armada hari ini", path: "/admin/monitor-driver", icon: "truck", tone: "warn" },
-  { key: "siram", title: "Siram Tanaman", sub: "dari 2 jendela hari ini", path: "/admin/monitor-dadakan", icon: "droplet", tone: "teal" },
   { key: "tukarShift", title: "Tukar Shift", sub: "scan telat bulan ini", path: "/admin/monitor-tukar-shift", icon: "swap", tone: "red" },
 ];
 
@@ -197,7 +195,6 @@ async function muatHitungan(): Promise<Hitungan> {
     ob: () => hitung(query(collection(db, "ob_checklists"), where("tanggal", "==", hariIni))),
     security: () => hitung(query(collection(db, "security_patrols"), where("waktu_laporan", ">=", awalHari))),
     driver: () => hitung(query(collection(db, "operational_vehicle_logs"), where("waktu_catat", ">=", awalHari))),
-    siram: () => hitung(query(collection(db, "notifikasi_dadakan_siram"), where("tanggal", "==", hariIni))),
     tukarShift: async () => {
       const snap = await getDocs(query(collection(db, "security_shift_handover"), where("terlambat", "==", true)));
       return snap.docs.filter((d) => {

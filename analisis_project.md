@@ -3279,3 +3279,11 @@ Catatan: lembur yang sudah tercatat sebelum perubahan ini tidak diubah otomatis.
 ## 151. Panel Kehadiran & Lembur: Pilih Hari + Hanya Lembur Lewat 19:30 (14 Oktober 2026)
 User menegaskan aturan tagihan overtime gedung (sudah sesuai §150): validasi mulai 18:00; pulang 18:00–19:30 tidak tercatat overtime; tetap di gedung lewat 19:30 tercatat (dihitung dari 18:00). Fungsi panel: siapa tidak hadir & siapa masih lembur sampai malam.
 KehadiranKaryawanPanel: pemilih tanggal (‹ tanggal › + "Hari ini", maks hari ini); lembur tampil hanya yang masih di gedung atau pulang lewat 19:30 (data lama tanpa field dihitung dinilai dari waktu_keluar); yang pulang ≤ 19:30 cukup jumlahnya di judul; kartu "pulang HH:MM" untuk yang sudah check-out; hari ini menyertakan kartu kemarin yang belum check-out; satu kartu per orang per tanggal; panel Security (roster & tukar jaga) hanya untuk hari ini.
+
+## 152. Notifikasi Dadakan (Siram Tanaman) Dihapus (15 Oktober 2026)
+Keputusan user: tugas siram tanaman tidak signifikan untuk penilaian.
+1. Dihapus: menu "Notifikasi Dadakan: Siram Tanaman" (dashboard Security), halaman /dashboard/security/notifikasi-dadakan & NotifikasiDadakanSiramPage, halaman /admin/monitor-dadakan, kotak Pantau "Siram Tanaman" + hitungannya di admin hub.
+2. scripts/points-deduction.mjs: cekNotifikasiDadakan, potongan security_dadakan_terlewat & push Admin GA dihapus. Rekap Poin: teks aturan −5 siram dihapus.
+3. scripts/security-tugas-reminder.mjs: slot siram pagi/malam dihapus (tinggal cek AC pagi hari kerja).
+4. Panduan PDF 02 Security & 07 Admin GA diperbarui.
+Tidak diubah: titik patroli "Siram Tanaman" di Sesi 1 (bagian daftar patroli, bukan menu dadakan); data lama notifikasi_dadakan_siram dibiarkan.

@@ -60,15 +60,10 @@ const tanggalShift2Relevan = now.getHours() < 12 ? kemarin : hariIni;
 // Tentukan slot yang berlaku sekarang -- siram tanaman jalan TIAP HARI (tidak lagi
 // weekend-only), AC check tetap Senin-Jumat saja.
 let slotAktif = null;
-const targetPagi = toWaktu(6, 30); // jendela 06:00-07:00, titik tengah 06:30 +-30 menit
-const targetMalam = toWaktu(21, 0); // jendela 20:00-22:00, titik tengah 21:00 +-60 menit
 const targetAC = toWaktu(7, 20);
 
-if (selisihMenit(targetPagi) <= 30) {
-  slotAktif = { id: "siram-tanaman-pagi", tanggalShift: tanggalShift2Relevan, pesan: "🌱 Notifikasi Dadakan: waktunya siram tanaman! Buka menu \"Notifikasi Dadakan\" di aplikasi & upload foto bukti." };
-} else if (selisihMenit(targetMalam) <= 60) {
-  slotAktif = { id: "siram-tanaman-malam", tanggalShift: tanggalShift2Relevan, pesan: "🌱 Notifikasi Dadakan: waktunya siram tanaman! Buka menu \"Notifikasi Dadakan\" di aplikasi & upload foto bukti." };
-} else if (!isWeekend && selisihMenit(targetAC) <= TOLERANSI_MENIT) {
+// §152 slot siram tanaman (notifikasi dadakan) dihapus atas keputusan user; tinggal cek AC pagi hari kerja.
+if (!isWeekend && selisihMenit(targetAC) <= TOLERANSI_MENIT) {
   slotAktif = { id: "cek-ac-pagi", tanggalShift: tanggalShift2Relevan, pesan: "❄️ Pastikan SEMUA AC sudah menyala jam segini, tanpa terkecuali." };
 }
 

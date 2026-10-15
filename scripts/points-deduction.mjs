@@ -161,7 +161,6 @@ const POIN_AWAL_BULAN = 100;
 const POTONGAN = {
   ob_sesi_terlewat: 5, // per sesi (Pagi/Siang/Sore) yang gak dilaporkan
   security_shift_tidak_patuh: 10, // per shift (Shift 1 / Shift 2) yang gak memenuhi minimum sesi
-  security_dadakan_terlewat: 5, // per jendela (Pagi / Malam) yang gak diselesaikan
   // §82 Driver (keputusan user 3 Okt 2026) -- hanya kendaraan master ber-dikelola_driver = true
   driver_inspeksi_terlewat: 5, // per kendaraan yang tidak diinspeksi minggu lalu (semua driver; dicek tiap Senin)
   driver_status_lupa: 3, // per trip "Keluar" yang tidak dicatat tiba/pulang dalam 12 jam (driver pembawa)
@@ -303,39 +302,7 @@ async function cekSecurityPatroli() {
   return tidakPatuh;
 }
 
-// ==========================================
-// 3. Security -- Notifikasi Dadakan (siram tanaman): jendela Malam KEMARIN
-// dan jendela Pagi HARI INI, keduanya jadi tanggung jawab Shift 2 yang mulai
-// kemarin. Dipotong dari SEMUA yang terjadwal shift itu (tugas berbasis
-// giliran shift, bukan per-individu -- lihat catatan scope di atas).
-// ==========================================
-async function cekNotifikasiDadakan() {
-  const jendelaTerlewat = [];
-  const shift2Kemarin = await ambilPicShift(kemarin, "Shift 2");
-  if (shift2Kemarin.length === 0) {
-    console.log("Notifikasi Dadakan: tidak ada Security Shift 2 terjadwal kemarin, skip.");
-    return jendelaTerlewat;
-  }
-
-  const [malamKemarinDoc, pagiHariIniDoc] = await Promise.all([
-    db.collection("notifikasi_dadakan_siram").doc(`${kemarin}_Malam`).get(),
-    db.collection("notifikasi_dadakan_siram").doc(`${hariIni}_Pagi`).get(),
-  ]);
-
-  if (!malamKemarinDoc.exists) {
-    for (const nama of shift2Kemarin) {
-      await potongPoin(nama, "Security", `Notifikasi Dadakan jendela Malam (${kemarin}) tidak diselesaikan`, POTONGAN.security_dadakan_terlewat);
-    }
-    jendelaTerlewat.push({ jendela: "Malam", tanggal: kemarin, petugas: shift2Kemarin });
-  }
-  if (!pagiHariIniDoc.exists) {
-    for (const nama of shift2Kemarin) {
-      await potongPoin(nama, "Security", `Notifikasi Dadakan jendela Pagi (${hariIni}) tidak diselesaikan`, POTONGAN.security_dadakan_terlewat);
-    }
-    jendelaTerlewat.push({ jendela: "Pagi", tanggal: hariIni, petugas: shift2Kemarin });
-  }
-  return jendelaTerlewat;
-}
+// 3. (dihapus §152) Notifikasi Dadakan siram tanaman tidak lagi dinilai -- keputusan user 15 Okt 2026.
 
 // ==========================================
 // 4. DRIVER (§82)
@@ -415,7 +382,6 @@ async function jalankan() {
   const obTidakLengkap = await cekOB();
   const driverTemuan = await cekDriver();
   const securityTidakPatuh = await cekSecurityPatroli();
-  const dadakanTerlewat = await cekNotifikasiDadakan();
 
   // Email ke Admin GA tiap kali ada Security yang gak penuhi minimum sesi patroli (permintaan
   // user) -- 1 email rekap per hari (bisa isi >1 shift/orang), bukan 1 email per orang.
@@ -455,16 +421,6 @@ async function jalankan() {
       `${securityTidakPatuh.length} petugas Security tidak memenuhi minimum ${MINIMUM_SESI_PATROLI} sesi patroli shift kemarin (${kemarin}): ${daftar}.`
     );
   }
-  if (dadakanTerlewat.length > 0) {
-    for (const d of dadakanTerlewat) {
-      console.log(`Kirim notifikasi Admin GA: Notifikasi Dadakan jendela ${d.jendela} tidak diselesaikan.`);
-      await kirimPushAdminGA(
-        "🌱 Notifikasi Dadakan (Siram Tanaman) Tidak Diselesaikan",
-        `Jendela ${d.jendela} (${d.tanggal}) tidak diselesaikan oleh Security Shift 2 yang bertugas: ${d.petugas.join(", ")}.`
-      );
-    }
-  }
-
   if (driverTemuan.length > 0) {
     await kirimPushAdminGA("🚐 Penilaian Driver", `${driverTemuan.length} temuan Driver (${kemarin}): ${driverTemuan.slice(0, 5).join("; ")}${driverTemuan.length > 5 ? "; ..." : ""}.`);
   }
