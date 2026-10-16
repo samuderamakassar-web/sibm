@@ -3297,3 +3297,10 @@ Atas permintaan user, titik tambahan "Parkiran::Siram Tanaman" yang disisipkan d
 
 ## 155. Pencocokan Temuan ↔ Item Inspeksi Lebih Longgar (16 Oktober 2026)
 Laporan user: Genset sudah "dalam perbaikan" di Temuan Aset tetapi masih bisa diinspeksi. Dulu temuanUntuk() mensyaratkan jenis, area & nama persis sama -- temuan lama (pindahan tiket Helpdesk) bisa ber-area/jenis lain atau bernama dengan keterangan kurung. Sekarang: nama dinormalisasi (tanpa "(…)", huruf kecil, spasi tunggal); fasilitas gedung tetap wajib area sama; utilitas & alat cocok cukup dengan nama (jenis sama, atau temuan non-gedung, atau area sama).
+
+## 156. Menu Inspeksi Terpisah per Jenis + "Tidak Ada" Tanpa Foto (16 Oktober 2026)
+Keputusan user: Inspeksi Fasilitas Gedung & Utilitas dibedakan = menu terpisah.
+1. Dashboard OB: kartu "Inspeksi Fasilitas Gedung" (petugas gedung / Koordinator, ?jenis=gedung), "Inspeksi Utilitas Teknis" (petugas utilitas, ?jenis=utilitas), "Inspeksi Alat Kebersihan" (Koordinator, ?jenis=alat). Kartu gabungan "Inspeksi Kondisi Aset" dihapus.
+2. InspeksiFasilitasPage membaca ?jenis= -> jenis dikunci, tab jenis disembunyikan, judul & subjudul per jenis; bila tidak ditugaskan tampil pesan. Tanpa parameter tetap tampilan lama (tab).
+3. Mode temuan: kondisi "Tidak Ada" tidak wajib foto (label "Foto" tanpa *); kondisi lain tetap wajib foto & keterangan.
+4. Panduan PDF 03 OB & CS dan 04 Koordinator diperbarui.

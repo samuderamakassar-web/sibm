@@ -135,7 +135,7 @@ export default function DashboardOBPage() {
   // §132 alat tidak lagi per PIC (diinspeksi Koordinator 2x sebulan) -> jumlahAlat tidak memberi tugas
   // §133 gedung = petugas yang ditunjuk Koordinator (bergilir), bukan lagi semua yang punya plot area
   const petugasGedung = masterAset.petugas_gedung.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
-  const punyaTugasInspeksi = petugasGedung || petugasUtilitas || /koordinator|admin/i.test(picRole);
+  const isKoordinatorOB = /koordinator|admin/i.test(picRole);
 
 // 🔔 Setup FCM — aktif otomatis begitu picName ke-set dari sesi Firebase Auth
   useFcmSetup(picName, !!picName, "OB & CS");
@@ -201,7 +201,10 @@ export default function DashboardOBPage() {
   const menuOB = [
     { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
     { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", action: "link", token: "warn", icon: IconDroplet },
-    ...(punyaTugasInspeksi ? [{ title: "Inspeksi Kondisi Aset", desc: "Foto & kondisi fasilitas & utilitas (mingguan), alat kebersihan (Koordinator, 2x sebulan).", path: "/dashboard/ob/laporan", action: "link", token: "info", icon: IconSearch }] : []),
+    // §156 menu inspeksi terpisah per jenis, hanya untuk yang ditugaskan
+    ...(petugasGedung || isKoordinatorOB ? [{ title: "Inspeksi Fasilitas Gedung", desc: "Tiap minggu per area — Semua aman atau lapor temuan.", path: "/dashboard/ob/laporan?jenis=gedung", action: "link", token: "info", icon: IconSearch }] : []),
+    ...(petugasUtilitas ? [{ title: "Inspeksi Utilitas Teknis", desc: "Genset, panel, pompa — dinilai lengkap tiap minggu.", path: "/dashboard/ob/laporan?jenis=utilitas", action: "link", token: "warn", icon: IconSearch }] : []),
+    ...(isKoordinatorOB ? [{ title: "Inspeksi Alat Kebersihan", desc: "2x sebulan — Semua aman atau lapor alat bermasalah.", path: "/dashboard/ob/laporan?jenis=alat", action: "link", token: "ok", icon: IconSearch }] : []),
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input data lemburan Anda.", path: "", action: "modal_lembur", token: "accent", icon: IconClock },
     { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim OB & CS.", path: "/dashboard/ob/sop", action: "link", token: "info", icon: IconBook },
   ];

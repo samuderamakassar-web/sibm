@@ -118,6 +118,12 @@ export default function InspeksiFasilitasPage() {
   const [, setAssignedAreas] = useState<string[]>([]); // plot hari ini hanya untuk area awal
   const [step, setStep] = useState<1 | 2>(1);
   const [jenis, setJenis] = useState<JenisInspeksi>("gedung");
+  // §156 menu terpisah per jenis: ?jenis=gedung|utilitas|alat dari kartu dashboard -> jenis dikunci, tab disembunyikan
+  const [jenisTetap, setJenisTetap] = useState<JenisInspeksi | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("jenis");
+    if (q === "gedung" || q === "utilitas" || q === "alat") { const t = setTimeout(() => { setJenis(q); setJenisTetap(q); }, 0); return () => clearTimeout(t); }
+  }, []);
   const [selectedArea, setSelectedArea] = useState("");
   const [riwayat, setRiwayat] = useState<InspeksiAsetLog[]>([]);
   const [temuanTerbuka, setTemuanTerbuka] = useState<TemuanAset[]>([]);
@@ -264,7 +270,7 @@ export default function InspeksiFasilitasPage() {
       if (temuan.some((h) => !h.kondisi)) return showToast("Pilih kondisi setiap temuan.", "warning");
       if (jenis === "alat" && temuan.some((h) => !daftarMaster().includes(h.nama.trim()))) return showToast("Pilih alat dari daftar.", "warning");
       // §134 setiap temuan wajib foto (hilang/tidak ada: foto lokasi terakhirnya) & keterangan
-      const tanpaFotoT = temuan.find((h) => !h.foto);
+      const tanpaFotoT = temuan.find((h) => h.kondisi !== "Tidak Ada" && !h.foto); // §156 "Tidak Ada" tidak wajib foto
       if (tanpaFotoT) return showToast(`Foto temuan "${tanpaFotoT.nama}" wajib diambil${tanpaFotoT.kondisi === "Hilang" || tanpaFotoT.kondisi === "Tidak Ada" ? " (foto lokasi terakhirnya)" : ""}.`, "warning");
       const tanpaKetT = temuan.find((h) => !h.catatan.trim());
       if (tanpaKetT) return showToast(`Isi keterangan "${tanpaKetT.nama}".`, "warning");
@@ -343,7 +349,7 @@ export default function InspeksiFasilitasPage() {
   const ringkasAlat = Object.entries(alatDipegang.reduce<Record<string, number>>((m, a) => { m[a.nama] = (m[a.nama] || 0) + 1; return m; }, {})).map(([n, c]) => `${n} ${c}`).join(" · ");
 
   return (
-    <AdminShell title="Inspeksi Kondisi Aset" subtitle="Foto & kondisi fasilitas gedung, peralatan kebersihan, dan utilitas — mingguan" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
+    <AdminShell title={jenisTetap ? `Inspeksi ${LABEL_JENIS[jenisTetap]}` : "Inspeksi Kondisi Aset"} subtitle={jenisTetap === "utilitas" ? "Genset, panel, pompa & utilitas lain — dinilai lengkap tiap minggu" : jenisTetap === "alat" ? "Peralatan kebersihan tim — 2x sebulan, Semua aman atau lapor yang bermasalah" : jenisTetap === "gedung" ? "Fasilitas per area — tiap minggu, Semua aman atau lapor temuan" : "Foto & kondisi fasilitas gedung, peralatan kebersihan, dan utilitas — mingguan"} userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
       <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -370,7 +376,9 @@ export default function InspeksiFasilitasPage() {
         <div className="ka-kartu" style={{ maxWidth: "640px" }}>
           <div style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>{jenis === "alat" ? `Periode alat (2x sebulan) · ${labelPeriodeAlat}` : `Minggu ini · ${formatRentangMinggu(seninMingguIni)}`}</div>
           {!jenisTersedia.length && <div style={{ padding: "12px", borderRadius: "12px", background: "var(--warn-50)", fontSize: "13px", fontWeight: 700 }}>Anda belum ditugaskan inspeksi. Petugas inspeksi gedung ditunjuk Koordinator di menu Plotting.</div>}
-          {jenisTersedia.length > 0 && !jenisSah && <button type="button" className="sa-btn is-soft" onClick={() => setJenis(jenisTersedia[0])}>Buka {LABEL_JENIS[jenisTersedia[0]]}</button>}
+          {jenisTetap && !jenisSah && <div style={{ padding: "12px", borderRadius: "12px", background: "var(--warn-50)", fontSize: "13px", fontWeight: 700 }}>Anda tidak ditugaskan untuk inspeksi {LABEL_JENIS[jenisTetap]}.</div>}
+          {!jenisTetap && jenisTersedia.length > 0 && !jenisSah && <button type="button" className="sa-btn is-soft" onClick={() => setJenis(jenisTersedia[0])}>Buka {LABEL_JENIS[jenisTersedia[0]]}</button>}
+          {!jenisTetap && (
           <div className="ka-jenis" role="tablist" aria-label="Jenis inspeksi">
             {jenisTersedia.map((j) => (
               <button key={j} type="button" role="tab" aria-selected={jenis === j} className={jenis === j ? "on" : ""} onClick={() => setJenis(j)}>
@@ -379,6 +387,7 @@ export default function InspeksiFasilitasPage() {
               </button>
             ))}
           </div>
+          )}
 
           {jenis === "gedung" ? (
             <label style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink-soft)" }}>Area yang diinspeksi
@@ -470,7 +479,7 @@ export default function InspeksiFasilitasPage() {
                       {h.foto ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={h.foto} alt={`Foto ${h.nama}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : uploading === String(i) ? "Mengunggah..." : <><IconCamera size={18} /> Foto *</>}
+                      ) : uploading === String(i) ? "Mengunggah..." : <><IconCamera size={18} /> {h.kondisi === "Tidak Ada" ? "Foto" : "Foto *"}</>}
                       <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { unggah(String(i), e.target.files?.[0], (url) => ubahItem(i, { foto: url })); e.target.value = ""; }} />
                     </label>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
