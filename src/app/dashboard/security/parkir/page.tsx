@@ -362,7 +362,9 @@ function LogOperasionalPage() {
         waktu_catat: serverTimestamp(),
         kendaraan: kendaraan.kendaraan,
         status_kendaraan: aksi.status,
-        driver_bertugas: driverTerakhir,
+        // §160 kendaraan dibawa pulang oleh PIC-nya, bukan driver yang terakhir memakai
+        driver_bertugas: aksi.status.startsWith("Pulang") && kendaraan.pic_kendaraan ? kendaraan.pic_kendaraan : driverTerakhir,
+        ...(aksi.status.startsWith("Pulang") ? { pemakai_terakhir: driverTerakhir } : {}),
         tujuan_keperluan: "-",
         kilometer_kendaraan: "Tidak dicatat",
       });

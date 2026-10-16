@@ -31,7 +31,7 @@ import { daerahTulis } from "@/lib/daerah";
 // ==========================================
 // INTERFACES
 // ==========================================
-interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; petugas_security?: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; _riwayatTerakhir?: KendaraanLog; }
+interface KendaraanLog { kendaraan: string; status_kendaraan: string; driver_bertugas: string; tujuan_keperluan: string; petugas_security?: string; kilometer_kendaraan?: string; waktu_catat?: Timestamp | null; _riwayatTerakhir?: KendaraanLog; pemakai_terakhir?: string; }
 interface DriverStatusLog { nama_driver: string; status: string; waktu_ubah?: Timestamp | null; }
 interface DataTamu { id: string; nama: string; instansi_dept: string; tujuan: string; waktu_masuk?: Timestamp | null; waktu_keluar?: Timestamp | null; sedang_keluar?: boolean; keluar_tujuan?: string; keluar_moda?: string; keluar_kendaraan?: string; }
 interface DataPaket { id: string; penerima: string; kurir: string; waktu_diterima?: Timestamp | null; status: string; }
@@ -254,7 +254,7 @@ export default function PortalSIBM() {
 
   // STATE HERO / RINGKASAN
   const [staffFotoMap, setStaffFotoMap] = useState<Record<string, string>>({});
-  const [kendaraanMetaMap, setKendaraanMetaMap] = useState<Record<string, { kategori: string; warna: string }>>({});
+  const [kendaraanMetaMap, setKendaraanMetaMap] = useState<Record<string, { kategori: string; warna: string; pic?: string }>>({});
   const [daftarSemuaKendaraan, setDaftarSemuaKendaraan] = useState<string[]>([]);
 
   // Tamu & paket terbaru (limit) — dipakai badge Menu Cepat. Tren & Kalender pakai hitungan server (§58Q/§58R). Dibatasi limit biar
@@ -395,7 +395,7 @@ export default function PortalSIBM() {
     }).catch(err => console.error("[hero] Gagal memuat foto staf:", err));
 
     getDocs(collection(db, "master_kendaraan")).then(snap => {
-      const metaMap: Record<string, { kategori: string; warna: string }> = {};
+      const metaMap: Record<string, { kategori: string; warna: string; pic?: string }> = {};
       const semuaId: string[] = [];
       snap.docs.forEach(d => {
         const data = d.data();
@@ -404,7 +404,7 @@ export default function PortalSIBM() {
           // nama driver/PIC yang tercatat) dianggap 1 unit fisik yang sama, bukan 2 unit.
           const plat = getPlat(data.kendaraan);
           if (!semuaId.includes(plat)) semuaId.push(plat);
-          if (!metaMap[plat]) metaMap[plat] = { kategori: data.kategori || "Sedan", warna: data.warna || "Putih" };
+          if (!metaMap[plat]) metaMap[plat] = { kategori: data.kategori || "Sedan", warna: data.warna || "Putih", pic: data.pic_kendaraan || "" };
         }
       });
       setKendaraanMetaMap(metaMap);
@@ -1101,6 +1101,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   type AnggotaTim = { key: string; nama: string; sub: string; label: string; nada: NadaTim; foto?: string };
   const jamTimWITA = (ts: Timestamp | null | undefined) =>
     ts ? new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" }).format(ts.toDate()) : "";
+  const labelUpdateArmada = (ts: Timestamp) => {
+    const f = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(d);
+    return f(ts.toDate()) === f(new Date()) ? jamTimWITA(ts) : new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Makassar", day: "numeric", month: "short" }).format(ts.toDate());
+  };
   const sejakWITA = (ts: Timestamp | null) => {
     if (!ts) return "";
     const tgl = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(ts.toDate());
@@ -1903,7 +1907,8 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       </span>
                       <span className="armada-plat">{k.kendaraan}</span>
                       <span className="armada-status" style={{ color: info.fg }}><span className="armada-titik" style={{ background: info.fg }} />{info.label}</span>
-                      {k.driver_bertugas && k.driver_bertugas !== "-" && <span className="armada-pemakai">{k.driver_bertugas.replace("Standby: ", "")}</span>}
+                      {/* §160 nama diganti waktu update terakhir (nama pemakai ada di riwayat) */}
+                      {k.waktu_catat && <span className="armada-pemakai">update {labelUpdateArmada(k.waktu_catat)}</span>}
                       {bookingKini && <span className="armada-booking" title={`${bookingKini.nama_pemesan} · ${rentangWaktu(bookingKini.mulai.toDate(), bookingKini.sampai.toDate())}`}>Dibooking</span>}
                     </button>
                   );
@@ -1926,8 +1931,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                       const info = INFO_KATEGORI_ARMADA[kat];
                       const driver = log.driver_bertugas?.replace("Standby: ", "");
                       const tujuan = log.tujuan_keperluan && log.tujuan_keperluan !== "-" ? log.tujuan_keperluan : "";
-                      // Keluar = yang membawa; Tiba/Pulang = pemakai terakhir (dibawa dari log sebelumnya). §58U-b
-                      const pemakai = driver && driver !== "-" ? `${kat === "keluar" ? "Dibawa" : "Pemakai terakhir"}: ${driver}` : "";
+                      // Keluar = yang membawa; Tiba = pemakai terakhir. §58U-b
+                      // §160 Dibawa pulang = PIC kendaraan (bukan driver yang terakhir memakai)
+                      const pic = kendaraanMetaMap[getPlat(log.kendaraan)]?.pic;
+                      const pemakai = kat === "pulang"
+                        ? [pic || driver ? `Dibawa pulang: ${pic || driver}` : "", log.pemakai_terakhir && log.pemakai_terakhir !== "-" && log.pemakai_terakhir !== pic ? `terakhir dipakai ${log.pemakai_terakhir.replace("Standby: ", "")}` : ""].filter(Boolean).join(" · ")
+                        : driver && driver !== "-" ? `${kat === "keluar" ? "Dibawa" : "Pemakai terakhir"}: ${driver}` : "";
                       const detail = [pemakai, kat === "keluar" && tujuan ? `ke ${tujuan}` : ""].filter(Boolean).join(" · ");
                       const pencatat = (log.petugas_security || "").replace(" (Auto-Sync Buku Tamu)", " · otomatis dari Buku Tamu");
                       return (

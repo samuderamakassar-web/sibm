@@ -37,16 +37,33 @@ export const WARNA_KONDISI: Record<string, { bg: string; fg: string }> = {
   "Tidak Ada": { bg: "var(--line)", fg: "var(--muted)" },
 };
 
-export type StatusTemuan = "Baru" | "Dijadwalkan" | "Dikerjakan" | "Selesai" | "Ditolak";
-export const STATUS_TEMUAN: StatusTemuan[] = ["Baru", "Dijadwalkan", "Dikerjakan", "Selesai", "Ditolak"];
-export const STATUS_TEMUAN_TERBUKA: StatusTemuan[] = ["Baru", "Dijadwalkan", "Dikerjakan"];
+// §160 Ditunda = pekerjaan berhenti sementara (sparepart/anggaran/vendor) -> tetap terbuka & terkunci.
+// Ditolak = dibatalkan/tidak dijalankan (alasan wajib) -> item terbuka lagi untuk inspeksi.
+// Disposal = diajukan dimusnahkan -> terkunci; Dimusnahkan = sudah dibuang/dijual (final, tetap terkunci);
+// Diganti = unit pengganti sudah ada -> kunci dibuka, item kembali diinspeksi.
+export type StatusTemuan = "Baru" | "Dijadwalkan" | "Dikerjakan" | "Ditunda" | "Selesai" | "Ditolak" | "Disposal" | "Dimusnahkan" | "Diganti";
+export const STATUS_TEMUAN: StatusTemuan[] = ["Baru", "Dijadwalkan", "Dikerjakan", "Ditunda", "Selesai", "Ditolak", "Disposal", "Dimusnahkan", "Diganti"];
+export const STATUS_TEMUAN_TERBUKA: StatusTemuan[] = ["Baru", "Dijadwalkan", "Dikerjakan", "Ditunda"];
+export const STATUS_TEMUAN_DISPOSAL: StatusTemuan[] = ["Disposal", "Dimusnahkan", "Diganti"];
+/** Item dengan temuan berstatus ini terkunci di halaman inspeksi (tidak perlu dinilai). */
+export const STATUS_TEMUAN_KUNCI: StatusTemuan[] = ["Baru", "Dijadwalkan", "Dikerjakan", "Ditunda", "Disposal", "Dimusnahkan"];
+export const STATUS_TEMUAN_FINAL: StatusTemuan[] = ["Selesai", "Ditolak", "Dimusnahkan", "Diganti"];
+export const LABEL_STATUS_TEMUAN: Record<StatusTemuan, string> = {
+  Baru: "Baru", Dijadwalkan: "Dijadwalkan", Dikerjakan: "Dikerjakan", Ditunda: "⏸ Tunda", Selesai: "✓ Selesai",
+  Ditolak: "✕ Batalkan / tolak", Disposal: "🗑 Ajukan disposal", Dimusnahkan: "🗑 Sudah dimusnahkan", Diganti: "Diganti unit baru",
+};
 export const WARNA_STATUS_TEMUAN: Record<StatusTemuan, { bg: string; fg: string }> = {
   Baru: { bg: "var(--red-50)", fg: "var(--red-600)" },
   Dijadwalkan: { bg: "var(--warn-50)", fg: "var(--warn)" },
   Dikerjakan: { bg: "var(--info-50)", fg: "var(--info)" },
+  Ditunda: { bg: "var(--warn-50)", fg: "var(--warn)" },
   Selesai: { bg: "var(--ok-50)", fg: "var(--ok)" },
   Ditolak: { bg: "var(--line)", fg: "var(--muted)" },
+  Disposal: { bg: "var(--line)", fg: "var(--ink-soft)" },
+  Dimusnahkan: { bg: "var(--line)", fg: "var(--ink)" },
+  Diganti: { bg: "var(--ok-50)", fg: "var(--ok)" },
 };
+export const CARA_MUSNAH = ["Dibuang", "Dijual", "Dihibahkan"] as const;
 
 export interface HasilInspeksiItem { nama: string; kondisi: string; catatan: string; foto: string; butuh_tindakan?: boolean }
 export interface InspeksiAsetLog {
@@ -58,6 +75,9 @@ export interface TemuanAset {
   pelapor: string; waktu_lapor?: Timestamp | null; status: StatusTemuan; inspeksi_id?: string;
   rencana?: string; catatan_admin?: string; alasan_tolak?: string; biaya?: number; foto_hasil?: string;
   waktu_selesai?: Timestamp | null; ditangani_oleh?: string; dari_helpdesk_id?: string;
+  tanggal_selesai?: string; alasan_tunda?: string; alasan_disposal?: string;
+  cara_musnah?: string; tanggal_musnah?: string; nilai_jual?: number;
+  riwayat_status?: { status: string; oleh: string; waktu: Timestamp; catatan?: string }[];
 }
 
 /** §133 petugas_gedung = OB/CS yang ditunjuk Koordinator (bergilir) untuk inspeksi fasilitas gedung. */

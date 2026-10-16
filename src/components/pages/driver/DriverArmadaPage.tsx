@@ -259,13 +259,16 @@ export default function DriverArmadaPage() {
   // Catat 1 log pergerakan armada. `syncDriverStatus` HANYA true untuk Keluar/Service (lewat modal) —
   // itu yang beneran berarti driver-nya sedang bertugas di luar bareng kendaraan itu. Parkir/Standby &
   // Pulang (aksi instan) cuma soal status KENDARAAN, jadi TIDAK ikut mengubah status kesiagaan driver.
-  const catatPergerakan = async (kendaraanNama: string, status: string, tujuanIsi: string, kmIsi: string, syncDriverStatus: boolean) => {
+  const catatPergerakan = async (kendaraanNama: string, status: string, tujuanIsi: string, kmIsi: string, syncDriverStatus: boolean, pic?: string) => {
+    // §160 Pulang -> dibawa pulang oleh PIC kendaraan; driver yang menekan dicatat sebagai pemakai terakhir
+    const pulangPic = status.startsWith("Pulang") && pic ? pic : "";
     await addDoc(collection(db, "operational_vehicle_logs"), { daerah: daerahTulis(),
       petugas_security: "Aplikasi Driver",
       waktu_catat: serverTimestamp(),
       kendaraan: kendaraanNama,
       status_kendaraan: status,
-      driver_bertugas: activeDriver,
+      driver_bertugas: pulangPic || activeDriver,
+      ...(pulangPic ? { pemakai_terakhir: activeDriver } : {}),
       tujuan_keperluan: tujuanIsi || "-",
       kilometer_kendaraan: kmIsi || "Tidak dicatat",
     });
@@ -301,7 +304,7 @@ export default function DriverArmadaPage() {
       const sebelumnya = statusPerKendaraan[kendaraan.kendaraan];
       const kembaliDariLuar = !!sebelumnya && sebelumnya.driver_bertugas === activeDriver &&
         (sebelumnya.status_kendaraan === "Keluar Beroperasi" || sebelumnya.status_kendaraan === "Masuk Bengkel / Service");
-      await catatPergerakan(kendaraan.kendaraan, aksi.status, "-", "Tidak dicatat", kembaliDariLuar);
+      await catatPergerakan(kendaraan.kendaraan, aksi.status, "-", "Tidak dicatat", kembaliDariLuar, kendaraan.pic_kendaraan);
       // §144 kembali -> Buku Tamu: tidak lagi "sedang keluar"
       if (kembaliDariLuar) tandaiKembali(activeDriver, "Aplikasi Driver").catch((e) => console.error("[armada] tandai kembali:", e));
       if (aksi.key === "standby") {

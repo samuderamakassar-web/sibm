@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { arrayUnion, collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -24,12 +24,23 @@ import { daerahTulis } from "../../../lib/daerah";
 import PetugasUtilitasPicker from "../../../components/PetugasUtilitasPicker";
 import { dataUrlKeCloudinary } from "../../../lib/uploadFoto";
 import {
-  JENIS_INSPEKSI, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, MASTER_KONDISI_BAWAAN, STATUS_TEMUAN, STATUS_TEMUAN_TERBUKA, WARNA_KONDISI, WARNA_STATUS_TEMUAN,
+  JENIS_INSPEKSI, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, MASTER_KONDISI_BAWAAN, CARA_MUSNAH, LABEL_STATUS_TEMUAN, STATUS_TEMUAN_DISPOSAL, STATUS_TEMUAN_FINAL, STATUS_TEMUAN_TERBUKA, WARNA_KONDISI, WARNA_STATUS_TEMUAN,
   kodeTemuan, kondisiBermasalah, tebakJenisDariItem, useMasterKondisiAset,
   type InspeksiAsetLog, type JenisInspeksi, type MasterKondisiAset, type StatusTemuan, type TemuanAset,
 } from "../../../lib/kondisiAset";
 
 const PREFIX_LAMA = "[Temuan Inspeksi Mingguan]";
+const hariIniWITA = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
+const tglIso = (s?: string) => (s ? s.split("-").reverse().join("/") : "");
+// §160 pilihan tindak lanjut sesuai status sekarang (status sendiri ikut agar catatan/rencana bisa diperbarui)
+const PILIHAN_STATUS: Record<StatusTemuan, StatusTemuan[]> = {
+  Baru: ["Dijadwalkan", "Dikerjakan", "Selesai", "Ditunda", "Ditolak", "Disposal"],
+  Dijadwalkan: ["Dijadwalkan", "Dikerjakan", "Selesai", "Ditunda", "Ditolak", "Disposal"],
+  Dikerjakan: ["Selesai", "Dikerjakan", "Ditunda", "Ditolak", "Disposal"],
+  Ditunda: ["Ditunda", "Dijadwalkan", "Dikerjakan", "Selesai", "Ditolak", "Disposal"],
+  Disposal: ["Dimusnahkan", "Dikerjakan"],
+  Selesai: [], Ditolak: [], Dimusnahkan: [], Diganti: [],
+};
 const tgl = (ts?: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
 const salin = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
@@ -68,9 +79,10 @@ export default function KondisiAsetPage() {
   const [temuan, setTemuan] = useState<TemuanAset[]>([]);
   const [inspeksi, setInspeksi] = useState<InspeksiAsetLog[]>([]);
   const [filterJenis, setFilterJenis] = useState<JenisInspeksi | "SEMUA">("SEMUA");
-  const [filterStatus, setFilterStatus] = useState<"TERBUKA" | "SELESAI" | "DITOLAK" | "SEMUA">("TERBUKA");
+  const [filterStatus, setFilterStatus] = useState<"TERBUKA" | "SELESAI" | "DITOLAK" | "DISPOSAL" | "SEMUA">("TERBUKA");
   const [pilih, setPilih] = useState<TemuanAset | null>(null);
-  const [form, setForm] = useState({ status: "Baru" as StatusTemuan, rencana: "", catatan_admin: "", alasan_tolak: "", biaya: "", foto_hasil: "" });
+  const formKosong = { status: "Baru" as StatusTemuan, rencana: "", catatan_admin: "", alasan_tolak: "", biaya: "", foto_hasil: "", tanggal_selesai: "", alasan_tunda: "", alasan_disposal: "", cara_musnah: "", tanggal_musnah: "", nilai_jual: "" };
+  const [form, setForm] = useState(formKosong);
   const [menyimpan, setMenyimpan] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [lama, setLama] = useState<{ id: string; data: Record<string, unknown> }[] | null>(null);
@@ -92,11 +104,17 @@ export default function KondisiAsetPage() {
   if (!isReady) return null;
 
   const tampil = temuan.filter((t) => (filterJenis === "SEMUA" || t.jenis === filterJenis)
-    && (filterStatus === "SEMUA" || (filterStatus === "TERBUKA" ? STATUS_TEMUAN_TERBUKA.includes(t.status) : filterStatus === "SELESAI" ? t.status === "Selesai" : t.status === "Ditolak")));
+    && (filterStatus === "SEMUA" || (filterStatus === "TERBUKA" ? STATUS_TEMUAN_TERBUKA.includes(t.status) : filterStatus === "SELESAI" ? t.status === "Selesai" : filterStatus === "DISPOSAL" ? STATUS_TEMUAN_DISPOSAL.includes(t.status) : t.status === "Ditolak")));
   const hitung = (j: JenisInspeksi | "SEMUA") => temuan.filter((t) => (j === "SEMUA" || t.jenis === j) && STATUS_TEMUAN_TERBUKA.includes(t.status)).length;
-  const final = (t: TemuanAset) => t.status === "Selesai" || t.status === "Ditolak";
+  const final = (t: TemuanAset) => STATUS_TEMUAN_FINAL.includes(t.status);
+  // §160 Dikerjakan -> langsung mode "Selesaikan"; Disposal -> langsung konfirmasi musnah
+  const statusAwal = (s: StatusTemuan): StatusTemuan => (s === "Dikerjakan" ? "Selesai" : s === "Disposal" ? "Dimusnahkan" : s === "Baru" ? "Dijadwalkan" : s);
+  const labelTombol = (t: TemuanAset) => (final(t) ? "Lihat detail" : t.status === "Dikerjakan" ? "✓ Selesaikan" : t.status === "Disposal" ? "Konfirmasi musnah" : "Tindak lanjuti");
 
-  const buka = (t: TemuanAset) => { setPilih(t); setForm({ status: t.status, rencana: t.rencana || "", catatan_admin: t.catatan_admin || "", alasan_tolak: t.alasan_tolak || "", biaya: t.biaya ? String(t.biaya) : "", foto_hasil: t.foto_hasil || "" }); };
+  const buka = (t: TemuanAset) => {
+    setPilih(t);
+    setForm({ ...formKosong, status: statusAwal(t.status), rencana: t.rencana || "", catatan_admin: t.catatan_admin || "", alasan_tolak: t.alasan_tolak || "", biaya: t.biaya ? String(t.biaya) : "", foto_hasil: t.foto_hasil || "", tanggal_selesai: hariIniWITA(), alasan_tunda: t.alasan_tunda || "", alasan_disposal: t.alasan_disposal || "", tanggal_musnah: hariIniWITA() });
+  };
   const fotoHasil = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = "";
     if (!file) return;
@@ -106,19 +124,54 @@ export default function KondisiAsetPage() {
   };
   const simpan = async () => {
     if (!pilih || final(pilih)) return;
-    if (form.status === "Selesai" && !form.foto_hasil) return showToast("Lampirkan foto hasil untuk menutup temuan.", "warning");
-    if (form.status === "Ditolak" && !form.alasan_tolak.trim()) return showToast("Isi alasan penolakan.", "warning");
+    const s = form.status;
+    if (s === "Selesai" && !form.tanggal_selesai) return showToast("Isi tanggal selesai.", "warning");
+    if (s === "Selesai" && !form.foto_hasil) return showToast("Lampirkan foto hasil untuk menutup temuan.", "warning");
+    if (s === "Ditolak" && !form.alasan_tolak.trim()) return showToast("Isi alasan pembatalan / penolakan.", "warning");
+    if (s === "Ditunda" && !form.alasan_tunda.trim()) return showToast("Isi alasan ditunda.", "warning");
+    if (s === "Disposal" && !form.alasan_disposal.trim()) return showToast("Isi alasan disposal.", "warning");
+    if (s === "Dimusnahkan" && (!form.cara_musnah || !form.tanggal_musnah)) return showToast("Pilih cara & tanggal pemusnahan.", "warning");
+    if (s === "Dimusnahkan" && !form.catatan_admin.trim()) return showToast("Isi keterangan pemusnahan (mis. dijual ke siapa / dibuang ke mana).", "warning");
+    if (s === "Dimusnahkan" && !(await confirm({ title: "Konfirmasi dimusnahkan", message: `${pilih.item} (${pilih.area}) dicatat ${form.cara_musnah.toLowerCase()} pada ${tglIso(form.tanggal_musnah)}. Status ini final dan item tetap terkunci dari inspeksi sampai ada unit pengganti.`, confirmText: "Ya, catat" }))) return;
     setMenyimpan(true);
     try {
+      const oleh = session?.nama || "-";
+      const fotoUrl = form.foto_hasil && form.foto_hasil !== pilih.foto_hasil ? (await dataUrlKeCloudinary(form.foto_hasil, "sibm/temuan-aset")) || form.foto_hasil : form.foto_hasil;
+      const alasanLog = s === "Ditolak" ? form.alasan_tolak : s === "Ditunda" ? form.alasan_tunda : s === "Disposal" ? form.alasan_disposal : form.catatan_admin;
       await updateDoc(doc(db, "temuan_aset", pilih.id), {
-        status: form.status, rencana: form.rencana, catatan_admin: form.catatan_admin.trim(), ditangani_oleh: session?.nama || "-",
-        ...(form.status === "Ditolak" ? { alasan_tolak: form.alasan_tolak.trim(), waktu_selesai: serverTimestamp() } : {}),
-        ...(form.status === "Selesai" ? { biaya: Number(form.biaya.replace(/\D/g, "")) || 0, foto_hasil: (await dataUrlKeCloudinary(form.foto_hasil, "sibm/temuan-aset")) || form.foto_hasil, waktu_selesai: serverTimestamp() } : {}),
+        status: s, rencana: form.rencana, catatan_admin: form.catatan_admin.trim(), ditangani_oleh: oleh,
+        riwayat_status: arrayUnion({ status: s, dari: pilih.status, oleh, waktu: Timestamp.now(), catatan: alasanLog.trim() }),
+        ...(s === "Ditolak" ? { alasan_tolak: form.alasan_tolak.trim(), waktu_selesai: serverTimestamp() } : {}),
+        ...(s === "Ditunda" ? { alasan_tunda: form.alasan_tunda.trim() } : {}),
+        ...(s === "Disposal" ? { alasan_disposal: form.alasan_disposal.trim(), waktu_disposal: serverTimestamp() } : {}),
+        ...(s === "Selesai" ? { biaya: Number(form.biaya.replace(/\D/g, "")) || 0, foto_hasil: fotoUrl, tanggal_selesai: form.tanggal_selesai, waktu_selesai: serverTimestamp() } : {}),
+        ...(s === "Dimusnahkan" ? { cara_musnah: form.cara_musnah, tanggal_musnah: form.tanggal_musnah, nilai_jual: form.cara_musnah === "Dijual" ? Number(form.nilai_jual.replace(/\D/g, "")) || 0 : 0, ...(fotoUrl ? { foto_hasil: fotoUrl } : {}), waktu_selesai: serverTimestamp() } : {}),
       });
-      showToast(`${kodeTemuan(pilih.id)} → ${form.status}`, "success");
+      // §160 alat kebersihan yang dimusnahkan -> register alat ikut Afkir (hilang dari daftar inspeksi alat)
+      if (s === "Dimusnahkan" && pilih.jenis === "alat") {
+        const kode = pilih.item.split(" · ")[0].trim();
+        const snapAlat = await getDocs(query(collection(db, "aset_alat"), where("kode", "==", kode)));
+        await Promise.all(snapAlat.docs.map((d) => updateDoc(d.ref, {
+          status: "Afkir",
+          riwayat: arrayUnion({ waktu: Timestamp.now(), aksi: "Status → Afkir", oleh, dari: String(d.data().status || "-"), catatan: `${form.cara_musnah} ${tglIso(form.tanggal_musnah)} (${kodeTemuan(pilih.id)}) — ${form.catatan_admin.trim()}` }),
+        })));
+      }
+      showToast(`${kodeTemuan(pilih.id)} → ${s}`, "success");
       setPilih(null);
     } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
     finally { setMenyimpan(false); }
+  };
+
+  // §160 unit pengganti sudah terpasang -> kunci inspeksi item ini dibuka lagi
+  const gantiUnit = async () => {
+    if (!pilih || pilih.status !== "Dimusnahkan") return;
+    if (!(await confirm({ title: "Unit pengganti sudah ada?", message: `${pilih.item} (${pilih.area}) akan kembali muncul di inspeksi.`, confirmText: "Ya, buka kunci" }))) return;
+    try {
+      const oleh = session?.nama || "-";
+      await updateDoc(doc(db, "temuan_aset", pilih.id), { status: "Diganti", waktu_diganti: serverTimestamp(), riwayat_status: arrayUnion({ status: "Diganti", dari: pilih.status, oleh, waktu: Timestamp.now(), catatan: "Unit pengganti terpasang" }) });
+      showToast(`${pilih.item} kembali masuk inspeksi.`, "success");
+      setPilih(null);
+    } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
   };
 
   const pindahkanLama = async () => {
@@ -215,7 +268,7 @@ export default function KondisiAsetPage() {
           ))}
           {tab === "TEMUAN" && <>
             <span style={{ width: "10px" }} />
-            {([["TERBUKA", "Terbuka"], ["SELESAI", "Selesai"], ["DITOLAK", "Ditolak"], ["SEMUA", "Semua status"]] as const).map(([k, l]) => (
+            {([["TERBUKA", "Terbuka"], ["SELESAI", "Selesai"], ["DITOLAK", "Dibatalkan"], ["DISPOSAL", "Disposal"], ["SEMUA", "Semua status"]] as const).map(([k, l]) => (
               <button key={k} type="button" className={`ka-chip${filterStatus === k ? " on" : ""}`} onClick={() => setFilterStatus(k)}>{l}</button>
             ))}
           </>}
@@ -233,7 +286,7 @@ export default function KondisiAsetPage() {
               ) : <div className="ka-foto" />}
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <Pill teks={t.status} w={WARNA_STATUS_TEMUAN[t.status]} />
+                  <Pill teks={t.status} w={WARNA_STATUS_TEMUAN[t.status] || WARNA_STATUS_TEMUAN.Baru} />
                   <b style={{ fontSize: "14px", color: "var(--ink)" }}>{t.item}</b>
                   <span style={{ fontSize: "12px", color: "var(--muted)" }}>· {t.area}</span>
                   <span style={{ fontSize: "10.5px", fontWeight: 800, padding: "2px 8px", borderRadius: "999px", background: "var(--bg)", color: "var(--ink-soft)" }}>{LABEL_TINDAKAN[t.jenis]}</span>
@@ -242,9 +295,11 @@ export default function KondisiAsetPage() {
                 <p style={{ margin: "6px 0 0", fontSize: "13.5px", color: "var(--ink)" }}><b style={{ color: (WARNA_KONDISI[t.kondisi] || WARNA_KONDISI.Rusak).fg }}>{t.kondisi}</b> — {t.catatan}</p>
                 <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>
                   Pelapor {t.pelapor}{t.rencana ? ` · rencana ${t.rencana.split("-").reverse().join("/")}` : ""}{t.catatan_admin ? ` · ${t.catatan_admin}` : ""}
-                  {t.status === "Selesai" && <> · selesai {tgl(t.waktu_selesai)}{t.biaya ? ` · Rp ${new Intl.NumberFormat("id-ID").format(t.biaya)}` : ""}</>}
+                  {t.status === "Selesai" && <> · selesai {t.tanggal_selesai ? tglIso(t.tanggal_selesai) : tgl(t.waktu_selesai)}{t.biaya ? ` · Rp ${new Intl.NumberFormat("id-ID").format(t.biaya)}` : ""}</>}
                 </div>
-                {t.status === "Ditolak" && t.alasan_tolak && <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "var(--muted)" }}>Ditolak: {t.alasan_tolak}</div>}
+                {t.status === "Ditolak" && t.alasan_tolak && <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "var(--muted)" }}>Dibatalkan/ditolak: {t.alasan_tolak}</div>}
+                {t.status === "Ditunda" && t.alasan_tunda && <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "var(--warn)" }}>Ditunda: {t.alasan_tunda}{t.rencana ? ` · lanjut ${tglIso(t.rencana)}` : ""}</div>}
+                {(t.status === "Disposal" || t.status === "Dimusnahkan" || t.status === "Diganti") && <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>{t.status === "Disposal" ? `Diajukan disposal: ${t.alasan_disposal || "-"}` : `${t.cara_musnah || "Dimusnahkan"} ${tglIso(t.tanggal_musnah)}${t.nilai_jual ? ` · Rp ${new Intl.NumberFormat("id-ID").format(t.nilai_jual)}` : ""}${t.status === "Diganti" ? " · unit pengganti terpasang" : ""}`}</div>}
                 {t.dari_helpdesk_id && <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>Dipindahkan dari Helpdesk</div>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
@@ -252,7 +307,7 @@ export default function KondisiAsetPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={t.foto_hasil} alt="Hasil" title="Foto hasil" onClick={() => setPreview(t.foto_hasil!)} style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "10px", border: "2px solid var(--ok)", cursor: "zoom-in" }} />
                 )}
-                <button type="button" className={`sa-btn ${final(t) ? "is-soft" : "is-primary"}`} onClick={() => buka(t)}>{final(t) ? "Lihat detail" : "Tindak lanjuti"}</button>
+                <button type="button" className={`sa-btn ${final(t) ? "is-soft" : "is-primary"}`} onClick={() => buka(t)}>{labelTombol(t)}</button>
               </div>
             </article>
           ))}
@@ -332,41 +387,81 @@ export default function KondisiAsetPage() {
               <img src={pilih.foto} alt="Foto temuan" style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "12px", marginBottom: "12px" }} />
             )}
             {final(pilih) ? (
-              <div style={{ padding: "12px 14px", borderRadius: "12px", background: pilih.status === "Selesai" ? "var(--ok-50)" : "var(--line)", fontSize: "13px" }}>
-                🔒 <b>{pilih.status}</b> — status final, tidak bisa diubah. {pilih.status === "Selesai" ? `Selesai ${tgl(pilih.waktu_selesai)}${pilih.biaya ? ` · Rp ${new Intl.NumberFormat("id-ID").format(pilih.biaya)}` : ""}` : `Alasan: ${pilih.alasan_tolak || "-"}`}
+              <div style={{ padding: "12px 14px", borderRadius: "12px", background: pilih.status === "Selesai" || pilih.status === "Diganti" ? "var(--ok-50)" : "var(--line)", fontSize: "13px", color: "var(--ink)" }}>
+                🔒 <b>{pilih.status}</b> — status final, tidak bisa diubah.{" "}
+                {pilih.status === "Selesai" && <>Selesai {pilih.tanggal_selesai ? tglIso(pilih.tanggal_selesai) : tgl(pilih.waktu_selesai)}{pilih.biaya ? ` · Rp ${new Intl.NumberFormat("id-ID").format(pilih.biaya)}` : ""}</>}
+                {pilih.status === "Ditolak" && <>Alasan: {pilih.alasan_tolak || "-"}</>}
+                {(pilih.status === "Dimusnahkan" || pilih.status === "Diganti") && <>{pilih.cara_musnah} {tglIso(pilih.tanggal_musnah)}{pilih.nilai_jual ? ` · Rp ${new Intl.NumberFormat("id-ID").format(pilih.nilai_jual)}` : ""} — {pilih.catatan_admin || "-"}</>}
+                {pilih.catatan_admin && pilih.status !== "Dimusnahkan" && pilih.status !== "Diganti" && <div style={{ marginTop: "4px", color: "var(--muted)" }}>Catatan: {pilih.catatan_admin}</div>}
                 {pilih.foto_hasil && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={pilih.foto_hasil} alt="Foto hasil" style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "10px", marginTop: "10px" }} />
                 )}
+                {pilih.status === "Dimusnahkan" && (
+                  <div style={{ marginTop: "10px" }}>
+                    <div style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>Item ini terkunci dari inspeksi.{pilih.jenis === "alat" ? " Alat sudah Afkir — daftarkan alat baru di Alat Kerja Tim." : " Bila unit pengganti sudah terpasang, buka kuncinya:"}</div>
+                    {pilih.jenis !== "alat" && <button type="button" className="sa-btn is-soft" onClick={gantiUnit}>Unit pengganti sudah ada → buka inspeksi</button>}
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ fontSize: "12px", color: "var(--muted)" }}>Status sekarang: <b style={{ color: (WARNA_STATUS_TEMUAN[pilih.status] || WARNA_STATUS_TEMUAN.Baru).fg }}>{pilih.status}</b>{pilih.status === "Ditunda" && pilih.alasan_tunda ? ` — ${pilih.alasan_tunda}` : ""}{pilih.status === "Disposal" && pilih.alasan_disposal ? ` — ${pilih.alasan_disposal}` : ""}</div>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  {STATUS_TEMUAN.map((s) => (
-                    <button key={s} type="button" className={`ka-chip${form.status === s ? " on" : ""}`} onClick={() => setForm({ ...form, status: s })}>{s}</button>
+                  {PILIHAN_STATUS[pilih.status].map((s) => (
+                    <button key={s} type="button" className={`ka-chip${form.status === s ? " on" : ""}`} onClick={() => setForm({ ...form, status: s })}>{s === pilih.status ? `Tetap ${s.toLowerCase()}` : LABEL_STATUS_TEMUAN[s]}</button>
                   ))}
                 </div>
-                {(form.status === "Dijadwalkan" || form.status === "Dikerjakan") && (
-                  <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Rencana / target tanggal<input type="date" className="ka-in" style={{ marginTop: "4px" }} value={form.rencana} onChange={(e) => setForm({ ...form, rencana: e.target.value })} /></label>
-                )}
-                <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Catatan tindakan<input className="ka-in" style={{ marginTop: "4px" }} value={form.catatan_admin} onChange={(e) => setForm({ ...form, catatan_admin: e.target.value })} placeholder={pilih.jenis === "alat" ? "Mis. dibelikan mop baru 2 pcs" : "Mis. ganti lampu oleh teknisi / vendor"} /></label>
-                {form.status === "Ditolak" && (
-                  <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Alasan ditolak *<input className="ka-in" style={{ marginTop: "4px" }} value={form.alasan_tolak} onChange={(e) => setForm({ ...form, alasan_tolak: e.target.value })} placeholder="Mis. masih layak pakai / bukan tanggung jawab gedung" /></label>
-                )}
-                {form.status === "Selesai" && (
+                {form.status === "Ditunda" && (
                   <>
-                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Biaya (opsional, Rp — masuk realisasi anggaran)<input className="ka-in" inputMode="numeric" style={{ marginTop: "4px" }} value={form.biaya ? new Intl.NumberFormat("id-ID").format(Number(form.biaya)) : ""} onChange={(e) => setForm({ ...form, biaya: e.target.value.replace(/\D/g, "") })} /></label>
-                    <label style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "12px", border: `1px dashed ${form.foto_hasil ? "var(--ok)" : "var(--red-600)"}`, cursor: "pointer", fontSize: "12.5px", fontWeight: 700, color: form.foto_hasil ? "var(--ok)" : "var(--red-600)" }}>
-                      {form.foto_hasil ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={form.foto_hasil} alt="Foto hasil" style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px" }} />
-                      ) : "📷"}
-                      {form.foto_hasil ? "Foto hasil terlampir — ketuk untuk ganti" : "Foto hasil (wajib untuk Selesai)"}
-                      <input type="file" accept="image/*" capture="environment" onChange={fotoHasil} style={{ display: "none" }} />
-                    </label>
+                    <div style={{ padding: "10px 12px", borderRadius: "12px", background: "var(--warn-50)", fontSize: "12px", color: "var(--ink)" }}>Pekerjaan berhenti sementara (menunggu sparepart, anggaran, vendor). Item <b>tetap terkunci</b> dari inspeksi.</div>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Alasan ditunda *<input className="ka-in" style={{ marginTop: "4px" }} value={form.alasan_tunda} onChange={(e) => setForm({ ...form, alasan_tunda: e.target.value })} placeholder="mis. menunggu sparepart / persetujuan anggaran" /></label>
                   </>
                 )}
-                <button type="button" className="sa-btn is-primary" onClick={simpan} disabled={menyimpan}>{menyimpan ? "Menyimpan..." : "Simpan"}</button>
+                {(form.status === "Dijadwalkan" || form.status === "Dikerjakan" || form.status === "Ditunda") && (
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>{form.status === "Ditunda" ? "Rencana dilanjutkan (opsional)" : "Rencana / target tanggal"}<input type="date" className="ka-in" style={{ marginTop: "4px" }} value={form.rencana} onChange={(e) => setForm({ ...form, rencana: e.target.value })} /></label>
+                )}
+                {form.status === "Ditolak" && (
+                  <>
+                    <div style={{ padding: "10px 12px", borderRadius: "12px", background: "var(--line)", fontSize: "12px", color: "var(--ink)" }}>Temuan ditutup tanpa perbaikan (laporan keliru, sudah ditangani pihak lain, dibatalkan). Item <b>kembali masuk inspeksi</b> berikutnya.</div>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Alasan dibatalkan / ditolak *<input className="ka-in" style={{ marginTop: "4px" }} value={form.alasan_tolak} onChange={(e) => setForm({ ...form, alasan_tolak: e.target.value })} /></label>
+                  </>
+                )}
+                {form.status === "Disposal" && (
+                  <>
+                    <div style={{ padding: "10px 12px", borderRadius: "12px", background: "var(--line)", fontSize: "12px", color: "var(--ink)" }}>Aset tidak layak diperbaiki & akan dimusnahkan. Item <b>terkunci dari inspeksi</b>; setelah benar-benar dibuang/dijual, Admin GA mengonfirmasi di sini.</div>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Alasan disposal *<input className="ka-in" style={{ marginTop: "4px" }} value={form.alasan_disposal} onChange={(e) => setForm({ ...form, alasan_disposal: e.target.value })} placeholder="mis. biaya perbaikan > harga baru, rusak total" /></label>
+                  </>
+                )}
+                {form.status === "Dimusnahkan" && (
+                  <>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {CARA_MUSNAH.map((c) => <button key={c} type="button" className={`ka-chip${form.cara_musnah === c ? " on" : ""}`} onClick={() => setForm({ ...form, cara_musnah: c })}>{c}</button>)}
+                    </div>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Tanggal dimusnahkan *<input type="date" className="ka-in" style={{ marginTop: "4px" }} value={form.tanggal_musnah} max={hariIniWITA()} onChange={(e) => setForm({ ...form, tanggal_musnah: e.target.value })} /></label>
+                    {form.cara_musnah === "Dijual" && (
+                      <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Nilai jual (Rp, opsional)<input className="ka-in" inputMode="numeric" style={{ marginTop: "4px" }} value={form.nilai_jual} onChange={(e) => setForm({ ...form, nilai_jual: e.target.value })} /></label>
+                    )}
+                  </>
+                )}
+                <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>{form.status === "Dimusnahkan" ? "Keterangan * (dijual ke siapa / dibuang ke mana / no. berita acara)" : "Catatan tindakan"}<input className="ka-in" style={{ marginTop: "4px" }} value={form.catatan_admin} onChange={(e) => setForm({ ...form, catatan_admin: e.target.value })} /></label>
+                {form.status === "Selesai" && (
+                  <>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Tanggal selesai *<input type="date" className="ka-in" style={{ marginTop: "4px" }} value={form.tanggal_selesai} max={hariIniWITA()} onChange={(e) => setForm({ ...form, tanggal_selesai: e.target.value })} /></label>
+                    <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--ink-soft)" }}>Biaya (opsional, Rp — masuk realisasi anggaran)<input className="ka-in" inputMode="numeric" style={{ marginTop: "4px" }} value={form.biaya} onChange={(e) => setForm({ ...form, biaya: e.target.value })} /></label>
+                  </>
+                )}
+                {(form.status === "Selesai" || form.status === "Dimusnahkan") && (
+                  <label style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "12px", border: `1px dashed ${form.foto_hasil ? "var(--ok)" : form.status === "Selesai" ? "var(--red-600)" : "var(--line)"}`, cursor: "pointer", fontSize: "13px", color: "var(--ink)" }}>
+                    {form.foto_hasil ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={form.foto_hasil} alt="Foto hasil" style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px" }} />
+                    ) : "📷"}
+                    {form.foto_hasil ? "Foto terlampir — ketuk untuk ganti" : form.status === "Selesai" ? "Foto hasil (wajib untuk Selesai)" : "Foto bukti pemusnahan (opsional)"}
+                    <input type="file" accept="image/*" capture="environment" onChange={fotoHasil} style={{ display: "none" }} />
+                  </label>
+                )}
+                <button type="button" className="sa-btn is-primary" onClick={simpan} disabled={menyimpan}>{menyimpan ? "Menyimpan..." : form.status === "Selesai" ? "✓ Selesaikan temuan" : form.status === "Dimusnahkan" ? "Catat sudah dimusnahkan" : "Simpan"}</button>
               </div>
             )}
           </div>

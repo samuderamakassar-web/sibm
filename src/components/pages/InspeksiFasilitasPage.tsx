@@ -25,7 +25,7 @@ import AdminShell from "../admin/AdminShell";
 import Modal from "../ui/Modal";
 import { daerahTulis } from "@/lib/daerah";
 import {
-  AREA_TETAP, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, STATUS_TEMUAN_TERBUKA, WARNA_KONDISI, kodeTemuan, kondisiBermasalah, kondisiDefaultTindakan,
+  AREA_TETAP, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, STATUS_TEMUAN_KUNCI, WARNA_KONDISI, kodeTemuan, kondisiBermasalah, kondisiDefaultTindakan,
   useMasterKondisiAset, type HasilInspeksiItem, type InspeksiAsetLog, type JenisInspeksi, type TemuanAset,
 } from "@/lib/kondisiAset";
 
@@ -192,7 +192,7 @@ export default function InspeksiFasilitasPage() {
     const u1 = onSnapshot(query(collection(db, "inspeksi_fasilitas"), where("pic_bertugas", "==", picName), orderBy("waktu_selesai", "desc"), limit(200)), (snap) => {
       setRiwayat(snap.docs.map((d) => ({ ...(d.data() as Omit<InspeksiAsetLog, "id">), id: d.id })));
     });
-    const u2 = onSnapshot(query(collection(db, "temuan_aset"), where("status", "in", STATUS_TEMUAN_TERBUKA)), (snap) => {
+    const u2 = onSnapshot(query(collection(db, "temuan_aset"), where("status", "in", STATUS_TEMUAN_KUNCI)), (snap) => {
       setTemuanTerbuka(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TemuanAset)));
     }, (e) => console.error("[inspeksi] temuan terbuka:", e));
     const u3 = onSnapshot(collection(db, "aset_alat"), (snap) => {
@@ -207,6 +207,9 @@ export default function InspeksiFasilitasPage() {
   // §155 pencocokan temuan lebih longgar: nama tanpa keterangan dalam kurung ("Genset (Tugas Khusus)" = "Genset").
   // Fasilitas gedung tetap per area (Lampu ada di banyak lantai); utilitas & alat cukup nama item -- temuan lama
   // hasil pemindahan tiket Helpdesk bisa ber-area/jenis lain (mis. area "Basement").
+  // §160 label kunci: disposal/dimusnahkan dibedakan dari perbaikan
+  const disposalT = (t: TemuanAset) => t.status === "Disposal" || t.status === "Dimusnahkan";
+  const ketKunci = (t: TemuanAset) => (disposalT(t) ? `${t.status === "Disposal" ? "Diajukan disposal" : "Sudah dimusnahkan"} (${kodeTemuan(t.id)})` : `Dalam perbaikan (${kodeTemuan(t.id)} · ${t.status})`);
   const normItem = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
   const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => normItem(t.item) === normItem(nama)
     && (jenis === "gedung" ? t.jenis === "gedung" && t.area === areaAktif : t.jenis === jenis || t.jenis !== "gedung" || t.area === areaAktif)) : undefined);
@@ -228,7 +231,7 @@ export default function InspeksiFasilitasPage() {
       const t = temuanUntuk(nama);
       // §154 item dengan temuan terbuka (Baru/Dijadwalkan/Dikerjakan) = dalam perbaikan -> tidak dinilai ulang
       return t
-        ? { nama, kondisi: t.kondisi || "Rusak", catatan: `Dalam perbaikan (${kodeTemuan(t.id)} · ${t.status})`, foto: t.foto || "", butuh_tindakan: false }
+        ? { nama, kondisi: t.kondisi || "Rusak", catatan: ketKunci(t), foto: t.foto || "", butuh_tindakan: false }
         : { nama, kondisi: "", catatan: "", foto: "", butuh_tindakan: false };
     }));
     setStep(2);
@@ -455,9 +458,9 @@ export default function InspeksiFasilitasPage() {
                 <div key={i} className="ka-kartu" style={{ borderStyle: "dashed", opacity: 0.85, cursor: "pointer" }} onClick={() => setModalTemuan([t])}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                     <b style={{ fontSize: "15px" }}>{h.nama}</b>
-                    <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "4px 10px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>🔧 Dalam perbaikan · {t.status} · terkunci</span>
+                    <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "4px 10px", borderRadius: "8px", background: disposalT(t) ? "var(--line)" : "var(--info-50)", color: disposalT(t) ? "var(--ink-soft)" : "var(--info)" }}>{disposalT(t) ? `🗑 ${t.status} · terkunci` : `🔧 Dalam perbaikan · ${t.status} · terkunci`}</span>
                   </div>
-                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>{kodeTemuan(t.id)} · dilaporkan {tglRingkas(t.waktu_lapor)} — tidak perlu dinilai; terbuka lagi otomatis setelah temuan ditandai selesai oleh Admin GA.</div>
+                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>{kodeTemuan(t.id)} · dilaporkan {tglRingkas(t.waktu_lapor)} — tidak perlu dinilai; {disposalT(t) ? "aset akan/sudah dimusnahkan, hanya Admin GA yang dapat membuka kembali (unit pengganti)." : "terbuka lagi otomatis setelah temuan ditandai selesai/dibatalkan oleh Admin GA."}</div>
                 </div>
               );
             }
