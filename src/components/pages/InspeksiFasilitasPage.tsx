@@ -146,7 +146,8 @@ export default function InspeksiFasilitasPage() {
   const labelPeriodeAlat = `${paruhKe === 1 ? "1–15" : `16–${akhirBulan}`} ${new Date(`${tglHariIni}T12:00:00Z`).toLocaleDateString("id-ID", { month: "short", year: "numeric" })}`;
   const bolehUtilitas = master.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
   // §133 gedung: petugas yang ditunjuk Koordinator (bergilir) + Koordinator; area = semua area SOP (bukan plot harian)
-  const bolehGedung = isKoordinator || master.petugas_gedung.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
+  // §158 hanya petugas yang dicentang di Plotting (Koordinator ikut bila mencentang dirinya sendiri)
+  const bolehGedung = master.petugas_gedung.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
   const areaGedung = sop.area.filter((x) => !x.area.toLowerCase().includes("pelayanan")).map((x) => x.area);
   // §133 gedung & alat: cukup lapor temuan / "Semua aman"; utilitas tetap dinilai lengkap
   const modeTemuan = jenis !== "utilitas";

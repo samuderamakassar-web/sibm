@@ -397,7 +397,7 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
         .plot-col { flex: 1 1 400px; width: 100%; }
         .cal-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .cal-table th, .cal-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-        .cal-table th { background: #f1f5f9; color: var(--ink-soft); position: sticky; top: 0; }
+        .cal-table th { background: var(--bg); color: var(--ink-soft); position: sticky; top: 0; }
         @media (max-width: 768px) {
           .plot-wrapper { flex-direction: column; }
         }
@@ -510,13 +510,13 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
               <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
                 <button
                   onClick={() => setBlockSize("2")}
-                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "2" ? "2px solid #2c7a7b" : "1px solid var(--line)", background: blockSize === "2" ? "#e6fffa" : "white", color: "var(--ink)", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
+                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "2" ? "2px solid var(--teal, #2c7a7b)" : "1px solid var(--line)", background: blockSize === "2" ? "var(--teal-50, #e6fffa)" : "var(--surface)", color: "var(--ink)", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
                 >
                   Tiap 2 Hari
                 </button>
                 <button
                   onClick={() => setBlockSize("7")}
-                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "7" ? "2px solid #2c7a7b" : "1px solid var(--line)", background: blockSize === "7" ? "#e6fffa" : "white", color: "var(--ink)", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
+                  style={{ flex: 1, padding: "10px", borderRadius: "10px", border: blockSize === "7" ? "2px solid var(--teal, #2c7a7b)" : "1px solid var(--line)", background: blockSize === "7" ? "var(--teal-50, #e6fffa)" : "var(--surface)", color: "var(--ink)", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}
                 >
                   Tiap 1 Minggu
                 </button>
@@ -567,8 +567,8 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
                       const weekend = isWeekend(tgl);
                       const namaHari = NAMA_HARI_SINGKAT[new Date(tgl + "T00:00:00").getDay()];
                       return (
-                        <tr key={tgl} style={{ background: tgl === selectedDate ? "#e6fffa" : weekend ? "#f8fafc" : "white", cursor: "pointer" }} onClick={() => setSelectedDate(tgl)}>
-                          <td style={{ fontWeight: "bold", color: weekend ? "#a0aec0" : "#1a202c" }}>
+                        <tr key={tgl} style={{ background: tgl === selectedDate ? "var(--teal-50, #e6fffa)" : weekend ? "var(--bg)" : "var(--surface)", cursor: "pointer" }} onClick={() => setSelectedDate(tgl)}>
+                          <td style={{ fontWeight: "bold", color: weekend ? "var(--muted)" : "var(--ink)" }}>
                             {tgl} <span style={{ fontWeight: "normal", fontSize: "11px" }}>({namaHari}{weekend ? " · Libur" : ""})</span>
                           </td>
                           {SEMUA_AREA.map((a) => (
@@ -576,7 +576,7 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
                             // weekend -- kalau ternyata ada data nyangkut (mis. belum sempat
                             // di-generate ulang), admin harus bisa LIHAT & sadar ada yang perlu
                             // dibersihkan, bukan disembunyikan seolah-olah sudah bersih.
-                            <td key={a} style={{ color: plot?.[a] ? (weekend ? "#c05621" : "#2d3748") : "#cbd5e0" }}>{plot?.[a] || "-"}</td>
+                            <td key={a} style={{ color: plot?.[a] ? (weekend ? "var(--warn)" : "var(--ink-soft)") : "var(--muted)" }}>{plot?.[a] || "-"}</td>
                           ))}
                         </tr>
                       );

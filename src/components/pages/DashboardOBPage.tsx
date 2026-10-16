@@ -202,7 +202,7 @@ export default function DashboardOBPage() {
     { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
     { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", action: "link", token: "warn", icon: IconDroplet },
     // §156 menu inspeksi terpisah per jenis, hanya untuk yang ditugaskan
-    ...(petugasGedung || isKoordinatorOB ? [{ title: "Inspeksi Fasilitas Gedung", desc: "Tiap minggu per area — Semua aman atau lapor temuan.", path: "/dashboard/ob/laporan?jenis=gedung", action: "link", token: "info", icon: IconSearch }] : []),
+    ...(petugasGedung ? [{ title: "Inspeksi Fasilitas Gedung", desc: "Tiap minggu per area — Semua aman atau lapor temuan.", path: "/dashboard/ob/laporan?jenis=gedung", action: "link", token: "info", icon: IconSearch }] : []),
     ...(petugasUtilitas ? [{ title: "Inspeksi Utilitas Teknis", desc: "Genset, panel, pompa — dinilai lengkap tiap minggu.", path: "/dashboard/ob/laporan?jenis=utilitas", action: "link", token: "warn", icon: IconSearch }] : []),
     ...(isKoordinatorOB ? [{ title: "Inspeksi Alat Kebersihan", desc: "2x sebulan — Semua aman atau lapor alat bermasalah.", path: "/dashboard/ob/laporan?jenis=alat", action: "link", token: "ok", icon: IconSearch }] : []),
     { title: "Klaim Lembur Bulan Ini", desc: "Rekap & input data lemburan Anda.", path: "", action: "modal_lembur", token: "accent", icon: IconClock },

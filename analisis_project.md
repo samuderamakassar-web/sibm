@@ -3307,3 +3307,6 @@ Keputusan user: Inspeksi Fasilitas Gedung & Utilitas dibedakan = menu terpisah.
 
 ## 157. Info Jadwal Otomatis di Plotting OB & Jadwal Security (16 Oktober 2026)
 Permintaan user: plotting otomatis berlanjut tanpa generate ulang. Fitur sudah ada sejak §82 (scripts/jadwal-otomatis.mjs, harian ~00:30 WITA, isi tanggal KOSONG s.d. 60 hari ke depan, tidak menimpa manual); riwayat Actions 5 hari terakhir sukses. Ditambahkan JadwalOtomatisInfo di Plotting OB & Pengaturan Jadwal Security: penjelasan + "terisi s.d. <tanggal>" (OB: dokumen daily_plots terakhir; Security: tanggal terakhir berisi di security_monthly_schedules) + syarat (OB Pelayanan Tetap dipilih; staf Security punya minimal 1 hari jadwal).
+
+## 158. Inspeksi Fasilitas Gedung Hanya Petugas yang Dicentang + Warna Plotting Ikut Tema (16 Oktober 2026)
+Laporan user: Zainal dicentang sebagai Petugas Inspeksi Fasilitas Gedung, tetapi Hilal (Koordinator) tetap mendapat menu inspeksi. Sebab: §133 memberi Koordinator akses gedung otomatis. Sekarang bolehGedung = hanya nama di settings/master_kondisi_aset.petugas_gedung (Koordinator ikut bila mencentang dirinya); kartu dashboard "Inspeksi Fasilitas Gedung" mengikuti. Inspeksi Alat Kebersihan tetap Koordinator. Plotting OB: tombol blok 2 hari / 1 minggu & tabel kalender memakai token tema (dulu putih/teks hampir tak terbaca di mode gelap).
