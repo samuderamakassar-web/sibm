@@ -17,7 +17,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
 import DokumenLegalPT from "../../../components/DokumenLegalPT";
-import { KONFIG_BAWAAN, WARNA_STATUS, progressKuartal, progressTask, type KonfigTracker, type TargetPT, type TaskPT, type StatusTarget } from "../../../lib/projectTracker";
+import { KONFIG_BAWAAN, WARNA_STATUS, progressTarget, statusOtomatis, tahapSekarang, type KonfigTracker, type TargetLengkap, type StatusTarget } from "../../../lib/projectTracker";
 
 interface Tiket { id: string; lokasi: string; deskripsi: string; status: string; departemen?: string; waktu_lapor?: Timestamp | null; waktu_selesai?: Timestamp | null }
 interface Karyawan { nama: string; departemen?: string }
@@ -64,8 +64,7 @@ export default function DashboardEksekutifPage() {
   const [atkBulan, setAtkBulan] = useState<{ departemen?: string; status: string }[]>([]);
   const [lantai, setLantai] = useState<Lantai[]>([]);
   const [konfig, setKonfig] = useState<KonfigTracker>(KONFIG_BAWAAN);
-  const [targets, setTargets] = useState<TargetPT[]>([]);
-  const [tasks, setTasks] = useState<TaskPT[]>([]);
+  const [targets, setTargets] = useState<TargetLengkap[]>([]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -83,14 +82,13 @@ export default function DashboardEksekutifPage() {
       onSnapshot(query(collection(db, "ga_atk_requests"), where("waktu_request", ">=", tsBulan)), (s) => setAtkBulan(s.docs.map((d) => d.data() as { departemen?: string; status: string }))),
       onSnapshot(doc(db, "okupansi_gedung", "data"), (s) => setLantai(((s.data()?.lantai as Lantai[]) || []))),
       onSnapshot(collection(db, "project_tracker"), (s) => {
-        const t: TargetPT[] = []; const k: TaskPT[] = [];
+        const t: TargetLengkap[] = [];
         s.docs.forEach((d) => {
           const x = { id: d.id, ...d.data() } as Record<string, unknown> & { id: string; tipe?: string };
           if (d.id === "config") setKonfig({ ...KONFIG_BAWAAN, ...(d.data() as Partial<KonfigTracker>) });
-          else if (x.tipe === "target") t.push(x as unknown as TargetPT);
-          else if (x.tipe === "task") k.push(x as unknown as TaskPT);
+          else if (x.tipe === "target") t.push(x as unknown as TargetLengkap);
         });
-        setTargets(t); setTasks(k);
+        setTargets(t);
       }, (e) => console.error("[eksekutif] tracker:", e)),
     ];
     return () => u.forEach((f) => f());
@@ -109,7 +107,10 @@ export default function DashboardEksekutifPage() {
   const unitPt = semuaUnit.filter((u) => u.status === "terisi" && norm(u.tenant) === norm(pt));
   const lokasiGedung = konfig.lokasi_gedung || "";
   const targetGedung = targets.filter((t) => t.lokasi === lokasiGedung && t.status !== "Cancelled").sort((a, b) => a.kode.localeCompare(b.kode));
-  const hitungStatus = (s: StatusTarget) => targetGedung.filter((t) => t.status === s).length;
+  // §162 status & progres dihitung dari tahapan (sama dengan Project Tracker)
+  const hariIniTracker = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
+  const statusT = (t: TargetLengkap) => statusOtomatis(t, hariIniTracker);
+  const hitungStatus = (s: StatusTarget) => targetGedung.filter((t) => statusT(t) === s).length;
 
   // ---------- PT ----------
   const karyawanPt = karyawan.filter((k) => norm(k.departemen) === norm(pt));
@@ -201,16 +202,16 @@ export default function DashboardEksekutifPage() {
           {targetGedung.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Belum ada program kerja untuk lokasi ini.</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {targetGedung.map((t) => {
-                const pk = progressKuartal(t);
-                const pTask = progressTask(tasks.filter((k) => k.target_id === t.id));
-                const prog = t.status === "Done" ? 100 : Math.max(t.progress_est || 0, pk ?? 0, pTask ?? 0);
+                const prog = progressTarget(t);
+                const s = statusT(t);
+                const kini = tahapSekarang(t);
                 return (
                   <div key={t.id} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 110px 150px", gap: "10px", alignItems: "center", padding: "8px 10px", borderRadius: "12px", background: "var(--bg)" }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--ink)" }}>{t.target}</div>
-                      <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{t.kategori} · target {t.deadline ? new Date(`${t.deadline}T12:00:00+08:00`).toLocaleDateString("id-ID", { month: "short", year: "numeric" }) : "-"}</div>
+                      <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{t.kategori}{kini ? ` · ${kini.nama}` : ""} · target {t.deadline ? new Date(`${t.deadline}T12:00:00+08:00`).toLocaleDateString("id-ID", { month: "short", year: "numeric" }) : "-"}</div>
                     </div>
-                    <span style={{ fontSize: "11px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", background: WARNA_STATUS[t.status].bg, color: WARNA_STATUS[t.status].fg, justifySelf: "start", whiteSpace: "nowrap" }}>{t.status}</span>
+                    <span style={{ fontSize: "11px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", background: WARNA_STATUS[s].bg, color: WARNA_STATUS[s].fg, justifySelf: "start", whiteSpace: "nowrap" }}>{s}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <div style={{ flex: 1, height: "6px", borderRadius: "3px", background: "var(--line)", overflow: "hidden" }}><div style={{ width: `${prog}%`, height: "100%", background: "var(--info-solid)" }} /></div>
                       <span style={{ fontSize: "11.5px", fontWeight: 800, width: "34px", textAlign: "right" }}>{Math.round(prog)}%</span>

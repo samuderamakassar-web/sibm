@@ -1,13 +1,19 @@
 "use client";
 
 /**
- * Project Tracker BM (§107) -- dari template Excel "BM TASK TRACKER": Annual Target -> Quarterly -> Weekly Task -> Weekly Review.
+ * Project Tracker BM (§107, dirombak §162) -- program kerja gedung untuk laporan ke atasan.
  * Koleksi project_tracker (1 koleksi, dibedakan field `tipe`):
- *   config/config  { lokasi[], kategori[], pic[], user[], lokasi_gedung }   -- pusat dropdown (sheet KONFIGURASI)
- *   tipe "target"  { kode, lokasi, target, kategori, user, ukuran_sukses, deadline, status, catatan, progress_est, kuartal[4]{milestone,pct} }
+ *   config/config  { lokasi[], kategori[], pic[], user[], lokasi_gedung, tahapan[]{nama,bobot,parsial} }
+ *   tipe "target"  { kode, lokasi, target, kategori, user, ukuran_sukses, deadline, status, progress_est,
+ *                    tahapan[]{nama,bobot,parsial,rencana,selesai,pct,catatan}, frekuensi_rencana, realisasi[]{tanggal,catatan},
+ *                    riwayat[]{tanggal,oleh,isi}, kendala, (lama: catatan, kuartal[]) }
  *   tipe "task"    { kode, task, target_id, pic, due, priority, status, progress, keterangan }
  *   tipe "review"  { minggu (Senin), selesai, tidak_selesai, blocker, komitmen, refleksi, oleh }
- * 3 lensa progres target: Est (manual) · Kuartal (rata-rata Q1-Q4 %) · Task (Done/total, bobot High=3 Med=2 Low=1).
+ * §162 SATU angka progres per target, dihitung sistem:
+ *   PROJECT  -> 9 tahapan baku perusahaan (Survey ... BAST) dengan bobot tetap; Pelaksanaan boleh parsial.
+ *   Rutin    -> frekuensi: terlaksana ÷ rencana per tahun.
+ *   Status   -> otomatis dari progres vs tanggal rencana (At Risk bila ada tahap lewat rencana / deadline lewat).
+ * Target lama yang belum dipetakan tetap memakai progress_est & status manual sampai dipetakan.
  * Admin GA mengisi; Eksekutif Tenant melihat ringkasan target lokasi gedung (§108).
  */
 
@@ -23,8 +29,9 @@ import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { daerahTulis } from "../../../lib/daerah";
 import {
-  KONFIG_BAWAAN, STATUS_TARGET, STATUS_TASK, PRIORITAS, BOBOT_PRIORITAS, WARNA_STATUS, progressKuartal, progressTask,
-  type KonfigTracker, type TargetPT, type TaskPT, type ReviewPT, type StatusTarget, type StatusTask, type Prioritas,
+  KONFIG_BAWAAN, STATUS_TARGET, STATUS_TASK, PRIORITAS, BOBOT_PRIORITAS, WARNA_STATUS, TAHAPAN_BAWAAN,
+  metodeProgres, progressTarget, rencanaTarget, statusOtomatis, tahapSekarang, tahapTerlambat, tahapanBaru,
+  type KonfigTracker, type TargetLengkap, type TaskPT, type ReviewPT, type StatusTarget, type StatusTask, type Prioritas, type TahapDef, type MetodeProgres,
 } from "../../../lib/projectTracker";
 
 const KOL = "project_tracker";
@@ -37,18 +44,38 @@ const seninMingguIni = () => {
 };
 const fmtTgl = (iso?: string) => (iso ? new Date(`${iso}T12:00:00+08:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
 const singkatan = (lokasi: string) => lokasi.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 4) || "BM";
-const TARGET_KOSONG: TargetPT = { id: "", kode: "", lokasi: "", target: "", kategori: "PROJECT", user: "BM", ukuran_sukses: "Pekerjaan selesai / PO terbit", deadline: "", status: "Not Started", catatan: "", progress_est: 0, kuartal: [0, 1, 2, 3].map(() => ({ milestone: "", pct: 0 })) };
+const TARGET_KOSONG: TargetLengkap = { id: "", kode: "", lokasi: "", target: "", kategori: "PROJECT", user: "BM", ukuran_sukses: "Pekerjaan selesai / BAST", deadline: "", status: "Not Started", catatan: "", progress_est: 0, kuartal: [], tahapan: [], frekuensi_rencana: 0, realisasi: [], riwayat: [], kendala: "" };
 const TASK_KOSONG: TaskPT = { id: "", kode: "", task: "", target_id: "", pic: "", due: "", priority: "Medium", status: "Backlog", progress: 0, keterangan: "" };
+const LABEL_STATUS: Record<StatusTarget, string> = { "Not Started": "Belum mulai", "On Track": "Sesuai rencana", "In Progress": "Berjalan", "At Risk": "Terlambat", Done: "Selesai", Cancelled: "Dibatalkan" };
+const LABEL_METODE: Record<MetodeProgres, string> = { tahapan: "Tahapan project", frekuensi: "Frekuensi (rutin)", manual: "Manual (lama)" };
 
 function Pill({ teks, warna }: { teks: string; warna: { bg: string; fg: string } }) {
   return <span style={{ display: "inline-block", fontSize: "11px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", background: warna.bg, color: warna.fg, whiteSpace: "nowrap" }}>{teks}</span>;
 }
-function MiniBar({ pct, warna = "var(--info-solid)" }: { pct: number | null; warna?: string }) {
-  if (pct === null) return <span style={{ color: "var(--muted)", fontSize: "11.5px" }}>—</span>;
+/** Bar realisasi + penanda garis posisi rencana. */
+function BarProgres({ real, rencana, besar = false }: { real: number; rencana: number | null; besar?: boolean }) {
+  const telat = rencana !== null && real + 0.5 < rencana;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: "90px" }}>
-      <div style={{ flex: 1, height: "6px", borderRadius: "3px", background: "var(--line)", overflow: "hidden" }}><div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: warna }} /></div>
-      <span style={{ fontSize: "11.5px", fontWeight: 800, fontVariantNumeric: "tabular-nums", width: "34px", textAlign: "right" }}>{Math.round(pct)}%</span>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "130px" }}>
+      <div style={{ position: "relative", flex: 1, height: besar ? "10px" : "7px", borderRadius: "5px", background: "var(--line)" }}>
+        <div style={{ width: `${Math.min(100, real)}%`, height: "100%", borderRadius: "5px", background: telat ? "var(--red-600)" : real >= 99.5 ? "var(--ok-solid, var(--ok))" : "var(--info-solid, var(--info))" }} />
+        {rencana !== null && <div title={`Rencana ${Math.round(rencana)}%`} style={{ position: "absolute", top: "-3px", bottom: "-3px", left: `calc(${Math.min(100, rencana)}% - 1px)`, width: "2px", background: "var(--ink)" }} />}
+      </div>
+      <span style={{ fontSize: besar ? "15px" : "12px", fontWeight: 800, fontVariantNumeric: "tabular-nums", width: besar ? "44px" : "36px", textAlign: "right" }}>{Math.round(real)}%</span>
+    </div>
+  );
+}
+/** Deret tahapan: hijau selesai, biru berjalan, merah lewat rencana, abu belum. */
+function Stepper({ t, hari }: { t: TargetLengkap; hari: string }) {
+  if (metodeProgres(t) !== "tahapan") return null;
+  const kini = tahapSekarang(t);
+  return (
+    <div style={{ display: "flex", gap: "3px" }}>
+      {t.tahapan!.map((s, i) => {
+        const telat = !s.selesai && s.rencana && s.rencana < hari;
+        const w = s.selesai ? "var(--ok)" : telat ? "var(--red-600)" : s === kini ? "var(--info)" : "var(--line)";
+        return <span key={i} title={`${i + 1}. ${s.nama}${s.selesai ? ` — selesai ${fmtTgl(s.selesai)}` : s.rencana ? ` — rencana ${fmtTgl(s.rencana)}` : ""}${s.parsial && !s.selesai && s.pct ? ` (${s.pct}%)` : ""}`} style={{ flex: s.bobot || 1, height: "6px", borderRadius: "3px", background: w, opacity: s === kini && !s.selesai && !telat ? 0.75 : 1 }} />;
+      })}
     </div>
   );
 }
@@ -71,20 +98,56 @@ function EditorDaftar({ judul, nilai, onUbah }: { judul: string; nilai: string[]
     </div>
   );
 }
+function EditorTahapan({ nilai, onSimpan }: { nilai: TahapDef[]; onSimpan: (v: TahapDef[]) => void }) {
+  const [draf, setDraf] = useState<TahapDef[]>(nilai);
+  const total = draf.reduce((a, s) => a + (Number(s.bobot) || 0), 0);
+  const ubah = (i: number, p: Partial<TahapDef>) => setDraf(draf.map((s, j) => (j === i ? { ...s, ...p } : s)));
+  const geser = (i: number, d: number) => { const j = i + d; if (j < 0 || j >= draf.length) return; const b = [...draf]; [b[i], b[j]] = [b[j], b[i]]; setDraf(b); };
+  return (
+    <div>
+      <div className="pt-lbl">Tahapan project & bobot (%)</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {draf.map((s, i) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr) 70px auto auto", gap: "6px", alignItems: "center" }}>
+            <span style={{ fontSize: "12px", fontWeight: 800, color: "var(--muted)" }}>{i + 1}.</span>
+            <input className="pt-in" value={s.nama} onChange={(e) => ubah(i, { nama: e.target.value })} aria-label={`Nama tahap ${i + 1}`} />
+            <input className="pt-in" inputMode="numeric" value={s.bobot} onChange={(e) => ubah(i, { bobot: Number(e.target.value.replace(/\D/g, "")) || 0 })} aria-label={`Bobot tahap ${i + 1}`} />
+            <label style={{ fontSize: "11.5px", display: "flex", gap: "4px", alignItems: "center", whiteSpace: "nowrap" }}><input type="checkbox" checked={!!s.parsial} onChange={(e) => ubah(i, { parsial: e.target.checked })} />bisa %</label>
+            <span style={{ display: "flex", gap: "2px" }}>
+              <button type="button" className="pt-chip" style={{ padding: "4px 8px" }} onClick={() => geser(i, -1)} aria-label="Naik">↑</button>
+              <button type="button" className="pt-chip" style={{ padding: "4px 8px" }} onClick={() => setDraf(draf.filter((_, j) => j !== i))} aria-label="Hapus">×</button>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "8px", flexWrap: "wrap" }}>
+        <button type="button" className="sa-btn is-soft" onClick={() => setDraf([...draf, { nama: "Tahap baru", bobot: 0 }])}>+ Tahap</button>
+        <span style={{ fontSize: "12.5px", fontWeight: 800, color: total === 100 ? "var(--ok)" : "var(--red-600)" }}>Total bobot {total}%{total !== 100 ? " (harus 100)" : ""}</span>
+        <div style={{ flex: 1 }} />
+        <button type="button" className="sa-btn is-soft" onClick={() => setDraf(TAHAPAN_BAWAAN.map((s) => ({ ...s })))}>Kembalikan bawaan</button>
+        <button type="button" className="sa-btn is-primary" disabled={total !== 100 || draf.some((s) => !s.nama.trim())} onClick={() => onSimpan(draf.map((s) => ({ ...s, nama: s.nama.trim() })))}>Simpan tahapan</button>
+      </div>
+      <p style={{ margin: "6px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Berlaku untuk target baru / target yang baru dipetakan. Target yang sudah berjalan tetap memakai bobot saat dibuat agar angkanya tidak berubah tiba-tiba.</p>
+    </div>
+  );
+}
 
 export default function ProjectTrackerPage() {
   const showToast = useToast();
   const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA / BM." });
-  const [tab, setTab] = useState<"TARGET" | "KUARTAL" | "TASK" | "REVIEW" | "SETTING">("TARGET");
+  const [tab, setTab] = useState<"TARGET" | "PRESENTASI" | "TASK" | "REVIEW" | "SETTING">("TARGET");
   const [konfig, setKonfig] = useState<KonfigTracker>(KONFIG_BAWAAN);
-  const [targets, setTargets] = useState<TargetPT[]>([]);
+  const [targets, setTargets] = useState<TargetLengkap[]>([]);
   const [tasks, setTasks] = useState<TaskPT[]>([]);
   const [reviews, setReviews] = useState<ReviewPT[]>([]);
   const [filterLokasi, setFilterLokasi] = useState("Semua");
   const [filterStatus, setFilterStatus] = useState("Semua");
   const [cari, setCari] = useState("");
-  const [formTarget, setFormTarget] = useState<TargetPT | null>(null);
+  const [formTarget, setFormTarget] = useState<TargetLengkap | null>(null);
+  const [asliTarget, setAsliTarget] = useState<TargetLengkap | null>(null);
+  const [updateBaru, setUpdateBaru] = useState("");
+  const [realBaru, setRealBaru] = useState({ tanggal: "", catatan: "" });
   const [formTask, setFormTask] = useState<TaskPT | null>(null);
   const [formReview, setFormReview] = useState<ReviewPT | null>(null);
   const [menyimpan, setMenyimpan] = useState(false);
@@ -92,11 +155,11 @@ export default function ProjectTrackerPage() {
   useEffect(() => {
     if (!isReady) return;
     const unsub = onSnapshot(collection(db, KOL), (s) => {
-      const t: TargetPT[] = []; const k: TaskPT[] = []; const r: ReviewPT[] = [];
+      const t: TargetLengkap[] = []; const k: TaskPT[] = []; const r: ReviewPT[] = [];
       s.docs.forEach((d) => {
         const x = { id: d.id, ...d.data() } as Record<string, unknown> & { id: string; tipe?: string };
         if (d.id === "config") setKonfig({ ...KONFIG_BAWAAN, ...(d.data() as Partial<KonfigTracker>) });
-        else if (x.tipe === "target") t.push(x as unknown as TargetPT);
+        else if (x.tipe === "target") t.push(x as unknown as TargetLengkap);
         else if (x.tipe === "task") k.push(x as unknown as TaskPT);
         else if (x.tipe === "review") r.push(x as unknown as ReviewPT);
       });
@@ -110,16 +173,31 @@ export default function ProjectTrackerPage() {
 
   if (!isReady) return null;
 
+  const hari = hariIni();
+  const tahapanKonfig = konfig.tahapan?.length ? konfig.tahapan : TAHAPAN_BAWAAN;
+  const st = (t: TargetLengkap) => statusOtomatis(t, hari);
   const targetPerId = new Map(targets.map((t) => [t.id, t]));
-  const progTask = (id: string) => progressTask(tasks.filter((k) => k.target_id === id));
-  const targetTampil = targets.filter((t) => (filterLokasi === "Semua" || t.lokasi === filterLokasi) && (filterStatus === "Semua" || t.status === filterStatus)
-    && (!cari.trim() || `${t.kode} ${t.target} ${t.catatan}`.toLowerCase().includes(cari.toLowerCase())));
+  const aktifLokasi = targets.filter((t) => filterLokasi === "Semua" || t.lokasi === filterLokasi);
+  const targetTampil = aktifLokasi.filter((t) => (filterStatus === "Semua" || st(t) === filterStatus)
+    && (!cari.trim() || `${t.kode} ${t.target} ${t.catatan || ""} ${t.kendala || ""}`.toLowerCase().includes(cari.toLowerCase())));
   const taskTampil = tasks.filter((k) => (filterLokasi === "Semua" || targetPerId.get(k.target_id)?.lokasi === filterLokasi)
     && (!cari.trim() || `${k.kode} ${k.task} ${k.pic} ${targetPerId.get(k.target_id)?.target || ""}`.toLowerCase().includes(cari.toLowerCase())));
   const lokasiDipakai = Array.from(new Set([...konfig.lokasi, ...targets.map((t) => t.lokasi).filter(Boolean)]));
-  const hitung = (s: StatusTarget) => targets.filter((t) => (filterLokasi === "Semua" || t.lokasi === filterLokasi) && t.status === s).length;
-  const aktifLokasi = targets.filter((t) => filterLokasi === "Semua" || t.lokasi === filterLokasi);
-  const rataEst = aktifLokasi.length ? aktifLokasi.reduce((a, t) => a + (t.status === "Done" ? 100 : t.progress_est || 0), 0) / aktifLokasi.length : 0;
+  const hitung = (s: StatusTarget) => aktifLokasi.filter((t) => st(t) === s).length;
+  const berjalan = aktifLokasi.filter((t) => st(t) !== "Cancelled");
+  const rataReal = berjalan.length ? berjalan.reduce((a, t) => a + progressTarget(t), 0) / berjalan.length : 0;
+  const denganRencana = berjalan.filter((t) => rencanaTarget(t, hari) !== null);
+  const rataRencana = denganRencana.length ? denganRencana.reduce((a, t) => a + (rencanaTarget(t, hari) || 0), 0) / denganRencana.length : null;
+  const updateTerakhir = (t: TargetLengkap) => (t.riwayat?.length ? t.riwayat[t.riwayat.length - 1] : null);
+  const ketTahap = (t: TargetLengkap) => {
+    const m = metodeProgres(t);
+    if (m === "frekuensi") return `${t.realisasi?.length || 0} dari ${t.frekuensi_rencana}× terlaksana`;
+    if (m === "manual") return "Belum dipetakan ke tahapan";
+    const s = tahapSekarang(t);
+    if (!s) return "Semua tahap selesai";
+    const i = t.tahapan!.indexOf(s);
+    return `Tahap ${i + 1}/${t.tahapan!.length}: ${s.nama}${s.parsial && s.pct ? ` (${s.pct}%)` : ""}${s.rencana ? ` · rencana ${fmtTgl(s.rencana)}` : ""}`;
+  };
 
   // ---------- simpan ----------
   const simpan = async (id: string, data: Record<string, unknown>, pesan: string) => {
@@ -143,12 +221,59 @@ export default function ProjectTrackerPage() {
     return `${pre}-${String((n.length ? Math.max(...n) : 0) + 1).padStart(4, "0")}`;
   };
   const kodeTaskBaru = () => `T-${String((tasks.map((k) => Number(k.kode.replace(/\D/g, "")) || 0).reduce((a, b) => Math.max(a, b), 0)) + 1).padStart(3, "0")}`;
-  const simpanTarget = async () => {
-    if (!formTarget) return;
-    if (!formTarget.target.trim() || !formTarget.lokasi) return showToast("Isi lokasi & target.", "warning");
-    const { id, ...isi } = formTarget;
-    if (await simpan(id, { ...isi, tipe: "target", kode: isi.kode.trim() || kodeTargetBaru(isi.lokasi), target: isi.target.trim() }, "Target tersimpan.")) setFormTarget(null);
+
+  const bukaTarget = (t: TargetLengkap) => {
+    const salin: TargetLengkap = { ...TARGET_KOSONG, ...t, tahapan: (t.tahapan || []).map((s) => ({ ...s })), realisasi: [...(t.realisasi || [])], riwayat: [...(t.riwayat || [])] };
+    setFormTarget(salin); setAsliTarget(t); setUpdateBaru(""); setRealBaru({ tanggal: hari, catatan: "" });
   };
+  const targetBaru = () => {
+    setFormTarget({ ...TARGET_KOSONG, lokasi: filterLokasi !== "Semua" ? filterLokasi : konfig.lokasi_gedung || "", deadline: `${hari.slice(0, 4)}-12-31`, tahapan: tahapanBaru(tahapanKonfig), realisasi: [], riwayat: [] });
+    setAsliTarget(null); setUpdateBaru(""); setRealBaru({ tanggal: hari, catatan: "" });
+  };
+  const gantiMetode = (m: MetodeProgres) => {
+    if (!formTarget) return;
+    if (m === "tahapan") setFormTarget({ ...formTarget, tahapan: formTarget.tahapan?.length ? formTarget.tahapan : tahapanBaru(tahapanKonfig) });
+    else if (m === "frekuensi") setFormTarget({ ...formTarget, tahapan: [], frekuensi_rencana: formTarget.frekuensi_rencana || 4 });
+    else setFormTarget({ ...formTarget, tahapan: [], frekuensi_rencana: 0 });
+  };
+  const ubahTahap = (i: number, p: Partial<NonNullable<TargetLengkap["tahapan"]>[number]>) => {
+    if (!formTarget) return;
+    setFormTarget({ ...formTarget, tahapan: formTarget.tahapan!.map((s, j) => (j === i ? { ...s, ...p } : s)) });
+  };
+  // Cepat untuk memetakan target lama: semua tahap sebelum tahap terpilih ditandai selesai
+  const sampaiTahap = (idx: number) => {
+    if (!formTarget) return;
+    setFormTarget({ ...formTarget, tahapan: formTarget.tahapan!.map((s, j) => (j < idx ? { ...s, selesai: s.selesai || hari } : { ...s, selesai: "" })) });
+  };
+
+  const simpanTarget = async () => {
+    const f = formTarget;
+    if (!f) return;
+    if (!f.target.trim() || !f.lokasi) return showToast("Isi lokasi & target.", "warning");
+    if (!f.deadline) return showToast("Isi deadline.", "warning");
+    const m = metodeProgres(f);
+    if (m === "manual" && f.kategori === "PROJECT" && !asliTarget) return showToast("Target PROJECT baru wajib memakai tahapan.", "warning");
+    const statusBaru = f.status === "Cancelled" ? "Cancelled" : m === "manual" ? f.status : statusOtomatis({ ...f, status: "Not Started" }, hari);
+    if (statusBaru === "At Risk" && !f.kendala?.trim()) return showToast("Target terlambat — isi Kendala (akan tampil saat presentasi).", "warning");
+    // riwayat otomatis: tahap yang baru selesai + update manual
+    const oleh = session?.nama || "-";
+    const riwayat = [...(f.riwayat || [])];
+    if (m === "tahapan") {
+      const lama = new Map((asliTarget?.tahapan || []).map((s) => [s.nama, s]));
+      f.tahapan!.forEach((s) => {
+        if (s.selesai && !lama.get(s.nama)?.selesai && asliTarget?.tahapan?.length) riwayat.push({ tanggal: s.selesai, oleh, isi: `✓ ${s.nama} selesai${s.catatan ? ` (${s.catatan})` : ""}` });
+      });
+    }
+    if (updateBaru.trim()) riwayat.push({ tanggal: hari, oleh, isi: updateBaru.trim() });
+    const { id, ...isi } = f;
+    const data = {
+      ...isi, tipe: "target", kode: isi.kode.trim() || kodeTargetBaru(isi.lokasi), target: isi.target.trim(), kendala: (isi.kendala || "").trim(),
+      status: statusBaru, progress_est: Math.round(progressTarget({ ...f, status: statusBaru })), riwayat,
+      tahapan: m === "tahapan" ? f.tahapan : [], frekuensi_rencana: m === "frekuensi" ? f.frekuensi_rencana : 0,
+    };
+    if (await simpan(id, data, "Target tersimpan.")) setFormTarget(null);
+  };
+
   const simpanTask = async () => {
     if (!formTask) return;
     if (!formTask.task.trim() || !formTask.target_id) return showToast("Isi task & pilih Target ID (task wajib terhubung ke target).", "warning");
@@ -166,13 +291,20 @@ export default function ProjectTrackerPage() {
   const ekspor = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ["Target ID", "Lokasi Aset", "Target", "Kategori", "User", "Ukuran Sukses", "Deadline", "Status", "Catatan", "Progress Est (%)", "Progress Quarterly (%)", "Progress Task (%)"],
-      ...targets.map((t) => [t.kode, t.lokasi, t.target, t.kategori, t.user, t.ukuran_sukses, t.deadline, t.status, t.catatan, t.progress_est, progressKuartal(t) ?? "", progTask(t.id) ?? ""]),
-    ]), "Annual Target");
+      ["Target ID", "Lokasi", "Target", "Kategori", "User", "Ukuran Sukses", "Deadline", "Cara Hitung", "Posisi Sekarang", "Rencana (%)", "Realisasi (%)", "Status", "Kendala", "Update Terakhir"],
+      ...targets.map((t) => {
+        const r = rencanaTarget(t, hari); const u = updateTerakhir(t);
+        return [t.kode, t.lokasi, t.target, t.kategori, t.user, t.ukuran_sukses, t.deadline, LABEL_METODE[metodeProgres(t)], ketTahap(t), r === null ? "" : Math.round(r), Math.round(progressTarget(t)), LABEL_STATUS[st(t)], t.kendala || "", u ? `${u.tanggal} ${u.isi}` : t.catatan || ""];
+      }),
+    ]), "Target");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ["Target ID", "Lokasi", "Target", "Q1", "Q1 %", "Q2", "Q2 %", "Q3", "Q3 %", "Q4", "Q4 %", "Avg %"],
-      ...targets.map((t) => [t.kode, t.lokasi, t.target, ...(t.kuartal || []).flatMap((q) => [q.milestone, q.pct]), progressKuartal(t) ?? ""]),
-    ]), "Quarterly");
+      ["Target ID", "Target", "No", "Tahap", "Bobot (%)", "Rencana", "Selesai", "Progres tahap (%)", "Catatan"],
+      ...targets.flatMap((t) => (t.tahapan || []).map((s, i) => [t.kode, t.target, i + 1, s.nama, s.bobot, s.rencana, s.selesai, s.selesai ? 100 : s.parsial ? s.pct || 0 : 0, s.catatan || ""])),
+    ]), "Tahapan");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ["Target ID", "Target", "Tanggal", "Oleh", "Update"],
+      ...targets.flatMap((t) => (t.riwayat || []).map((u) => [t.kode, t.target, u.tanggal, u.oleh, u.isi])),
+    ]), "Riwayat Update");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ["Task ID", "Task", "Target ID", "Target", "Lokasi", "PIC", "Due Date", "Priority", "Status", "Progress (%)", "Keterangan"],
       ...tasks.map((k) => [k.kode, k.task, targetPerId.get(k.target_id)?.kode || "", targetPerId.get(k.target_id)?.target || "", targetPerId.get(k.target_id)?.lokasi || "", k.pic, k.due, k.priority, k.status, k.progress, k.keterangan]),
@@ -181,7 +313,7 @@ export default function ProjectTrackerPage() {
       ["Minggu (Senin)", "Yang Selesai", "Tidak Selesai (& Kenapa)", "Blocker / Eskalasi", "Komitmen Minggu Depan", "Refleksi", "Oleh"],
       ...reviews.map((r) => [r.minggu, r.selesai, r.tidak_selesai, r.blocker, r.komitmen, r.refleksi, r.oleh]),
     ]), "Weekly Review");
-    XLSX.writeFile(wb, `BM_Task_Tracker_${hariIni()}.xlsx`);
+    XLSX.writeFile(wb, `BM_Project_Tracker_${hari}.xlsx`);
   };
 
   const pilihTargetOptions = lokasiDipakai.map((l) => {
@@ -189,13 +321,17 @@ export default function ProjectTrackerPage() {
     return isi.length ? <optgroup key={l} label={l}>{isi.map((t) => <option key={t.id} value={t.id}>{t.kode} — {t.target}</option>)}</optgroup> : null;
   });
 
+  const f = formTarget;
+  const mForm = f ? metodeProgres(f) : "manual";
+  const statusForm = f ? (f.status === "Cancelled" ? "Cancelled" : mForm === "manual" ? f.status : statusOtomatis({ ...f, status: "Not Started" }, hari)) : "Not Started";
+
   return (
-    <AdminShell title="Project Tracker" subtitle="Target tahunan → kuartal → task mingguan → review (Building Management)" userName={session?.nama || "Admin"}
+    <AdminShell title="Project Tracker" subtitle="Program kerja gedung — progres dihitung dari tahapan, status otomatis dari rencana" userName={session?.nama || "Admin"}
       actions={<button type="button" className="sa-btn is-soft" onClick={ekspor}>Export Excel</button>}>
       <style dangerouslySetInnerHTML={{ __html: `
-        .pt-tabel { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 980px; }
+        .pt-tabel { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 900px; }
         .pt-tabel th { text-align: left; padding: 9px 10px; background: var(--bg); color: var(--ink-soft); font-size: 11.5px; font-weight: 800; border-bottom: 1px solid var(--line); white-space: nowrap; }
-        .pt-tabel td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+        .pt-tabel td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
         .pt-tabel tbody tr { cursor: pointer; }
         .pt-tabel tbody tr:hover td { background: var(--bg); }
         .pt-in { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px; font-family: inherit; box-sizing: border-box; min-width: 0; }
@@ -206,26 +342,33 @@ export default function ProjectTrackerPage() {
         .pt-kartu:hover { border-color: var(--ink-soft); }
         .pt-chip { border: 1px solid var(--line); background: var(--bg); color: var(--ink-soft); border-radius: 999px; padding: 7px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
         .pt-chip.is-on { background: var(--ink); color: var(--surface); border-color: transparent; }
+        .pt-tahap { display: grid; grid-template-columns: 24px minmax(0,1fr) 128px 128px; gap: 6px; align-items: center; padding: 8px; border-radius: 10px; border: 1px solid var(--line); }
+        .pt-tahap.is-done { background: var(--ok-50); border-color: transparent; }
+        .pt-tahap.is-late { border-color: var(--red-600); }
+        .pt-presentasi { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+        .pt-slide { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; break-inside: avoid; }
+        @media (max-width: 640px) { .pt-tahap { grid-template-columns: 24px minmax(0,1fr); } .pt-tahap > .pt-tahap-tgl { grid-column: 2; } }
+        @media print { .pt-noprint { display: none !important; } .pt-presentasi { grid-template-columns: 1fr 1fr; } .pt-slide { border-color: #ccc; } }
       ` }} />
 
       <div className="sa-tabs" role="tablist" aria-label="Bagian project tracker" style={{ width: "fit-content", maxWidth: "100%", marginBottom: "14px", overflowX: "auto" }}>
-        {([["TARGET", `Target Tahunan (${targets.length})`], ["KUARTAL", "Kuartal"], ["TASK", `Task Mingguan (${tasks.filter((k) => k.status !== "Done").length})`], ["REVIEW", "Review Mingguan"], ["SETTING", "Pengaturan"]] as const).map(([k, l]) => (
+        {([["TARGET", `Target (${targets.length})`], ["PRESENTASI", "Presentasi"], ["TASK", `Task Mingguan (${tasks.filter((k) => k.status !== "Done").length})`], ["REVIEW", "Review Mingguan"], ["SETTING", "Pengaturan"]] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sa-tab${tab === k ? " is-active" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
 
       {tab !== "SETTING" && tab !== "REVIEW" && (
-        <>
+        <div className="pt-noprint">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginBottom: "12px" }}>
-            {(["Not Started", "On Track", "In Progress", "At Risk", "Done"] as StatusTarget[]).map((s) => (
-              <button key={s} type="button" onClick={() => { setFilterStatus(filterStatus === s ? "Semua" : s); setTab("TARGET"); }} style={{ textAlign: "left", padding: "10px 12px", borderRadius: "14px", border: `1px solid ${filterStatus === s ? WARNA_STATUS[s].fg : "var(--line)"}`, background: "var(--surface)", cursor: "pointer", fontFamily: "inherit" }}>
+            {(["Not Started", "On Track", "At Risk", "Done"] as StatusTarget[]).map((s) => (
+              <button key={s} type="button" onClick={() => { setFilterStatus(filterStatus === s ? "Semua" : s); if (tab === "TASK") setTab("TARGET"); }} style={{ textAlign: "left", padding: "10px 12px", borderRadius: "14px", border: `1px solid ${filterStatus === s ? WARNA_STATUS[s].fg : "var(--line)"}`, background: "var(--surface)", cursor: "pointer", fontFamily: "inherit" }}>
                 <div style={{ fontSize: "22px", fontWeight: 800, color: WARNA_STATUS[s].fg }}>{hitung(s)}</div>
-                <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }}>{s}</div>
+                <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }}>{LABEL_STATUS[s]}</div>
               </button>
             ))}
             <div style={{ padding: "10px 12px", borderRadius: "14px", border: "1px solid var(--line)", background: "var(--surface)" }}>
-              <div style={{ fontSize: "22px", fontWeight: 800, color: "var(--ink)" }}>{Math.round(rataEst)}%</div>
-              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }}>Rata-rata progres</div>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "var(--ink)" }}>{Math.round(rataReal)}%{rataRencana !== null && <span style={{ fontSize: "13px", color: "var(--muted)", fontWeight: 700 }}> / {Math.round(rataRencana)}%</span>}</div>
+              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }}>Realisasi / rencana rata-rata</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
@@ -233,72 +376,119 @@ export default function ProjectTrackerPage() {
               <option value="Semua">Semua lokasi</option>
               {lokasiDipakai.map((l) => <option key={l} value={l}>{l} ({targets.filter((t) => t.lokasi === l).length})</option>)}
             </select>
-            {filterStatus !== "Semua" && <button type="button" className="pt-chip is-on" onClick={() => setFilterStatus("Semua")}>Status: {filterStatus} ×</button>}
+            {filterStatus !== "Semua" && <button type="button" className="pt-chip is-on" onClick={() => setFilterStatus("Semua")}>Status: {LABEL_STATUS[filterStatus as StatusTarget] || filterStatus} ×</button>}
             <input className="pt-in" style={{ width: "240px" }} placeholder="Cari target / task / PIC..." value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari" />
             <div style={{ flex: 1 }} />
+            {tab === "PRESENTASI" && <button type="button" className="sa-btn is-soft" onClick={() => window.print()}>Cetak / PDF</button>}
             {tab === "TASK"
-              ? <button type="button" className="sa-btn is-primary" onClick={() => setFormTask({ ...TASK_KOSONG, due: hariIni() })} disabled={!targets.length}>+ Task</button>
-              : <button type="button" className="sa-btn is-primary" onClick={() => setFormTarget({ ...TARGET_KOSONG, lokasi: filterLokasi !== "Semua" ? filterLokasi : konfig.lokasi_gedung || "", kuartal: TARGET_KOSONG.kuartal.map((q) => ({ ...q })) })}>+ Target</button>}
+              ? <button type="button" className="sa-btn is-primary" onClick={() => setFormTask({ ...TASK_KOSONG, due: hari })} disabled={!targets.length}>+ Task</button>
+              : <button type="button" className="sa-btn is-primary" onClick={targetBaru}>+ Target</button>}
           </div>
-        </>
+        </div>
       )}
 
-      {/* ============ TARGET TAHUNAN ============ */}
+      {/* ============ TARGET ============ */}
       {tab === "TARGET" && (
         <Tile>
-          {targetTampil.length === 0 ? <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>{targets.length ? "Tidak ada target pada filter ini." : "Belum ada target. Mulai dari + Target (tiap task nanti wajib terhubung ke target)."}</div> : (
+          {targetTampil.length === 0 ? <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>{targets.length ? "Tidak ada target pada filter ini." : "Belum ada target. Mulai dari + Target."}</div> : (
             <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: "12px" }}>
               <table className="pt-tabel">
-                <thead><tr><th>Target ID</th><th>Lokasi</th><th>Target</th><th>Kategori</th><th>User</th><th>Deadline</th><th>Status</th><th>Progress Est</th><th>Kuartal</th><th>Task</th></tr></thead>
+                <thead><tr><th>ID</th><th>Target</th><th>Posisi sekarang</th><th>Deadline</th><th>Status</th><th>Progres (│ = rencana)</th></tr></thead>
                 <tbody>
-                  {targetTampil.map((t) => (
-                    <tr key={t.id} onClick={() => setFormTarget({ ...TARGET_KOSONG, ...t, kuartal: (t.kuartal?.length === 4 ? t.kuartal : TARGET_KOSONG.kuartal).map((q) => ({ ...q })) })}>
-                      <td style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{t.kode}</td>
-                      <td style={{ whiteSpace: "nowrap", color: "var(--ink-soft)" }}>{t.lokasi}</td>
-                      <td style={{ minWidth: "240px" }}><div style={{ fontWeight: 700, color: "var(--ink)" }}>{t.target}</div>{t.catatan && <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "2px" }}>{t.catatan}</div>}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{t.kategori}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{t.user}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{fmtTgl(t.deadline)}</td>
-                      <td><Pill teks={t.status} warna={WARNA_STATUS[t.status]} /></td>
-                      <td><MiniBar pct={t.status === "Done" ? 100 : t.progress_est || 0} /></td>
-                      <td><MiniBar pct={progressKuartal(t)} warna="var(--accent)" /></td>
-                      <td><MiniBar pct={progTask(t.id)} warna="var(--ok-solid)" /></td>
-                    </tr>
-                  ))}
+                  {targetTampil.map((t) => {
+                    const s = st(t); const u = updateTerakhir(t);
+                    return (
+                      <tr key={t.id} onClick={() => bukaTarget(t)}>
+                        <td style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{t.kode}<div style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted)" }}>{t.kategori}</div></td>
+                        <td style={{ minWidth: "240px" }}>
+                          <div style={{ fontWeight: 700, color: "var(--ink)" }}>{t.target}</div>
+                          <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "2px" }}>{t.lokasi} · {t.user}</div>
+                          {u && <div style={{ fontSize: "11.5px", color: "var(--ink-soft)", marginTop: "3px" }}>{fmtTgl(u.tanggal)}: {u.isi}</div>}
+                          {!u && t.catatan && <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "3px" }}>{t.catatan}</div>}
+                        </td>
+                        <td style={{ minWidth: "220px" }}>
+                          <div style={{ fontSize: "12px", color: "var(--ink)", marginBottom: "6px" }}>{ketTahap(t)}</div>
+                          <Stepper t={t} hari={hari} />
+                          {s === "At Risk" && t.kendala && <div style={{ fontSize: "11.5px", color: "var(--red-600)", marginTop: "5px", fontWeight: 700 }}>Kendala: {t.kendala}</div>}
+                        </td>
+                        <td style={{ whiteSpace: "nowrap", color: t.deadline && t.deadline < hari && s !== "Done" ? "var(--red-600)" : "inherit" }}>{fmtTgl(t.deadline)}</td>
+                        <td><Pill teks={LABEL_STATUS[s]} warna={WARNA_STATUS[s]} /></td>
+                        <td><BarProgres real={progressTarget(t)} rencana={rencanaTarget(t, hari)} /></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-          <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>3 lensa progres: Est = estimasi manual · Kuartal = rata-rata % milestone Q1–Q4 · Task = task Done/total (bobot High 3, Medium 2, Low 1). Klik baris untuk edit.</p>
+          <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Progres = jumlah bobot tahap yang selesai (PROJECT) atau terlaksana ÷ rencana (rutin). Garis hitam = posisi yang seharusnya sudah dicapai hari ini menurut tanggal rencana. Klik baris untuk update.</p>
         </Tile>
       )}
 
-      {/* ============ KUARTAL ============ */}
-      {tab === "KUARTAL" && (
-        <Tile>
-          <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: "12px" }}>
-            <table className="pt-tabel">
-              <thead><tr><th>Target ID</th><th>Target</th>{["Q1 (Jan–Mar)", "Q2 (Apr–Jun)", "Q3 (Jul–Sep)", "Q4 (Okt–Des)"].map((q) => <th key={q}>{q}</th>)}<th>Avg</th><th>Status</th></tr></thead>
-              <tbody>
-                {targetTampil.filter((t) => t.status !== "Not Started" && t.status !== "Cancelled").map((t) => (
-                  <tr key={t.id} onClick={() => setFormTarget({ ...TARGET_KOSONG, ...t, kuartal: (t.kuartal?.length === 4 ? t.kuartal : TARGET_KOSONG.kuartal).map((q) => ({ ...q })) })}>
-                    <td style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{t.kode}</td>
-                    <td style={{ minWidth: "180px" }}><div style={{ fontWeight: 700 }}>{t.target}</div><div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{t.lokasi}</div></td>
-                    {(t.kuartal?.length === 4 ? t.kuartal : TARGET_KOSONG.kuartal).map((q, i) => (
-                      <td key={i} style={{ minWidth: "150px" }}>
-                        <div style={{ fontSize: "12px", color: q.milestone ? "var(--ink)" : "var(--muted)", marginBottom: "4px" }}>{q.milestone || "—"}</div>
-                        {q.milestone && <MiniBar pct={q.pct} warna="var(--accent)" />}
-                      </td>
-                    ))}
-                    <td><MiniBar pct={progressKuartal(t)} warna="var(--accent)" /></td>
-                    <td><Pill teks={t.status} warna={WARNA_STATUS[t.status]} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ============ PRESENTASI ============ */}
+      {tab === "PRESENTASI" && (
+        <div>
+          <Tile style={{ marginBottom: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "baseline" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 800 }}>Program Kerja Building Management {hari.slice(0, 4)}</h2>
+                <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>{filterLokasi === "Semua" ? "Semua lokasi" : filterLokasi} · per {fmtTgl(hari)}</div>
+              </div>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {(["Done", "On Track", "At Risk", "Not Started"] as StatusTarget[]).map((s) => hitung(s) > 0 && <Pill key={s} teks={`${hitung(s)} ${LABEL_STATUS[s]}`} warna={WARNA_STATUS[s]} />)}
+              </div>
+            </div>
+            <div style={{ marginTop: "12px", maxWidth: "520px" }}>
+              <div style={{ fontSize: "12px", color: "var(--ink-soft)", fontWeight: 700, marginBottom: "4px" }}>Rata-rata realisasi{rataRencana !== null ? ` (rencana ${Math.round(rataRencana)}%)` : ""}</div>
+              <BarProgres real={rataReal} rencana={rataRencana} besar />
+            </div>
+          </Tile>
+          <div className="pt-presentasi">
+            {targetTampil.filter((t) => st(t) !== "Cancelled").map((t) => {
+              const s = st(t); const r = rencanaTarget(t, hari); const kini = tahapSekarang(t);
+              const riw = (t.riwayat || []).slice(-3).reverse();
+              const telat = tahapTerlambat(t, hari);
+              return (
+                <div key={t.id} className="pt-slide">
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "11.5px", color: "var(--muted)", fontWeight: 700 }}>{t.kode} · {t.kategori} · deadline {fmtTgl(t.deadline)}</div>
+                      <div style={{ fontSize: "15.5px", fontWeight: 800, color: "var(--ink)", marginTop: "2px" }}>{t.target}</div>
+                    </div>
+                    <Pill teks={LABEL_STATUS[s]} warna={WARNA_STATUS[s]} />
+                  </div>
+                  <div style={{ marginTop: "12px" }}><BarProgres real={progressTarget(t)} rencana={r} besar /></div>
+                  <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "3px" }}>Realisasi {Math.round(progressTarget(t))}%{r !== null ? ` · rencana ${Math.round(r)}%` : ""}</div>
+                  {metodeProgres(t) === "tahapan" && (
+                    <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "3px" }}>
+                      {t.tahapan!.map((x, i) => {
+                        const lewat = !x.selesai && x.rencana && x.rencana < hari;
+                        return (
+                          <div key={i} style={{ display: "flex", gap: "6px", fontSize: "12px", color: x.selesai ? "var(--ink-soft)" : x === kini ? "var(--ink)" : "var(--muted)", fontWeight: x === kini ? 800 : 500 }}>
+                            <span style={{ width: "16px", color: x.selesai ? "var(--ok)" : lewat ? "var(--red-600)" : "inherit" }}>{x.selesai ? "✓" : x === kini ? "▶" : "○"}</span>
+                            <span style={{ flex: 1 }}>{x.nama}{x.parsial && !x.selesai && x.pct ? ` (${x.pct}%)` : ""}</span>
+                            <span style={{ color: lewat ? "var(--red-600)" : "inherit" }}>{x.selesai ? fmtTgl(x.selesai) : x.rencana ? `rencana ${fmtTgl(x.rencana)}` : ""}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {metodeProgres(t) !== "tahapan" && <div style={{ marginTop: "10px", fontSize: "12.5px", color: "var(--ink)" }}>{ketTahap(t)}</div>}
+                  {(s === "At Risk" || t.kendala) && (
+                    <div style={{ marginTop: "10px", padding: "8px 10px", borderRadius: "10px", background: "var(--red-50)", fontSize: "12px", color: "var(--ink)" }}>
+                      <b style={{ color: "var(--red-600)" }}>Kendala:</b> {t.kendala || "-"}{telat.length ? ` · terlambat di ${telat.map((x) => x.nama).join(", ")}` : ""}
+                    </div>
+                  )}
+                  {riw.length > 0 && (
+                    <div style={{ marginTop: "10px", fontSize: "11.5px", color: "var(--ink-soft)" }}>
+                      {riw.map((u, i) => <div key={i}><b>{fmtTgl(u.tanggal)}</b> — {u.isi}</div>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Muncul untuk target berstatus selain Not Started / Cancelled. Klik baris untuk isi milestone & % tiap kuartal.</p>
-        </Tile>
+        </div>
       )}
 
       {/* ============ TASK MINGGUAN ============ */}
@@ -311,7 +501,7 @@ export default function ProjectTrackerPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><Pill teks={s} warna={WARNA_STATUS[s]} /><span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>{isi.length}</span></div>
                 {isi.map((k) => {
                   const t = targetPerId.get(k.target_id);
-                  const telat = k.status !== "Done" && k.due && k.due < hariIni();
+                  const telat = k.status !== "Done" && k.due && k.due < hari;
                   return (
                     <div key={k.id} className="pt-kartu" onClick={() => setFormTask({ ...TASK_KOSONG, ...k })}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "11px", color: "var(--muted)", fontWeight: 700 }}>
@@ -326,7 +516,6 @@ export default function ProjectTrackerPage() {
                           {STATUS_TASK.map((x) => <option key={x} value={x}>{x}</option>)}
                         </select>
                       </div>
-                      {k.status !== "Done" && k.progress > 0 && <div style={{ marginTop: "6px" }}><MiniBar pct={k.progress} warna="var(--ok-solid)" /></div>}
                     </div>
                   );
                 })}
@@ -361,61 +550,146 @@ export default function ProjectTrackerPage() {
 
       {/* ============ PENGATURAN ============ */}
       {tab === "SETTING" && (
-        <Tile>
-          <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Konfigurasi dropdown</h2>
-          <p style={{ margin: "0 0 14px", fontSize: "12.5px", color: "var(--muted)" }}>Pusat pilihan dropdown. Perubahan langsung tersimpan.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
-            <EditorDaftar judul="Lokasi Aset" nilai={konfig.lokasi} onUbah={(v) => simpanKonfig({ ...konfig, lokasi: v })} />
-            <EditorDaftar judul="Kategori" nilai={konfig.kategori} onUbah={(v) => simpanKonfig({ ...konfig, kategori: v })} />
-            <EditorDaftar judul="PIC" nilai={konfig.pic} onUbah={(v) => simpanKonfig({ ...konfig, pic: v })} />
-            <EditorDaftar judul="User" nilai={konfig.user} onUbah={(v) => simpanKonfig({ ...konfig, user: v })} />
-          </div>
-          <label style={{ display: "block", marginTop: "18px", maxWidth: "360px" }}>
-            <span className="pt-lbl">Lokasi gedung ini (yang ditampilkan ke Eksekutif Tenant)</span>
-            <select className="pt-in" value={konfig.lokasi_gedung || ""} onChange={(e) => simpanKonfig({ ...konfig, lokasi_gedung: e.target.value })}>
-              <option value="">— Pilih lokasi —</option>
-              {konfig.lokasi.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
-          <p style={{ margin: "14px 0 0", fontSize: "12px", color: "var(--muted)" }}>Status target ({STATUS_TARGET.join(" · ")}), status task ({STATUS_TASK.join(" · ")}) & prioritas ({PRIORITAS.join(" · ")}) mengikuti template, tidak diubah di sini.</p>
-        </Tile>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <Tile>
+            <EditorTahapan key={JSON.stringify(tahapanKonfig)} nilai={tahapanKonfig} onSimpan={(v) => simpanKonfig({ ...konfig, tahapan: v })} />
+          </Tile>
+          <Tile>
+            <h2 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 800 }}>Konfigurasi dropdown</h2>
+            <p style={{ margin: "0 0 14px", fontSize: "12.5px", color: "var(--muted)" }}>Pusat pilihan dropdown. Perubahan langsung tersimpan.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <EditorDaftar judul="Lokasi Aset" nilai={konfig.lokasi} onUbah={(v) => simpanKonfig({ ...konfig, lokasi: v })} />
+              <EditorDaftar judul="Kategori" nilai={konfig.kategori} onUbah={(v) => simpanKonfig({ ...konfig, kategori: v })} />
+              <EditorDaftar judul="PIC" nilai={konfig.pic} onUbah={(v) => simpanKonfig({ ...konfig, pic: v })} />
+              <EditorDaftar judul="User" nilai={konfig.user} onUbah={(v) => simpanKonfig({ ...konfig, user: v })} />
+            </div>
+            <label style={{ display: "block", marginTop: "18px", maxWidth: "360px" }}>
+              <span className="pt-lbl">Lokasi gedung ini (yang ditampilkan ke Eksekutif Tenant)</span>
+              <select className="pt-in" value={konfig.lokasi_gedung || ""} onChange={(e) => simpanKonfig({ ...konfig, lokasi_gedung: e.target.value })}>
+                <option value="">— Pilih lokasi —</option>
+                {konfig.lokasi.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </label>
+            <p style={{ margin: "14px 0 0", fontSize: "12px", color: "var(--muted)" }}>Status target dihitung otomatis ({STATUS_TARGET.filter((s) => s !== "In Progress").map((s) => LABEL_STATUS[s]).join(" · ")}). Status task ({STATUS_TASK.join(" · ")}) & prioritas ({PRIORITAS.join(" · ")}) mengikuti template.</p>
+          </Tile>
+        </div>
       )}
 
       {/* ============ MODAL TARGET ============ */}
-      <Modal open={!!formTarget} onClose={() => !menyimpan && setFormTarget(null)} maxWidth="680px">
-        {formTarget && (
+      <Modal open={!!f} onClose={() => !menyimpan && setFormTarget(null)} maxWidth="760px">
+        {f && (
           <div>
-            <h3 style={{ margin: "0 0 12px", fontSize: "18px", color: "var(--ink)" }}>{formTarget.id ? `Edit target ${formTarget.kode}` : "Target baru"}</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "10px" }}>
-              <label><span className="pt-lbl">Lokasi aset *</span><select className="pt-in" value={formTarget.lokasi} onChange={(e) => setFormTarget({ ...formTarget, lokasi: e.target.value })}><option value="">Pilih...</option>{lokasiDipakai.map((l) => <option key={l} value={l}>{l}</option>)}</select></label>
-              <label><span className="pt-lbl">Target ID</span><input className="pt-in" value={formTarget.kode} onChange={(e) => setFormTarget({ ...formTarget, kode: e.target.value.toUpperCase() })} placeholder={formTarget.lokasi ? `otomatis: ${kodeTargetBaru(formTarget.lokasi)}` : "otomatis"} /></label>
-              <label><span className="pt-lbl">Deadline</span><input type="date" className="pt-in" value={formTarget.deadline} onChange={(e) => setFormTarget({ ...formTarget, deadline: e.target.value })} /></label>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", marginBottom: "12px" }}>
+              <h3 style={{ margin: 0, fontSize: "18px", color: "var(--ink)" }}>{f.id ? `Update ${f.kode}` : "Target baru"}</h3>
+              <Pill teks={LABEL_STATUS[statusForm]} warna={WARNA_STATUS[statusForm]} />
             </div>
-            <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Target *</span><input className="pt-in" value={formTarget.target} onChange={(e) => setFormTarget({ ...formTarget, target: e.target.value })} placeholder="Mis. Pengadaan CCTV" /></label>
+            <label style={{ display: "block" }}><span className="pt-lbl">Target * (1 target = 1 pekerjaan)</span><input className="pt-in" value={f.target} onChange={(e) => setFormTarget({ ...f, target: e.target.value })} placeholder="Mis. Pengadaan fire alarm system" /></label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px", marginTop: "10px" }}>
-              <label><span className="pt-lbl">Kategori</span><select className="pt-in" value={formTarget.kategori} onChange={(e) => setFormTarget({ ...formTarget, kategori: e.target.value })}>{konfig.kategori.map((k) => <option key={k}>{k}</option>)}</select></label>
-              <label><span className="pt-lbl">User</span><select className="pt-in" value={formTarget.user} onChange={(e) => setFormTarget({ ...formTarget, user: e.target.value })}>{konfig.user.map((k) => <option key={k}>{k}</option>)}</select></label>
-              <label><span className="pt-lbl">Status</span><select className="pt-in" value={formTarget.status} onChange={(e) => setFormTarget({ ...formTarget, status: e.target.value as StatusTarget })}>{STATUS_TARGET.map((k) => <option key={k}>{k}</option>)}</select></label>
-              <label><span className="pt-lbl">Progress est.</span><select className="pt-in" value={formTarget.progress_est} onChange={(e) => setFormTarget({ ...formTarget, progress_est: Number(e.target.value) })}>{[0, 25, 50, 75, 100].map((p) => <option key={p} value={p}>{p}%</option>)}</select></label>
+              <label><span className="pt-lbl">Lokasi aset *</span><select className="pt-in" value={f.lokasi} onChange={(e) => setFormTarget({ ...f, lokasi: e.target.value })}><option value="">Pilih...</option>{lokasiDipakai.map((l) => <option key={l} value={l}>{l}</option>)}</select></label>
+              <label><span className="pt-lbl">Target ID</span><input className="pt-in" value={f.kode} onChange={(e) => setFormTarget({ ...f, kode: e.target.value.toUpperCase() })} placeholder={f.lokasi ? `otomatis: ${kodeTargetBaru(f.lokasi)}` : "otomatis"} /></label>
+              <label><span className="pt-lbl">Deadline *</span><input type="date" className="pt-in" value={f.deadline} onChange={(e) => setFormTarget({ ...f, deadline: e.target.value })} /></label>
+              <label><span className="pt-lbl">Kategori</span><select className="pt-in" value={f.kategori} onChange={(e) => { const k = e.target.value; const baru = { ...f, kategori: k }; if (!f.id && k === "PROJECT") baru.tahapan = f.tahapan?.length ? f.tahapan : tahapanBaru(tahapanKonfig); if (!f.id && k !== "PROJECT") { baru.tahapan = []; baru.frekuensi_rencana = f.frekuensi_rencana || 4; } setFormTarget(baru); }}>{konfig.kategori.map((k) => <option key={k}>{k}</option>)}</select></label>
+              <label><span className="pt-lbl">User</span><select className="pt-in" value={f.user} onChange={(e) => setFormTarget({ ...f, user: e.target.value })}>{konfig.user.map((k) => <option key={k}>{k}</option>)}</select></label>
             </div>
-            <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Ukuran sukses (kuantitatif)</span><input className="pt-in" value={formTarget.ukuran_sukses} onChange={(e) => setFormTarget({ ...formTarget, ukuran_sukses: e.target.value })} /></label>
-            <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Catatan</span><textarea className="pt-in" style={{ minHeight: "60px" }} value={formTarget.catatan} onChange={(e) => setFormTarget({ ...formTarget, catatan: e.target.value })} placeholder="[Okt] CER sudah final approve, PO terbit..." /></label>
-            <div className="pt-lbl" style={{ marginTop: "14px" }}>Milestone kuartal</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "8px" }}>
-              {formTarget.kuartal.map((q, i) => (
-                <div key={i} style={{ padding: "8px", borderRadius: "10px", border: "1px solid var(--line)", background: "var(--bg)" }}>
-                  <div style={{ fontSize: "11.5px", fontWeight: 800, color: "var(--ink-soft)", marginBottom: "4px" }}>Q{i + 1}</div>
-                  <input className="pt-in" style={{ padding: "6px 8px", fontSize: "12px" }} value={q.milestone} placeholder={["TOR / BOQ & komparasi vendor", "Tender, evaluasi & PO", "Pelaksanaan & monitoring", "Serah terima & penutupan"][i]} onChange={(e) => setFormTarget({ ...formTarget, kuartal: formTarget.kuartal.map((x, j) => (j === i ? { ...x, milestone: e.target.value } : x)) })} />
-                  <select className="pt-in" style={{ padding: "5px 8px", fontSize: "12px", marginTop: "4px" }} value={q.pct} onChange={(e) => setFormTarget({ ...formTarget, kuartal: formTarget.kuartal.map((x, j) => (j === i ? { ...x, pct: Number(e.target.value) } : x)) })} aria-label={`Progres Q${i + 1}`}>
-                    {[0, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100].map((p) => <option key={p} value={p}>{p}%</option>)}
-                  </select>
-                </div>
+            <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Ukuran sukses</span><input className="pt-in" value={f.ukuran_sukses} onChange={(e) => setFormTarget({ ...f, ukuran_sukses: e.target.value })} /></label>
+
+            <div style={{ marginTop: "14px", display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+              <span className="pt-lbl" style={{ margin: 0 }}>Cara hitung progres:</span>
+              {(["tahapan", "frekuensi", "manual"] as MetodeProgres[]).filter((m) => m !== "manual" || mForm === "manual").map((m) => (
+                <button key={m} type="button" className={`pt-chip${mForm === m ? " is-on" : ""}`} onClick={() => gantiMetode(m)}>{LABEL_METODE[m]}</button>
               ))}
             </div>
-            {formTarget.id && <div style={{ marginTop: "10px", fontSize: "12.5px", color: "var(--ink-soft)" }}>Task terhubung: <b>{tasks.filter((k) => k.target_id === formTarget.id).length}</b> · progress task {progTask(formTarget.id) === null ? "—" : `${Math.round(progTask(formTarget.id)!)}%`}</div>}
+
+            {mForm === "manual" && (
+              <div style={{ marginTop: "10px", padding: "12px", borderRadius: "12px", background: "var(--warn-50)", fontSize: "12.5px", color: "var(--ink)" }}>
+                Target lama ini belum dipetakan — progres & status masih diisi manual. Klik <b>Tahapan project</b> (pekerjaan pengadaan/instalasi) atau <b>Frekuensi</b> (pekerjaan rutin) agar angkanya dihitung sistem.
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px", marginTop: "10px" }}>
+                  <label><span className="pt-lbl">Status (manual)</span><select className="pt-in" value={f.status} onChange={(e) => setFormTarget({ ...f, status: e.target.value as StatusTarget })}>{STATUS_TARGET.map((k) => <option key={k} value={k}>{LABEL_STATUS[k]}</option>)}</select></label>
+                  <label><span className="pt-lbl">Progres (manual)</span><select className="pt-in" value={f.progress_est} onChange={(e) => setFormTarget({ ...f, progress_est: Number(e.target.value) })}>{[0, 25, 50, 75, 100].map((p) => <option key={p} value={p}>{p}%</option>)}</select></label>
+                </div>
+              </div>
+            )}
+
+            {mForm === "tahapan" && (
+              <div style={{ marginTop: "10px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>Isi cepat — sekarang sedang di tahap:</span>
+                  <select className="pt-in" style={{ width: "auto" }} value="" onChange={(e) => e.target.value !== "" && sampaiTahap(Number(e.target.value))} aria-label="Sedang di tahap">
+                    <option value="">pilih…</option>
+                    {f.tahapan!.map((s, i) => <option key={i} value={i}>{i + 1}. {s.nama}</option>)}
+                    <option value={f.tahapan!.length}>Semua selesai</option>
+                  </select>
+                  <div style={{ flex: 1 }} />
+                  <BarProgres real={progressTarget(f)} rencana={rencanaTarget(f, hari)} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {f.tahapan!.map((s, i) => {
+                    const lewat = !s.selesai && s.rencana && s.rencana < hari;
+                    return (
+                      <div key={i} className={`pt-tahap${s.selesai ? " is-done" : ""}${lewat ? " is-late" : ""}`}>
+                        <input type="checkbox" checked={!!s.selesai} onChange={(e) => ubahTahap(i, { selesai: e.target.checked ? hari : "" })} aria-label={`${s.nama} selesai`} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{i + 1}. {s.nama} <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>· {s.bobot}%</span>{lewat && <span style={{ fontSize: "11px", color: "var(--red-600)", fontWeight: 800 }}> · lewat rencana</span>}</div>
+                          <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                            {s.parsial && !s.selesai && (
+                              <select className="pt-in" style={{ width: "auto", padding: "4px 6px", fontSize: "12px" }} value={s.pct || 0} onChange={(e) => ubahTahap(i, { pct: Number(e.target.value) })} aria-label={`Progres ${s.nama}`}>
+                                {[0, 10, 25, 50, 75, 90].map((p) => <option key={p} value={p}>{p}% berjalan</option>)}
+                              </select>
+                            )}
+                            <input className="pt-in" style={{ padding: "4px 8px", fontSize: "12px" }} value={s.catatan || ""} onChange={(e) => ubahTahap(i, { catatan: e.target.value })} placeholder="No. CER / PO / vendor / catatan" />
+                          </div>
+                        </div>
+                        <label className="pt-tahap-tgl" style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--muted)" }}>Rencana<input type="date" className="pt-in" style={{ padding: "4px 6px", fontSize: "12px" }} value={s.rencana} onChange={(e) => ubahTahap(i, { rencana: e.target.value })} /></label>
+                        <label className="pt-tahap-tgl" style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--muted)" }}>Selesai<input type="date" className="pt-in" style={{ padding: "4px 6px", fontSize: "12px" }} value={s.selesai} max={hari} onChange={(e) => ubahTahap(i, { selesai: e.target.value })} /></label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Isi <b>tanggal rencana</b> tiap tahap sekali di awal — dari situ sistem tahu apakah target sesuai rencana atau terlambat. Centang tahap saat selesai.</p>
+              </div>
+            )}
+
+            {mForm === "frekuensi" && (
+              <div style={{ marginTop: "10px" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <label style={{ width: "160px" }}><span className="pt-lbl">Rencana per tahun (kali)</span><input className="pt-in" inputMode="numeric" value={f.frekuensi_rencana || ""} onChange={(e) => setFormTarget({ ...f, frekuensi_rencana: Number(e.target.value.replace(/\D/g, "")) || 0 })} placeholder="mis. 4" /></label>
+                  <div style={{ flex: 1, minWidth: "180px" }}><BarProgres real={progressTarget(f)} rencana={rencanaTarget(f, hari)} /></div>
+                </div>
+                <div className="pt-lbl" style={{ marginTop: "10px" }}>Realisasi ({f.realisasi?.length || 0} dari {f.frekuensi_rencana || 0})</div>
+                {(f.realisasi || []).map((r, i) => (
+                  <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "12.5px", padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
+                    <b style={{ whiteSpace: "nowrap" }}>{i + 1}. {fmtTgl(r.tanggal)}</b><span style={{ flex: 1, color: "var(--ink-soft)" }}>{r.catatan}</span>
+                    <button type="button" className="pt-chip" style={{ padding: "3px 8px" }} onClick={() => setFormTarget({ ...f, realisasi: f.realisasi!.filter((_, j) => j !== i) })} aria-label="Hapus realisasi">×</button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
+                  <input type="date" className="pt-in" style={{ width: "160px" }} value={realBaru.tanggal} max={hari} onChange={(e) => setRealBaru({ ...realBaru, tanggal: e.target.value })} aria-label="Tanggal pelaksanaan" />
+                  <input className="pt-in" style={{ flex: 1, minWidth: "160px" }} value={realBaru.catatan} onChange={(e) => setRealBaru({ ...realBaru, catatan: e.target.value })} placeholder="Mis. service rutin semua unit, vendor X" />
+                  <button type="button" className="sa-btn is-soft" onClick={() => { if (!realBaru.tanggal) return; setFormTarget({ ...f, realisasi: [...(f.realisasi || []), { tanggal: realBaru.tanggal, catatan: realBaru.catatan.trim() }].sort((a, b) => a.tanggal.localeCompare(b.tanggal)) }); setRealBaru({ tanggal: hari, catatan: "" }); }}>+ Terlaksana</button>
+                </div>
+              </div>
+            )}
+
+            <label style={{ display: "block", marginTop: "14px" }}>
+              <span className="pt-lbl" style={{ color: statusForm === "At Risk" ? "var(--red-600)" : undefined }}>Kendala / butuh dukungan atasan{statusForm === "At Risk" ? " * (target terlambat)" : ""}</span>
+              <input className="pt-in" value={f.kendala || ""} onChange={(e) => setFormTarget({ ...f, kendala: e.target.value })} placeholder="Mis. CER menunggu tanda tangan Direksi" />
+            </label>
+            <label style={{ display: "block", marginTop: "10px" }}>
+              <span className="pt-lbl">Update hari ini (masuk riwayat)</span>
+              <textarea className="pt-in" style={{ minHeight: "54px" }} value={updateBaru} onChange={(e) => setUpdateBaru(e.target.value)} placeholder="Mis. penawaran 3 vendor sudah masuk, menunggu review" />
+            </label>
+            {((f.riwayat || []).length > 0 || f.catatan) && (
+              <div style={{ marginTop: "10px", maxHeight: "160px", overflowY: "auto", padding: "8px 10px", borderRadius: "10px", background: "var(--bg)", fontSize: "12px" }}>
+                <div className="pt-lbl">Riwayat update</div>
+                {[...(f.riwayat || [])].reverse().map((u, i) => <div key={i} style={{ padding: "3px 0", color: "var(--ink)" }}><b>{fmtTgl(u.tanggal)}</b> · {u.isi} <span style={{ color: "var(--muted)" }}>— {u.oleh}</span></div>)}
+                {f.catatan && <div style={{ padding: "3px 0", color: "var(--muted)" }}>Catatan lama: {f.catatan}</div>}
+              </div>
+            )}
+            {f.id && <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--muted)" }}>Task terhubung: <b>{tasks.filter((k) => k.target_id === f.id).length}</b></div>}
             <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>
-              {formTarget.id && <button type="button" className="sa-btn is-soft" style={{ color: "var(--red-600)" }} disabled={menyimpan} onClick={() => hapus(formTarget.id, `${formTarget.kode} ${formTarget.target}`, () => setFormTarget(null))}>Hapus</button>}
-              {formTarget.id && <button type="button" className="sa-btn is-soft" onClick={() => { const t = formTarget; setFormTarget(null); setFormTask({ ...TASK_KOSONG, target_id: t.id, due: t.deadline || hariIni() }); }}>+ Task untuk target ini</button>}
+              {f.id && <button type="button" className="sa-btn is-soft" style={{ color: "var(--red-600)" }} disabled={menyimpan} onClick={() => hapus(f.id, `${f.kode} ${f.target}`, () => setFormTarget(null))}>Hapus</button>}
+              {f.id && <button type="button" className="sa-btn is-soft" disabled={menyimpan} onClick={() => setFormTarget({ ...f, status: f.status === "Cancelled" ? "Not Started" : "Cancelled" })}>{f.status === "Cancelled" ? "Aktifkan lagi" : "Batalkan target"}</button>}
+              {f.id && <button type="button" className="sa-btn is-soft" onClick={() => { const t = f; setFormTarget(null); setFormTask({ ...TASK_KOSONG, target_id: t.id, due: t.deadline || hari }); }}>+ Task</button>}
               <div style={{ flex: 1 }} />
               <button type="button" className="sa-btn is-soft" onClick={() => setFormTarget(null)} disabled={menyimpan}>Batal</button>
               <button type="button" className="sa-btn is-primary" onClick={simpanTarget} disabled={menyimpan}>{menyimpan ? "Menyimpan..." : "Simpan"}</button>
@@ -441,7 +715,7 @@ export default function ProjectTrackerPage() {
               <label><span className="pt-lbl">Progress</span><select className="pt-in" value={formTask.progress} onChange={(e) => setFormTask({ ...formTask, progress: Number(e.target.value) })}>{[0, 25, 50, 75, 100].map((p) => <option key={p} value={p}>{p}%</option>)}</select></label>
             </div>
             <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Keterangan</span><input className="pt-in" value={formTask.keterangan} onChange={(e) => setFormTask({ ...formTask, keterangan: e.target.value })} placeholder="Mis. menunggu SRA" /></label>
-            <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Bobot prioritas untuk progress target: High {BOBOT_PRIORITAS.High} · Medium {BOBOT_PRIORITAS.Medium} · Low {BOBOT_PRIORITAS.Low}.</p>
+            <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Task = pengingat kerja harian; progres target dihitung dari tahapan. Bobot prioritas: High {BOBOT_PRIORITAS.High} · Medium {BOBOT_PRIORITAS.Medium} · Low {BOBOT_PRIORITAS.Low}.</p>
             <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
               {formTask.id && <button type="button" className="sa-btn is-soft" style={{ color: "var(--red-600)" }} disabled={menyimpan} onClick={() => hapus(formTask.id, `${formTask.kode} ${formTask.task}`, () => setFormTask(null))}>Hapus</button>}
               <div style={{ flex: 1 }} />

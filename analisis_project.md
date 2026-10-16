@@ -3326,3 +3326,16 @@ Laporan user: Zainal dicentang sebagai Petugas Inspeksi Fasilitas Gedung, tetapi
 ## 161. Validasi Tidak Masuk: Dinas Luar Tanpa Foto (16 Oktober 2026)
 
 Di Validasi Kehadiran Security, alasan "Dinas luar" kini menyembunyikan kolom foto meja (foto diunggah ke Cloudinary begitu diambil, jadi kolomnya dihilangkan, bukan sekadar tidak wajib) agar tidak ada unggahan sembarang yang memenuhi penyimpanan. Sebagai gantinya "Tujuan / keterangan dinas" wajib diisi. foto_url disimpan kosong untuk Dinas luar. Alasan lain (Izin, Sakit, Cuti, Tanpa kabar) tetap wajib foto meja.
+
+## 162. Project Tracker Dirombak: Progres dari 9 Tahapan Perusahaan, Status Otomatis, Mode Presentasi (16 Oktober 2026)
+
+Masalah lama: 3 lensa progres (Est manual, Kuartal manual, Task) yang saling bertentangan (mis. Done tetapi kuartal 56%), status dipilih manual, catatan ditumpuk "[April]…[Oktober]…".
+
+1. Satu angka progres per target (src/lib/projectTracker.ts: metodeProgres, progressTarget, rencanaTarget, tahapSekarang, tahapTerlambat, statusOtomatis):
+   - Tahapan project (bawaan, bobot %): Survey kebutuhan 5 · Pengajuan approval komparasi vendor 10 · Review doc komparasi 10 · Proses approval komparasi 10 · Pengajuan CER 10 · Pengajuan PO 10 · Pelaksanaan 30 (boleh parsial 10–90%) · Checklist item 10 · BAST 5. Bobot/nama/urutan dapat diubah di Pengaturan (config.tahapan, total wajib 100); target menyimpan salinan bobot saat dibuat agar angkanya tidak berubah tiba-tiba.
+   - Frekuensi (rutin): terlaksana ÷ rencana per tahun; rencana = proporsi waktu dari 1 Jan s.d. deadline.
+   - Manual: target lama yang belum dipetakan (progress_est & status lama) sampai dipilih tahapan/frekuensi. Target PROJECT baru wajib tahapan.
+2. Status otomatis: Dibatalkan (manual) · Selesai (100%) · Terlambat/At Risk (deadline lewat, ada tahap lewat tanggal rencana, atau realisasi < rencana) · Belum mulai (0%) · Sesuai rencana. Kendala wajib bila terlambat. Status & progress_est hasil hitung ikut disimpan (snapshot) untuk konsumen lain.
+3. Modal: daftar tahapan (centang selesai, tanggal rencana & selesai, % pelaksanaan, catatan No. CER/PO), "isi cepat sedang di tahap…" untuk memetakan target lama, update hari ini → riwayat[] (tahap yang baru dicentang otomatis tercatat), catatan lama tetap tampil.
+4. Tabel: posisi sekarang + stepper warna, bar realisasi dengan garis rencana. Tab Kuartal diganti Presentasi (kartu per target: tahapan ✓/▶/○, realisasi vs rencana, kendala, 3 update terakhir; Cetak/PDF memakai @media print tema admin). Task & Review Mingguan tetap. Export Excel: sheet Target, Tahapan, Riwayat Update, Weekly Task, Weekly Review.
+5. Dashboard Eksekutif memakai progressTarget/statusOtomatis + nama tahap sekarang. Data kuartal lama tidak dihapus (tidak dipakai lagi).
