@@ -197,7 +197,12 @@ export default function InspeksiFasilitasPage() {
   const alatDipegang = isKoordinator ? alatSaya.filter((a) => a.status !== "Hilang") : [];
   const labelAlat = (a: AlatKerja) => `${a.kode} · ${a.nama}`;
 
-  const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => t.jenis === jenis && t.area === areaAktif && t.item.toLowerCase() === nama.trim().toLowerCase()) : undefined);
+  // §155 pencocokan temuan lebih longgar: nama tanpa keterangan dalam kurung ("Genset (Tugas Khusus)" = "Genset").
+  // Fasilitas gedung tetap per area (Lampu ada di banyak lantai); utilitas & alat cukup nama item -- temuan lama
+  // hasil pemindahan tiket Helpdesk bisa ber-area/jenis lain (mis. area "Basement").
+  const normItem = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
+  const temuanUntuk = (nama: string) => (nama.trim() ? temuanTerbuka.find((t) => normItem(t.item) === normItem(nama)
+    && (jenis === "gedung" ? t.jenis === "gedung" && t.area === areaAktif : t.jenis === jenis || t.jenis !== "gedung" || t.area === areaAktif)) : undefined);
   const sudahMingguIni = riwayat.find((l) => (l.jenis || "gedung") === jenis && l.area === areaAktif && (jenis === "alat" ? (l as InspeksiAsetLog & { periode_alat?: string }).periode_alat === periodeAlat : l.minggu_mulai === seninMingguIni));
   // §116 Peralatan Kebersihan = alat milik pemegang sendiri (register), bukan daftar umum
   const daftarMaster = () => (jenis === "alat" ? alatDipegang.map(labelAlat) : master[jenis].filter((x) => x.aktif !== false).map((x) => x.nama));
