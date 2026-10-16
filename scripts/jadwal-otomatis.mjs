@@ -23,7 +23,8 @@ const db = getFirestore();
 
 const HARI_KE_DEPAN = 60;
 const POLA = ["Shift 1", "Shift 1", "Shift 2", "Shift 2", "Off", "Off"];
-const PAKET_OB_BAWAAN = [["Basement", "Lantai 1"], ["Lantai 2"], ["Lantai 3", "Lantai 4"], ["Lantai 5"]];
+// §154 Lantai 5 opsional (ditunjuk manual Koordinator) -- tidak ikut paket otomatis
+const PAKET_OB_BAWAAN = [["Basement", "Lantai 1"], ["Lantai 2"], ["Lantai 3", "Lantai 4"]];
 const AREA_PELAYANAN = "Pelayanan Khusus OB"; // sinkron dgn PlottingOBPage.tsx
 
 const FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
@@ -108,7 +109,7 @@ async function jadwalOB() {
   if (Array.isArray(areaMaster) && areaMaster.length) {
     const grup = new Map();
     let bebas = 1000;
-    areaMaster.filter((a) => !String(a.area).toLowerCase().includes("pelayanan")).forEach((a) => {
+    areaMaster.filter((a) => !String(a.area).toLowerCase().includes("pelayanan") && !(a.opsional ?? a.area === "Lantai 5")).forEach((a) => {
       const bawaan = { Basement: 1, "Lantai 1": 1, "Lantai 2": 2, "Lantai 3": 3, "Lantai 4": 3, "Lantai 5": 4 }[a.area];
       const no = typeof a.paket === "number" && a.paket > 0 ? a.paket : bawaan ?? bebas++;
       grup.set(no, [...(grup.get(no) || []), a.area]);

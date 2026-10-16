@@ -214,8 +214,9 @@ export default function InspeksiFasilitasPage() {
     }
     setItems(daftarMaster().map((nama) => {
       const t = temuanUntuk(nama);
-      return t?.status === "Dikerjakan"
-        ? { nama, kondisi: t.kondisi || "Rusak", catatan: `Sedang ditangani (${kodeTemuan(t.id)})`, foto: t.foto || "", butuh_tindakan: false }
+      // §154 item dengan temuan terbuka (Baru/Dijadwalkan/Dikerjakan) = dalam perbaikan -> tidak dinilai ulang
+      return t
+        ? { nama, kondisi: t.kondisi || "Rusak", catatan: `Dalam perbaikan (${kodeTemuan(t.id)} · ${t.status})`, foto: t.foto || "", butuh_tindakan: false }
         : { nama, kondisi: "", catatan: "", foto: "", butuh_tindakan: false };
     }));
     setStep(2);
@@ -226,7 +227,7 @@ export default function InspeksiFasilitasPage() {
   const ubahItem = (i: number, patch: Partial<ItemForm>) => setItems((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const pilihKondisi = (i: number, kondisi: string) => {
     const t = temuanUntuk(items[i]?.nama || "");
-    if (t?.status === "Dikerjakan") { setModalTemuan([t]); return; }
+    if (t) { setModalTemuan([t]); return; }
     if (t && kondisiBermasalah(kondisi) && !kondisiBermasalah(items[i]?.kondisi || "")) setModalTemuan([t]);
     ubahItem(i, { kondisi, butuh_tindakan: t ? false : kondisiDefaultTindakan(kondisi) });
   };
@@ -270,9 +271,9 @@ export default function InspeksiFasilitasPage() {
       const custom = items.slice(jumlahStandar).filter((h) => h.nama.trim() && h.kondisi);
       if (standar.some((h) => !h.kondisi)) return showToast("Nilai kondisi semua item dulu.", "warning");
       semua = [...standar, ...custom];
-      const tanpaFoto = semua.find((h) => h.kondisi !== "Tidak Ada" && !h.foto);
+      const tanpaFoto = semua.find((h) => !temuanUntuk(h.nama) && h.kondisi !== "Tidak Ada" && !h.foto);
       if (tanpaFoto) return showToast(`Foto "${tanpaFoto.nama}" wajib diambil.`, "warning");
-      const tanpaKet = semua.find((h) => kondisiBermasalah(h.kondisi) && !h.catatan.trim());
+      const tanpaKet = semua.find((h) => !temuanUntuk(h.nama) && kondisiBermasalah(h.kondisi) && !h.catatan.trim());
       if (tanpaKet) return showToast(`Isi keterangan kondisi "${tanpaKet.nama}".`, "warning");
     }
 
@@ -432,23 +433,23 @@ export default function InspeksiFasilitasPage() {
 
           {items.map((h, i) => {
             const t = temuanUntuk(h.nama);
-            const kunci = t?.status === "Dikerjakan";
+            const kunci = !!t; // §154 semua temuan terbuka
             const custom = i >= daftarMaster().length;
             if (kunci && t) {
               return (
                 <div key={i} className="ka-kartu" style={{ borderStyle: "dashed", opacity: 0.85, cursor: "pointer" }} onClick={() => setModalTemuan([t])}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                     <b style={{ fontSize: "15px" }}>{h.nama}</b>
-                    <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "4px 10px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>🔧 Sedang ditangani · terkunci</span>
+                    <span style={{ fontSize: "11.5px", fontWeight: 800, padding: "4px 10px", borderRadius: "8px", background: "var(--info-50)", color: "var(--info)" }}>🔧 Dalam perbaikan · {t.status} · terkunci</span>
                   </div>
-                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>{kodeTemuan(t.id)} · dilaporkan {tglRingkas(t.waktu_lapor)} — tidak perlu dinilai sampai selesai.</div>
+                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>{kodeTemuan(t.id)} · dilaporkan {tglRingkas(t.waktu_lapor)} — tidak perlu dinilai; terbuka lagi otomatis setelah temuan ditandai selesai oleh Admin GA.</div>
                 </div>
               );
             }
             return (
               <div key={i} className="ka-kartu">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                  {modeTemuan ? <input className="ka-in" list="ka-opsi" style={{ flex: "1 1 160px", fontWeight: 700 }} placeholder={jenis === "alat" ? "Pilih alat bermasalah..." : "Item bermasalah, mis. Lampu"} value={h.nama} onChange={(e) => { const t = temuanUntuk(e.target.value); if (t?.status === "Dikerjakan") { setModalTemuan([t]); return; } ubahItem(i, { nama: e.target.value }); }} />
+                  {modeTemuan ? <input className="ka-in" list="ka-opsi" style={{ flex: "1 1 160px", fontWeight: 700 }} placeholder={jenis === "alat" ? "Pilih alat bermasalah..." : "Item bermasalah, mis. Lampu"} value={h.nama} onChange={(e) => { const t = temuanUntuk(e.target.value); if (t) { setModalTemuan([t]); return; } ubahItem(i, { nama: e.target.value }); }} />
                     : custom ? <input className="ka-in" style={{ flex: "1 1 160px", fontWeight: 700 }} placeholder="Nama item lain..." value={h.nama} onChange={(e) => ubahItem(i, { nama: e.target.value })} />
                     : <b style={{ fontSize: "15px", color: "var(--ink)" }}>{h.nama}</b>}
                   <div className="ka-kondisi">
@@ -458,7 +459,6 @@ export default function InspeksiFasilitasPage() {
                     {custom && <button type="button" onClick={() => setItems((l) => l.filter((_, j) => j !== i))} style={{ color: "var(--red-600)" }} aria-label="Hapus item"><IconTrash size={13} /></button>}
                   </div>
                 </div>
-                {t && <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--warn)", background: "var(--warn-50)", padding: "8px 10px", borderRadius: "10px" }}>⏳ Sudah tercatat sebagai temuan ({kodeTemuan(t.id)}, {t.status}) sejak {tglRingkas(t.waktu_lapor)} — belum ditangani. Tidak membuat temuan baru.</div>}
                 {h.kondisi && (modeTemuan || h.kondisi !== "Tidak Ada") && (
                   <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
                     <label className={`ka-foto${h.foto ? "" : " wajib"}`}>

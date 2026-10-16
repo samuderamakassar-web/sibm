@@ -3290,3 +3290,7 @@ Tidak diubah: titik patroli "Siram Tanaman" di Sesi 1 (bagian daftar patroli, bu
 
 ## 153. Titik Patroli "Siram Tanaman" Dihapus (15 Oktober 2026)
 Atas permintaan user, titik tambahan "Parkiran::Siram Tanaman" yang disisipkan di Sesi 1 (buatGroupedPatroli) dihapus bersama parameternya. Titik "Cek AC Menyala" Shift 2 hari kerja tetap.
+
+## 154. Inspeksi: Item Dalam Perbaikan Terkunci + Lantai 5 Opsional (16 Oktober 2026)
+1. InspeksiFasilitasPage: item yang punya temuan TERBUKA (Baru / Dijadwalkan / Dikerjakan -- temuanTerbuka sudah disaring STATUS_TEMUAN_TERBUKA, live onSnapshot) terkunci "🔧 Dalam perbaikan · <status> · terkunci", terisi kondisi temuan, dikecualikan dari wajib foto/keterangan; terbuka lagi otomatis setelah Admin GA menandai temuan selesai. Berlaku utilitas (mode lengkap) & gedung/alat (mode temuan). Dulu hanya status "Dikerjakan" yang terkunci.
+2. Area opsional: AreaChecklist.opsional + areaOpsional() (bawaan Lantai 5 opsional bila belum diatur). paketPlottingDari & scripts/jadwal-otomatis.mjs (PAKET_OB_BAWAAN tanpa Lantai 5) mengecualikan area opsional -> tidak dibagikan plotting otomatis & tidak dihitung paket/posisi CS wajib di Beban Kerja. Admin SOP Checklist: centang "Opsional" per area (nomor paket nonaktif). Plotting OB: label "opsional — tunjuk bergiliran bila perlu"; Koordinator memilih petugas manual.

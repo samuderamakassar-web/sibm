@@ -13,7 +13,10 @@ export interface PertanyaanItem { id: string; teks: string; }
 export interface SegmentConfig { id: string; nama: string; pertanyaan: PertanyaanItem[]; aktif?: boolean; }
 /** paket = nomor pembagian plotting OB (§82): area dgn nomor sama dipegang 1 orang yang sama.
  *  Area Pelayanan tidak ikut rotasi (dipegang OB Pelayanan Tetap). */
-export interface AreaChecklist { area: string; segmen: SegmentConfig[]; paket?: number; }
+/** §154 opsional = tidak ikut plotting otomatis & tidak dihitung posisi CS wajib; ditunjuk manual oleh Koordinator.
+ *  Bawaan: Lantai 5 opsional (selama field belum pernah diatur). */
+export interface AreaChecklist { area: string; segmen: SegmentConfig[]; paket?: number; opsional?: boolean; }
+export const areaOpsional = (a: Pick<AreaChecklist, "area" | "opsional">) => a.opsional ?? a.area === "Lantai 5";
 export interface TugasTambahan { nama_staf: string; segmen: SegmentConfig; }
 export interface ItemSederhana { nama: string; aktif: boolean; }
 export interface ItemInspeksiDriver { key: string; label: string; aktif: boolean; }
@@ -259,7 +262,7 @@ export const INSPEKSI_DRIVER_BAWAAN: ItemInspeksiDriver[] = [
 export function paketPlottingDari(area: AreaChecklist[]): string[][] {
   const grup = new Map<number, string[]>();
   let nomorBebas = 1000;
-  area.filter((a) => !a.area.toLowerCase().includes("pelayanan")).forEach((a) => {
+  area.filter((a) => !a.area.toLowerCase().includes("pelayanan") && !areaOpsional(a)).forEach((a) => {
     // Data tersimpan sebelum §82 belum punya paket -> pakai paket bawaan sesuai nama area.
     const bawaan = CHECKLIST_OB_BAWAAN.find((b) => b.area === a.area)?.paket;
     const no = typeof a.paket === "number" && a.paket > 0 ? a.paket : bawaan ?? nomorBebas++;

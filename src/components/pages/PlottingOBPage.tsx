@@ -18,7 +18,7 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
-import { paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
+import { areaOpsional, paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
 import PetugasUtilitasPicker from "../PetugasUtilitasPicker";
 
 // ==========================================
@@ -455,7 +455,7 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
                       : staffList;
                     return (
                       <div key={area}>
-                        <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px" }}>{area}</label>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "var(--ink-soft)", marginBottom: "4px" }}>{area}{masterOB.area.some((x) => x.area === area && areaOpsional(x)) && <span style={{ fontWeight: 600, color: "var(--muted)" }}> · opsional — tunjuk bergiliran bila perlu</span>}</label>
                         <select
                           value={plotHariIni[area] || ""}
                           onChange={(e) => handleUbahArea(area, e.target.value)}

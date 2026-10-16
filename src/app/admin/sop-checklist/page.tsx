@@ -20,7 +20,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import {
   idBaru, JENIS_SERVIS_BERKALA, useChecklistOB, useFasilitasOB, useInspeksiDriver, useJenisServis,
-  type AreaChecklist, type ItemInspeksiDriver, type ItemSederhana, type JenisServis, type SegmentConfig, type TugasTambahan,
+  type AreaChecklist, type ItemInspeksiDriver, type ItemSederhana, type JenisServis, type SegmentConfig, type TugasTambahan, areaOpsional,
 } from "../../../lib/sopChecklist";
 
 type Tab = "ob" | "fasilitas" | "driver" | "servis" | "patroli";
@@ -200,8 +200,14 @@ export default function SopChecklistPage() {
                   {!a.area.toLowerCase().includes("pelayanan") && (
                     <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }} title="Area dengan nomor paket sama dipegang 1 orang yang sama saat plotting otomatis">
                       Paket
-                      <input type="number" min={1} max={20} className="sc-input" style={{ width: "56px", flex: "none" }} value={a.paket ?? ""}
+                      <input type="number" min={1} max={20} className="sc-input" style={{ width: "56px", flex: "none" }} value={a.paket ?? ""} disabled={areaOpsional(a)}
                         onChange={(e) => dOb.ubah((d) => { d.area[ai].paket = e.target.value ? Number(e.target.value) : undefined; })} />
+                    </label>
+                  )}
+                  {/* §154 area opsional: tidak ikut plotting otomatis, ditunjuk bergiliran oleh Koordinator */}
+                  {!a.area.toLowerCase().includes("pelayanan") && (
+                    <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)", cursor: "pointer" }} title="Tidak ikut plotting otomatis; Koordinator menunjuk petugas bergiliran bila perlu">
+                      <input type="checkbox" checked={areaOpsional(a)} onChange={(e) => dOb.ubah((d) => { d.area[ai].opsional = e.target.checked; })} /> Opsional
                     </label>
                   )}
                   <TombolHapus label={`Hapus area ${a.area}`} onClick={async () => { if (await yakinHapus(`area ${a.area} (beserta checklist & plotting-nya)`)) dOb.ubah((d) => { d.area.splice(ai, 1); }); }} />
