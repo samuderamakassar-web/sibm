@@ -3304,3 +3304,6 @@ Keputusan user: Inspeksi Fasilitas Gedung & Utilitas dibedakan = menu terpisah.
 2. InspeksiFasilitasPage membaca ?jenis= -> jenis dikunci, tab jenis disembunyikan, judul & subjudul per jenis; bila tidak ditugaskan tampil pesan. Tanpa parameter tetap tampilan lama (tab).
 3. Mode temuan: kondisi "Tidak Ada" tidak wajib foto (label "Foto" tanpa *); kondisi lain tetap wajib foto & keterangan.
 4. Panduan PDF 03 OB & CS dan 04 Koordinator diperbarui.
+
+## 157. Info Jadwal Otomatis di Plotting OB & Jadwal Security (16 Oktober 2026)
+Permintaan user: plotting otomatis berlanjut tanpa generate ulang. Fitur sudah ada sejak §82 (scripts/jadwal-otomatis.mjs, harian ~00:30 WITA, isi tanggal KOSONG s.d. 60 hari ke depan, tidak menimpa manual); riwayat Actions 5 hari terakhir sukses. Ditambahkan JadwalOtomatisInfo di Plotting OB & Pengaturan Jadwal Security: penjelasan + "terisi s.d. <tanggal>" (OB: dokumen daily_plots terakhir; Security: tanggal terakhir berisi di security_monthly_schedules) + syarat (OB Pelayanan Tetap dipilih; staf Security punya minimal 1 hari jadwal).

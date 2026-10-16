@@ -20,6 +20,7 @@ import { useAuthGuard } from "../../hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
 import { areaOpsional, paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
 import PetugasUtilitasPicker from "../PetugasUtilitasPicker";
+import JadwalOtomatisInfo from "../JadwalOtomatisInfo";
 
 // ==========================================
 // KONSTANTA
@@ -520,6 +521,7 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
                   Tiap 1 Minggu
                 </button>
               </div>
+              <div style={{ marginTop: "12px" }}><JadwalOtomatisInfo jenis="ob" /></div>
               <button
                 onClick={generateSebulan}
                 disabled={isGenerating}

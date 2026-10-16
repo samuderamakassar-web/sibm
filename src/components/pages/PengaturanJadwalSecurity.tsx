@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
+import JadwalOtomatisInfo from "../JadwalOtomatisInfo";
 
 interface SlotHarian {
   tanggalStr: string;
@@ -386,6 +387,7 @@ export default function PengaturanJadwalSecurity() {
           </div>
 
           <div style={{ background: "#ebf8ff", border: "1px solid #bee3f8", padding: "12px 15px", borderRadius: "12px", marginBottom: "25px", fontSize: "12px", color: "#2b6cb0", display: "flex", flexDirection: "column", gap: "6px", fontWeight: "bold", lineHeight: "1.5" }}>
+            <JadwalOtomatisInfo jenis="security" />
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ fontSize: "16px" }}>💡</span> Cara Pakai:</div>
             <ul style={{ margin: 0, paddingLeft: "30px", fontWeight: "normal" }}>
               <li>Hari pertama periode <b>otomatis disambung</b> dari 2 hari terakhir periode sebelumnya (kalau datanya ada). Nama staf yang auto-tersambung ditandai badge 🔄.</li>
