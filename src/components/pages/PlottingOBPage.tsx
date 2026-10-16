@@ -12,6 +12,8 @@ import {
   setDoc,
   writeBatch,
   serverTimestamp,
+  deleteField,
+  FieldPath,
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useToast } from "../ui/ToastProvider";
@@ -306,6 +308,27 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
   // ==========================================
   // 7. Generate Otomatis 1 Bulan
   // ==========================================
+  // §159 plotting lama (sebelum Lantai 5 opsional) masih berisi area opsional -> kosongkan mulai hari ini
+  const areaOpsionalList = masterOB.area.filter((x) => areaOpsional(x)).map((x) => x.area);
+  const kosongkanOpsional = async () => {
+    if (!areaOpsionalList.length) return showToast("Tidak ada area opsional.", "info");
+    const mulai = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date());
+    const yakin = await confirm({ title: `Kosongkan ${areaOpsionalList.join(", ")}`, message: `Hapus penugasan ${areaOpsionalList.join(", ")} di semua plotting mulai ${mulai}. Area ini tidak muncul di checklist & tidak dihitung pengurangan poin sampai Koordinator menunjuk petugas lagi.`, confirmText: "Ya, kosongkan" });
+    if (!yakin) return;
+    try {
+      const snap = await getDocs(query(collection(db, "daily_plots"), where(documentId(), ">=", mulai)));
+      const batch = writeBatch(db);
+      let n = 0;
+      snap.docs.forEach((d) => {
+        const plot = (d.data().plot_lantai || {}) as Record<string, string>;
+        areaOpsionalList.forEach((a) => { if (plot[a]) { batch.update(d.ref, new FieldPath("plot_lantai", a), deleteField()); n++; } });
+      });
+      if (n) await batch.commit();
+      showToast(n ? `${n} penugasan area opsional dikosongkan.` : "Tidak ada penugasan area opsional ke depan.", "success");
+      setPlotHariIni((p) => { const b = { ...p }; areaOpsionalList.forEach((a) => { delete b[a]; }); return b; });
+    } catch (e) { console.error(e); showToast("Gagal mengosongkan.", "error"); }
+  };
+
   const generateSebulan = async () => {
     if (!pelayananTetap) {
       showToast("Pilih dulu OB yang dedicated Pelayanan sebelum generate.", "warning");
@@ -522,6 +545,11 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
                 </button>
               </div>
               <div style={{ marginTop: "12px" }}><JadwalOtomatisInfo jenis="ob" /></div>
+              {areaOpsionalList.length > 0 && (
+                <button type="button" onClick={kosongkanOpsional} className="sa-btn is-soft" style={{ width: "100%", marginBottom: "10px" }}>
+                  Kosongkan {areaOpsionalList.join(", ")} mulai hari ini
+                </button>
+              )}
               <button
                 onClick={generateSebulan}
                 disabled={isGenerating}

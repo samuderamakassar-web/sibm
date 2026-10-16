@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp, where } from "firebase/firestore";
 import { daftarTahunSejak, rentangBulanTahun } from "../../../lib/rentangFilter";
 import * as XLSX from "xlsx";
@@ -368,6 +369,12 @@ export default function AdminHelpdeskPage() {
                 </button>
               );
             })}
+            {/* §159 tiket hasil inspeksi yang dipindahkan tidak hilang -- ada di Temuan & Kondisi Aset */}
+            {tickets.some((t) => t.status === STATUS_DIPINDAHKAN) && (
+              <Link href="/admin/kondisi-aset" className="hd-chip" style={{ textDecoration: "none" }}>
+                Dipindahkan ke Temuan Aset<span>{tickets.filter((t) => t.status === STATUS_DIPINDAHKAN).length}</span> →
+              </Link>
+            )}
           </div>
           <div className="hd-alat">
             <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} aria-label="Bulan">
