@@ -4,7 +4,7 @@
  * Validasi Karyawan (§59) -- Security menjawab kartu yang dibuat cron scripts/validasi-karyawan.mjs:
  *   - Lembur (lewat 18:00): Lanjut lembur (foto + area) / Akan pulang.
  *   - Belum tercatat masuk (09:00 & 13:00 hari kerja): Lupa diinput (check-in susulan, jam diatur) /
- *     Tidak masuk (alasan + foto wajib, datangi mejanya).
+ *     Tidak masuk (alasan + foto wajib, datangi mejanya; Dinas luar tanpa foto, tujuan wajib -- §161).
  * Logika simpan ada di src/lib/validasiKaryawan.ts.
  * §92: kartu lembur juga dihitung LANGSUNG di halaman dari Buku Tamu (sesi "Di Dalam Area" sejak 18:00),
  * karena cron GitHub kenyataannya jalan tiap ~3 jam. Kartu "virtual" disimpan saat Security menjawab.
@@ -160,9 +160,13 @@ export default function ValidasiKaryawanPage() {
       () => setMengunggah(false));
   };
 
+  // §161 Dinas luar tidak perlu foto meja (mejanya pasti kosong) -> kolom foto disembunyikan agar tidak ada unggahan
+  // sembarang yang memenuhi penyimpanan; sebagai gantinya tujuan/keterangan dinas wajib diisi.
+  const tanpaFoto = aksi?.jenis === "tidak_masuk" && alasan === "Dinas luar";
   const simpan = async () => {
     if (!aksi) return;
-    if ((aksi.jenis === "lanjut" || aksi.jenis === "tidak_masuk") && !foto) return showToast("Foto wajib diambil dulu.", "warning");
+    if ((aksi.jenis === "lanjut" || aksi.jenis === "tidak_masuk") && !tanpaFoto && !foto) return showToast("Foto wajib diambil dulu.", "warning");
+    if (tanpaFoto && !keterangan.trim()) return showToast("Isi tujuan / keterangan dinas luar.", "warning");
     if (aksi.jenis === "lanjut" && !area.trim()) return showToast("Isi area / lantai lembur.", "warning");
     if (aksi.jenis === "susulan" && sudahMasuk.has(normalNama(aksi.v.nama))) {
       setAksi(null);
@@ -179,7 +183,7 @@ export default function ValidasiKaryawanPage() {
         showToast(`${aksi.v.nama} dicatat masuk pukul ${jamMasuk} (input susulan).`, "success");
       } else {
         await updateDoc(doc(db, "validasi_karyawan", aksi.v.id), {
-          status: "tidak_masuk", alasan, keterangan: keterangan.trim(), foto_url: foto,
+          status: "tidak_masuk", alasan, keterangan: keterangan.trim(), foto_url: tanpaFoto ? "" : foto,
           divalidasi_oleh: petugas, waktu_validasi: serverTimestamp(),
         });
         showToast(`${aksi.v.nama} ditandai tidak masuk (${alasan}).`, "success");
@@ -395,13 +399,14 @@ export default function ValidasiKaryawanPage() {
                   </select>
                 </div>
                 <div className="vk-field">
-                  <label htmlFor="vk-ket">Keterangan</label>
-                  <input id="vk-ket" className="vk-input" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Misal: info dari rekan satu ruangan" />
+                  <label htmlFor="vk-ket">{tanpaFoto ? "Tujuan / keterangan dinas *" : "Keterangan"}</label>
+                  <input id="vk-ket" className="vk-input" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder={tanpaFoto ? "Misal: dinas ke Kendari s.d. 18 Okt, info dari atasan" : "Misal: info dari rekan satu ruangan"} />
+                  {tanpaFoto && <p style={{ fontSize: "12px", color: "var(--muted)", margin: "6px 0 0" }}>Dinas luar tidak perlu foto meja.</p>}
                 </div>
               </>
             )}
 
-            {aksi.jenis !== "susulan" && (
+            {aksi.jenis !== "susulan" && !tanpaFoto && (
               <div className="vk-field">
                 <label>{aksi.jenis === "lanjut" ? "Foto karyawan di lokasi *" : "Foto meja karyawan *"}</label>
                 <div className="vk-foto">

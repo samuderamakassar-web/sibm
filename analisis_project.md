@@ -3322,3 +3322,7 @@ Laporan user: Zainal dicentang sebagai Petugas Inspeksi Fasilitas Gedung, tetapi
 3. Tombol kartu: Dikerjakan → "✓ Selesaikan" (modal langsung mode Selesai: tanggal selesai*, foto hasil*, biaya); Disposal → "Konfirmasi musnah". Pilihan status di modal mengikuti status sekarang (PILIHAN_STATUS). Setiap perubahan tercatat di riwayat_status (status, dari, oleh, waktu, catatan). Filter baru "Disposal".
 4. Alat kebersihan yang Dimusnahkan → aset_alat dengan kode yang sama otomatis Afkir + riwayat.
 5. Inspeksi: kueri kunci memakai STATUS_TEMUAN_KUNCI (Baru, Dijadwalkan, Dikerjakan, Ditunda, Disposal, Dimusnahkan); label 🗑 untuk disposal dengan keterangan hanya Admin GA yang dapat membuka kembali. Halaman Kondisi Aset hanya Admin GA (magang tidak termasuk).
+
+## 161. Validasi Tidak Masuk: Dinas Luar Tanpa Foto (16 Oktober 2026)
+
+Di Validasi Kehadiran Security, alasan "Dinas luar" kini menyembunyikan kolom foto meja (foto diunggah ke Cloudinary begitu diambil, jadi kolomnya dihilangkan, bukan sekadar tidak wajib) agar tidak ada unggahan sembarang yang memenuhi penyimpanan. Sebagai gantinya "Tujuan / keterangan dinas" wajib diisi. foto_url disimpan kosong untuk Dinas luar. Alasan lain (Izin, Sakit, Cuti, Tanpa kabar) tetap wajib foto meja.
