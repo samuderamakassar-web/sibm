@@ -1,7 +1,10 @@
 "use client";
 
 /**
- * Evaluasi Biaya Tahunan (§164) -- khusus Super Admin. Bahan evaluasi & perencanaan tahun depan.
+ * Evaluasi Biaya Tahunan (§164) -- bahan evaluasi & perencanaan tahun depan.
+ * §165 per wilayah: Admin wilayah (Administrator dengan daerah) hanya melihat wilayahnya; Super Admin memilih
+ * "Semua wilayah" atau 1 wilayah. Rekap & target disimpan per wilayah (kunci "2025" = wilayah default/Makassar,
+ * "Jakarta|2025" = wilayah lain, "SEMUA|2027" = target gabungan).
  * 3 kartu: (1) biaya tahun lalu, (2) tahun berjalan vs PERIODE SAMA tahun lalu (nominal & %) + proyeksi setahun,
  * (3) target reduksi tahun depan (% dipilih) dibagi per bagian + saran berbasis data.
  *
@@ -21,16 +24,21 @@ import { useEffect, useState } from "react";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
-import { useAuthGuard, isSuperAdmin } from "../../../hooks/useAuthGuard";
+import { useAuthGuard, isAdministrator, isSuperAdmin } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
-import { daerahTulis } from "../../../lib/daerah";
+import { DAERAH_DEFAULT, rapikanNamaDaerah } from "../../../lib/daerah";
 import { LABEL_SUMBER, muatDataTahun, type DataTahun, type Jenis, type Realisasi, type Sumber } from "../../../lib/realisasiBiaya";
 
 const DOC_EVALUASI = doc(db, "anggaran", "evaluasi_biaya");
 const BELUM = "Belum dialokasikan";
+const SEMUA = "SEMUA";
+/** Kunci rekap/target per wilayah -- wilayah default memakai kunci tahun polos (kompatibel data §164). */
+const kunciWilayah = (wilayah: string, th: number) => (wilayah === DAERAH_DEFAULT ? String(th) : `${wilayah}|${th}`);
+const wilayahDariKunci = (k: string) => (k.includes("|") ? k.split("|")[0] : DAERAH_DEFAULT);
+const tahunDariKunci = (k: string) => k.split("|").pop() || "";
 interface BarisRekap { jenis: Jenis; bagian: string; jumlah: number }
 interface Evaluasi { rekap?: Record<string, { baris: BarisRekap[]; oleh?: string; sumber?: string }>; target_reduksi?: Record<string, number> }
 
@@ -105,17 +113,19 @@ export default function EvaluasiBiayaPage() {
   const hari = hariIniWITA();
   const tahunSekarang = Number(hari.slice(0, 4));
   const [tahun, setTahun] = useState(tahunSekarang);
-  const [ini, setIni] = useState<DataTahun | null>(null);
-  const [lalu, setLalu] = useState<DataTahun | null>(null);
+  const [iniMentah, setIni] = useState<DataTahun | null>(null);
+  const [laluMentah, setLalu] = useState<DataTahun | null>(null);
   const [evaluasi, setEvaluasi] = useState<Evaluasi>({});
   const [memuat, setMemuat] = useState(true);
   const [targetDraf, setTargetDraf] = useState<string>("");
   const [rekapForm, setRekapForm] = useState<BarisRekap[] | null>(null);
   const [caraHitung, setCaraHitung] = useState(false);
+  const [pilihWilayah, setPilihWilayah] = useState("");
   const superAdmin = !!session && isSuperAdmin(session.role, session.daerah);
+  const bolehAkses = !!session && (superAdmin || isAdministrator(session.role));
 
   useEffect(() => {
-    if (!isReady || !superAdmin) return;
+    if (!isReady || !bolehAkses) return;
     let batal = false;
     const t = setTimeout(() => { if (!batal) setMemuat(true); }, 0);
     Promise.all([muatDataTahun(tahun), muatDataTahun(tahun - 1), getDoc(DOC_EVALUASI)]).then(([a, b, e]) => {
@@ -123,32 +133,45 @@ export default function EvaluasiBiayaPage() {
       setIni(a); setLalu(b); setEvaluasi((e.data() as Evaluasi) || {}); setMemuat(false);
     }).catch((e) => { console.error("[evaluasi]", e); if (!batal) setMemuat(false); });
     return () => { batal = true; clearTimeout(t); };
-  }, [isReady, superAdmin, tahun]);
+  }, [isReady, bolehAkses, tahun]);
 
   if (!isReady || !session) return null;
-  if (!superAdmin) {
+  if (!bolehAkses) {
     return (
       <AdminShell title="Evaluasi Biaya" userName={session.nama || "Admin"}>
-        <Tile><div style={{ padding: "24px", textAlign: "center", color: "var(--muted)" }}>Halaman ini khusus Super Admin (akun Administrator dengan wilayah PUSAT).</div></Tile>
+        <Tile><div style={{ padding: "24px", textAlign: "center", color: "var(--muted)" }}>Halaman ini khusus Administrator (Super Admin & admin wilayah).</div></Tile>
       </AdminShell>
     );
   }
+
+  // ---------- wilayah ----------
+  const wilayahAkun = rapikanNamaDaerah(session.daerah) || DAERAH_DEFAULT;
+  const wilayah = superAdmin ? pilihWilayah || SEMUA : wilayahAkun;
+  const daftarWilayah = Array.from(new Set([DAERAH_DEFAULT, ...[...(iniMentah?.real || []), ...(laluMentah?.real || [])].map((r) => r.daerah || DAERAH_DEFAULT),
+    ...Object.keys(evaluasi.rekap || {}).map(wilayahDariKunci)])).filter((w) => w !== SEMUA).sort();
+  const saring = (d: DataTahun | null): DataTahun | null => (d && wilayah !== SEMUA ? { ...d, real: d.real.filter((r) => (r.daerah || DAERAH_DEFAULT) === wilayah) } : d);
+  const ini = saring(iniMentah), lalu = saring(laluMentah);
+  const namaWilayah = wilayah === SEMUA ? "Semua wilayah" : wilayah;
 
   // ---------- olah data ----------
   const berjalan = tahun === tahunSekarang;
   const sampaiIni = berjalan ? hari : `${tahun}-12-31`;
   const porsiTahun = berjalan ? Math.min(1, hariKe(hari) / jumlahHari(tahun)) : 1;
   const tanggalSamaLalu = `${tahun - 1}${sampaiIni.slice(4)}`;
-  const rekapLalu = evaluasi.rekap?.[String(tahun - 1)];
+  const rekapEntri = Object.entries(evaluasi.rekap || {}).filter(([k]) => tahunDariKunci(k) === String(tahun - 1) && (wilayah === SEMUA || wilayahDariKunci(k) === wilayah));
+  const rekapLalu = rekapEntri.length ? { baris: rekapEntri.flatMap(([, v]) => v.baris || []), oleh: rekapEntri.map(([, v]) => v.oleh).filter(Boolean).join(", "), sumber: rekapEntri[0][1].sumber } : undefined;
   const lewatRekap = !!rekapLalu?.baris?.length;
   const adaDataLalu = !!lalu?.real.length;
 
   const aIni = agregat(ini, sampaiIni);
-  const aLaluFull = lewatRekap ? new Map(rekapLalu!.baris.map((b) => [kunci(b.jenis, b.bagian), b.jumlah])) : agregat(lalu);
+  const aLaluFull = new Map<string, number>();
+  if (lewatRekap) rekapLalu!.baris.forEach((b) => aLaluFull.set(kunci(b.jenis, b.bagian), (aLaluFull.get(kunci(b.jenis, b.bagian)) || 0) + b.jumlah));
+  else agregat(lalu).forEach((v, k) => aLaluFull.set(k, v));
   // periode sama tahun lalu: data bertanggal bila ada, selain itu rekap diprorata
   const proratar = !adaDataLalu || (lewatRekap && total(agregat(lalu)) < total(aLaluFull) * 0.5);
   const aLaluSama = proratar ? new Map(Array.from(aLaluFull.entries()).map(([k, v]) => [k, v * porsiTahun])) : agregat(lalu, tanggalSamaLalu);
-  const rencanaCapexIni = (ini?.items || []).filter((i) => i.jenis === "CAPEX");
+  const rabBerlaku = wilayah === SEMUA || wilayah === (iniMentah?.rabDaerah || DAERAH_DEFAULT);
+  const rencanaCapexIni = rabBerlaku ? (ini?.items || []).filter((i) => i.jenis === "CAPEX") : [];
   const proyeksi = new Map<string, number>();
   new Set([...aIni.keys(), ...rencanaCapexIni.map((i) => kunci("CAPEX", i.kelompok || "Lainnya"))]).forEach((k) => {
     const [j] = k.split("|") as [Jenis];
@@ -161,7 +184,8 @@ export default function EvaluasiBiayaPage() {
   const totLalu = total(aLaluFull), totIni = total(aIni), totLaluSama = total(aLaluSama), totProyeksi = total(proyeksi);
   const opexLalu = total(aLaluFull, opexLike), opexIni = total(aIni, opexLike), opexLaluSama = total(aLaluSama, opexLike), opexProyeksi = total(proyeksi, opexLike);
   const tahunTarget = tahun + 1;
-  const targetPct = targetDraf !== "" ? Number(targetDraf) || 0 : evaluasi.target_reduksi?.[String(tahunTarget)] ?? 5;
+  const kunciTarget = wilayah === SEMUA ? `${SEMUA}|${tahunTarget}` : kunciWilayah(wilayah, tahunTarget);
+  const targetPct = targetDraf !== "" ? Number(targetDraf) || 0 : evaluasi.target_reduksi?.[kunciTarget] ?? 5;
   const hematTotal = opexProyeksi * (targetPct / 100);
 
   const semuaKunci = Array.from(new Set([...aLaluFull.keys(), ...aIni.keys(), ...proyeksi.keys()]));
@@ -206,13 +230,14 @@ export default function EvaluasiBiayaPage() {
   // ---------- simpan ----------
   const simpanTarget = async (p: number) => {
     try {
-      await setDoc(DOC_EVALUASI, { target_reduksi: { [String(tahunTarget)]: p }, daerah: daerahTulis(), diperbarui_oleh: session.nama || "-", diperbarui_pada: serverTimestamp() }, { merge: true });
-      setEvaluasi((e) => ({ ...e, target_reduksi: { ...(e.target_reduksi || {}), [String(tahunTarget)]: p } }));
+      await setDoc(DOC_EVALUASI, { target_reduksi: { [kunciTarget]: p }, diperbarui_oleh: session.nama || "-", diperbarui_pada: serverTimestamp() }, { merge: true });
+      setEvaluasi((e) => ({ ...e, target_reduksi: { ...(e.target_reduksi || {}), [kunciTarget]: p } }));
       setTargetDraf("");
-      showToast(`Target reduksi ${tahunTarget}: ${p}%`, "success");
+      showToast(`Target reduksi ${namaWilayah} ${tahunTarget}: ${p}%`, "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan target.", "error"); }
   };
   const bukaRekap = () => {
+    if (wilayah === SEMUA) return showToast("Pilih 1 wilayah dulu untuk mengisi rekap.", "warning");
     const dasar = lewatRekap ? rekapLalu!.baris : Array.from(agregat(lalu).entries()).map(([k, v]) => { const [j, b] = k.split("|"); return { jenis: j as Jenis, bagian: b, jumlah: Math.round(v) }; });
     const bagianIni = Array.from(new Set((ini?.items || []).map((i) => kunci(i.jenis, i.kelompok || "Lainnya"))));
     const tambah = bagianIni.filter((k) => !dasar.some((d) => kunci(d.jenis, d.bagian) === k)).map((k) => { const [j, b] = k.split("|"); return { jenis: j as Jenis, bagian: b, jumlah: 0 }; });
@@ -222,23 +247,24 @@ export default function EvaluasiBiayaPage() {
     if (!rekapForm) return;
     const bersih = rekapForm.filter((b) => b.bagian.trim()).map((b) => ({ ...b, bagian: b.bagian.trim(), jumlah: Math.round(b.jumlah) || 0 }));
     try {
-      await setDoc(DOC_EVALUASI, { rekap: { [String(tahun - 1)]: { baris: bersih, oleh: session.nama || "-", sumber: adaDataLalu ? "tutup buku" : "manual" } }, daerah: daerahTulis(), diperbarui_pada: serverTimestamp() }, { merge: true });
-      setEvaluasi((e) => ({ ...e, rekap: { ...(e.rekap || {}), [String(tahun - 1)]: { baris: bersih, oleh: session.nama || "-" } } }));
+      const k = kunciWilayah(wilayah, tahun - 1);
+      await setDoc(DOC_EVALUASI, { rekap: { [k]: { baris: bersih, oleh: session.nama || "-", sumber: adaDataLalu ? "tutup buku" : "manual" } }, diperbarui_pada: serverTimestamp() }, { merge: true });
+      setEvaluasi((e) => ({ ...e, rekap: { ...(e.rekap || {}), [k]: { baris: bersih, oleh: session.nama || "-" } } }));
       setRekapForm(null);
-      showToast(`Rekap ${tahun - 1} tersimpan.`, "success");
+      showToast(`Rekap ${namaWilayah} ${tahun - 1} tersimpan.`, "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan rekap.", "error"); }
   };
   const ekspor = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      [`Evaluasi Biaya ${tahun} (per ${sampaiIni})`],
+      [`Evaluasi Biaya ${namaWilayah} ${tahun} (per ${sampaiIni})`],
       ["Jenis", "Bagian", `Total ${tahun - 1}`, `${tahun - 1} periode sama`, `${tahun} s.d. ${sampaiIni}`, "Naik/Turun (%)", `Proyeksi ${tahun}`, `Target ${tahunTarget}`, "Hemat", "Saran"],
       ...baris.map((b) => [b.jenis, b.bagian, Math.round(b.lalu), Math.round(b.laluSama), Math.round(b.ini), b.naik === null ? "" : Number(b.naik.toFixed(1)), Math.round(b.proy), b.target === null ? "" : Math.round(b.target), Math.round(b.hemat), b.saran.join(" | ")]),
       [],
       ["TOTAL", "", Math.round(totLalu), Math.round(totLaluSama), Math.round(totIni), pct(totIni, totLaluSama) === null ? "" : Number(pct(totIni, totLaluSama)!.toFixed(1)), Math.round(totProyeksi), Math.round(opexProyeksi - hematTotal), Math.round(hematTotal)],
       [`Target reduksi OPEX ${tahunTarget}: ${targetPct}%`],
     ]), "Evaluasi");
-    XLSX.writeFile(wb, `Evaluasi_Biaya_${tahun}.xlsx`);
+    XLSX.writeFile(wb, `Evaluasi_Biaya_${namaWilayah.replace(/\s+/g, "_")}_${tahun}.xlsx`);
   };
 
   const warnaNaik = (p: number | null) => (p === null ? "var(--muted)" : p > 0 ? "var(--red-600)" : "var(--ok)");
@@ -246,8 +272,14 @@ export default function EvaluasiBiayaPage() {
   const label: React.CSSProperties = { fontSize: "12px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" };
 
   return (
-    <AdminShell title="Evaluasi Biaya" subtitle="Tahun lalu · tahun berjalan · target tahun depan — khusus Super Admin" userName={session.nama || "Admin"}
+    <AdminShell title="Evaluasi Biaya" subtitle={`${namaWilayah} · tahun lalu, tahun berjalan & target tahun depan`} userName={session.nama || "Admin"}
       actions={<>
+        {superAdmin && (
+          <select className="ev-in" value={wilayah} onChange={(e) => setPilihWilayah(e.target.value)} aria-label="Wilayah">
+            <option value={SEMUA}>Semua wilayah</option>
+            {daftarWilayah.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+        )}
         <select className="ev-in" value={tahun} onChange={(e) => setTahun(Number(e.target.value))} aria-label="Tahun evaluasi">
           {[tahunSekarang, tahunSekarang - 1, tahunSekarang - 2].map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
@@ -271,8 +303,8 @@ export default function EvaluasiBiayaPage() {
           {!lewatRekap && !adaDataLalu && (
             <Tile style={{ marginBottom: "12px", background: "var(--warn-50)" }}>
               <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: "240px", fontSize: "13px", color: "var(--ink)" }}><b>Data {tahun - 1} belum ada di sistem.</b> Isi rekap biaya {tahun - 1} per bagian dari Excel lama sekali saja — setelah itu perbandingan & target otomatis.</div>
-                <button type="button" className="sa-btn is-primary" onClick={bukaRekap}>Isi rekap {tahun - 1}</button>
+                <div style={{ flex: 1, minWidth: "240px", fontSize: "13px", color: "var(--ink)" }}><b>Data {tahun - 1} {namaWilayah} belum ada di sistem.</b> {wilayah === SEMUA ? "Pilih wilayah di kanan atas, lalu isi rekap per bagian dari Excel lama." : `Isi rekap biaya ${tahun - 1} per bagian dari Excel lama sekali saja — setelah itu perbandingan & target otomatis.`}</div>
+                {wilayah !== SEMUA && <button type="button" className="sa-btn is-primary" onClick={bukaRekap}>Isi rekap {tahun - 1}</button>}
               </div>
             </Tile>
           )}
@@ -284,7 +316,7 @@ export default function EvaluasiBiayaPage() {
               <div className="ev-angka">{rupiah(totLalu)}</div>
               <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Operasional (OPEX) {rupiah(opexLalu)} · Investasi (CAPEX) {rupiah(totLalu - opexLalu)}</div>
               <div style={{ fontSize: "12px", color: "var(--muted)" }}>Sumber: {lewatRekap ? `rekap ${rekapLalu?.sumber || "manual"}${rekapLalu?.oleh ? ` oleh ${rekapLalu.oleh}` : ""}` : adaDataLalu ? "data sistem (belum tutup buku)" : "belum ada"}</div>
-              <div style={{ marginTop: "auto" }}><button type="button" className="sa-btn is-soft" onClick={bukaRekap}>{lewatRekap ? "Ubah rekap" : adaDataLalu ? `Tutup buku ${tahun - 1}` : `Isi rekap ${tahun - 1}`}</button></div>
+              <div style={{ marginTop: "auto" }}>{wilayah === SEMUA ? <span style={{ fontSize: "12px", color: "var(--muted)" }}>Gabungan rekap semua wilayah. Pilih 1 wilayah untuk mengubah.</span> : <button type="button" className="sa-btn is-soft" onClick={bukaRekap}>{lewatRekap ? "Ubah rekap" : adaDataLalu ? `Tutup buku ${tahun - 1}` : `Isi rekap ${tahun - 1}`}</button>}</div>
             </Tile>
 
             {/* KARTU 2 */}
@@ -379,7 +411,7 @@ export default function EvaluasiBiayaPage() {
       <Modal open={!!rekapForm} onClose={() => setRekapForm(null)} maxWidth="640px">
         {rekapForm && (
           <div>
-            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>Rekap biaya {tahun - 1} per bagian</h3>
+            <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>Rekap biaya {namaWilayah} {tahun - 1} per bagian</h3>
             <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>{adaDataLalu ? "Terisi dari data sistem — koreksi bila perlu lalu simpan sebagai tutup buku." : "Isi dari laporan/Excel tahun lalu. Cukup total per bagian."}</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "50vh", overflowY: "auto" }}>
               {rekapForm.map((b, i) => (

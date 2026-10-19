@@ -8,6 +8,7 @@
 
 import { collection, doc, getDoc, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "./firebase";
+import { DAERAH_DEFAULT } from "./daerah";
 
 export type Jenis = "CAPEX" | "OPEX" | "PL";
 export interface ItemRab {
@@ -17,7 +18,8 @@ export interface ItemRab {
 }
 export interface PetaOtomatis { helpdesk?: string; servis?: string; atk?: string; temuan_gedung?: string; temuan_alat?: string }
 export type Sumber = "manual" | "helpdesk" | "servis" | "atk" | "temuan_gedung" | "temuan_alat";
-export interface Realisasi { id: string; sumber: Sumber; item_id?: string; tanggal: string; uraian: string; jumlah: number; kategori?: string }
+/** daerah = wilayah dokumen sumber (data lama tanpa field dianggap DAERAH_DEFAULT, sesuai migrasi §78). */
+export interface Realisasi { id: string; sumber: Sumber; item_id?: string; tanggal: string; uraian: string; jumlah: number; kategori?: string; daerah?: string }
 export const LABEL_SUMBER: Record<Sumber, string> = { manual: "Input manual", helpdesk: "Helpdesk", servis: "Servis kendaraan", atk: "ATK", temuan_gedung: "Temuan gedung", temuan_alat: "Temuan alat" };
 
 export const angkaRupiah = (v: unknown) => (typeof v === "number" ? v : Number(String(v ?? "").replace(/[^\d]/g, "")) || 0);
@@ -35,7 +37,7 @@ export async function muatRealisasiOtomatis(tahun: number): Promise<Realisasi[]>
     t.docs.forEach((d) => {
       const x = d.data();
       if (!(x.biaya > 0) || x.status !== "Selesai") return;
-      hasil.push({ id: `hd-${d.id}`, sumber: "helpdesk", tanggal: tglWITA(x.waktu_selesai.toDate()), uraian: `${x.lokasi || "-"}: ${x.deskripsi || ""}`.slice(0, 140), jumlah: x.biaya });
+      hasil.push({ id: `hd-${d.id}`, daerah: x.daerah || DAERAH_DEFAULT, sumber: "helpdesk", tanggal: tglWITA(x.waktu_selesai.toDate()), uraian: `${x.lokasi || "-"}: ${x.deskripsi || ""}`.slice(0, 140), jumlah: x.biaya });
     });
   } catch (e) { console.error("[realisasi] helpdesk:", e); }
   try {
@@ -44,7 +46,7 @@ export async function muatRealisasiOtomatis(tahun: number): Promise<Realisasi[]>
       const x = d.data();
       const n = angkaRupiah(x.biaya);
       if (!n) return;
-      hasil.push({ id: `sv-${d.id}`, sumber: "servis", tanggal: x.tanggal, uraian: `${String(x.kendaraan || "").split(" - ")[0]}: ${x.jenis_service || "Servis"}`, jumlah: n });
+      hasil.push({ id: `sv-${d.id}`, daerah: x.daerah || DAERAH_DEFAULT, sumber: "servis", tanggal: x.tanggal, uraian: `${String(x.kendaraan || "").split(" - ")[0]}: ${x.jenis_service || "Servis"}`, jumlah: n });
     });
   } catch (e) { console.error("[realisasi] servis:", e); }
   try {
@@ -62,7 +64,7 @@ export async function muatRealisasiOtomatis(tahun: number): Promise<Realisasi[]>
         const h = harga.get(it.nama_barang)?.[it.satuan || satuanDefault.get(it.nama_barang) || "PCS"];
         if (h) total += h * (parseInt(it.jumlah, 10) || 0);
       }
-      if (total > 0) hasil.push({ id: `atk-${d.id}`, sumber: "atk", tanggal: tglWITA(x.waktu_request.toDate()), uraian: `ATK ${x.resi || ""} · ${x.departemen || "-"}`, jumlah: total });
+      if (total > 0) hasil.push({ id: `atk-${d.id}`, daerah: x.daerah || DAERAH_DEFAULT, sumber: "atk", tanggal: tglWITA(x.waktu_request.toDate()), uraian: `ATK ${x.resi || ""} · ${x.departemen || "-"}`, jumlah: total });
     });
   } catch (e) { console.error("[realisasi] atk:", e); }
   try {
@@ -71,29 +73,31 @@ export async function muatRealisasiOtomatis(tahun: number): Promise<Realisasi[]>
     tm.docs.forEach((d) => {
       const x = d.data();
       if (x.status !== "Selesai" || !(x.biaya > 0) || x.dari_helpdesk_id) return; // pindahan Helpdesk sudah terhitung di sumber helpdesk
-      hasil.push({ id: `tm-${d.id}`, sumber: x.jenis === "alat" ? "temuan_alat" : "temuan_gedung", tanggal: tglWITA(x.waktu_selesai.toDate()), uraian: `${x.area}: ${x.item}`, jumlah: x.biaya });
+      hasil.push({ id: `tm-${d.id}`, daerah: x.daerah || DAERAH_DEFAULT, sumber: x.jenis === "alat" ? "temuan_alat" : "temuan_gedung", tanggal: tglWITA(x.waktu_selesai.toDate()), uraian: `${x.area}: ${x.item}`, jumlah: x.biaya });
     });
   } catch (e) { console.error("[realisasi] temuan:", e); }
   return hasil;
 }
 
-export interface DataTahun { tahun: number; items: ItemRab[]; real: Realisasi[] }
+export interface DataTahun { tahun: number; items: ItemRab[]; real: Realisasi[]; rabDaerah: string }
 
 /** RAB + seluruh realisasi 1 tahun (sekali baca, untuk evaluasi lintas tahun). item_id sumber otomatis sudah diisi. */
 export async function muatDataTahun(tahun: number): Promise<DataTahun> {
   let items: ItemRab[] = [];
   let peta: PetaOtomatis = {};
+  let rabDaerah = DAERAH_DEFAULT;
   try {
     const s = await getDoc(doc(db, "anggaran_rab", String(tahun)));
     const d = s.data();
     items = Array.isArray(d?.items) ? (d!.items as ItemRab[]) : [];
     peta = (d?.peta_otomatis as PetaOtomatis) || {};
+    rabDaerah = (d?.daerah as string) || DAERAH_DEFAULT;
   } catch (e) { console.error("[realisasi] rab:", e); }
   let manual: Realisasi[] = [];
   try {
     const s = await getDocs(query(collection(db, "realisasi_biaya"), where("tanggal", ">=", `${tahun}-01-01`), where("tanggal", "<", `${tahun + 1}-01-01`)));
-    manual = s.docs.map((d) => ({ id: d.id, sumber: "manual" as const, ...(d.data() as Omit<Realisasi, "id" | "sumber">) }));
+    manual = s.docs.map((d) => ({ id: d.id, sumber: "manual" as const, ...(d.data() as Omit<Realisasi, "id" | "sumber">), daerah: (d.data().daerah as string) || DAERAH_DEFAULT }));
   } catch (e) { console.error("[realisasi] manual:", e); }
   const otomatis = (await muatRealisasiOtomatis(tahun)).map((r) => ({ ...r, item_id: peta[r.sumber as keyof PetaOtomatis] }));
-  return { tahun, items, real: [...manual, ...otomatis] };
+  return { tahun, items, real: [...manual, ...otomatis], rabDaerah };
 }
