@@ -3347,3 +3347,12 @@ Masalah lama: 3 lensa progres (Est manual, Kuartal manual, Task) yang saling ber
 3. Tahap opsional (flag `opsional` di TahapDef, dapat diatur di Pengaturan) bisa "Lewati" dengan alasan wajib (dilewati, alasan_lewati). Tahap dilewati keluar dari pembilang & penyebut progres/rencana, tidak dihitung terlambat, tampil putus-putus di stepper, "↷ dilewati — alasan" di Presentasi, otomatis tercatat di riwayat, dan "Dilewati" di Export.
 4. Config tahapan yang masih persis bawaan §162 (TAHAPAN_BAWAAN_LAMA) dianggap belum diatur -> memakai bawaan baru. Target yang tahapannya beda dari Pengaturan mendapat tombol "Pakai tahapan terbaru" (data tahap bernama sama dipertahankan).
 5. Tab Task Mingguan disembunyikan atas keputusan user (Review Mingguan tetap); data task tidak dihapus & tetap ikut Export Excel.
+
+## 164. Evaluasi Biaya Tahunan — Khusus Super Admin (19 Oktober 2026)
+
+Halaman baru /admin/evaluasi-biaya (menu "Evaluasi Biaya Tahunan" di grup Manajemen & Sistem, hanya tampil untuk isSuperAdmin = Administrator wilayah PUSAT; halaman juga menolak akun lain).
+
+1. Loader realisasi dipindah ke src/lib/realisasiBiaya.ts (muatRealisasiOtomatis, muatDataTahun) dan dipakai halaman Anggaran & Realisasi + Evaluasi, jadi angkanya identik. Tipe ItemRab/Realisasi dll. kini diekspor dari lib.
+2. Kartu ① biaya tahun lalu (OPEX/CAPEX) dari rekap tutup buku `anggaran/evaluasi_biaya.rekap[tahun]` atau data sistem; tombol "Isi rekap" (tahun sebelum SIBM, isi manual per bagian) / "Tutup buku" (prefill dari sistem). ② tahun berjalan s.d. hari ini vs periode sama tahun lalu (nominal & %, prorata bila tahun lalu hanya rekap total) + proyeksi akhir tahun (OPEX run-rate, CAPEX maks realisasi/rencana RAB). ③ target reduksi OPEX tahun depan (chip 3/5/10/15% atau isian, disimpan di target_reduksi[tahun+1]) = proyeksi OPEX × (1−%).
+3. Analisa per bagian (bagian = kelompok RAB; tanpa alokasi = "Belum dialokasikan"): tahun lalu, periode sama, berjalan, naik/turun, proyeksi, target, hemat. Porsi hemat per bagian = proyeksi × (1 + kenaikan, maks 100%). Saran otomatis: kenaikan >10%, porsi ≥30%, perbaikan berulang (Helpdesk/Temuan uraian sama ≥2×), ATK per departemen terbesar, servis kendaraan per unit terbesar, item melebihi RAB, plus saran umum per jenis bagian (MEP, Sipil, GA, Kendaraan, Kebersihan, Security). Peringatan bila >10% biaya belum dialokasikan.
+4. Kartu "Dari mana biaya muncul" per sumber (manual, Helpdesk, Servis, ATK, Temuan) vs tahun lalu; panel "Cara hitung"; Export Excel.

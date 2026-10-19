@@ -14,7 +14,7 @@ import {
 import { db } from "../../lib/firebase";
 import { tanggalISOWITASekarang } from "../../lib/shift";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { logoutWithConfirm, useAuthGuard, HALAMAN_MAGANG_GA, isMagangGA } from "../../hooks/useAuthGuard";
+import { logoutWithConfirm, useAuthGuard, HALAMAN_MAGANG_GA, isMagangGA, isSuperAdmin } from "../../hooks/useAuthGuard";
 import AbsensiCard from "../../components/AbsensiCard";
 import KehadiranKaryawanPanel from "../../components/KehadiranKaryawanPanel";
 import { FITUR_ABSENSI_AKTIF } from "../../lib/fitur";
@@ -31,6 +31,8 @@ interface MenuItem {
   desc: string;
   path: string;
   icon: AdminIconName;
+  /** §164 hanya tampil untuk Super Admin (Administrator wilayah PUSAT) */
+  superAdmin?: boolean;
 }
 
 interface MenuGroup {
@@ -101,6 +103,7 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { title: "Dashboard Eksekutif", desc: "Ringkasan untuk Eksekutif Tenant", path: "/dashboard/eksekutif", icon: "activity" },
       { title: "Anggaran & Realisasi", desc: "RAB CAPEX/OPEX vs biaya aktual", path: "/admin/anggaran", icon: "chart" },
+      { title: "Evaluasi Biaya Tahunan", desc: "Tahun lalu, naik/turun, target reduksi & saran", path: "/admin/evaluasi-biaya", icon: "chart", superAdmin: true },
       { title: "Project Tracker", desc: "Target, kuartal, task & review mingguan", path: "/admin/project-tracker", icon: "clipboardList" },
       { title: "Hari Libur", desc: "Tanggal merah & cuti bersama", path: "/admin/hari-libur", icon: "calendar" },
       { title: "Kesehatan Notifikasi", desc: "Status cron reminder", path: "/admin/monitor-cron", icon: "activity" },
@@ -286,7 +289,9 @@ export default function AdminDashboardPage() {
   if (!isReady || !session) return null;
   // §145 Magang GA: hanya menu yang boleh, tanpa panel pantau/tindakan/kehadiran
   const magangGA = isMagangGA(session.role, session.dept);
-  const grupTampil = magangGA ? MENU_GROUPS.map((g) => ({ ...g, items: g.items.filter((m) => HALAMAN_MAGANG_GA.includes(m.path)) })).filter((g) => g.items.length) : MENU_GROUPS;
+  const superAdmin = isSuperAdmin(session.role, session.daerah);
+  const grupTampil = (magangGA ? MENU_GROUPS.map((g) => ({ ...g, items: g.items.filter((m) => HALAMAN_MAGANG_GA.includes(m.path)) })) : MENU_GROUPS)
+    .map((g) => ({ ...g, items: g.items.filter((m) => !m.superAdmin || superAdmin) })).filter((g) => g.items.length);
   const adminName = session.nama || "Admin";
   const namaDepan = adminName.split(/\s+/)[0];
   const wilayah = session.daerah === "PUSAT" ? "Super Admin · Semua wilayah" : session.daerah ? `Wilayah ${session.daerah}` : "Admin GA";

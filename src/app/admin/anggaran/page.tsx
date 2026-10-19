@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, type ChangeEvent } from "react";
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -23,22 +23,14 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { daerahTulis } from "../../../lib/daerah";
+import { muatRealisasiOtomatis, type ItemRab, type Jenis, type PetaOtomatis, type Realisasi } from "../../../lib/realisasiBiaya";
 
-type Jenis = "CAPEX" | "OPEX" | "PL";
 const JENIS: Jenis[] = ["CAPEX", "OPEX", "PL"];
 const LABEL_JENIS: Record<Jenis, string> = { CAPEX: "CAPEX · Investasi", OPEX: "OPEX · Operasional", PL: "PL" };
 const WARNA_JENIS: Record<Jenis, string> = { CAPEX: "var(--info)", OPEX: "var(--warn)", PL: "var(--accent)" };
 const UOM_UMUM = ["unit", "pcs", "set", "ls", "lumpsum", "bulan", "tahun", "kali", "orang", "m2", "liter", "kaleng", "box", "pack", "roll", "kg"];
 const Q_LABEL = ["Q1", "Q2", "Q3", "Q4"];
 
-interface ItemRab {
-  id: string; jenis: Jenis; kelompok: string; kode: string; uraian: string;
-  qty: number; uom: string; harga: number; q: boolean[];
-  deskripsi?: string; risiko?: string; usulan?: string;
-}
-interface PetaOtomatis { helpdesk?: string; servis?: string; atk?: string; temuan_gedung?: string; temuan_alat?: string }
-type Sumber = "manual" | "helpdesk" | "servis" | "atk" | "temuan_gedung" | "temuan_alat";
-interface Realisasi { id: string; sumber: Sumber; item_id?: string; tanggal: string; uraian: string; jumlah: number; kategori?: string }
 interface HasilImport { sheet: string; jenis: Jenis; items: ItemRab[] }
 
 const rupiah = (n: number) => "Rp " + new Intl.NumberFormat("id-ID").format(Math.round(n));
@@ -167,57 +159,8 @@ export default function AnggaranPage() {
       setManual(s.docs.map((d) => ({ id: d.id, sumber: "manual" as const, ...(d.data() as Omit<Realisasi, "id" | "sumber">) })));
     }, (e) => console.error("[anggaran] realisasi:", e));
     let batal = false;
-    (async () => {
-      const hasil: Realisasi[] = [];
-      const tgl = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(d);
-      const tsAwal = Timestamp.fromDate(new Date(`${awal}T00:00:00+08:00`));
-      const tsAkhir = Timestamp.fromDate(new Date(`${akhir}T00:00:00+08:00`));
-      try {
-        const t = await getDocs(query(collection(db, "helpdesk_tickets"), where("waktu_selesai", ">=", tsAwal), where("waktu_selesai", "<", tsAkhir)));
-        t.docs.forEach((d) => {
-          const x = d.data();
-          if (!(x.biaya > 0) || x.status !== "Selesai") return;
-          hasil.push({ id: `hd-${d.id}`, sumber: "helpdesk", tanggal: tgl(x.waktu_selesai.toDate()), uraian: `${x.lokasi || "-"}: ${x.deskripsi || ""}`.slice(0, 140), jumlah: x.biaya });
-        });
-      } catch (e) { console.error("[anggaran] helpdesk:", e); }
-      try {
-        const s = await getDocs(query(collection(db, "kendaraan_service_logs"), where("tanggal", ">=", awal), where("tanggal", "<", akhir)));
-        s.docs.forEach((d) => {
-          const x = d.data();
-          const n = angka(x.biaya);
-          if (!n) return;
-          hasil.push({ id: `sv-${d.id}`, sumber: "servis", tanggal: x.tanggal, uraian: `${String(x.kendaraan || "").split(" - ")[0]}: ${x.jenis_service || "Servis"}`, jumlah: n });
-        });
-      } catch (e) { console.error("[anggaran] servis:", e); }
-      try {
-        const [mst, req] = await Promise.all([
-          getDocs(collection(db, "master_atk")),
-          getDocs(query(collection(db, "ga_atk_requests"), where("waktu_request", ">=", tsAwal), where("waktu_request", "<", tsAkhir))),
-        ]);
-        const harga = new Map(mst.docs.map((d) => [d.data().nama_barang as string, (d.data().harga || {}) as Record<string, number>]));
-        const satuanDefault = new Map(mst.docs.map((d) => [d.data().nama_barang as string, ((d.data().satuan as string[]) || ["PCS"])[0]]));
-        req.docs.forEach((d) => {
-          const x = d.data();
-          if (x.status !== "Selesai / Diambil" || !x.waktu_request) return;
-          let total = 0;
-          for (const it of (x.items || []) as { nama_barang: string; jumlah: string; satuan?: string }[]) {
-            const h = harga.get(it.nama_barang)?.[it.satuan || satuanDefault.get(it.nama_barang) || "PCS"];
-            if (h) total += h * (parseInt(it.jumlah, 10) || 0);
-          }
-          if (total > 0) hasil.push({ id: `atk-${d.id}`, sumber: "atk", tanggal: tgl(x.waktu_request.toDate()), uraian: `ATK ${x.resi || ""} · ${x.departemen || "-"}`, jumlah: total });
-        });
-      } catch (e) { console.error("[anggaran] atk:", e); }
-      try {
-        // §113 temuan inspeksi OB yang selesai dengan biaya (gedung & utilitas -> perbaikan; alat -> penggantian alat)
-        const tm = await getDocs(query(collection(db, "temuan_aset"), where("waktu_selesai", ">=", tsAwal), where("waktu_selesai", "<", tsAkhir)));
-        tm.docs.forEach((d) => {
-          const x = d.data();
-          if (x.status !== "Selesai" || !(x.biaya > 0) || x.dari_helpdesk_id) return; // pindahan Helpdesk sudah terhitung di sumber helpdesk
-          hasil.push({ id: `tm-${d.id}`, sumber: x.jenis === "alat" ? "temuan_alat" : "temuan_gedung", tanggal: tgl(x.waktu_selesai.toDate()), uraian: `${x.area}: ${x.item}`, jumlah: x.biaya });
-        });
-      } catch (e) { console.error("[anggaran] temuan:", e); }
-      if (!batal) setOtomatis(hasil);
-    })();
+    // §164 loader dipindah ke lib/realisasiBiaya (dipakai juga Evaluasi Biaya)
+    muatRealisasiOtomatis(tahun).then((hasil) => { if (!batal) setOtomatis(hasil); });
     return () => { batal = true; u1(); u2(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, tahun]);
