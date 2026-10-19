@@ -3339,3 +3339,11 @@ Masalah lama: 3 lensa progres (Est manual, Kuartal manual, Task) yang saling ber
 3. Modal: daftar tahapan (centang selesai, tanggal rencana & selesai, % pelaksanaan, catatan No. CER/PO), "isi cepat sedang di tahap…" untuk memetakan target lama, update hari ini → riwayat[] (tahap yang baru dicentang otomatis tercatat), catatan lama tetap tampil.
 4. Tabel: posisi sekarang + stepper warna, bar realisasi dengan garis rencana. Tab Kuartal diganti Presentasi (kartu per target: tahapan ✓/▶/○, realisasi vs rencana, kendala, 3 update terakhir; Cetak/PDF memakai @media print tema admin). Task & Review Mingguan tetap. Export Excel: sheet Target, Tahapan, Riwayat Update, Weekly Task, Weekly Review.
 5. Dashboard Eksekutif memakai progressTarget/statusOtomatis + nama tahap sekarang. Data kuartal lama tidak dihapus (tidak dipakai lagi).
+
+## 163. Cuti Tanpa Foto + Project Tracker: VHR Opsional, Bobot Baru, Tab Task Disembunyikan (19 Oktober 2026)
+
+1. Validasi tidak masuk: alasan "Cuti" sama dengan "Dinas luar" -- kolom foto meja disembunyikan, keterangan cuti wajib.
+2. Tahapan bawaan jadi 10: Survey 3 · Pengajuan approval komparasi vendor 3 · Review doc komparasi 3 · Proses approval komparasi 3 · Pengajuan CER 4 · VHR 2 (opsional) · Pengajuan PO 4 · Pelaksanaan 65 (parsial 10–90% per 10) · Checklist item 8 · BAST 5. Alasan: dengan bobot §162 project yang administrasinya beres tetapi pekerjaan fisiknya baru 10% tampak ~60–85%; sekarang ≈28%.
+3. Tahap opsional (flag `opsional` di TahapDef, dapat diatur di Pengaturan) bisa "Lewati" dengan alasan wajib (dilewati, alasan_lewati). Tahap dilewati keluar dari pembilang & penyebut progres/rencana, tidak dihitung terlambat, tampil putus-putus di stepper, "↷ dilewati — alasan" di Presentasi, otomatis tercatat di riwayat, dan "Dilewati" di Export.
+4. Config tahapan yang masih persis bawaan §162 (TAHAPAN_BAWAAN_LAMA) dianggap belum diatur -> memakai bawaan baru. Target yang tahapannya beda dari Pengaturan mendapat tombol "Pakai tahapan terbaru" (data tahap bernama sama dipertahankan).
+5. Tab Task Mingguan disembunyikan atas keputusan user (Review Mingguan tetap); data task tidak dihapus & tetap ikut Export Excel.

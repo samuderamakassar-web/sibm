@@ -4,7 +4,7 @@
  * Validasi Karyawan (§59) -- Security menjawab kartu yang dibuat cron scripts/validasi-karyawan.mjs:
  *   - Lembur (lewat 18:00): Lanjut lembur (foto + area) / Akan pulang.
  *   - Belum tercatat masuk (09:00 & 13:00 hari kerja): Lupa diinput (check-in susulan, jam diatur) /
- *     Tidak masuk (alasan + foto wajib, datangi mejanya; Dinas luar tanpa foto, tujuan wajib -- §161).
+ *     Tidak masuk (alasan + foto wajib, datangi mejanya; Dinas luar & Cuti tanpa foto, keterangan wajib -- §161/§163).
  * Logika simpan ada di src/lib/validasiKaryawan.ts.
  * §92: kartu lembur juga dihitung LANGSUNG di halaman dari Buku Tamu (sesi "Di Dalam Area" sejak 18:00),
  * karena cron GitHub kenyataannya jalan tiap ~3 jam. Kartu "virtual" disimpan saat Security menjawab.
@@ -162,11 +162,11 @@ export default function ValidasiKaryawanPage() {
 
   // §161 Dinas luar tidak perlu foto meja (mejanya pasti kosong) -> kolom foto disembunyikan agar tidak ada unggahan
   // sembarang yang memenuhi penyimpanan; sebagai gantinya tujuan/keterangan dinas wajib diisi.
-  const tanpaFoto = aksi?.jenis === "tidak_masuk" && alasan === "Dinas luar";
+  const tanpaFoto = aksi?.jenis === "tidak_masuk" && (alasan === "Dinas luar" || alasan === "Cuti"); // §163 Cuti juga
   const simpan = async () => {
     if (!aksi) return;
     if ((aksi.jenis === "lanjut" || aksi.jenis === "tidak_masuk") && !tanpaFoto && !foto) return showToast("Foto wajib diambil dulu.", "warning");
-    if (tanpaFoto && !keterangan.trim()) return showToast("Isi tujuan / keterangan dinas luar.", "warning");
+    if (tanpaFoto && !keterangan.trim()) return showToast(alasan === "Cuti" ? "Isi keterangan cuti (sampai tanggal berapa)." : "Isi tujuan / keterangan dinas luar.", "warning");
     if (aksi.jenis === "lanjut" && !area.trim()) return showToast("Isi area / lantai lembur.", "warning");
     if (aksi.jenis === "susulan" && sudahMasuk.has(normalNama(aksi.v.nama))) {
       setAksi(null);
@@ -399,9 +399,9 @@ export default function ValidasiKaryawanPage() {
                   </select>
                 </div>
                 <div className="vk-field">
-                  <label htmlFor="vk-ket">{tanpaFoto ? "Tujuan / keterangan dinas *" : "Keterangan"}</label>
-                  <input id="vk-ket" className="vk-input" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder={tanpaFoto ? "Misal: dinas ke Kendari s.d. 18 Okt, info dari atasan" : "Misal: info dari rekan satu ruangan"} />
-                  {tanpaFoto && <p style={{ fontSize: "12px", color: "var(--muted)", margin: "6px 0 0" }}>Dinas luar tidak perlu foto meja.</p>}
+                  <label htmlFor="vk-ket">{tanpaFoto ? (alasan === "Cuti" ? "Keterangan cuti *" : "Tujuan / keterangan dinas *") : "Keterangan"}</label>
+                  <input id="vk-ket" className="vk-input" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder={tanpaFoto ? (alasan === "Cuti" ? "Misal: cuti tahunan s.d. 22 Okt" : "Misal: dinas ke Kendari s.d. 18 Okt, info dari atasan") : "Misal: info dari rekan satu ruangan"} />
+                  {tanpaFoto && <p style={{ fontSize: "12px", color: "var(--muted)", margin: "6px 0 0" }}>{alasan} tidak perlu foto meja.</p>}
                 </div>
               </>
             )}

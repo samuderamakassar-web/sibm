@@ -59,19 +59,26 @@ export function progressTask(tasks: Pick<TaskPT, "priority" | "status">[]): numb
 // Status dihitung sistem dari progres + tanggal rencana, bukan dipilih manual. Target lama yang belum dipetakan tetap
 // memakai progress_est & status manual sampai tahapannya diisi.
 
-export interface TahapDef { nama: string; bobot: number; parsial?: boolean }
+// §163 bobot disusun ulang: tahap administrasi (survey s.d. PO) total 22%, Pelaksanaan 65% -> project yang baru
+// mulai dikerjakan tidak tampak "hampir selesai". VHR boleh dilewati (opsional) dengan alasan; tahap yang dilewati
+// keluar dari perhitungan (bobotnya dibagi ke tahap lain secara proporsional).
+export interface TahapDef { nama: string; bobot: number; parsial?: boolean; opsional?: boolean }
 export const TAHAPAN_BAWAAN: TahapDef[] = [
-  { nama: "Survey kebutuhan", bobot: 5 },
-  { nama: "Pengajuan approval komparasi vendor", bobot: 10 },
-  { nama: "Review doc komparasi", bobot: 10 },
-  { nama: "Proses approval komparasi", bobot: 10 },
-  { nama: "Pengajuan CER", bobot: 10 },
-  { nama: "Pengajuan PO", bobot: 10 },
-  { nama: "Pelaksanaan", bobot: 30, parsial: true },
-  { nama: "Checklist item", bobot: 10 },
+  { nama: "Survey kebutuhan", bobot: 3 },
+  { nama: "Pengajuan approval komparasi vendor", bobot: 3 },
+  { nama: "Review doc komparasi", bobot: 3 },
+  { nama: "Proses approval komparasi", bobot: 3 },
+  { nama: "Pengajuan CER", bobot: 4 },
+  { nama: "VHR", bobot: 2, opsional: true },
+  { nama: "Pengajuan PO", bobot: 4 },
+  { nama: "Pelaksanaan", bobot: 65, parsial: true },
+  { nama: "Checklist item", bobot: 8 },
   { nama: "BAST", bobot: 5 },
 ];
-export interface TahapTarget extends TahapDef { rencana: string; selesai: string; pct?: number; catatan?: string }
+/** Bawaan §162 (9 tahap tanpa VHR) -- config yang masih persis ini dianggap belum diatur & memakai bawaan baru. */
+export const TAHAPAN_BAWAAN_LAMA = ["Survey kebutuhan:5", "Pengajuan approval komparasi vendor:10", "Review doc komparasi:10", "Proses approval komparasi:10", "Pengajuan CER:10", "Pengajuan PO:10", "Pelaksanaan:30", "Checklist item:10", "BAST:5"].join("|");
+export const sidikTahapan = (xs: TahapDef[]) => xs.map((s) => `${s.nama}:${s.bobot}`).join("|");
+export interface TahapTarget extends TahapDef { rencana: string; selesai: string; pct?: number; catatan?: string; dilewati?: boolean; alasan_lewati?: string }
 export interface RiwayatPT { tanggal: string; oleh: string; isi: string }
 export interface RealisasiPT { tanggal: string; catatan: string }
 export type MetodeProgres = "tahapan" | "frekuensi" | "manual";
@@ -87,12 +94,13 @@ export function metodeProgres(t: TargetLengkap): MetodeProgres {
   return "manual";
 }
 const nilaiTahap = (s: TahapTarget) => (s.selesai ? 1 : s.parsial ? Math.min(100, Math.max(0, s.pct || 0)) / 100 : 0);
-const totalBobot = (xs: TahapTarget[]) => xs.reduce((a, s) => a + (s.bobot || 0), 0) || 1;
+const dihitung = (xs: TahapTarget[]) => xs.filter((s) => !s.dilewati);
+const totalBobot = (xs: TahapTarget[]) => dihitung(xs).reduce((a, s) => a + (s.bobot || 0), 0) || 1;
 
 /** Progres realisasi 0-100 (satu angka resmi per target). */
 export function progressTarget(t: TargetLengkap): number {
   const m = metodeProgres(t);
-  if (m === "tahapan") return (t.tahapan!.reduce((a, s) => a + (s.bobot || 0) * nilaiTahap(s), 0) / totalBobot(t.tahapan!)) * 100;
+  if (m === "tahapan") return (dihitung(t.tahapan!).reduce((a, s) => a + (s.bobot || 0) * nilaiTahap(s), 0) / totalBobot(t.tahapan!)) * 100;
   if (m === "frekuensi") return Math.min(100, ((t.realisasi?.length || 0) / (t.frekuensi_rencana || 1)) * 100);
   return t.status === "Done" ? 100 : t.progress_est || 0;
 }
@@ -101,8 +109,8 @@ export function progressTarget(t: TargetLengkap): number {
 export function rencanaTarget(t: TargetLengkap, hari: string): number | null {
   const m = metodeProgres(t);
   if (m === "tahapan") {
-    if (!t.tahapan!.some((s) => s.rencana)) return null;
-    return (t.tahapan!.filter((s) => s.rencana && s.rencana <= hari).reduce((a, s) => a + (s.bobot || 0), 0) / totalBobot(t.tahapan!)) * 100;
+    if (!dihitung(t.tahapan!).some((s) => s.rencana)) return null;
+    return (dihitung(t.tahapan!).filter((s) => s.rencana && s.rencana <= hari).reduce((a, s) => a + (s.bobot || 0), 0) / totalBobot(t.tahapan!)) * 100;
   }
   if (m === "frekuensi" && t.deadline) {
     const awal = `${t.deadline.slice(0, 4)}-01-01`;
@@ -115,11 +123,11 @@ export function rencanaTarget(t: TargetLengkap, hari: string): number | null {
 
 /** Tahap yang sedang berjalan (pertama yang belum selesai). */
 export function tahapSekarang(t: TargetLengkap): TahapTarget | null {
-  return metodeProgres(t) === "tahapan" ? t.tahapan!.find((s) => !s.selesai) || null : null;
+  return metodeProgres(t) === "tahapan" ? t.tahapan!.find((s) => !s.selesai && !s.dilewati) || null : null;
 }
 /** Tahap yang lewat tanggal rencana tetapi belum selesai. */
 export function tahapTerlambat(t: TargetLengkap, hari: string): TahapTarget[] {
-  return metodeProgres(t) === "tahapan" ? t.tahapan!.filter((s) => !s.selesai && s.rencana && s.rencana < hari) : [];
+  return metodeProgres(t) === "tahapan" ? t.tahapan!.filter((s) => !s.selesai && !s.dilewati && s.rencana && s.rencana < hari) : [];
 }
 
 export function statusOtomatis(t: TargetLengkap, hari: string): StatusTarget {

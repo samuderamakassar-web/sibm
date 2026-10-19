@@ -14,6 +14,7 @@
  *   Rutin    -> frekuensi: terlaksana ÷ rencana per tahun.
  *   Status   -> otomatis dari progres vs tanggal rencana (At Risk bila ada tahap lewat rencana / deadline lewat).
  * Target lama yang belum dipetakan tetap memakai progress_est & status manual sampai dipetakan.
+ * §163 VHR (sebelum PO) opsional: boleh dilewati dengan alasan. Tab Task Mingguan disembunyikan (data tetap, ikut Export).
  * Admin GA mengisi; Eksekutif Tenant melihat ringkasan target lokasi gedung (§108).
  */
 
@@ -29,9 +30,9 @@ import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { daerahTulis } from "../../../lib/daerah";
 import {
-  KONFIG_BAWAAN, STATUS_TARGET, STATUS_TASK, PRIORITAS, BOBOT_PRIORITAS, WARNA_STATUS, TAHAPAN_BAWAAN,
+  KONFIG_BAWAAN, STATUS_TARGET, WARNA_STATUS, TAHAPAN_BAWAAN, TAHAPAN_BAWAAN_LAMA, sidikTahapan,
   metodeProgres, progressTarget, rencanaTarget, statusOtomatis, tahapSekarang, tahapTerlambat, tahapanBaru,
-  type KonfigTracker, type TargetLengkap, type TaskPT, type ReviewPT, type StatusTarget, type StatusTask, type Prioritas, type TahapDef, type MetodeProgres,
+  type KonfigTracker, type TargetLengkap, type TaskPT, type ReviewPT, type StatusTarget, type TahapDef, type MetodeProgres,
 } from "../../../lib/projectTracker";
 
 const KOL = "project_tracker";
@@ -45,7 +46,6 @@ const seninMingguIni = () => {
 const fmtTgl = (iso?: string) => (iso ? new Date(`${iso}T12:00:00+08:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
 const singkatan = (lokasi: string) => lokasi.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 4) || "BM";
 const TARGET_KOSONG: TargetLengkap = { id: "", kode: "", lokasi: "", target: "", kategori: "PROJECT", user: "BM", ukuran_sukses: "Pekerjaan selesai / BAST", deadline: "", status: "Not Started", catatan: "", progress_est: 0, kuartal: [], tahapan: [], frekuensi_rencana: 0, realisasi: [], riwayat: [], kendala: "" };
-const TASK_KOSONG: TaskPT = { id: "", kode: "", task: "", target_id: "", pic: "", due: "", priority: "Medium", status: "Backlog", progress: 0, keterangan: "" };
 const LABEL_STATUS: Record<StatusTarget, string> = { "Not Started": "Belum mulai", "On Track": "Sesuai rencana", "In Progress": "Berjalan", "At Risk": "Terlambat", Done: "Selesai", Cancelled: "Dibatalkan" };
 const LABEL_METODE: Record<MetodeProgres, string> = { tahapan: "Tahapan project", frekuensi: "Frekuensi (rutin)", manual: "Manual (lama)" };
 
@@ -72,6 +72,7 @@ function Stepper({ t, hari }: { t: TargetLengkap; hari: string }) {
   return (
     <div style={{ display: "flex", gap: "3px" }}>
       {t.tahapan!.map((s, i) => {
+        if (s.dilewati) return <span key={i} title={`${i + 1}. ${s.nama} — dilewati: ${s.alasan_lewati || "-"}`} style={{ flex: s.bobot || 1, height: "6px", borderRadius: "3px", border: "1px dashed var(--muted)", boxSizing: "border-box" }} />;
         const telat = !s.selesai && s.rencana && s.rencana < hari;
         const w = s.selesai ? "var(--ok)" : telat ? "var(--red-600)" : s === kini ? "var(--info)" : "var(--line)";
         return <span key={i} title={`${i + 1}. ${s.nama}${s.selesai ? ` — selesai ${fmtTgl(s.selesai)}` : s.rencana ? ` — rencana ${fmtTgl(s.rencana)}` : ""}${s.parsial && !s.selesai && s.pct ? ` (${s.pct}%)` : ""}`} style={{ flex: s.bobot || 1, height: "6px", borderRadius: "3px", background: w, opacity: s === kini && !s.selesai && !telat ? 0.75 : 1 }} />;
@@ -108,11 +109,12 @@ function EditorTahapan({ nilai, onSimpan }: { nilai: TahapDef[]; onSimpan: (v: T
       <div className="pt-lbl">Tahapan project & bobot (%)</div>
       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
         {draf.map((s, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr) 70px auto auto", gap: "6px", alignItems: "center" }}>
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr) 70px auto auto auto", gap: "6px", alignItems: "center" }}>
             <span style={{ fontSize: "12px", fontWeight: 800, color: "var(--muted)" }}>{i + 1}.</span>
             <input className="pt-in" value={s.nama} onChange={(e) => ubah(i, { nama: e.target.value })} aria-label={`Nama tahap ${i + 1}`} />
             <input className="pt-in" inputMode="numeric" value={s.bobot} onChange={(e) => ubah(i, { bobot: Number(e.target.value.replace(/\D/g, "")) || 0 })} aria-label={`Bobot tahap ${i + 1}`} />
             <label style={{ fontSize: "11.5px", display: "flex", gap: "4px", alignItems: "center", whiteSpace: "nowrap" }}><input type="checkbox" checked={!!s.parsial} onChange={(e) => ubah(i, { parsial: e.target.checked })} />bisa %</label>
+            <label style={{ fontSize: "11.5px", display: "flex", gap: "4px", alignItems: "center", whiteSpace: "nowrap" }} title="Boleh dilewati dengan alasan"><input type="checkbox" checked={!!s.opsional} onChange={(e) => ubah(i, { opsional: e.target.checked })} />opsional</label>
             <span style={{ display: "flex", gap: "2px" }}>
               <button type="button" className="pt-chip" style={{ padding: "4px 8px" }} onClick={() => geser(i, -1)} aria-label="Naik">↑</button>
               <button type="button" className="pt-chip" style={{ padding: "4px 8px" }} onClick={() => setDraf(draf.filter((_, j) => j !== i))} aria-label="Hapus">×</button>
@@ -127,7 +129,7 @@ function EditorTahapan({ nilai, onSimpan }: { nilai: TahapDef[]; onSimpan: (v: T
         <button type="button" className="sa-btn is-soft" onClick={() => setDraf(TAHAPAN_BAWAAN.map((s) => ({ ...s })))}>Kembalikan bawaan</button>
         <button type="button" className="sa-btn is-primary" disabled={total !== 100 || draf.some((s) => !s.nama.trim())} onClick={() => onSimpan(draf.map((s) => ({ ...s, nama: s.nama.trim() })))}>Simpan tahapan</button>
       </div>
-      <p style={{ margin: "6px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Berlaku untuk target baru / target yang baru dipetakan. Target yang sudah berjalan tetap memakai bobot saat dibuat agar angkanya tidak berubah tiba-tiba.</p>
+      <p style={{ margin: "6px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Berlaku untuk target baru / target yang baru dipetakan. Target yang sudah ada tetap memakai bobot saat dibuat; buka targetnya lalu klik «Pakai tahapan terbaru» untuk menyesuaikan. Tahap opsional (mis. VHR) boleh dilewati dengan alasan & tidak dihitung.</p>
     </div>
   );
 }
@@ -136,7 +138,7 @@ export default function ProjectTrackerPage() {
   const showToast = useToast();
   const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA / BM." });
-  const [tab, setTab] = useState<"TARGET" | "PRESENTASI" | "TASK" | "REVIEW" | "SETTING">("TARGET");
+  const [tab, setTab] = useState<"TARGET" | "PRESENTASI" | "REVIEW" | "SETTING">("TARGET");
   const [konfig, setKonfig] = useState<KonfigTracker>(KONFIG_BAWAAN);
   const [targets, setTargets] = useState<TargetLengkap[]>([]);
   const [tasks, setTasks] = useState<TaskPT[]>([]);
@@ -148,7 +150,6 @@ export default function ProjectTrackerPage() {
   const [asliTarget, setAsliTarget] = useState<TargetLengkap | null>(null);
   const [updateBaru, setUpdateBaru] = useState("");
   const [realBaru, setRealBaru] = useState({ tanggal: "", catatan: "" });
-  const [formTask, setFormTask] = useState<TaskPT | null>(null);
   const [formReview, setFormReview] = useState<ReviewPT | null>(null);
   const [menyimpan, setMenyimpan] = useState(false);
 
@@ -174,14 +175,12 @@ export default function ProjectTrackerPage() {
   if (!isReady) return null;
 
   const hari = hariIni();
-  const tahapanKonfig = konfig.tahapan?.length ? konfig.tahapan : TAHAPAN_BAWAAN;
+  const tahapanKonfig = konfig.tahapan?.length && sidikTahapan(konfig.tahapan) !== TAHAPAN_BAWAAN_LAMA ? konfig.tahapan : TAHAPAN_BAWAAN;
   const st = (t: TargetLengkap) => statusOtomatis(t, hari);
   const targetPerId = new Map(targets.map((t) => [t.id, t]));
   const aktifLokasi = targets.filter((t) => filterLokasi === "Semua" || t.lokasi === filterLokasi);
   const targetTampil = aktifLokasi.filter((t) => (filterStatus === "Semua" || st(t) === filterStatus)
     && (!cari.trim() || `${t.kode} ${t.target} ${t.catatan || ""} ${t.kendala || ""}`.toLowerCase().includes(cari.toLowerCase())));
-  const taskTampil = tasks.filter((k) => (filterLokasi === "Semua" || targetPerId.get(k.target_id)?.lokasi === filterLokasi)
-    && (!cari.trim() || `${k.kode} ${k.task} ${k.pic} ${targetPerId.get(k.target_id)?.target || ""}`.toLowerCase().includes(cari.toLowerCase())));
   const lokasiDipakai = Array.from(new Set([...konfig.lokasi, ...targets.map((t) => t.lokasi).filter(Boolean)]));
   const hitung = (s: StatusTarget) => aktifLokasi.filter((t) => st(t) === s).length;
   const berjalan = aktifLokasi.filter((t) => st(t) !== "Cancelled");
@@ -220,7 +219,6 @@ export default function ProjectTrackerPage() {
     const n = targets.filter((t) => t.kode.startsWith(`${pre}-`)).map((t) => Number(t.kode.split("-").pop()) || 0);
     return `${pre}-${String((n.length ? Math.max(...n) : 0) + 1).padStart(4, "0")}`;
   };
-  const kodeTaskBaru = () => `T-${String((tasks.map((k) => Number(k.kode.replace(/\D/g, "")) || 0).reduce((a, b) => Math.max(a, b), 0)) + 1).padStart(3, "0")}`;
 
   const bukaTarget = (t: TargetLengkap) => {
     const salin: TargetLengkap = { ...TARGET_KOSONG, ...t, tahapan: (t.tahapan || []).map((s) => ({ ...s })), realisasi: [...(t.realisasi || [])], riwayat: [...(t.riwayat || [])] };
@@ -243,7 +241,14 @@ export default function ProjectTrackerPage() {
   // Cepat untuk memetakan target lama: semua tahap sebelum tahap terpilih ditandai selesai
   const sampaiTahap = (idx: number) => {
     if (!formTarget) return;
-    setFormTarget({ ...formTarget, tahapan: formTarget.tahapan!.map((s, j) => (j < idx ? { ...s, selesai: s.selesai || hari } : { ...s, selesai: "" })) });
+    setFormTarget({ ...formTarget, tahapan: formTarget.tahapan!.map((s, j) => (s.dilewati ? s : j < idx ? { ...s, selesai: s.selesai || hari } : { ...s, selesai: "" })) });
+  };
+  // §163 samakan tahapan target dengan Pengaturan terbaru (data tahap yang namanya sama dipertahankan)
+  const pakaiTahapanTerbaru = () => {
+    if (!formTarget) return;
+    const lama = new Map((formTarget.tahapan || []).map((s) => [s.nama, s]));
+    setFormTarget({ ...formTarget, tahapan: tahapanBaru(tahapanKonfig).map((s) => { const x = lama.get(s.nama); return x ? { ...s, rencana: x.rencana, selesai: x.selesai, pct: x.pct || 0, catatan: x.catatan || "", dilewati: !!x.dilewati && !!s.opsional, alasan_lewati: x.alasan_lewati || "" } : s; }) });
+    showToast("Tahapan diperbarui — cek tahap baru (mis. VHR), lalu Simpan.", "info");
   };
 
   const simpanTarget = async () => {
@@ -254,6 +259,7 @@ export default function ProjectTrackerPage() {
     const m = metodeProgres(f);
     if (m === "manual" && f.kategori === "PROJECT" && !asliTarget) return showToast("Target PROJECT baru wajib memakai tahapan.", "warning");
     const statusBaru = f.status === "Cancelled" ? "Cancelled" : m === "manual" ? f.status : statusOtomatis({ ...f, status: "Not Started" }, hari);
+    if (m === "tahapan" && f.tahapan!.some((s) => s.dilewati && !s.alasan_lewati?.trim())) return showToast("Isi alasan untuk tahap yang dilewati.", "warning");
     if (statusBaru === "At Risk" && !f.kendala?.trim()) return showToast("Target terlambat — isi Kendala (akan tampil saat presentasi).", "warning");
     // riwayat otomatis: tahap yang baru selesai + update manual
     const oleh = session?.nama || "-";
@@ -262,6 +268,7 @@ export default function ProjectTrackerPage() {
       const lama = new Map((asliTarget?.tahapan || []).map((s) => [s.nama, s]));
       f.tahapan!.forEach((s) => {
         if (s.selesai && !lama.get(s.nama)?.selesai && asliTarget?.tahapan?.length) riwayat.push({ tanggal: s.selesai, oleh, isi: `✓ ${s.nama} selesai${s.catatan ? ` (${s.catatan})` : ""}` });
+        if (s.dilewati && !lama.get(s.nama)?.dilewati && asliTarget?.tahapan?.length) riwayat.push({ tanggal: hari, oleh, isi: `↷ ${s.nama} dilewati: ${(s.alasan_lewati || "").trim()}` });
       });
     }
     if (updateBaru.trim()) riwayat.push({ tanggal: hari, oleh, isi: updateBaru.trim() });
@@ -274,13 +281,6 @@ export default function ProjectTrackerPage() {
     if (await simpan(id, data, "Target tersimpan.")) setFormTarget(null);
   };
 
-  const simpanTask = async () => {
-    if (!formTask) return;
-    if (!formTask.task.trim() || !formTask.target_id) return showToast("Isi task & pilih Target ID (task wajib terhubung ke target).", "warning");
-    const { id, ...isi } = formTask;
-    if (await simpan(id, { ...isi, tipe: "task", kode: isi.kode || kodeTaskBaru(), task: isi.task.trim(), progress: isi.status === "Done" ? 100 : isi.progress }, "Task tersimpan.")) setFormTask(null);
-  };
-  const ubahStatusTask = (k: TaskPT, status: StatusTask) => simpan(k.id, { status, ...(status === "Done" ? { progress: 100 } : {}) }, `${k.kode} → ${status}`);
   const simpanReview = async () => {
     if (!formReview) return;
     if (!formReview.minggu || !formReview.selesai.trim()) return showToast("Isi minggu & yang selesai minggu ini.", "warning");
@@ -299,7 +299,7 @@ export default function ProjectTrackerPage() {
     ]), "Target");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ["Target ID", "Target", "No", "Tahap", "Bobot (%)", "Rencana", "Selesai", "Progres tahap (%)", "Catatan"],
-      ...targets.flatMap((t) => (t.tahapan || []).map((s, i) => [t.kode, t.target, i + 1, s.nama, s.bobot, s.rencana, s.selesai, s.selesai ? 100 : s.parsial ? s.pct || 0 : 0, s.catatan || ""])),
+      ...targets.flatMap((t) => (t.tahapan || []).map((s, i) => [t.kode, t.target, i + 1, s.nama, s.bobot, s.dilewati ? "" : s.rencana, s.dilewati ? "Dilewati" : s.selesai, s.dilewati ? "" : s.selesai ? 100 : s.parsial ? s.pct || 0 : 0, s.dilewati ? `Dilewati: ${s.alasan_lewati || "-"}` : s.catatan || ""])),
     ]), "Tahapan");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ["Target ID", "Target", "Tanggal", "Oleh", "Update"],
@@ -316,10 +316,6 @@ export default function ProjectTrackerPage() {
     XLSX.writeFile(wb, `BM_Project_Tracker_${hari}.xlsx`);
   };
 
-  const pilihTargetOptions = lokasiDipakai.map((l) => {
-    const isi = targets.filter((t) => t.lokasi === l && t.status !== "Cancelled");
-    return isi.length ? <optgroup key={l} label={l}>{isi.map((t) => <option key={t.id} value={t.id}>{t.kode} — {t.target}</option>)}</optgroup> : null;
-  });
 
   const f = formTarget;
   const mForm = f ? metodeProgres(f) : "manual";
@@ -352,7 +348,7 @@ export default function ProjectTrackerPage() {
       ` }} />
 
       <div className="sa-tabs" role="tablist" aria-label="Bagian project tracker" style={{ width: "fit-content", maxWidth: "100%", marginBottom: "14px", overflowX: "auto" }}>
-        {([["TARGET", `Target (${targets.length})`], ["PRESENTASI", "Presentasi"], ["TASK", `Task Mingguan (${tasks.filter((k) => k.status !== "Done").length})`], ["REVIEW", "Review Mingguan"], ["SETTING", "Pengaturan"]] as const).map(([k, l]) => (
+        {([["TARGET", `Target (${targets.length})`], ["PRESENTASI", "Presentasi"], ["REVIEW", "Review Mingguan"], ["SETTING", "Pengaturan"]] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sa-tab${tab === k ? " is-active" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -361,7 +357,7 @@ export default function ProjectTrackerPage() {
         <div className="pt-noprint">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginBottom: "12px" }}>
             {(["Not Started", "On Track", "At Risk", "Done"] as StatusTarget[]).map((s) => (
-              <button key={s} type="button" onClick={() => { setFilterStatus(filterStatus === s ? "Semua" : s); if (tab === "TASK") setTab("TARGET"); }} style={{ textAlign: "left", padding: "10px 12px", borderRadius: "14px", border: `1px solid ${filterStatus === s ? WARNA_STATUS[s].fg : "var(--line)"}`, background: "var(--surface)", cursor: "pointer", fontFamily: "inherit" }}>
+              <button key={s} type="button" onClick={() => { setFilterStatus(filterStatus === s ? "Semua" : s); }} style={{ textAlign: "left", padding: "10px 12px", borderRadius: "14px", border: `1px solid ${filterStatus === s ? WARNA_STATUS[s].fg : "var(--line)"}`, background: "var(--surface)", cursor: "pointer", fontFamily: "inherit" }}>
                 <div style={{ fontSize: "22px", fontWeight: 800, color: WARNA_STATUS[s].fg }}>{hitung(s)}</div>
                 <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--ink-soft)" }}>{LABEL_STATUS[s]}</div>
               </button>
@@ -377,12 +373,10 @@ export default function ProjectTrackerPage() {
               {lokasiDipakai.map((l) => <option key={l} value={l}>{l} ({targets.filter((t) => t.lokasi === l).length})</option>)}
             </select>
             {filterStatus !== "Semua" && <button type="button" className="pt-chip is-on" onClick={() => setFilterStatus("Semua")}>Status: {LABEL_STATUS[filterStatus as StatusTarget] || filterStatus} ×</button>}
-            <input className="pt-in" style={{ width: "240px" }} placeholder="Cari target / task / PIC..." value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari" />
+            <input className="pt-in" style={{ width: "240px" }} placeholder="Cari target / kendala..." value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari" />
             <div style={{ flex: 1 }} />
             {tab === "PRESENTASI" && <button type="button" className="sa-btn is-soft" onClick={() => window.print()}>Cetak / PDF</button>}
-            {tab === "TASK"
-              ? <button type="button" className="sa-btn is-primary" onClick={() => setFormTask({ ...TASK_KOSONG, due: hari })} disabled={!targets.length}>+ Task</button>
-              : <button type="button" className="sa-btn is-primary" onClick={targetBaru}>+ Target</button>}
+            <button type="button" className="sa-btn is-primary" onClick={targetBaru}>+ Target</button>
           </div>
         </div>
       )}
@@ -462,6 +456,7 @@ export default function ProjectTrackerPage() {
                   {metodeProgres(t) === "tahapan" && (
                     <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "3px" }}>
                       {t.tahapan!.map((x, i) => {
+                        if (x.dilewati) return <div key={i} style={{ display: "flex", gap: "6px", fontSize: "12px", color: "var(--muted)" }}><span style={{ width: "16px" }}>↷</span><span style={{ flex: 1 }}>{x.nama} <i>dilewati — {x.alasan_lewati || "-"}</i></span></div>;
                         const lewat = !x.selesai && x.rencana && x.rencana < hari;
                         return (
                           <div key={i} style={{ display: "flex", gap: "6px", fontSize: "12px", color: x.selesai ? "var(--ink-soft)" : x === kini ? "var(--ink)" : "var(--muted)", fontWeight: x === kini ? 800 : 500 }}>
@@ -488,40 +483,6 @@ export default function ProjectTrackerPage() {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* ============ TASK MINGGUAN ============ */}
-      {tab === "TASK" && (
-        <div className="pt-board">
-          {STATUS_TASK.map((s) => {
-            const isi = taskTampil.filter((k) => k.status === s);
-            return (
-              <div key={s} className="pt-kol">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><Pill teks={s} warna={WARNA_STATUS[s]} /><span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 700 }}>{isi.length}</span></div>
-                {isi.map((k) => {
-                  const t = targetPerId.get(k.target_id);
-                  const telat = k.status !== "Done" && k.due && k.due < hari;
-                  return (
-                    <div key={k.id} className="pt-kartu" onClick={() => setFormTask({ ...TASK_KOSONG, ...k })}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "11px", color: "var(--muted)", fontWeight: 700 }}>
-                        <span>{k.kode} · {t?.kode || "?"}</span>
-                        <span style={{ color: k.priority === "High" ? "var(--red-600)" : k.priority === "Medium" ? "var(--warn)" : "var(--muted)" }}>{k.priority}</span>
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--ink)", margin: "4px 0" }}>{k.task}</div>
-                      <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{t?.lokasi || "-"} · {k.pic || "PIC?"}</div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px", gap: "6px" }}>
-                        <span style={{ fontSize: "11.5px", fontWeight: 700, color: telat ? "var(--red-600)" : "var(--ink-soft)" }}>{k.due ? fmtTgl(k.due) : "-"}{telat ? " · lewat" : ""}</span>
-                        <select className="pt-in" style={{ width: "auto", padding: "3px 6px", fontSize: "11.5px" }} value={k.status} onClick={(e) => e.stopPropagation()} onChange={(e) => ubahStatusTask(k, e.target.value as StatusTask)} aria-label={`Status ${k.kode}`}>
-                          {STATUS_TASK.map((x) => <option key={x} value={x}>{x}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
         </div>
       )}
 
@@ -570,7 +531,7 @@ export default function ProjectTrackerPage() {
                 {konfig.lokasi.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
             </label>
-            <p style={{ margin: "14px 0 0", fontSize: "12px", color: "var(--muted)" }}>Status target dihitung otomatis ({STATUS_TARGET.filter((s) => s !== "In Progress").map((s) => LABEL_STATUS[s]).join(" · ")}). Status task ({STATUS_TASK.join(" · ")}) & prioritas ({PRIORITAS.join(" · ")}) mengikuti template.</p>
+            <p style={{ margin: "14px 0 0", fontSize: "12px", color: "var(--muted)" }}>Status target dihitung otomatis ({STATUS_TARGET.filter((s) => s !== "In Progress").map((s) => LABEL_STATUS[s]).join(" · ")}).</p>
           </Tile>
         </div>
       )}
@@ -616,24 +577,41 @@ export default function ProjectTrackerPage() {
                   <span style={{ fontSize: "12px", color: "var(--muted)" }}>Isi cepat — sekarang sedang di tahap:</span>
                   <select className="pt-in" style={{ width: "auto" }} value="" onChange={(e) => e.target.value !== "" && sampaiTahap(Number(e.target.value))} aria-label="Sedang di tahap">
                     <option value="">pilih…</option>
-                    {f.tahapan!.map((s, i) => <option key={i} value={i}>{i + 1}. {s.nama}</option>)}
+                    {f.tahapan!.map((s, i) => !s.dilewati && <option key={i} value={i}>{i + 1}. {s.nama}</option>)}
                     <option value={f.tahapan!.length}>Semua selesai</option>
                   </select>
+                  {sidikTahapan(f.tahapan!) !== sidikTahapan(tahapanKonfig) && <button type="button" className="pt-chip" onClick={pakaiTahapanTerbaru}>Pakai tahapan terbaru ({tahapanKonfig.length} tahap)</button>}
                   <div style={{ flex: 1 }} />
                   <BarProgres real={progressTarget(f)} rencana={rencanaTarget(f, hari)} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   {f.tahapan!.map((s, i) => {
-                    const lewat = !s.selesai && s.rencana && s.rencana < hari;
+                    const lewat = !s.selesai && !s.dilewati && s.rencana && s.rencana < hari;
+                    if (s.dilewati) {
+                      return (
+                        <div key={i} className="pt-tahap" style={{ borderStyle: "dashed", gridTemplateColumns: "24px minmax(0,1fr)" }}>
+                          <span style={{ color: "var(--muted)", textAlign: "center" }}>↷</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink-soft)" }}>{i + 1}. {s.nama} <span style={{ fontSize: "11px", fontWeight: 600 }}>· dilewati, tidak dihitung</span></span>
+                              <button type="button" className="pt-chip" style={{ padding: "3px 9px", fontSize: "11.5px" }} onClick={() => ubahTahap(i, { dilewati: false, alasan_lewati: "" })}>Batal lewati</button>
+                            </div>
+                            <input className="pt-in" style={{ padding: "4px 8px", fontSize: "12px", marginTop: "4px", borderColor: s.alasan_lewati?.trim() ? undefined : "var(--red-600)" }} value={s.alasan_lewati || ""} onChange={(e) => ubahTahap(i, { alasan_lewati: e.target.value })} placeholder="Alasan dilewati * (mis. vendor existing, nilai di bawah batas)" />
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={i} className={`pt-tahap${s.selesai ? " is-done" : ""}${lewat ? " is-late" : ""}`}>
                         <input type="checkbox" checked={!!s.selesai} onChange={(e) => ubahTahap(i, { selesai: e.target.checked ? hari : "" })} aria-label={`${s.nama} selesai`} />
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{i + 1}. {s.nama} <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>· {s.bobot}%</span>{lewat && <span style={{ fontSize: "11px", color: "var(--red-600)", fontWeight: 800 }}> · lewat rencana</span>}</div>
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{i + 1}. {s.nama} <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>· {s.bobot}%{s.opsional ? " · opsional" : ""}</span>{lewat && <span style={{ fontSize: "11px", color: "var(--red-600)", fontWeight: 800 }}> · lewat rencana</span>}
+                            {s.opsional && !s.selesai && <button type="button" className="pt-chip" style={{ padding: "2px 8px", fontSize: "11px", marginLeft: "6px" }} onClick={() => ubahTahap(i, { dilewati: true, rencana: "", pct: 0 })}>Lewati</button>}
+                          </div>
                           <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
                             {s.parsial && !s.selesai && (
                               <select className="pt-in" style={{ width: "auto", padding: "4px 6px", fontSize: "12px" }} value={s.pct || 0} onChange={(e) => ubahTahap(i, { pct: Number(e.target.value) })} aria-label={`Progres ${s.nama}`}>
-                                {[0, 10, 25, 50, 75, 90].map((p) => <option key={p} value={p}>{p}% berjalan</option>)}
+                                {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => <option key={p} value={p}>{p}% berjalan</option>)}
                               </select>
                             )}
                             <input className="pt-in" style={{ padding: "4px 8px", fontSize: "12px" }} value={s.catatan || ""} onChange={(e) => ubahTahap(i, { catatan: e.target.value })} placeholder="No. CER / PO / vendor / catatan" />
@@ -685,42 +663,12 @@ export default function ProjectTrackerPage() {
                 {f.catatan && <div style={{ padding: "3px 0", color: "var(--muted)" }}>Catatan lama: {f.catatan}</div>}
               </div>
             )}
-            {f.id && <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--muted)" }}>Task terhubung: <b>{tasks.filter((k) => k.target_id === f.id).length}</b></div>}
             <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>
               {f.id && <button type="button" className="sa-btn is-soft" style={{ color: "var(--red-600)" }} disabled={menyimpan} onClick={() => hapus(f.id, `${f.kode} ${f.target}`, () => setFormTarget(null))}>Hapus</button>}
               {f.id && <button type="button" className="sa-btn is-soft" disabled={menyimpan} onClick={() => setFormTarget({ ...f, status: f.status === "Cancelled" ? "Not Started" : "Cancelled" })}>{f.status === "Cancelled" ? "Aktifkan lagi" : "Batalkan target"}</button>}
-              {f.id && <button type="button" className="sa-btn is-soft" onClick={() => { const t = f; setFormTarget(null); setFormTask({ ...TASK_KOSONG, target_id: t.id, due: t.deadline || hari }); }}>+ Task</button>}
               <div style={{ flex: 1 }} />
               <button type="button" className="sa-btn is-soft" onClick={() => setFormTarget(null)} disabled={menyimpan}>Batal</button>
               <button type="button" className="sa-btn is-primary" onClick={simpanTarget} disabled={menyimpan}>{menyimpan ? "Menyimpan..." : "Simpan"}</button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* ============ MODAL TASK ============ */}
-      <Modal open={!!formTask} onClose={() => !menyimpan && setFormTask(null)} maxWidth="560px">
-        {formTask && (
-          <div>
-            <h3 style={{ margin: "0 0 12px", fontSize: "18px", color: "var(--ink)" }}>{formTask.id ? `Edit task ${formTask.kode}` : "Task baru"}</h3>
-            <label style={{ display: "block" }}><span className="pt-lbl">Task *</span><input className="pt-in" value={formTask.task} onChange={(e) => setFormTask({ ...formTask, task: e.target.value })} placeholder="Mis. Pengumpulan penawaran 3 vendor" /></label>
-            <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Target ID * (task wajib terhubung ke target)</span>
-              <select className="pt-in" value={formTask.target_id} onChange={(e) => setFormTask({ ...formTask, target_id: e.target.value })}><option value="">Pilih target...</option>{pilihTargetOptions}</select>
-            </label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginTop: "10px" }}>
-              <label><span className="pt-lbl">PIC</span><select className="pt-in" value={formTask.pic} onChange={(e) => setFormTask({ ...formTask, pic: e.target.value })}><option value="">—</option>{konfig.pic.map((p) => <option key={p}>{p}</option>)}</select></label>
-              <label><span className="pt-lbl">Due date</span><input type="date" className="pt-in" value={formTask.due} onChange={(e) => setFormTask({ ...formTask, due: e.target.value })} /></label>
-              <label><span className="pt-lbl">Priority</span><select className="pt-in" value={formTask.priority} onChange={(e) => setFormTask({ ...formTask, priority: e.target.value as Prioritas })}>{PRIORITAS.map((p) => <option key={p}>{p}</option>)}</select></label>
-              <label><span className="pt-lbl">Status</span><select className="pt-in" value={formTask.status} onChange={(e) => setFormTask({ ...formTask, status: e.target.value as StatusTask })}>{STATUS_TASK.map((p) => <option key={p}>{p}</option>)}</select></label>
-              <label><span className="pt-lbl">Progress</span><select className="pt-in" value={formTask.progress} onChange={(e) => setFormTask({ ...formTask, progress: Number(e.target.value) })}>{[0, 25, 50, 75, 100].map((p) => <option key={p} value={p}>{p}%</option>)}</select></label>
-            </div>
-            <label style={{ display: "block", marginTop: "10px" }}><span className="pt-lbl">Keterangan</span><input className="pt-in" value={formTask.keterangan} onChange={(e) => setFormTask({ ...formTask, keterangan: e.target.value })} placeholder="Mis. menunggu SRA" /></label>
-            <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "var(--muted)" }}>Task = pengingat kerja harian; progres target dihitung dari tahapan. Bobot prioritas: High {BOBOT_PRIORITAS.High} · Medium {BOBOT_PRIORITAS.Medium} · Low {BOBOT_PRIORITAS.Low}.</p>
-            <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
-              {formTask.id && <button type="button" className="sa-btn is-soft" style={{ color: "var(--red-600)" }} disabled={menyimpan} onClick={() => hapus(formTask.id, `${formTask.kode} ${formTask.task}`, () => setFormTask(null))}>Hapus</button>}
-              <div style={{ flex: 1 }} />
-              <button type="button" className="sa-btn is-soft" onClick={() => setFormTask(null)} disabled={menyimpan}>Batal</button>
-              <button type="button" className="sa-btn is-primary" onClick={simpanTask} disabled={menyimpan}>{menyimpan ? "Menyimpan..." : "Simpan"}</button>
             </div>
           </div>
         )}
