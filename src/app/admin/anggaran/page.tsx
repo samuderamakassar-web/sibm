@@ -9,6 +9,8 @@
  *   - kendaraan_service_logs (biaya teks bebas, diambil angkanya)
  *   - ga_atk_requests "Selesai / Diambil" x harga master_atk per satuan (§103)
  * Sumber otomatis dialokasikan ke 1 baris RAB lewat peta_otomatis (diatur di tab Realisasi).
+ * §166 Tab "Rencana vs Realisasi": status per baris (lib analisaDeviasi) -- Melebihi pagu / Terlambat / Di luar jadwal /
+ *   Tanpa pagu wajib diberi alasan + tindakan (Geser jadwal -> q_revisi, Ditunda, Dibatalkan, ...), disimpan di baris RAB.
  * Import: template SIBM ATAU file RAB lama (kolom No/Uraian|Description, Qty|Jumlah, UoM, Unit Price; baris "A  MEP" = kelompok).
  */
 
@@ -23,7 +25,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { daerahTulis } from "../../../lib/daerah";
-import { muatRealisasiOtomatis, type ItemRab, type Jenis, type PetaOtomatis, type Realisasi } from "../../../lib/realisasiBiaya";
+import { analisaDeviasi, muatRealisasiOtomatis, STATUS_PERLU_ALASAN, TINDAKAN_DEVIASI, WARNA_DEVIASI, type ItemRab, type Jenis, type PetaOtomatis, type Realisasi, type StatusDeviasi } from "../../../lib/realisasiBiaya";
 
 const JENIS: Jenis[] = ["CAPEX", "OPEX", "PL"];
 const LABEL_JENIS: Record<Jenis, string> = { CAPEX: "CAPEX · Investasi", OPEX: "OPEX · Operasional", PL: "PL" };
@@ -130,7 +132,9 @@ export default function AnggaranPage() {
   const { session, isReady } = useAuthGuard({ depts: ["Admin GA"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Admin GA." });
   const tahunIni = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()).slice(0, 4));
   const [tahun, setTahun] = useState(tahunIni);
-  const [tab, setTab] = useState<"RINGKASAN" | "RAB" | "REALISASI">("RINGKASAN");
+  const [tab, setTab] = useState<"RINGKASAN" | "DEVIASI" | "RAB" | "REALISASI">("RINGKASAN");
+  const [filterDev, setFilterDev] = useState<"PERLU" | "MENYIMPANG" | "SEMUA">("PERLU");
+  const [formDev, setFormDev] = useState<{ item: ItemRab; tindakan: string; alasan: string; q: boolean[] } | null>(null);
   const [items, setItems] = useState<ItemRab[]>([]);
   const [peta, setPeta] = useState<PetaOtomatis>({});
   const [lokasi, setLokasi] = useState("");
@@ -193,6 +197,18 @@ export default function AnggaranPage() {
     return { rencana: isi.reduce((a, i) => a + amount(i), 0), real: isi.reduce((a, i) => a + (realPerItem.get(i.id) || 0), 0) };
   };
   const melebihi = items.filter((i) => (realPerItem.get(i.id) || 0) > amount(i) && amount(i) > 0);
+  // §166 rencana vs realisasi per baris
+  const kuartalLewat = tahun < tahunIni ? 4 : tahun > tahunIni ? 0 : kuartalIni;
+  const realQPerItem = new Map<string, number[]>();
+  semuaReal.forEach((r) => {
+    if (!r.item_id || !itemPerId.has(r.item_id)) return;
+    const arr = realQPerItem.get(r.item_id) || [0, 0, 0, 0];
+    arr[Math.min(3, Math.floor((Number(r.tanggal.slice(5, 7)) - 1) / 3))] += r.jumlah;
+    realQPerItem.set(r.item_id, arr);
+  });
+  const deviasi = new Map(items.map((i) => [i.id, analisaDeviasi(i, realQPerItem.get(i.id) || [0, 0, 0, 0], kuartalLewat)]));
+  const perluAlasan = items.filter((i) => { const d = deviasi.get(i.id)!; return d.perluAlasan && !d.dijelaskan; });
+  const hitungDev = (s: StatusDeviasi) => items.filter((i) => deviasi.get(i.id)!.status === s).length;
   const labelItem = (id?: string) => { const i = id ? itemPerId.get(id) : undefined; return i ? `${i.kode} · ${i.uraian}` : "Belum dialokasikan"; };
 
   // ---------- simpan ----------
@@ -247,11 +263,26 @@ export default function AnggaranPage() {
     XLSX.writeFile(wb, "Template_RAB_SIBM.xlsx");
   };
   const eksporExcel = () => {
-    const baris = items.map((i) => [i.jenis, i.kelompok, i.kode, i.uraian, i.qty, i.uom, i.harga, amount(i), ...i.q.map((b) => (b ? "x" : "")), realPerItem.get(i.id) || 0, persen(realPerItem.get(i.id) || 0, amount(i)) + "%", i.deskripsi || "", i.risiko || "", i.usulan || ""]);
-    const ws = XLSX.utils.aoa_to_sheet([["Jenis", "Kelompok", "Kode", "Uraian", "Qty", "UoM", "Harga Satuan", "Amount", "Q1", "Q2", "Q3", "Q4", "Realisasi", "Serapan", "Deskripsi", "Risiko", "Usulan"], ...baris]);
+    const baris = items.map((i) => [i.jenis, i.kelompok, i.kode, i.uraian, i.qty, i.uom, i.harga, amount(i), ...i.q.map((b) => (b ? "x" : "")), realPerItem.get(i.id) || 0, persen(realPerItem.get(i.id) || 0, amount(i)) + "%",
+      deviasi.get(i.id)?.status || "", i.q_revisi?.some(Boolean) ? i.q_revisi.map((b, k) => (b ? `Q${k + 1}` : "")).filter(Boolean).join("+") : "", i.tindakan_deviasi || "", i.alasan_deviasi || "", i.deskripsi || "", i.risiko || "", i.usulan || ""]);
+    const ws = XLSX.utils.aoa_to_sheet([["Jenis", "Kelompok", "Kode", "Uraian", "Qty", "UoM", "Harga Satuan", "Amount", "Q1", "Q2", "Q3", "Q4", "Realisasi", "Serapan", "Status", "Jadwal revisi", "Tindakan", "Alasan", "Deskripsi", "Risiko", "Usulan"], ...baris]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `RAB ${tahun}`);
     XLSX.writeFile(wb, `RAB_Realisasi_${tahun}.xlsx`);
+  };
+  const bukaDeviasi = (i: ItemRab) => setFormDev({ item: i, tindakan: i.tindakan_deviasi || "", alasan: i.alasan_deviasi || "", q: [...(i.q_revisi?.some(Boolean) ? i.q_revisi : i.q || [false, false, false, false])] });
+  const simpanDeviasi = async () => {
+    if (!formDev) return;
+    const d = deviasi.get(formDev.item.id);
+    if (!formDev.tindakan) return showToast("Pilih tindakan.", "warning");
+    if (!formDev.alasan.trim()) return showToast("Isi alasan.", "warning");
+    const geser = formDev.tindakan === "Geser jadwal";
+    if (geser && !formDev.q.some((b, k) => b && k >= kuartalLewat)) return showToast(`Jadwal baru harus di kuartal yang belum lewat (Q${Math.min(4, kuartalLewat + 1)} atau sesudahnya).`, "warning");
+    const baru = items.map((i) => (i.id === formDev.item.id ? {
+      ...i, alasan_deviasi: formDev.alasan.trim(), tindakan_deviasi: formDev.tindakan, deviasi_untuk: d?.kunci || "",
+      q_revisi: geser ? formDev.q : i.q_revisi || [], deviasi_oleh: session?.nama || "-", deviasi_tgl: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+    } : i));
+    if (await simpanRab(baru, peta, `Alasan ${formDev.item.kode} tersimpan.`)) setFormDev(null);
   };
   const tambahRealisasi = async () => {
     const jumlah = angka(formReal.jumlah);
@@ -297,7 +328,7 @@ export default function AnggaranPage() {
       ` }} />
 
       <div className="sa-tabs" role="tablist" aria-label="Tampilan anggaran" style={{ width: "fit-content", maxWidth: "100%", marginBottom: "16px" }}>
-        {([["RINGKASAN", "Ringkasan"], ["RAB", `RAB (${items.length})`], ["REALISASI", `Realisasi (${semuaReal.length})`]] as const).map(([k, l]) => (
+        {([["RINGKASAN", "Ringkasan"], ["DEVIASI", `Rencana vs Realisasi${perluAlasan.length ? ` (${perluAlasan.length} ⚠)` : ""}`], ["RAB", `RAB (${items.length})`], ["REALISASI", `Realisasi (${semuaReal.length})`]] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sa-tab${tab === k ? " is-active" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -371,8 +402,9 @@ export default function AnggaranPage() {
             </Tile>
             <Tile>
               <h2 style={{ margin: "0 0 10px", fontSize: "16px", fontWeight: 800 }}>Perlu perhatian</h2>
-              {melebihi.length === 0 && belumAlokasi.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--ok)", fontWeight: 700 }}>Tidak ada baris yang melebihi anggaran.</div> : (
+              {melebihi.length === 0 && belumAlokasi.length === 0 && perluAlasan.length === 0 ? <div style={{ fontSize: "12.5px", color: "var(--ok)", fontWeight: 700 }}>Tidak ada baris yang melebihi anggaran.</div> : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px" }}>
+                  {perluAlasan.length > 0 && <button type="button" className="sa-btn is-primary" style={{ alignSelf: "flex-start" }} onClick={() => { setFilterDev("PERLU"); setTab("DEVIASI"); }}>{perluAlasan.length} baris meleset dari rencana — isi alasan →</button>}
                   {melebihi.map((i) => <div key={i.id} style={{ color: "var(--red-600)" }}><b>{i.kode} {i.uraian}</b> — realisasi {rupiah(realPerItem.get(i.id) || 0)} &gt; RAB {rupiah(amount(i))}</div>)}
                   {belumAlokasi.length > 0 && <button type="button" className="sa-btn is-soft" style={{ alignSelf: "flex-start" }} onClick={() => setTab("REALISASI")}>{belumAlokasi.length} realisasi ({rupiah(belumAlokasi.reduce((a, r) => a + r.jumlah, 0))}) belum dialokasikan →</button>}
                 </div>
@@ -380,6 +412,58 @@ export default function AnggaranPage() {
             </Tile>
           </div>
         </div>
+      )}
+
+      {/* ===================== RENCANA VS REALISASI (§166) ===================== */}
+      {tab === "DEVIASI" && items.length > 0 && (
+        <Tile>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
+            {([["PERLU", `Perlu alasan (${perluAlasan.length})`], ["MENYIMPANG", "Semua yang meleset"], ["SEMUA", "Semua baris"]] as const).map(([k, l]) => (
+              <button key={k} type="button" className={`rab-chip${filterDev === k ? " is-on" : ""}`} onClick={() => setFilterDev(k)}>{l}</button>
+            ))}
+            <div style={{ flex: 1 }} />
+            {(["Melebihi pagu", "Terlambat", "Di luar jadwal", "Tanpa pagu", "Berjalan", "Terserap"] as StatusDeviasi[]).map((s) => hitungDev(s) > 0 && (
+              <span key={s} style={{ fontSize: "11.5px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", background: WARNA_DEVIASI[s].bg, color: WARNA_DEVIASI[s].fg }}>{hitungDev(s)} {s}</span>
+            ))}
+          </div>
+          <p style={{ margin: "0 0 10px", fontSize: "12px", color: "var(--muted)" }}>
+            Rencana = pagu & kuartal yang dicentang di RAB. <b>Terlambat</b> = kuartal rencana sudah lewat tapi belum ada realisasi · <b>Di luar jadwal</b> = realisasi di kuartal yang tidak direncanakan · <b>Melebihi pagu</b> = realisasi &gt; anggaran. Yang meleset wajib diberi alasan.
+          </p>
+          <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: "12px" }}>
+            <table className="rab-tabel" style={{ minWidth: "900px" }}>
+              <thead><tr><th>Baris RAB</th><th className="num">Rencana</th><th>Jadwal</th><th className="num">Realisasi</th><th>Terealisasi di</th><th className="num">Selisih</th><th>Status</th><th>Alasan</th></tr></thead>
+              <tbody>
+                {items.filter((i) => {
+                  const d = deviasi.get(i.id)!;
+                  return filterDev === "SEMUA" || (filterDev === "MENYIMPANG" ? STATUS_PERLU_ALASAN.includes(d.status) || d.status === "Ditunda" || d.status === "Dibatalkan" : d.perluAlasan && !d.dijelaskan);
+                }).map((i) => {
+                  const d = deviasi.get(i.id)!;
+                  const rq = realQPerItem.get(i.id) || [0, 0, 0, 0];
+                  const revisi = i.q_revisi?.some(Boolean);
+                  return (
+                    <tr key={i.id} className="rab-item" onClick={() => bukaDeviasi(i)}>
+                      <td style={{ minWidth: "220px" }}><b>{i.kode}</b> {i.uraian}<div style={{ fontSize: "11px", color: "var(--muted)" }}>{i.jenis} · {i.kelompok || "-"}</div></td>
+                      <td className="num">{ringkas(amount(i))}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {[0, 1, 2, 3].map((k) => <span key={k} title={`Q${k + 1}`} className="rab-q" style={{ marginRight: "3px", background: d.qAktif[k] ? "var(--info-solid, var(--info))" : "transparent", outline: revisi && i.q[k] && !d.qAktif[k] ? "1px dashed var(--muted)" : undefined }} />)}
+                        {revisi && <div style={{ fontSize: "10.5px", color: "var(--muted)" }}>digeser</div>}
+                      </td>
+                      <td className="num">{ringkas(rq.reduce((a, b) => a + b, 0))}</td>
+                      <td style={{ whiteSpace: "nowrap", fontSize: "11.5px" }}>{rq.map((v, k) => (v > 0 ? <span key={k} style={{ marginRight: "4px", fontWeight: 800, color: d.qAktif[k] ? "var(--ink)" : "var(--info)" }}>Q{k + 1}</span> : null))}</td>
+                      <td className="num" style={{ color: d.selisih > 1 ? "var(--red-600)" : "var(--ink-soft)" }}>{d.selisih > 1 ? `+${ringkas(d.selisih)}` : d.selisih < -1 ? `sisa ${ringkas(-d.selisih)}` : "pas"}</td>
+                      <td><span style={{ fontSize: "11px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", whiteSpace: "nowrap", background: WARNA_DEVIASI[d.status].bg, color: WARNA_DEVIASI[d.status].fg }}>{d.status}</span></td>
+                      <td style={{ minWidth: "200px", fontSize: "12px" }}>
+                        {d.perluAlasan && !d.dijelaskan ? <span style={{ color: "var(--red-600)", fontWeight: 800 }}>⚠ Isi alasan</span>
+                          : i.alasan_deviasi ? <><b>{i.tindakan_deviasi}</b><div style={{ color: "var(--ink-soft)" }}>{i.alasan_deviasi}</div></> : <span style={{ color: "var(--muted)" }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {filterDev === "PERLU" && perluAlasan.length === 0 && <div style={{ padding: "16px", textAlign: "center", color: "var(--ok)", fontWeight: 700, fontSize: "13px" }}>Semua penyimpangan sudah dijelaskan.</div>}
+        </Tile>
       )}
 
       {/* ===================== RAB ===================== */}
@@ -492,9 +576,10 @@ export default function AnggaranPage() {
                           {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : r.sumber === "temuan_gedung" ? "Temuan gedung" : r.sumber === "temuan_alat" ? "Alat kebersihan" : "Manual"}
                         </span>
                       </div>
-                      {r.sumber === "manual" && (!r.item_id || !itemPerId.has(r.item_id)) && items.length > 0 ? (
-                        <select className="rab-in" style={{ marginTop: "4px", padding: "5px 8px", fontSize: "12px", borderColor: "var(--warn)" }} value="" onChange={(e) => alokasikan(r, e.target.value)} aria-label="Alokasikan ke baris RAB">
-                          <option value="">⚠ Alokasikan ke baris RAB{r.kategori ? ` (dulu: ${r.kategori})` : ""}...</option>
+                      {r.sumber === "manual" && items.length > 0 ? (
+                        /* §166 realisasi manual bisa dipindah ke baris lain (mis. pengadaan AC tercatat di Servis AC) */
+                        <select className="rab-in" style={{ marginTop: "4px", padding: "5px 8px", fontSize: "12px", borderColor: r.item_id && itemPerId.has(r.item_id) ? undefined : "var(--warn)" }} value={r.item_id && itemPerId.has(r.item_id) ? r.item_id : ""} onChange={(e) => e.target.value && alokasikan(r, e.target.value)} aria-label="Baris RAB">
+                          {!(r.item_id && itemPerId.has(r.item_id)) && <option value="">⚠ Alokasikan ke baris RAB{r.kategori ? ` (dulu: ${r.kategori})` : ""}...</option>}
                           {pilihItemOptions}
                         </select>
                       ) : <div style={{ fontSize: "11.5px", color: r.item_id && itemPerId.has(r.item_id) ? "var(--muted)" : "var(--warn)" }}>{labelItem(r.item_id)}</div>}
@@ -588,6 +673,53 @@ export default function AnggaranPage() {
             </div>
           </div>
         )}
+      </Modal>
+      <Modal open={!!formDev} onClose={() => setFormDev(null)} maxWidth="560px">
+        {formDev && (() => {
+          const d = deviasi.get(formDev.item.id)!;
+          const rq = realQPerItem.get(formDev.item.id) || [0, 0, 0, 0];
+          const pilihan = TINDAKAN_DEVIASI[d.status] || Array.from(new Set(Object.values(TINDAKAN_DEVIASI).flat()));
+          return (
+            <div>
+              <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>{formDev.item.kode} · {formDev.item.uraian}</h3>
+              <div style={{ fontSize: "12.5px", color: "var(--ink-soft)", marginBottom: "10px" }}>
+                Rencana {rupiah(amount(formDev.item))} di {formDev.item.q.map((b, k) => (b ? `Q${k + 1}` : "")).filter(Boolean).join("+") || "kuartal bebas"}{formDev.item.q_revisi?.some(Boolean) ? ` (digeser ke ${formDev.item.q_revisi.map((b, k) => (b ? `Q${k + 1}` : "")).filter(Boolean).join("+")})` : ""} · realisasi {rupiah(rq.reduce((a, b) => a + b, 0))}{rq.some((v) => v > 0) ? ` di ${rq.map((v, k) => (v > 0 ? `Q${k + 1}` : "")).filter(Boolean).join("+")}` : ""}
+              </div>
+              <div style={{ marginBottom: "10px" }}><span style={{ fontSize: "11.5px", fontWeight: 800, padding: "3px 9px", borderRadius: "999px", background: WARNA_DEVIASI[d.status].bg, color: WARNA_DEVIASI[d.status].fg }}>{d.status}</span></div>
+              <span className="rab-lbl">Tindakan *</span>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
+                {pilihan.map((t) => <button key={t} type="button" className={`rab-chip${formDev.tindakan === t ? " is-on" : ""}`} onClick={() => setFormDev({ ...formDev, tindakan: t })}>{t}</button>)}
+              </div>
+              {formDev.tindakan === "Geser jadwal" && (
+                <div style={{ marginBottom: "10px" }}>
+                  <span className="rab-lbl">Jadwal baru</span>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {[0, 1, 2, 3].map((k) => (
+                      <label key={k} style={{ display: "flex", gap: "4px", alignItems: "center", fontSize: "13px", fontWeight: 700, opacity: k < kuartalLewat ? 0.4 : 1 }}>
+                        <input type="checkbox" disabled={k < kuartalLewat} checked={!!formDev.q[k]} onChange={(e) => setFormDev({ ...formDev, q: formDev.q.map((b, j) => (j === k ? e.target.checked : b)) })} />Q{k + 1}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {formDev.tindakan === "Realisasi salah baris — dipindah" && (
+                <div style={{ padding: "10px 12px", borderRadius: "12px", background: "var(--info-50)", fontSize: "12.5px", marginBottom: "10px" }}>
+                  Pindahkan realisasinya ke baris yang benar di tab <b>Realisasi</b> (pilih baris pada transaksinya). Status baris ini akan normal sendiri.
+                  <div style={{ marginTop: "6px" }}><button type="button" className="sa-btn is-soft" onClick={() => { setFormDev(null); setTab("REALISASI"); }}>Buka tab Realisasi</button></div>
+                </div>
+              )}
+              <label style={{ display: "block" }}><span className="rab-lbl">Alasan *</span>
+                <textarea className="rab-in" style={{ minHeight: "70px" }} value={formDev.alasan} onChange={(e) => setFormDev({ ...formDev, alasan: e.target.value })} placeholder="Mis. CER baru disetujui Direksi September, pekerjaan mulai Oktober" />
+              </label>
+              {formDev.item.deviasi_oleh && <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "6px" }}>Terakhir diisi {formDev.item.deviasi_oleh} · {formDev.item.deviasi_tgl}</div>}
+              <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
+                <div style={{ flex: 1 }} />
+                <button type="button" className="sa-btn is-soft" onClick={() => setFormDev(null)}>Batal</button>
+                <button type="button" className="sa-btn is-primary" onClick={simpanDeviasi} disabled={menyimpan}>{menyimpan ? "Menyimpan..." : "Simpan alasan"}</button>
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </AdminShell>
   );

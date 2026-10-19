@@ -15,6 +15,8 @@ export interface ItemRab {
   id: string; jenis: Jenis; kelompok: string; kode: string; uraian: string;
   qty: number; uom: string; harga: number; q: boolean[];
   deskripsi?: string; risiko?: string; usulan?: string;
+  /** §166 alasan bila rencana meleset (lihat analisaDeviasi) */
+  alasan_deviasi?: string; tindakan_deviasi?: string; deviasi_untuk?: string; q_revisi?: boolean[]; deviasi_oleh?: string; deviasi_tgl?: string;
 }
 export interface PetaOtomatis { helpdesk?: string; servis?: string; atk?: string; temuan_gedung?: string; temuan_alat?: string }
 export type Sumber = "manual" | "helpdesk" | "servis" | "atk" | "temuan_gedung" | "temuan_alat";
@@ -100,4 +102,59 @@ export async function muatDataTahun(tahun: number): Promise<DataTahun> {
   } catch (e) { console.error("[realisasi] manual:", e); }
   const otomatis = (await muatRealisasiOtomatis(tahun)).map((r) => ({ ...r, item_id: peta[r.sumber as keyof PetaOtomatis] }));
   return { tahun, items, real: [...manual, ...otomatis], rabDaerah };
+}
+
+// ===================== §166 Rencana vs realisasi per baris RAB + alasan deviasi =====================
+// Status dihitung dari pagu (qty x harga), kuartal rencana (centang Q1-Q4, atau q_revisi bila jadwal digeser)
+// dan realisasi per kuartal. Status menyimpang wajib diberi alasan + tindakan; alasan tersimpan di baris RAB
+// (alasan_deviasi, tindakan_deviasi, deviasi_untuk, q_revisi). deviasi_untuk = kunci status saat dijelaskan, jadi
+// bila muncul penyimpangan baru (mis. jadwal revisi meleset lagi) alasan diminta ulang.
+
+export type StatusDeviasi = "Melebihi pagu" | "Terlambat" | "Di luar jadwal" | "Tanpa pagu" | "Ditunda" | "Dibatalkan" | "Terserap" | "Berjalan" | "Belum jatuh tempo";
+export const STATUS_PERLU_ALASAN: StatusDeviasi[] = ["Melebihi pagu", "Terlambat", "Di luar jadwal", "Tanpa pagu"];
+export const WARNA_DEVIASI: Record<StatusDeviasi, { bg: string; fg: string }> = {
+  "Melebihi pagu": { bg: "var(--red-50)", fg: "var(--red-600)" },
+  Terlambat: { bg: "var(--warn-50)", fg: "var(--warn)" },
+  "Di luar jadwal": { bg: "var(--info-50)", fg: "var(--info)" },
+  "Tanpa pagu": { bg: "var(--red-50)", fg: "var(--red-600)" },
+  Ditunda: { bg: "var(--line)", fg: "var(--ink-soft)" },
+  Dibatalkan: { bg: "var(--line)", fg: "var(--muted)" },
+  Terserap: { bg: "var(--ok-50)", fg: "var(--ok)" },
+  Berjalan: { bg: "var(--ok-50)", fg: "var(--ok)" },
+  "Belum jatuh tempo": { bg: "var(--bg)", fg: "var(--muted)" },
+};
+/** Tindakan yang masuk akal per status (pilihan di modal alasan). */
+export const TINDAKAN_DEVIASI: Record<string, string[]> = {
+  "Melebihi pagu": ["Realisasi salah baris — dipindah", "Kebutuhan bertambah", "Harga naik", "Darurat / mendesak", "Realokasi dari baris lain"],
+  Terlambat: ["Geser jadwal", "Ditunda ke tahun depan", "Dibatalkan", "Menunggu approval / CER / PO", "Vendor terlambat"],
+  "Di luar jadwal": ["Dipercepat (mendesak)", "Mundur dari jadwal", "Realisasi salah baris — dipindah"],
+  "Tanpa pagu": ["Realisasi salah baris — dipindah", "Pengeluaran di luar RAB (darurat)", "Akan dibuatkan baris RAB"],
+};
+
+export interface DeviasiRab { alasan_deviasi?: string; tindakan_deviasi?: string; deviasi_untuk?: string; q_revisi?: boolean[]; deviasi_oleh?: string; deviasi_tgl?: string }
+export interface HasilDeviasi { status: StatusDeviasi; kunci: string; perluAlasan: boolean; dijelaskan: boolean; qAktif: boolean[]; selisih: number }
+
+/**
+ * @param realQ realisasi baris ini per kuartal (4 angka)
+ * @param kuartalLewat jumlah kuartal yang SUDAH berakhir pada tahun anggaran (tahun lalu = 4, tahun depan = 0)
+ */
+export function analisaDeviasi(i: ItemRab & DeviasiRab, realQ: number[], kuartalLewat: number): HasilDeviasi {
+  const pagu = (i.qty || 0) * (i.harga || 0);
+  const real = realQ.reduce((a, b) => a + b, 0);
+  const qAsli = i.q || [false, false, false, false];
+  const qAktif = i.q_revisi?.some(Boolean) ? i.q_revisi : qAsli;
+  const adaJadwal = qAktif.some(Boolean);
+  let status: StatusDeviasi;
+  if (real === 0 && i.tindakan_deviasi === "Ditunda ke tahun depan") status = "Ditunda";
+  else if (real === 0 && i.tindakan_deviasi === "Dibatalkan") status = "Dibatalkan";
+  else if (pagu === 0 && real > 0) status = "Tanpa pagu";
+  else if (real > pagu + 1) status = "Melebihi pagu";
+  else if (real === 0) {
+    const pertama = qAktif.findIndex(Boolean);
+    status = (adaJadwal ? pertama < kuartalLewat : kuartalLewat >= 4) ? "Terlambat" : "Belum jatuh tempo";
+  } else if (adaJadwal && realQ.some((v, k) => v > 0 && !qAktif[k])) status = "Di luar jadwal";
+  else status = real >= pagu * 0.95 ? "Terserap" : "Berjalan";
+  const kunci = status === "Terlambat" ? `${status}:${qAktif.map((b) => (b ? 1 : 0)).join("")}` : status;
+  const perluAlasan = STATUS_PERLU_ALASAN.includes(status);
+  return { status, kunci, perluAlasan, dijelaskan: perluAlasan && !!i.alasan_deviasi && i.deviasi_untuk === kunci, qAktif, selisih: real - pagu };
 }
