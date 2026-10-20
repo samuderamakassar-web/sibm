@@ -23,6 +23,14 @@ service firebase.storage {
           && request.resource.contentType.matches('application/pdf|image/.*|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-excel')));
     }
 
+    // §168 As-built drawing gedung -- khusus Admin GA; maks 50 MB; PDF / gambar / DWG / DXF
+    match /asbuilt/{allPaths=**} {
+      allow read: if adminGA();
+      allow write: if adminGA()
+        && (request.resource == null || (request.resource.size < 50 * 1024 * 1024
+          && request.resource.contentType.matches('application/pdf|image/.*|application/acad|application/dxf')));
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

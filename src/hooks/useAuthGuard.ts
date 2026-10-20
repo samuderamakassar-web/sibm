@@ -54,7 +54,7 @@ export function getStoredSession(): AuthSession {
 
 // §145 Magang GA (departemen "Admin GA" + role mengandung "Magang"): hanya halaman di bawah ini (keputusan user
 // 14 Okt 2026: input dokumen legal, kendaraan, tambah karyawan, master laptop), tanpa hak hapus (UI + firestore.rules).
-export const HALAMAN_MAGANG_GA = ["/admin", "/admin/legalitas", "/admin/kendaraan", "/admin/karyawan", "/admin/laptop"];
+export const HALAMAN_MAGANG_GA = ["/admin", "/admin/legalitas", "/admin/kendaraan", "/admin/karyawan", "/admin/laptop", "/admin/aset"];
 export const isMagangGA = (role: string, dept: string) => dept === "Admin GA" && /magang/i.test(role || "");
 /** Magang (bagian mana pun) tidak boleh menghapus data -- dipakai untuk menyembunyikan tombol hapus. */
 export const isMagangSaatIni = () => /magang/i.test(getStoredSession().role);

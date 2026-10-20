@@ -73,15 +73,14 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { title: "Okupansi Gedung", desc: "Luas lantai, tenant & area kosong", path: "/admin/okupansi", icon: "building" },
       { title: "Titik Patroli & QR", desc: "Titik wajib scan per lantai + cetak label QR", path: "/admin/titik-patroli", icon: "shield" },
-      { title: "Master Data APAR", desc: "APAR per lantai & QR inspeksi", path: "/admin/apar", icon: "fireExtinguisher" },
     ],
   },
   {
     name: "Aset & Legalitas",
     tone: "accent",
     items: [
-      { title: "Kendaraan & Uji Emisi", desc: "Foto, PIC, odometer, servis, uji emisi", path: "/admin/kendaraan", icon: "truck" },
-      { title: "Master Data Laptop", desc: "Masa sewa laptop tiap user", path: "/admin/laptop", icon: "laptop" },
+      // §167 1 menu untuk semua aset: utilitas, AC, IT, furniture + laptop, kendaraan, APAR, alat OB + as-built drawing
+      { title: "Daftar Aset & As-Built", desc: "Semua aset, peremajaan rutin, kepemilikan & gambar as-built", path: "/admin/aset", icon: "box" },
       { title: "Bank Dokumen Legal", desc: "Legalitas, izin, perjanjian & BA per PT", path: "/admin/legalitas", icon: "stamp" },
     ],
   },
@@ -114,6 +113,10 @@ const MENU_GROUPS: MenuGroup[] = [
 /** Halaman yang digabung ke menu induk -- tidak tampil sebagai kartu, tetap bisa dicari. */
 const MENU_PENCARIAN: MenuItem[] = [
   { title: "Hasil Uji Emisi", desc: "Bagian dari Kendaraan & Uji Emisi", path: "/admin/uji-emisi", icon: "car" },
+  { title: "Kendaraan & Uji Emisi", desc: "Bagian dari Daftar Aset", path: "/admin/kendaraan", icon: "truck" },
+  { title: "Master Data Laptop", desc: "Bagian dari Daftar Aset", path: "/admin/laptop", icon: "laptop" },
+  { title: "Master Data APAR", desc: "Bagian dari Daftar Aset", path: "/admin/apar", icon: "fireExtinguisher" },
+  { title: "As-Built Drawing", desc: "Bagian dari Daftar Aset", path: "/admin/aset", icon: "fileText" },
   { title: "QR Code Generator", desc: "Bagian dari Titik Patroli & QR", path: "/admin/qr-manager", icon: "printer" },
   { title: "Dokumen SOP / IK", desc: "Bagian dari SOP & Checklist", path: "/admin/sop", icon: "book" },
 ];

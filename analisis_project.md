@@ -3371,3 +3371,17 @@ Halaman baru /admin/evaluasi-biaya (menu "Evaluasi Biaya Tahunan" di grup Manaje
 3. Tab baru "Rencana vs Realisasi (N ⚠)": filter Perlu alasan / Semua yang meleset / Semua baris, tabel rencana (pagu, kuartal; revisi ditandai), realisasi & kuartal terealisasi, selisih, status, alasan; klik baris -> modal. Ringkasan ▸ Perlu perhatian menampilkan tombol jumlah baris yang belum dijelaskan.
 4. Realisasi manual kini bisa dipindah ke baris RAB lain kapan saja (sebelumnya hanya yang belum dialokasikan) -- untuk kasus salah baris seperti pengadaan AC tercatat di Servis AC.
 5. Export RAB menambah kolom Status, Jadwal revisi, Tindakan, Alasan.
+
+## 167. Daftar Aset Terpadu + Peremajaan Rutin (20 Oktober 2026)
+
+Menu baru /admin/aset "Daftar Aset & As-Built" (grup Aset & Legalitas). Menu Kendaraan, Laptop & APAR dikeluarkan dari kartu hub (tetap ada, dibuka dari tautan di daftar / pencarian) agar menu tidak bertambah. Magang GA boleh membuka /admin/aset.
+1. Koleksi aset_gedung (src/lib/asetGedung.ts) untuk aset tanpa register sendiri: kode otomatis per kategori (UTL/AC/IT/SAF/FUR/KTR/LN-0001), nama, kategori, jenis, merek/tipe, no seri, lokasi, pemilik, PIC, tgl & nilai perolehan, umur ekonomis, status (Aktif/Dalam perbaikan/Rusak/Disposal/Dimusnahkan), interval peremajaan (bulan, usulan otomatis dari jenis: AC 3, pompa/tank/fire 6, genset/panel/IT 12, lift 1), peremajaan terakhir, riwayat[].
+2. Daftar gabungan menampilkan juga register lama (baca saja + tautan kelola): master_laptop aktif (jatuh tempo = sewa berakhir), master_kendaraan (servis terakhir dari kendaraan_service_logs, jatuh tempo = tanggal_servis_berikutnya), apar_units (kadaluarsa), aset_alat non-Afkir.
+3. Kartu: total aset, peremajaan terlambat, jatuh tempo ≤30 hari, perlu diganti (rusak/disposal/umur ekonomis habis/alat rusak-hilang), kepemilikan (jumlah per pemilik, klik = filter). Filter kategori, pemilik, cari; tabel urut yang terlambat dulu.
+4. Catat peremajaan (tanggal, jenis, uraian, vendor, biaya) -> riwayat & peremajaan_terakhir; biaya bisa langsung jadi realisasi_biaya baris RAB tahun berjalan (sumber_aset). Riwayat menampilkan total biaya vs nilai perolehan (>50% = saran ganti unit). Import/Template/Export Excel (sheet Daftar Aset & Riwayat Peremajaan).
+5. firestore.rules: 'aset_gedung', 'asbuilt_gambar' masuk koleksiOperasional (REST tanpa login 403; publik tetap 200).
+
+## 168. As-Built Drawing dengan Revisi Otomatis (20 Oktober 2026)
+
+Tab "As-Built Drawing" di /admin/aset. asbuilt_gambar: 1 dokumen = 1 sheet (disiplin, lantai, nomor_sheet, judul, kunci, revisi_aktif, riwayat[]). File di Firebase Storage asbuilt/** (storage.rules: hanya Admin GA, ≤50 MB, PDF/gambar/DWG/DXF; tanpa login 403).
+Upload banyak file sekaligus: nomor sheet diambil dari nama file (mis. AR-101), judul dibersihkan dari penanda rev/versi/tanggal, disiplin ditebak dari prefix. File yang cocok dengan sheet lama (nomor sheet, atau disiplin+lantai+judul bila tanpa nomor) otomatis menjadi revisi baru & menggantikan revisi aktif (versi lama masuk riwayat); sisanya sheet baru -> satu set gambar berlaku yang selalu terbaru. Catatan perubahan wajib bila ada revisi. Riwayat per sheet: buka/unduh tiap revisi, Bandingkan lama vs berlaku (PDF berdampingan; gambar ditumpuk dengan slider). Penggabungan isi gambar CAD secara otomatis tidak dilakukan -- perbedaan dijelaskan lewat catatan & perbandingan visual.
