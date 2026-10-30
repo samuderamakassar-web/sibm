@@ -14,6 +14,7 @@ import Tile from "../admin/Tile";
 import { useMasterKondisiAset } from "@/lib/kondisiAset";
 import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
 import KinerjaSayaPanel from "../KinerjaSayaPanel";
+import { useUjiPolaZona, zonaUntuk, mingguKe } from "@/lib/ujiPolaZona";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -130,7 +131,12 @@ export default function DashboardOBPage() {
     if (!picName || !uid) return;
     return onSnapshot(doc(db, "users_master", uid), (s) => setPeranTugas(String(s.data()?.peran_tugas || "")), () => setPeranTugas(""));
   }, [picName]);
-  const isOBPelayanan = peranTugas === "OB Pelayanan";
+  // §169 uji coba pola zona: selama periode aktif, zona menggantikan peran tugas & checklist lama
+  const { config: ujiZona } = useUjiPolaZona();
+  const zonaHariIni = zonaUntuk(ujiZona, picName, todayISO);
+  const isOBPelayanan = zonaHariIni ? zonaHariIni === "Tenant" : peranTugas === "OB Pelayanan";
+  const peranPanel = zonaHariIni ? "" : peranTugas; // semua permintaan tampil; zona Tenant di atas
+  const pathChecklist = zonaHariIni ? "/dashboard/ob/zona" : "/dashboard/ob/checklist";
   const petugasUtilitas = masterAset.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
   // §132 alat tidak lagi per PIC (diinspeksi Koordinator 2x sebulan) -> jumlahAlat tidak memberi tugas
   // §133 gedung = petugas yang ditunjuk Koordinator (bergilir), bukan lagi semua yang punya plot area
@@ -199,7 +205,9 @@ export default function DashboardOBPage() {
 
   // MENU UTAMA OB & CS — warna dipetakan ke token desain (lihat tokenColors di bawah)
   const menuOB = [
-    { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
+    zonaHariIni
+      ? { title: `Checklist Zona ${zonaHariIni}`, desc: "Uji coba pola zona: ronde + penilaian akhir shift.", path: "/dashboard/ob/zona", action: "link", token: "ok", icon: IconClipboard }
+      : { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
     { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", action: "link", token: "warn", icon: IconDroplet },
     // §156 menu inspeksi terpisah per jenis, hanya untuk yang ditugaskan
     ...(petugasGedung ? [{ title: "Inspeksi Fasilitas Gedung", desc: "Tiap minggu per area — Semua aman atau lapor temuan.", path: "/dashboard/ob/laporan?jenis=gedung", action: "link", token: "info", icon: IconSearch }] : []),
@@ -232,7 +240,7 @@ export default function DashboardOBPage() {
             <IconHome size={20} />
             <span>Home</span>
           </button>
-          <button type="button" className="sa-nav-item" onClick={() => router.push("/dashboard/ob/checklist")}>
+          <button type="button" className="sa-nav-item" onClick={() => router.push(pathChecklist)}>
             <IconClipboard size={20} />
             <span>Checklist</span>
           </button>
@@ -337,7 +345,7 @@ export default function DashboardOBPage() {
 
       {/* 🔹 KARTU SAPAAN (pengganti hero merah lama) */}
       <Tile variant="brand" className="staff-hero">
-        <span className="staff-hero-label">Cleaning Center · {peranTugas || "OB & CS"}</span>
+        <span className="staff-hero-label">Cleaning Center · {zonaHariIni ? `Office Boy · Zona ${zonaHariIni}` : peranTugas || "OB & CS"}</span>
         <h1 className="staff-hero-title">Halo, {picName.split(/\s+/)[0]}.<br />{isOBPelayanan ? "Siap melayani hari ini?" : "Siap bersih-bersih hari ini?"}</h1>
       </Tile>
 
@@ -351,6 +359,11 @@ export default function DashboardOBPage() {
               {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
             </h2>
           </div>
+          {zonaHariIni && ujiZona ? (
+            <div className="shift-badge" style={{ background: "var(--ok-50)", color: "var(--ok)", borderColor: "rgba(22,163,74,0.3)", cursor: "pointer" }} onClick={() => router.push("/dashboard/ob/zona")}>
+              <IconMapPin size={16} /> ZONA {zonaHariIni.toUpperCase()} · minggu {mingguKe(ujiZona, todayISO)}
+            </div>
+          ) : (
           <div className="shift-badge" style={assignedFloors.length > 0
             ? { background: "var(--ok-50)", color: "var(--ok)", borderColor: "rgba(22,163,74,0.3)" }
             : { background: "var(--red-50)", color: "var(--red-600)", borderColor: "rgba(220,38,38,0.3)" }}>
@@ -360,12 +373,13 @@ export default function DashboardOBPage() {
               <><IconAlertTriangle size={16} /> BELUM DIPLOT</>
             )}
           </div>
+          )}
         </div>
 
         <AbsensiCard picName={picName} departemen="OB & CS" />
 
         {/* §123 OB Pelayanan: permintaan pelayanan paling atas */}
-        {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranTugas} />}
+        {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranPanel} />}
 
         {/* ⚠️ BANNER PERINGATAN LOW STOCK */}
         {stokMenipis.length > 0 && (
@@ -385,10 +399,11 @@ export default function DashboardOBPage() {
         )}
 
         {/* §122 permintaan pelayanan dari karyawan (portal) */}
-        {picName && !isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranTugas} />}
+        {picName && !isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranPanel} />}
 
         {/* §123 kinerja pribadi -- hanya angka sendiri, bahan introspeksi */}
-        {picName && <KinerjaSayaPanel nama={picName} peran={peranTugas} />}
+        {/* §169 disembunyikan selama uji coba zona (target checklist sesi lama tidak berlaku) */}
+        {picName && !zonaHariIni && <KinerjaSayaPanel nama={picName} peran={peranTugas} />}
 
         {/* 👑 PANEL KHUSUS KOORDINATOR */}
         {(picRole.includes("Koordinator") || picRole.includes("Administrator")) && (

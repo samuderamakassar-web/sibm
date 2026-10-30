@@ -60,6 +60,14 @@ async function jalankan() {
     return;
   }
 
+  // §169 uji coba pola zona OB: pengingat sesi lama diganti 2 pengingat per hari --
+  // 12:00-12:29 belum ada ronde, 16:30-16:59 belum ada ronde / belum penilaian akhir shift.
+  const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
+  if (uji?.aktif && hariIni >= uji.mulai && hariIni <= uji.selesai) {
+    await pengingatZona(uji);
+    return;
+  }
+
   const sesiSekarang = sesiOBSekarang(now);
   if (!sesiSekarang) {
     console.log(`Jam ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")} WITA di luar jendela sesi checklist, skip.`);
@@ -136,6 +144,52 @@ async function jalankan() {
     }
   });
   await tulisNotifPersonal(picBelumLapor, `Pengingat Checklist Sesi ${sesiSekarang}`, bodyPesan);
+}
+
+async function pengingatZona(uji) {
+  const menit = now.getHours() * 60 + now.getMinutes();
+  const siang = menit >= 12 * 60 && menit < 12 * 60 + 30;
+  const sore = menit >= 16 * 60 + 30 && menit < 17 * 60;
+  if (!siang && !sore) {
+    console.log("Uji coba pola zona: di luar jam pengingat (12:00 & 16:30 WITA), skip.");
+    return;
+  }
+  const libur = (await db.collection("settings").doc("validasi_karyawan").get()).data()?.hari_libur || [];
+  if (libur.includes(hariIni)) {
+    console.log("Uji coba pola zona: hari libur, skip.");
+    return;
+  }
+  const peserta = [...(uji.tim_tenant || []), ...(uji.tim_publik || [])];
+  const laporan = (await db.collection("ob_zona_laporan").where("tanggal", "==", hariIni).get()).docs.map((d) => d.data());
+  const minRonde = Math.max(1, Number(uji.min_ronde) || 1);
+  const pesanPer = {};
+  for (const nama of peserta) {
+    const milik = laporan.filter((l) => String(l.nama || "").trim().toLowerCase() === nama.trim().toLowerCase());
+    const ronde = milik.filter((l) => l.jenis === "ronde").length;
+    const sudahNilai = milik.some((l) => l.jenis === "penilaian");
+    const kurang = [];
+    if (ronde < minRonde) kurang.push(`ronde (${ronde}/${minRonde})`);
+    if (sore && !sudahNilai) kurang.push("penilaian akhir shift");
+    if (kurang.length) pesanPer[nama] = `Checklist Zona hari ini belum lengkap: ${kurang.join(" & ")}. Isi di menu Checklist Zona.`;
+  }
+  const namaKirim = Object.keys(pesanPer);
+  if (namaKirim.length === 0) {
+    console.log("Uji coba pola zona: semua peserta sudah lengkap.");
+    return;
+  }
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "OB & CS").get();
+  const tokenPerNama = {};
+  tokenSnap.forEach((d) => { const x = d.data(); if (x.token && x.pic_nama) tokenPerNama[x.pic_nama] = x.token; });
+  const judul = "Pengingat Checklist Zona";
+  for (const nama of namaKirim) {
+    const token = tokenPerNama[nama];
+    if (!token) { console.log(`Tanpa token FCM: ${nama}`); continue; }
+    try {
+      await messaging.send({ token, notification: { title: judul, body: pesanPer[nama] }, webpush: { notification: { icon: "/icons/icon-192.png" } } });
+      console.log(`Terkirim ke ${nama}`);
+    } catch (e) { console.log(`Gagal kirim ke ${nama}:`, e?.code); }
+  }
+  await Promise.all(namaKirim.map((nama) => tulisNotifPersonal([nama], judul, pesanPer[nama])));
 }
 
 jalankan()

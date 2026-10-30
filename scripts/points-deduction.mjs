@@ -219,6 +219,12 @@ async function cekOB() {
     console.log("OB & CS: kemarin weekend, skip (gak ada jadwal).");
     return tidakLengkap;
   }
+  // §169 uji coba pola zona OB: checklist sesi lama dimatikan & tanpa potong poin selama periode aktif
+  const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
+  if (uji?.aktif && kemarin >= uji.mulai && kemarin <= uji.selesai) {
+    console.log(`OB & CS: ${kemarin} dalam uji coba pola zona (${uji.mulai} s.d. ${uji.selesai}), tanpa potong poin.`);
+    return tidakLengkap;
+  }
   const plotSnap = await db.collection("daily_plots").doc(kemarin).get();
   if (!plotSnap.exists) {
     console.log("OB & CS: tidak ada plot untuk kemarin, skip.");

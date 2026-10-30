@@ -190,7 +190,9 @@ service cloud.firestore {
           // §122 Permintaan pelayanan OB (form portal publik)
           'permintaan_pelayanan',
           // §167 Daftar aset terpadu & §168 As-built drawing (metadata; file di Storage asbuilt/**)
-          'aset_gedung', 'asbuilt_gambar'
+          'aset_gedung', 'asbuilt_gambar',
+          // §169 Uji coba pola zona OB: laporan ronde & penilaian akhir shift (config di ob_settings/uji_pola_zona)
+          'ob_zona_laporan'
         ];
     }
 

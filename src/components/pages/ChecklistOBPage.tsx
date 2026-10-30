@@ -9,6 +9,7 @@ import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/li
 import { getSegmenUntukArea, ID_SEGMENT_PELAYANAN, useChecklistOB } from "@/lib/sopChecklist";
 import AdminShell from "../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { useUjiPolaZona, zonaUntuk } from "@/lib/ujiPolaZona";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -187,6 +188,9 @@ export default function ChecklistOBPage() {
   const segmenUntuk = (area: string) => getSegmenUntukArea(masterOB.area, masterOB.tugas_tambahan, area, picName);
   const defaultArea = assignedAreas[0] ?? "";
   const isLiburHariIni = isWeekend(getTodayISOLocal());
+  // §169 selama uji coba pola zona, checklist per lantai/sesi dimatikan untuk staf peserta
+  const { config: ujiZona } = useUjiPolaZona();
+  const zonaHariIni = zonaUntuk(ujiZona, picName, getTodayISOLocal());
 
   // ==========================================
   // EFEK 1: Ambil Identitas & Data Ploting
@@ -556,6 +560,18 @@ export default function ChecklistOBPage() {
         <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "4px solid var(--ok-50)", borderTopColor: "var(--ok)", animation: "spin 0.8s linear infinite", marginBottom: "16px" }} />
         <div style={{ fontWeight: "bold", fontSize: "14px", color: "var(--ink-soft)" }}>Menyelaraskan Tugas Ploting Anda...</div>
       </div>
+    );
+  }
+
+  if (zonaHariIni) {
+    return (
+      <AdminShell title="Checklist Kebersihan" subtitle="Sementara dimatikan selama uji coba pola zona" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
+        <div style={{ padding: "20px", borderRadius: "20px", background: "var(--tile)" }}>
+          <b>Selama uji coba pola zona, checklist per lantai & sesi tidak dipakai.</b>
+          <p style={{ margin: "6px 0 14px", color: "var(--ink-soft)", fontSize: "13.5px" }}>Hari ini kamu bertugas di Zona {zonaHariIni}. Laporkan ronde & penilaian akhir shift di Checklist Zona.</p>
+          <button type="button" className="sa-btn is-primary" onClick={() => router.push("/dashboard/ob/zona")}>Buka Checklist Zona</button>
+        </div>
+      </AdminShell>
     );
   }
 

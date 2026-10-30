@@ -63,6 +63,7 @@ const MENU_GROUPS: MenuGroup[] = [
     tone: "ok",
     items: [
       { title: "Plotting OB & CS", desc: "Atur area tugas harian & petugas utilitas", path: "/admin/plotting-ob", icon: "calendar" },
+      { title: "Uji Coba Pola Zona", desc: "Office Boy zona Tenant vs Publik + evaluasi beban", path: "/admin/uji-pola-zona", icon: "clipboardList" },
       { title: "Temuan & Kondisi Aset", desc: "Hasil inspeksi OB: perbaikan & penggantian", path: "/admin/kondisi-aset", icon: "search" },
       { title: "Alat Kerja OB & CS", desc: "Daftar alat, rusak/hilang, label", path: "/admin/alat-kerja", icon: "box" },
     ],
@@ -198,7 +199,9 @@ async function muatHitungan(): Promise<Hitungan> {
   const awalBulan = new Date(`${hariIni.slice(0, 7)}-01T00:00:00+08:00`).getTime();
 
   const tugas: Record<KunciHitungan, () => Promise<number>> = {
-    ob: () => hitung(query(collection(db, "ob_checklists"), where("tanggal", "==", hariIni))),
+    // §169 + laporan Checklist Zona (uji coba pola zona OB)
+    ob: async () => (await hitung(query(collection(db, "ob_checklists"), where("tanggal", "==", hariIni))))
+      + (await hitung(query(collection(db, "ob_zona_laporan"), where("tanggal", "==", hariIni))).catch(() => 0)),
     security: () => hitung(query(collection(db, "security_patrols"), where("waktu_laporan", ">=", awalHari))),
     driver: () => hitung(query(collection(db, "operational_vehicle_logs"), where("waktu_catat", ">=", awalHari))),
     tukarShift: async () => {
