@@ -7,7 +7,7 @@
 //
 //   ob_settings/uji_pola_zona { aktif, mulai, tukar_mulai, selesai, tim_tenant[], tim_publik[],
 //                               area_tenant[], area_publik[], min_ronde, dibuat_oleh, waktu_update }
-//   ob_zona_laporan/{id}      { jenis: "ronde"|"penilaian", tanggal, nama, zona, minggu, ...isi }
+//   ob_zona_laporan/{id}      { jenis: "ronde", tanggal, nama, zona, minggu, area[], foto_sebelum, foto_sesudah, catatan }
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
@@ -34,25 +34,18 @@ export interface UjiPolaZona {
 
 export interface LaporanZona {
   id: string;
-  jenis: "ronde" | "penilaian";
+  // §171 hanya "ronde" -- penilaian dari staf ditiadakan (evaluasi otomatis dari data aplikasi)
+  jenis: "ronde";
   tanggal: string;
   nama: string;
   zona: Zona;
   minggu: 1 | 2;
   waktu?: Timestamp | null;
-  // ronde
   area?: string[];
   foto_sebelum?: string;
   foto_sesudah?: string;
   catatan?: string;
-  // penilaian akhir shift
-  beban?: number;          // 1 sangat ringan .. 5 sangat berat
-  bantu_zona_lain?: number; // berapa kali membantu zona lain
-  kendala?: string;
-  jam_pulang?: string;     // HH:MM
 }
-
-export const LABEL_BEBAN = ["", "Sangat ringan", "Ringan", "Sedang", "Berat", "Sangat berat"];
 
 /** Tanggal ISO + n hari (aman zona waktu: dihitung di UTC murni). */
 export function tambahHari(iso: string, n: number): string {

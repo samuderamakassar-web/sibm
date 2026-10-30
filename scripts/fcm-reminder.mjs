@@ -61,7 +61,7 @@ async function jalankan() {
   }
 
   // §169 uji coba pola zona OB: pengingat sesi lama diganti 2 pengingat per hari --
-  // 12:00-12:29 belum ada ronde, 16:30-16:59 belum ada ronde / belum penilaian akhir shift.
+  // 12:00-12:29 & 16:30-16:59 bila ronde hari ini masih kurang dari minimal.
   const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
   if (uji?.aktif && hariIni >= uji.mulai && hariIni <= uji.selesai) {
     await pengingatZona(uji);
@@ -166,11 +166,8 @@ async function pengingatZona(uji) {
   for (const nama of peserta) {
     const milik = laporan.filter((l) => String(l.nama || "").trim().toLowerCase() === nama.trim().toLowerCase());
     const ronde = milik.filter((l) => l.jenis === "ronde").length;
-    const sudahNilai = milik.some((l) => l.jenis === "penilaian");
-    const kurang = [];
-    if (ronde < minRonde) kurang.push(`ronde (${ronde}/${minRonde})`);
-    if (sore && !sudahNilai) kurang.push("penilaian akhir shift");
-    if (kurang.length) pesanPer[nama] = `Checklist Zona hari ini belum lengkap: ${kurang.join(" & ")}. Isi di menu Checklist Zona.`;
+    // §171 tanpa penilaian dari staf -- yang diingatkan hanya ronde
+    if (ronde < minRonde) pesanPer[nama] = `Checklist Zona hari ini belum lengkap: ronde ${ronde}/${minRonde}. Isi di menu Checklist Zona.`;
   }
   const namaKirim = Object.keys(pesanPer);
   if (namaKirim.length === 0) {

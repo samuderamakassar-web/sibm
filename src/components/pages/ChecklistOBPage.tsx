@@ -568,7 +568,7 @@ export default function ChecklistOBPage() {
       <AdminShell title="Checklist Kebersihan" subtitle="Sementara dimatikan selama uji coba pola zona" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
         <div style={{ padding: "20px", borderRadius: "20px", background: "var(--tile)" }}>
           <b>Selama uji coba pola zona, checklist per lantai & sesi tidak dipakai.</b>
-          <p style={{ margin: "6px 0 14px", color: "var(--ink-soft)", fontSize: "13.5px" }}>Hari ini kamu bertugas di Zona {zonaHariIni}. Laporkan ronde & penilaian akhir shift di Checklist Zona.</p>
+          <p style={{ margin: "6px 0 14px", color: "var(--ink-soft)", fontSize: "13.5px" }}>Hari ini kamu bertugas di Zona {zonaHariIni}. Laporkan ronde di Checklist Zona.</p>
           <button type="button" className="sa-btn is-primary" onClick={() => router.push("/dashboard/ob/zona")}>Buka Checklist Zona</button>
         </div>
       </AdminShell>

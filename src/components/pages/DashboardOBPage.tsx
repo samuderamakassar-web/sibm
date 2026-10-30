@@ -206,7 +206,7 @@ export default function DashboardOBPage() {
   // MENU UTAMA OB & CS — warna dipetakan ke token desain (lihat tokenColors di bawah)
   const menuOB = [
     zonaHariIni
-      ? { title: `Checklist Zona ${zonaHariIni}`, desc: "Uji coba pola zona: ronde + penilaian akhir shift.", path: "/dashboard/ob/zona", action: "link", token: "ok", icon: IconClipboard }
+      ? { title: `Checklist Zona ${zonaHariIni}`, desc: "Uji coba pola zona: lapor ronde + 2 foto.", path: "/dashboard/ob/zona", action: "link", token: "ok", icon: IconClipboard }
       : { title: "Kerjaan Rutin Harian", desc: "Checklist kebersihan (Toilet, Lobby, dll).", path: "/dashboard/ob/checklist", action: "link", token: "ok", icon: IconClipboard },
     { title: "Stock Opname Gudang", desc: "Catat sisa chemical, sabun, dan tisu.", path: "/dashboard/ob/stok", action: "link", token: "warn", icon: IconDroplet },
     // §156 menu inspeksi terpisah per jenis, hanya untuk yang ditugaskan
