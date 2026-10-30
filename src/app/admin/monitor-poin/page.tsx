@@ -203,7 +203,7 @@ export default function MonitorPoinPage() {
   return (
     <AdminShell
       title="Rekap Poin Staf"
-      subtitle="Poin awal 100/bulan, berkurang otomatis kalau misi/tugas tidak diselesaikan sempurna"
+      subtitle="Poin awal 100/bulan, berkurang otomatis kalau tugas tidak diselesaikan; OB & CS bisa dapat nilai plus (lebih dari 100)"
       userName={adminName}
     >
       <style dangerouslySetInnerHTML={{ __html: `
@@ -245,7 +245,7 @@ export default function MonitorPoinPage() {
         <details style={{ background: "var(--tile)", borderRadius: "20px", padding: "14px 18px", marginBottom: "16px" }}>
           <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: "14px", color: "var(--ink)" }}>Aturan potongan poin (otomatis, dihitung tiap pagi untuk hari kemarin)</summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginTop: "12px", fontSize: "12.5px", color: "var(--ink-soft)", lineHeight: 1.6 }}>
-            <div><b style={{ color: "var(--ink)" }}>OB & CS</b><br />−5 per sesi checklist (Pagi/Siang/Sore) yang tidak dilaporkan sesuai plot. OB Pelayanan cukup 2 dari 3 sesi. Tanpa potongan selama uji coba pola zona.</div>
+            <div><b style={{ color: "var(--ink)" }}>OB & CS</b><br />Per hari, dari jumlah sesi checklist (Pagi/Siang/Sore) yang dilaporkan: tidak lapor sama sekali −10 · 1 sesi 0 + peringatan · 2 sesi +1 · 3 sesi (sempurna) +2. Poin bisa lebih dari 100. Tanpa potongan selama uji coba pola zona.</div>
             <div><b style={{ color: "var(--ink)" }}>Security</b><br />−10 per shift di bawah minimum 2 sesi patroli.</div>
             <div><b style={{ color: "var(--ink)" }}>Driver</b> <span style={{ fontSize: "11px" }}>(hanya kendaraan bertanda &quot;dikelola tim Driver&quot; di Master Kendaraan)</span><br />
               −3 per trip &quot;Keluar&quot; yang tidak dicatat tiba/pulang dalam 12 jam (driver pembawa).<br />
@@ -300,7 +300,8 @@ export default function MonitorPoinPage() {
                           <span style={{ fontWeight: 700, color: "var(--ink)", fontSize: "13.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.nama}</span>
                         </div>
                         <div className="poin-bar-track">
-                          <div className="poin-bar-fill" style={{ width: `${r.poin}%`, background: warnaBar }} />
+                          {/* §172 poin bisa > 100 (nilai plus checklist OB) -> skala bar ikut poin tertinggi */}
+                          <div className="poin-bar-fill" style={{ width: `${Math.min(100, (r.poin / Math.max(100, poinTertinggiDept)) * 100)}%`, background: warnaBar }} />
                         </div>
                         <div style={{ fontWeight: 800, fontSize: "15px", color: warnaBar, width: "40px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.poin}</div>
                         {periode === "bulanan" && <AdminIcon name="chevronRight" size={14} style={{ color: "var(--muted)", transform: expandedNama === r.nama ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />}

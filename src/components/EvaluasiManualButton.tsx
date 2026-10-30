@@ -85,7 +85,8 @@ export default function EvaluasiManualButton({ nama, departemen, sumberJenis, su
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         const poinSekarang = snap.exists() ? (snap.data().poin as number) : 100;
-        const poinBaru = Math.max(0, Math.min(100, poinSekarang + jumlah));
+        // §172 poin boleh > 100 (nilai plus checklist OB) -- dulu dibatasi 100 & akan memotong bonus otomatis
+        const poinBaru = Math.max(0, poinSekarang + jumlah);
         // potongan NEGATIF = tambahan (lihat catatan di atas file).
         const entriRiwayat = { tanggal: tanggalLaporan, alasan: `[Evaluasi Manual oleh ${dievaluasiOleh}] ${alasan}`, potongan: -jumlah };
         if (snap.exists()) {

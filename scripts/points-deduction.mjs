@@ -159,7 +159,7 @@ const messaging = getMessaging();
 
 const POIN_AWAL_BULAN = 100;
 const POTONGAN = {
-  ob_sesi_terlewat: 5, // per sesi (Pagi/Siang/Sore) yang gak dilaporkan
+  // OB & CS: lihat NILAI_SESI_OB (§172, bertingkat -- bukan lagi −5 per sesi)
   security_shift_tidak_patuh: 10, // per shift (Shift 1 / Shift 2) yang gak memenuhi minimum sesi
   // §82 Driver (keputusan user 3 Okt 2026) -- hanya kendaraan master ber-dikelola_driver = true
   driver_inspeksi_terlewat: 5, // per kendaraan yang tidak diinspeksi minggu lalu (semua driver; dicek tiap Senin)
@@ -169,7 +169,8 @@ const POTONGAN = {
 };
 const AMBANG_JAM_KELUAR = 12;
 const MINIMUM_SESI_PATROLI = 2;
-const MINIMUM_SESI_PELAYANAN = 2; // §170 OB Pelayanan cukup 2 dari 3 sesi checklist
+// §172 nilai harian checklist OB & CS per jumlah sesi dilaporkan (index = jumlah sesi 0..3)
+const NILAI_SESI_OB = [-10, 0, 1, 2];
 
 const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
 
@@ -208,7 +209,8 @@ async function potongPoin(nama, departemen, alasan, jumlah) {
       tx.set(ref, { nama, departemen, bulan: bulanKemarin, poin: poinBaru, riwayat: [entriRiwayat] });
     }
   });
-  console.log(`-${jumlah} poin untuk ${nama} (${departemen}): ${alasan}`);
+  // jumlah negatif = nilai plus (§172); poin tidak dibatasi 100, hanya tidak di bawah 0
+  console.log(`${jumlah < 0 ? `+${-jumlah}` : `-${jumlah}`} poin untuk ${nama} (${departemen}): ${alasan}`);
 }
 
 // ==========================================
@@ -244,32 +246,29 @@ async function cekOB() {
     sesiPerNama[data.pic_bertugas].add(data.sesi);
   });
 
+  // §172 skema bertingkat untuk SEMUA OB & CS (menggantikan −5/sesi & aturan 2 sesi Pelayanan §170):
+  // jumlah sesi berbeda (Pagi/Siang/Sore) yang dilaporkan kemarin -> 0 = −10, 1 = 0 + peringatan, 2 = +1, 3 = +2.
+  // Nilai plus disimpan sebagai potongan NEGATIF (konvensi yang sama dengan evaluasi manual) dan poin boleh > 100.
   const SESI_LIST = ["Pagi", "Siang", "Sore"];
+  const peringatan = [];
   for (const nama of picUnik) {
     const sesiSudah = sesiPerNama[nama] || new Set();
-    // §170 OB Pelayanan (plot hanya area Pelayanan): cukup 2 dari 3 sesi -- pagi biasanya habis untuk
-    // melayani minum/makan sehingga jendela Pagi (s.d. 10:00) sering terlewat. Cleaning tetap 3 sesi.
-    const areaMilik = Object.keys(plotLantai).filter((a) => plotLantai[a] === nama);
-    const hanyaPelayanan = areaMilik.length > 0 && areaMilik.every((a) => a.toLowerCase().includes("pelayanan"));
-    if (hanyaPelayanan) {
-      const kurang = Math.max(0, MINIMUM_SESI_PELAYANAN - sesiSudah.size);
-      if (kurang > 0) {
-        const terlewat = SESI_LIST.filter((s) => !sesiSudah.has(s));
-        await potongPoin(nama, "OB & CS", `Checklist pelayanan hanya ${sesiSudah.size} dari minimal ${MINIMUM_SESI_PELAYANAN} sesi (${kemarin})`, POTONGAN.ob_sesi_terlewat * kurang);
-        tidakLengkap.push({ nama, terlewat });
-      }
-      continue;
-    }
+    const jumlah = SESI_LIST.filter((s) => sesiSudah.has(s)).length;
     const terlewat = SESI_LIST.filter((s) => !sesiSudah.has(s));
-    if (terlewat.length > 0) {
-      await potongPoin(
-        nama,
-        "OB & CS",
-        `Tidak lapor checklist sesi ${terlewat.join(", ")} (${kemarin})`,
-        POTONGAN.ob_sesi_terlewat * terlewat.length
-      );
+    const nilai = NILAI_SESI_OB[jumlah];
+    if (jumlah === 0) {
+      await potongPoin(nama, "OB & CS", `Tidak lapor checklist sama sekali (${kemarin})`, -nilai);
       tidakLengkap.push({ nama, terlewat });
+    } else if (jumlah === 1) {
+      peringatan.push(nama);
+      tidakLengkap.push({ nama, terlewat });
+      console.log(`Peringatan: ${nama} hanya lapor 1 sesi (${kemarin}), poin tetap.`);
+    } else {
+      await potongPoin(nama, "OB & CS", `Checklist ${jumlah} dari 3 sesi${jumlah === 3 ? " — sempurna" : ""} (${kemarin})`, -nilai);
     }
+  }
+  if (peringatan.length) {
+    await tulisNotifPersonal(peringatan, "Peringatan Checklist", `Kemarin (${kemarin}) kamu hanya melapor 1 sesi checklist. Lapor 2 sesi = +1 poin, 3 sesi = +2 poin.`);
   }
   return tidakLengkap;
 }
