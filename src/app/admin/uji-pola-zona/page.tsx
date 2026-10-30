@@ -36,7 +36,7 @@ function seninBerikut(hariIni: string) {
 export default function UjiPolaZonaPage() {
   const showToast = useToast();
   const confirm = useConfirm();
-  const { session, isReady } = useAuthGuard({ roles: ["Admin", "Koordinator"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Administrator." });
+  const { session, isReady } = useAuthGuard({ roles: ["Admin"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Administrator." });
   const hariIni = tanggalISOWITASekarang();
   const { config, dimuat } = useUjiPolaZona();
   const { nilai: masterOB } = useChecklistOB();

@@ -169,6 +169,7 @@ const POTONGAN = {
 };
 const AMBANG_JAM_KELUAR = 12;
 const MINIMUM_SESI_PATROLI = 2;
+const MINIMUM_SESI_PELAYANAN = 2; // §170 OB Pelayanan cukup 2 dari 3 sesi checklist
 
 const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
 
@@ -246,6 +247,19 @@ async function cekOB() {
   const SESI_LIST = ["Pagi", "Siang", "Sore"];
   for (const nama of picUnik) {
     const sesiSudah = sesiPerNama[nama] || new Set();
+    // §170 OB Pelayanan (plot hanya area Pelayanan): cukup 2 dari 3 sesi -- pagi biasanya habis untuk
+    // melayani minum/makan sehingga jendela Pagi (s.d. 10:00) sering terlewat. Cleaning tetap 3 sesi.
+    const areaMilik = Object.keys(plotLantai).filter((a) => plotLantai[a] === nama);
+    const hanyaPelayanan = areaMilik.length > 0 && areaMilik.every((a) => a.toLowerCase().includes("pelayanan"));
+    if (hanyaPelayanan) {
+      const kurang = Math.max(0, MINIMUM_SESI_PELAYANAN - sesiSudah.size);
+      if (kurang > 0) {
+        const terlewat = SESI_LIST.filter((s) => !sesiSudah.has(s));
+        await potongPoin(nama, "OB & CS", `Checklist pelayanan hanya ${sesiSudah.size} dari minimal ${MINIMUM_SESI_PELAYANAN} sesi (${kemarin})`, POTONGAN.ob_sesi_terlewat * kurang);
+        tidakLengkap.push({ nama, terlewat });
+      }
+      continue;
+    }
     const terlewat = SESI_LIST.filter((s) => !sesiSudah.has(s));
     if (terlewat.length > 0) {
       await potongPoin(
