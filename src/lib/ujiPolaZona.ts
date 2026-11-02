@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { CHECKLIST_OB_BAWAAN, type AreaChecklist } from "./sopChecklist";
-import { uraiArea } from "./bagiZona";
+import { bagiPagi, bagiPerOrang, uraiArea, type HasilBagi, type LantaiOk } from "./bagiZona";
 
 export type Zona = "Tenant" | "Publik";
 export const DOC_UJI_POLA = () => doc(db, "ob_settings", "uji_pola_zona");
@@ -32,6 +32,11 @@ export interface UjiPolaZona {
   area_tenant: string[];
   area_publik: string[];
   luas_area: Record<string, number>; // §174 luas manual per area (m²), dari baris "Area | luas"
+  mingguan: string[];                // §175 area cukup 1x/minggu (baris "Area | mingguan")
+  // §175 pembagian beban (keputusan user 2 Nov): ruang tenant dibersihkan SEMUA orang di pagi hari,
+  // lalu 1 orang Zona Publik bergiliran jadi cadangan pelayanan di jam sibuk.
+  pagi_bersama: boolean; jam_pagi: string;
+  cadangan_publik: boolean; jam_cadangan: string;
   min_ronde: number;
   dibuat_oleh?: string;
   waktu_update?: Timestamp | null;
@@ -97,6 +102,40 @@ export function anggotaZona(c: UjiPolaZona, zona: Zona, tanggal: string): string
   return mingguKe(c, tanggal) === 1 ? m1 : m2;
 }
 
+// ---------- §175 tugas harian per orang ----------
+/** Ruang tenant pagi bersama: dibagi ke SEMUA peserta (Tenant + Publik) per lantai menurut luas. */
+export function tugasPagi(c: UjiPolaZona, tanggal: string, lantai: LantaiOk[]): HasilBagi {
+  const semua = [...anggotaZona(c, "Tenant", tanggal), ...anggotaZona(c, "Publik", tanggal)];
+  return bagiPagi(c.area_tenant, semua, lantai, c.luas_area, c.mingguan);
+}
+/** Tugas zona siang: Publik = area publik dibagi per orang; Tenant = keliling semua ruang tenant (dipegang berdua). */
+export function tugasZona(c: UjiPolaZona, zona: Zona, tanggal: string, lantai: LantaiOk[]): HasilBagi {
+  const anggota = anggotaZona(c, zona, tanggal);
+  if (zona === "Tenant") return { orang: anggota.map((nama) => ({ nama, area: [], m2: 0, lantai: [] })), bersama: c.area_tenant };
+  return bagiPerOrang(c.area_publik, anggota, "Publik", lantai, c.luas_area, c.mingguan);
+}
+/** Cadangan pelayanan hari itu: anggota Zona Publik bergiliran per hari kerja sejak mulai minggu berjalan. */
+export function cadanganHariIni(c: UjiPolaZona | null, tanggal: string): string | null {
+  if (!c || !c.cadangan_publik || !dalamUjiCoba(c, tanggal) || akhirPekan(tanggal)) return null;
+  const publik = anggotaZona(c, "Publik", tanggal);
+  if (!publik.length) return null;
+  const awalMinggu = mingguKe(c, tanggal) === 1 ? c.mulai : c.tukar_mulai;
+  const urutan = hariKerja(awalMinggu, tanggal).length - 1;
+  return publik[Math.max(0, urutan) % publik.length];
+}
+/** Jam "11.00–14.00" -> apakah sekarang (menit WITA) di dalam rentang. */
+export function dalamJam(rentang: string, menitSekarang: number): boolean {
+  const m = /(\d{1,2})[.:](\d{2})\s*[–-]\s*(\d{1,2})[.:](\d{2})/.exec(rentang);
+  if (!m) return false;
+  const a = Number(m[1]) * 60 + Number(m[2]), b = Number(m[3]) * 60 + Number(m[4]);
+  return menitSekarang >= a && menitSekarang < b;
+}
+/** Panjang rentang jam dalam jam (untuk kapasitas cadangan). */
+export function lamaJam(rentang: string): number {
+  const m = /(\d{1,2})[.:](\d{2})\s*[–-]\s*(\d{1,2})[.:](\d{2})/.exec(rentang);
+  return m ? Math.max(0, (Number(m[3]) * 60 + Number(m[4]) - Number(m[1]) * 60 - Number(m[2])) / 60) : 0;
+}
+
 // ---------- Daftar area bawaan (bisa diubah admin di halaman uji coba) ----------
 interface UnitOkupansi { nama?: string; tenant?: string; status?: string }
 interface LantaiOkupansi { nama?: string; unit?: UnitOkupansi[] }
@@ -134,6 +173,9 @@ export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZo
     area_tenant: uraiArea(arr(d.area_tenant)).area,
     area_publik: uraiArea(arr(d.area_publik)).area,
     luas_area: { ...uraiArea(arr(d.area_tenant)).luas, ...uraiArea(arr(d.area_publik)).luas },
+    mingguan: [...uraiArea(arr(d.area_tenant)).mingguan, ...uraiArea(arr(d.area_publik)).mingguan],
+    pagi_bersama: d.pagi_bersama !== false, jam_pagi: String(d.jam_pagi || "07.00–09.00"),
+    cadangan_publik: d.cadangan_publik !== false, jam_cadangan: String(d.jam_cadangan || "11.00–14.00"),
     min_ronde: Math.max(1, Number(d.min_ronde) || 1),
     dibuat_oleh: typeof d.dibuat_oleh === "string" ? d.dibuat_oleh : "",
     waktu_update: (d.waktu_update as Timestamp) || null,

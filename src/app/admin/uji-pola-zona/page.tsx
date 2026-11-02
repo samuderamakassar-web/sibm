@@ -18,7 +18,7 @@ import Tile from "../../../components/admin/Tile";
 import { tanggalISOWITASekarang } from "../../../lib/shift";
 import { CHECKLIST_OB_BAWAAN, useChecklistOB, type AreaChecklist } from "../../../lib/sopChecklist";
 import { ASUMSI_BAWAAN, WARNA_STATUS_BEBAN, type AsumsiBeban } from "../../../lib/sla";
-import { bagiPerOrang, BOBOT_RINGAN, gabungArea, M2_PER_TOILET, uraiArea, type LantaiOk } from "../../../lib/bagiZona";
+import { bagiPagi, bagiPerOrang, BOBOT_RINGAN, gabungArea, M2_PER_TOILET, uraiArea, type LantaiOk } from "../../../lib/bagiZona";
 import {
   areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, tambahHari, useUjiPolaZona,
   type LaporanZona,
@@ -50,6 +50,11 @@ export default function UjiPolaZonaPage() {
   const [pilihan, setPilihan] = useState<Record<string, Pilihan>>({});
   const [mulai, setMulai] = useState(seninBerikut(hariIni));
   const [minRonde, setMinRonde] = useState("1");
+  // §175 pembagian beban
+  const [pagiBersama, setPagiBersama] = useState(true);
+  const [jamPagi, setJamPagi] = useState("07.00–09.00");
+  const [cadanganPublik, setCadanganPublik] = useState(true);
+  const [jamCadangan, setJamCadangan] = useState("11.00–14.00");
   const [areaTenant, setAreaTenant] = useState("");
   const [areaPublik, setAreaPublik] = useState("");
   const [simpan, setSimpan] = useState(false);
@@ -74,12 +79,14 @@ export default function UjiPolaZonaPage() {
     if (config) {
       setMulai(config.mulai);
       setMinRonde(String(config.min_ronde));
+      setPagiBersama(config.pagi_bersama); setJamPagi(config.jam_pagi);
+      setCadanganPublik(config.cadangan_publik); setJamCadangan(config.jam_cadangan);
       const p: Record<string, Pilihan> = {};
       config.tim_tenant.forEach((n) => (p[n] = "Tenant"));
       config.tim_publik.forEach((n) => (p[n] = "Publik"));
       setPilihan(p);
-      setAreaTenant(gabungArea(config.area_tenant, config.luas_area).join("\n"));
-      setAreaPublik(gabungArea(config.area_publik, config.luas_area).join("\n"));
+      setAreaTenant(gabungArea(config.area_tenant, config.luas_area, config.mingguan).join("\n"));
+      setAreaPublik(gabungArea(config.area_publik, config.luas_area, config.mingguan).join("\n"));
     }
   }
   // belum pernah diatur -> daftar area bawaan dari Okupansi & SOP (async, state diisi setelah data datang)
@@ -113,6 +120,7 @@ export default function UjiPolaZonaPage() {
     try {
       await setDoc(DOC_UJI_POLA(), {
         aktif, ...jadwal, tim_tenant: timTenant, tim_publik: timPublik, area_tenant: at, area_publik: ap,
+        pagi_bersama: pagiBersama, jam_pagi: jamPagi.trim(), cadangan_publik: cadanganPublik, jam_cadangan: jamCadangan.trim(),
         min_ronde: Math.max(1, Number(minRonde) || 1), dibuat_oleh: session?.nama || "", waktu_update: serverTimestamp(),
       });
       showToast(aktif ? "Uji coba disimpan & aktif sesuai tanggal." : "Disimpan sebagai draf (belum aktif).", "success");
@@ -255,6 +263,11 @@ export default function UjiPolaZonaPage() {
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "end" }}>
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Mulai (Senin)<br /><input type="date" className="sa-field" value={mulai} onChange={(e) => setMulai(e.target.value)} /></label>
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Minimal ronde / hari<br /><input type="number" min={1} className="sa-field" style={{ width: "90px", cursor: "text" }} value={minRonde} onChange={(e) => setMinRonde(e.target.value)} /></label>
+              {/* §175 pembagian beban */}
+              <label style={{ fontSize: "12.5px", fontWeight: 700 }}><input type="checkbox" checked={pagiBersama} onChange={(e) => setPagiBersama(e.target.checked)} /> Pagi bersama (ruang tenant oleh semua)<br />
+                <input className="sa-field" style={{ width: "140px", cursor: "text" }} value={jamPagi} onChange={(e) => setJamPagi(e.target.value)} /></label>
+              <label style={{ fontSize: "12.5px", fontWeight: 700 }}><input type="checkbox" checked={cadanganPublik} onChange={(e) => setCadanganPublik(e.target.checked)} /> Cadangan pelayanan (1 orang Publik bergiliran)<br />
+                <input className="sa-field" style={{ width: "140px", cursor: "text" }} value={jamCadangan} onChange={(e) => setJamCadangan(e.target.value)} /></label>
               <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Minggu 1: {tglIndo(jadwal.mulai)} – {tglIndo(tambahHari(jadwal.mulai, 4))}<br />Minggu 2 (zona ditukar): {tglIndo(jadwal.tukar_mulai)} – {tglIndo(jadwal.selesai)}</div>
             </div>
           </Tile>
@@ -301,31 +314,34 @@ export default function UjiPolaZonaPage() {
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>
               Area tiap zona dibagi per lantai agar beban luas seimbang (data Okupansi; toilet = {M2_PER_TOILET} m² setara, parkir/taman/rooftop × {BOBOT_RINGAN}). Lantai yang terlalu besar untuk 1 orang dipecah. Area &quot;semua lantai&quot; dikerjakan bersama. Bila Okupansi tidak sesuai kondisi lapangan (mis. renovasi), tulis luas manual di daftar area: <code>Lantai 3 · PT X | 60</code>. Staf melihat tugasnya di Checklist Zona.
             </div>
-            {[1, 2].map((mg) => (
-              <div key={mg} style={{ marginBottom: "10px" }}>
-                <b style={{ fontSize: "13.5px" }}>Minggu {mg}</b>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px", marginTop: "6px" }}>
-                  {(["Tenant", "Publik"] as const).map((z) => {
-                    const anggota = (z === "Tenant") === (mg === 1) ? timTenant : timPublik;
-                    const urai = uraiArea((z === "Tenant" ? areaTenant : areaPublik).split("\n"));
-                    const h = bagiPerOrang(urai.area, anggota, z, lantaiOk, urai.luas);
-                    return (
-                      <div key={z} style={{ padding: "10px 12px", borderRadius: "14px", background: "var(--bg)", fontSize: "12.5px" }}>
-                        <b>Zona {z}</b>
-                        {h.orang.map((o) => (
-                          <div key={o.nama} style={{ marginTop: "6px" }}>
-                            <b>{o.nama}</b> · ± {Math.round(o.m2)} m² · {o.lantai.join(", ")}
-                            <div style={{ color: "var(--ink-soft)" }}>{o.area.join("; ")}</div>
-                          </div>
-                        ))}
-                        {h.bersama.length > 0 && <div style={{ marginTop: "6px", color: "var(--muted)" }}>Bersama: {h.bersama.join("; ")}</div>}
-                        {!h.orang.length && <div style={{ color: "var(--muted)", marginTop: "6px" }}>Belum ada anggota.</div>}
-                      </div>
-                    );
-                  })}
+            {[1, 2].map((mg) => {
+              const tenantMg = mg === 1 ? timTenant : timPublik;
+              const publikMg = mg === 1 ? timPublik : timTenant;
+              const ut = uraiArea(areaTenant.split("\n"));
+              const up = uraiArea(areaPublik.split("\n"));
+              const pagi = bagiPagi(ut.area, [...tenantMg, ...publikMg], lantaiOk, ut.luas, ut.mingguan);
+              const pub = bagiPerOrang(up.area, publikMg, "Publik", lantaiOk, up.luas, up.mingguan);
+              const kartu = (judul: string, isi: React.ReactNode) => (
+                <div style={{ padding: "10px 12px", borderRadius: "14px", background: "var(--bg)", fontSize: "12.5px" }}><b>{judul}</b>{isi}</div>
+              );
+              const daftarOrang = (h: typeof pub, tanda: string[]) => h.orang.map((o) => (
+                <div key={o.nama} style={{ marginTop: "6px" }}>
+                  <b>{o.nama}</b> · ± {Math.round(o.m2)} m² · {o.lantai.join(", ")}
+                  <div style={{ color: "var(--ink-soft)" }}>{o.area.map((x) => (tanda.includes(x) ? `${x} (mingguan)` : x)).join("; ")}</div>
                 </div>
-              </div>
-            ))}
+              ));
+              return (
+                <div key={mg} style={{ marginBottom: "12px" }}>
+                  <b style={{ fontSize: "13.5px" }}>Minggu {mg}</b>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px", marginTop: "6px" }}>
+                    {pagiBersama && kartu(`1. Pagi bersama ${jamPagi} · ruang tenant (semua)`, daftarOrang(pagi, ut.mingguan))}
+                    {kartu("2. Zona Tenant (setelah pagi)", <div style={{ marginTop: "6px" }}><b>{tenantMg.join(", ") || "–"}</b><div style={{ color: "var(--ink-soft)" }}>Fokus pelayanan tenant + keliling semua ruang tenant (sampah, tumpahan).</div></div>)}
+                    {kartu("3. Zona Publik (setelah pagi)", <>{daftarOrang(pub, up.mingguan)}{pub.bersama.length > 0 && <div style={{ marginTop: "6px", color: "var(--muted)" }}>Bersama: {pub.bersama.join("; ")}</div>}
+                      {cadanganPublik && publikMg.length > 0 && <div style={{ marginTop: "6px", color: "var(--muted)" }}>Cadangan pelayanan {jamCadangan}: {["Sen", "Sel", "Rab", "Kam", "Jum"].map((h, i) => `${h} ${publikMg[i % publikMg.length].split(/\s+/)[0]}`).join(" · ")}</div>}</>)}
+                  </div>
+                </div>
+              );
+            })}
           </Tile>
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -367,12 +383,13 @@ export default function UjiPolaZonaPage() {
           <h3 style={{ margin: "4px 0 8px", fontSize: "16px" }}>2. Kerja nyata per zona (dari laporan & permintaan)</h3>
           <Tile style={{ marginBottom: "16px", overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "640px" }}>
-              <thead><tr>{["Zona", "Ronde/orang/hari", "Cakupan area/hari", "Kepatuhan ronde", "Permintaan diterima", "Menit pelayanan/orang/hari", "Respon", "≤ 10 menit", "Lembur"].map((h) => <th key={h} style={sel}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Zona", "Ronde/orang/hari", "Cakupan area/hari", "Mingguan", "Kepatuhan ronde", "Permintaan diterima", "Menit pelayanan/orang/hari", "Respon", "≤ 10 menit", "Lembur"].map((h) => <th key={h} style={sel}>{h}</th>)}</tr></thead>
               <tbody>
                 {hasil.kerja.map((k) => (
                   <tr key={k.zona}>
                     <td style={sel}><b>{k.zona}</b></td><td style={sel}>{f1(k.rondePerOrangHari)}</td>
                     <td style={{ ...sel, color: k.cakupan !== null && k.cakupan < 80 ? "var(--red-600)" : "inherit" }}>{f1(k.cakupan, 0)}%</td>
+                    <td style={sel}>{k.mingguan === null ? "–" : `${f1(k.mingguan, 0)}%`}</td>
                     <td style={sel}>{f1(k.kepatuhan, 0)}%</td><td style={sel}>{k.permintaan}</td>
                     <td style={sel}>{k.menitPelayananPerOrangHari === null ? "–" : `${Math.round(k.menitPelayananPerOrangHari)} mnt (${f1(k.utilisasiPelayanan, 0)}%)`}</td>
                     <td style={sel}>{k.responMenit === null ? "–" : `${f1(k.responMenit)} mnt`}</td><td style={sel}>{f1(k.persenCepat, 0)}%</td><td style={sel}>{f1(k.lemburJam)} j</td>

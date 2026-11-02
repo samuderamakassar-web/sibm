@@ -11,8 +11,7 @@ import type { Timestamp } from "firebase/firestore";
 import { menitJenis, timJenis } from "./pelayanan";
 import { statusBeban, type AsumsiBeban, type StatusBeban } from "./sla";
 import type { AreaChecklist } from "./sopChecklist";
-import { bagiPerOrang } from "./bagiZona";
-import { hariKerja, tambahHari, zonaUntuk, anggotaZona, type LaporanZona, type UjiPolaZona, type Zona } from "./ujiPolaZona";
+import { hariKerja, lamaJam, tambahHari, tugasPagi, tugasZona, zonaUntuk, anggotaZona, type LaporanZona, type UjiPolaZona, type Zona } from "./ujiPolaZona";
 
 export interface Permintaan { jenis?: string; jumlah?: number; diterima_oleh?: string; waktu_minta?: Timestamp | null; waktu_terima?: Timestamp | null; status?: string }
 export interface KlaimLembur { nama_pemohon?: string; status?: string; items?: { tanggal?: string; jam_mulai?: string; jam_selesai?: string }[] }
@@ -74,6 +73,9 @@ function bebanTerukur(c: UjiPolaZona, hariUji: string[], d: DataPendukung, permU
   const m2Publik = publik + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
   const kPublik = (m2Publik / a.cs_m2_per_orang) * cadangan;
   // Zona Tenant: cleaning ruang tenant + pelayanan
+  // §174 luas manual ruang tenant (kondisi renovasi) mengalahkan Okupansi bila diisi
+  const luasManualTenant = c.area_tenant.reduce((t, ar) => t + (c.luas_area[ar] || 0), 0);
+  if (luasManualTenant > 0) tenant = luasManualTenant;
   const kTenantBersih = (tenant / a.cs_m2_per_orang) * cadangan;
   const n = Math.max(1, hariUji.length);
   const permOB = permUji.filter((p) => timJenis(p.jenis || "") === "OB");
@@ -91,19 +93,33 @@ function bebanTerukur(c: UjiPolaZona, hariUji: string[], d: DataPendukung, permU
     const indeks = orang ? (kebutuhan / orang) * 100 : 0;
     return { zona, orang, kebutuhan, indeks, status: statusBeban(indeks), dasar, dataKurang: lantai.length ? undefined : "Isi luas lantai & tenant di menu Okupansi agar beban terhitung." };
   };
+  // §175 pembagian beban: cleaning ruang tenant dikerjakan semua orang pagi hari (porsi sesuai jumlah orang),
+  // 1 orang Publik jadi cadangan pelayanan beberapa jam (kapasitas = jam ÷ 8 jam kerja)
+  const totalOrang = Math.max(1, orangT + orangP);
+  const porsiPagiPublik = c.pagi_bersama ? kTenantBersih * (orangP / totalOrang) : 0;
+  const kapasitasCadangan = c.cadangan_publik && orangP ? Math.min(kPelayanan, lamaJam(c.jam_cadangan) / 8) : 0;
+  const kTenantAkhir = kTenant - porsiPagiPublik - kapasitasCadangan;
+  const kPublikAkhir = kPublik + porsiPagiPublik + kapasitasCadangan;
+  const geser = [
+    c.pagi_bersama ? `Pagi bersama ${c.jam_pagi}: ${f1(porsiPagiPublik)} orang cleaning ruang tenant dipikul Zona Publik` : "",
+    c.cadangan_publik ? `Cadangan pelayanan ${c.jam_cadangan} (1 orang Publik bergiliran): ${f1(kapasitasCadangan)} orang pelayanan dipikul Zona Publik` : "",
+  ].filter(Boolean);
   return [
-    buat("Tenant", orangT, kTenant, [
+    buat("Tenant", orangT, kTenantAkhir, [
       `Cleaning ruang tenant: ${f1(tenant)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}% = ${f1(kTenantBersih)} orang`,
       pakaiNyata
         ? `Pelayanan (data nyata): ${permOB.length} permintaan, ± ${Math.round(menitOB)} menit (${f1(menitOB / n)} menit/hari) ÷ ${a.ob_menit_produktif} menit efektif × cadangan = ${f1(kPelayanan)} orang`
         : `Pelayanan (perkiraan): ${d.jumlahKaryawan} karyawan + ${f1(meetingPerHari)} meeting/hari × ${a.ob_karyawan_per_meeting} ÷ ${a.ob_karyawan_per_orang} × cadangan = ${f1(kPelayanan)} orang (data permintaan baru ${permOB.length}, dipakai setelah ≥ ${a.ob_min_permintaan})`,
-      `Total kebutuhan ${f1(kTenant)} orang, sekarang ${orangT} orang`,
+      ...geser.map((g) => `− ${g}`),
+      `Total kebutuhan ${f1(kTenantAkhir)} orang, sekarang ${orangT} orang`,
     ]),
-    buat("Publik", orangP, kPublik, [
+    buat("Publik", orangP, kPublikAkhir, [
       `Area bersama intensif (lobi, koridor, toilet, tangga) ${f1(publik)} m²`,
       `Area ringan (kosong, parkir, taman) ${f1(ringan)} m² × bobot ${a.cs_bobot_ringan}`,
       `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara`,
-      `${f1(m2Publik)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}% = ${f1(kPublik)} orang, sekarang ${orangP} orang`,
+      `${f1(m2Publik)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}% = ${f1(kPublik)} orang`,
+      ...geser.map((g) => `+ ${g}`),
+      `Total kebutuhan ${f1(kPublikAkhir)} orang, sekarang ${orangP} orang`,
     ]),
   ];
 }
@@ -115,7 +131,8 @@ export interface RingkasPeriode {
   lemburJam: number; kepatuhan: number | null; // % laporan sesuai target (lama: sesi 3/hari; uji: minimal ronde)
 }
 export interface KerjaZona {
-  zona: Zona; rondePerOrangHari: number | null; cakupan: number | null; // % area zona tercentang per hari
+  zona: Zona; rondePerOrangHari: number | null; cakupan: number | null; // % area harian zona tercentang per hari
+  mingguan: number | null; // §175 % area mingguan yang dikerjakan minimal 1x per minggu
   permintaan: number; menitPelayananPerOrangHari: number | null; utilisasiPelayanan: number | null; // % dari menit efektif
   responMenit: number | null; persenCepat: number | null; lemburJam: number; kepatuhan: number | null;
 }
@@ -170,15 +187,19 @@ export function hitungEvaluasi(cfg: UjiPolaZona, hariIni: string, libur: string[
     const p = permUji.filter((x) => samaNama(x.diterima_oleh, nama) && hari.includes(tglWITA(x.waktu_minta)));
     const areaHarian = hari.map((h) => new Set(r.filter((l) => l.tanggal === h).flatMap((l) => l.area || [])).size);
     const zonaOrang = zonaUntuk(c, nama, hari[0])!;
-    const bagi = bagiPerOrang(zonaOrang === "Tenant" ? c.area_tenant : c.area_publik, anggotaZona(c, zonaOrang, hari[0]), zonaOrang, data.okupansi.lantai || [], c.luas_area);
-    const tugas = bagi.orang.find((o) => samaNama(o.nama, nama));
-    const areaTugas = [...(tugas?.area || []), ...bagi.bersama];
+    // §175 tugas harian sendiri = bagian pagi bersama (ruang tenant) + area publik bagiannya (Zona Publik);
+    // area mingguan tidak dihitung harian. Zona Tenant siang = pelayanan (diukur dari permintaan).
+    const lantai = data.okupansi.lantai || [];
+    const pagi = c.pagi_bersama ? tugasPagi(c, hari[0], lantai).orang.find((o) => samaNama(o.nama, nama)) : undefined;
+    const zb = zonaOrang === "Publik" ? tugasZona(c, "Publik", hari[0], lantai) : null;
+    const milikZona = zb ? zb.orang.find((o) => samaNama(o.nama, nama)) : undefined;
+    const areaTugas = Array.from(new Set([...(pagi?.area || []), ...(milikZona?.area || []), ...(zb?.bersama || [])])).filter((x) => !c.mingguan.includes(x));
     const cakupanTugas = areaTugas.length ? rata(hari.map((h) => {
       const dikerjakan = new Set(r.filter((l) => l.tanggal === h).flatMap((l) => l.area || []));
-      return (areaTugas.filter((a) => dikerjakan.has(a)).length / areaTugas.length) * 100;
+      return (areaTugas.filter((x) => dikerjakan.has(x)).length / areaTugas.length) * 100;
     })) : null;
     orang.push({
-      tugasArea: areaTugas.length, tugasM2: tugas?.m2 || 0, cakupanTugas,
+      tugasArea: areaTugas.length, tugasM2: (pagi?.m2 || 0) + (milikZona?.m2 || 0), cakupanTugas,
       nama, minggu, zona: zonaOrang, hari: hari.length, ronde: r.length,
       hariPatuh: hari.filter((h) => r.filter((l) => l.tanggal === h).length >= c.min_ronde).length,
       areaPerHari: rata(areaHarian), permintaan: p.length, menitPelayanan: p.reduce((t, x) => t + menitPermintaan(x), 0),
@@ -190,16 +211,25 @@ export function hitungEvaluasi(cfg: UjiPolaZona, hariIni: string, libur: string[
   const kerja: KerjaZona[] = (["Tenant", "Publik"] as Zona[]).map((z) => {
     const b = orang.filter((o) => o.zona === z);
     const orangHari = b.reduce((t, o) => t + o.hari, 0);
-    const totalArea = (z === "Tenant" ? c.area_tenant : c.area_publik).length;
+    // §175 cakupan per AREA zona (siapa pun yang mengerjakan -- pagi bersama ikut dihitung); area mingguan dinilai per minggu
+    const daftarZona = z === "Tenant" ? c.area_tenant : c.area_publik;
+    const harian = daftarZona.filter((x) => !c.mingguan.includes(x));
+    const mingguanZona = daftarZona.filter((x) => c.mingguan.includes(x));
     const cak = hariUji.map((h) => {
-      const set = new Set(ronde.filter((l) => l.tanggal === h && l.zona === z).flatMap((l) => l.area || []));
-      return totalArea ? (set.size / totalArea) * 100 : 0;
+      const set = new Set(ronde.filter((l) => l.tanggal === h).flatMap((l) => l.area || []));
+      return harian.length ? (harian.filter((x) => set.has(x)).length / harian.length) * 100 : 0;
     });
+    const mingguanPersen = mingguanZona.length ? rata([1, 2].map((mg) => {
+      const hari = hariUji.filter((d) => (mg === 1 ? d < c.tukar_mulai : d >= c.tukar_mulai));
+      if (!hari.length) return -1;
+      const set = new Set(ronde.filter((l) => hari.includes(l.tanggal)).flatMap((l) => l.area || []));
+      return (mingguanZona.filter((x) => set.has(x)).length / mingguanZona.length) * 100;
+    }).filter((x) => x >= 0)) : null;
     const p = permUji.filter((x) => staf.some((n) => samaNama(n, x.diterima_oleh)) && zonaUntuk(c, x.diterima_oleh || "", tglWITA(x.waktu_minta)) === z);
     const r = respon(p);
     const menitHari = orangHari ? p.reduce((t, x) => t + menitPermintaan(x), 0) / orangHari : null;
     return {
-      zona: z, rondePerOrangHari: orangHari ? b.reduce((t, o) => t + o.ronde, 0) / orangHari : null, cakupan: rata(cak),
+      zona: z, rondePerOrangHari: orangHari ? b.reduce((t, o) => t + o.ronde, 0) / orangHari : null, cakupan: rata(cak), mingguan: mingguanPersen,
       permintaan: p.length, menitPelayananPerOrangHari: menitHari, utilisasiPelayanan: menitHari === null ? null : (menitHari / a.ob_menit_produktif) * 100,
       responMenit: rata(r), persenCepat: r.length ? (r.filter((m) => m <= 10).length / r.length) * 100 : null,
       lemburJam: b.reduce((t, o) => t + o.lemburJam, 0), kepatuhan: orangHari ? (b.reduce((t, o) => t + o.hariPatuh, 0) / orangHari) * 100 : null,

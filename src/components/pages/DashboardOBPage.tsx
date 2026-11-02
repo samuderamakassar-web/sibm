@@ -14,7 +14,7 @@ import Tile from "../admin/Tile";
 import { useMasterKondisiAset } from "@/lib/kondisiAset";
 import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
 import KinerjaSayaPanel from "../KinerjaSayaPanel";
-import { useUjiPolaZona, zonaUntuk, mingguKe } from "@/lib/ujiPolaZona";
+import { useUjiPolaZona, zonaUntuk, mingguKe, cadanganHariIni, dalamJam } from "@/lib/ujiPolaZona";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -134,7 +134,12 @@ export default function DashboardOBPage() {
   // §169 uji coba pola zona: selama periode aktif, zona menggantikan peran tugas & checklist lama
   const { config: ujiZona } = useUjiPolaZona();
   const zonaHariIni = zonaUntuk(ujiZona, picName, todayISO);
-  const isOBPelayanan = zonaHariIni ? zonaHariIni === "Tenant" : peranTugas === "OB Pelayanan";
+  // §175 cadangan pelayanan: 1 orang Zona Publik bergiliran -- di jam cadangan panel permintaan naik ke atas
+  const cadangan = cadanganHariIni(ujiZona, todayISO);
+  const sayaCadangan = !!cadangan && cadangan.trim().toLowerCase() === picName.trim().toLowerCase();
+  const wita = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
+  const jamCadanganAktif = sayaCadangan && !!ujiZona && dalamJam(ujiZona.jam_cadangan, wita.getHours() * 60 + wita.getMinutes());
+  const isOBPelayanan = zonaHariIni ? zonaHariIni === "Tenant" || jamCadanganAktif : peranTugas === "OB Pelayanan";
   const peranPanel = zonaHariIni ? "" : peranTugas; // semua permintaan tampil; zona Tenant di atas
   const pathChecklist = zonaHariIni ? "/dashboard/ob/zona" : "/dashboard/ob/checklist";
   const petugasUtilitas = masterAset.petugas_utilitas.some((n) => n.trim().toLowerCase() === picName.trim().toLowerCase());
@@ -379,6 +384,11 @@ export default function DashboardOBPage() {
         <AbsensiCard picName={picName} departemen="OB & CS" />
 
         {/* §123 OB Pelayanan: permintaan pelayanan paling atas */}
+        {sayaCadangan && ujiZona && (
+          <div style={{ marginBottom: "16px", padding: "12px 16px", borderRadius: "16px", background: jamCadanganAktif ? "var(--info-50)" : "var(--bg)", border: "1px solid var(--line)", fontSize: "13.5px" }}>
+            🙋 Hari ini kamu <b>cadangan pelayanan</b> pukul <b>{ujiZona.jam_cadangan}</b>{jamCadanganAktif ? " — sekarang jamnya, bantu ambil permintaan tenant di bawah." : "."}
+          </div>
+        )}
         {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranPanel} />}
 
         {/* ⚠️ BANNER PERINGATAN LOW STOCK */}

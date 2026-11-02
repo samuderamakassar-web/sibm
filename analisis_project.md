@@ -3432,3 +3432,14 @@ Info user: Lantai 2 sedang renovasi -> tidak ada tenant di Lantai 2. Kondisi sek
 1. bagiZona.ts: `uraiArea()` -- baris daftar area boleh berakhiran "| luas" (mis. `Lantai 3 · PT X | 60`) = luas manual m² yang mengalahkan Okupansi; `gabungArea()` kebalikannya untuk textarea admin. `bagiPerOrang(..., luasManual)`.
 2. ujiPolaZona.rapikanConfig: area_tenant/area_publik jadi label bersih + `luas_area` (Firestore tetap menyimpan baris apa adanya). Dipakai Checklist Zona, Evaluasi (cakupan tugas), pratinjau admin.
 3. Uji: L1 Asuransi 63 + PPNP 52, L3 2×60, L4 4×30 -> A: L3 + Asuransi (183), B: L4 + PPNP (172) -- sesuai arahan.
+
+## 175. Pembagian Beban Tim OB: Pagi Bersama, Cadangan Pelayanan, Area Mingguan (2 November 2026)
+
+Analisa (§171/§174): kebutuhan total ± 4,1 orang untuk 4 orang -> tidak perlu tambah personel, hanya timpang: Zona Tenant ± 2,6 (cleaning ruang tenant ± 0,6 + pelayanan ± 2,1 perkiraan dari 66 karyawan), Zona Publik ± 1,5. Keputusan user "langsung terapkan":
+1. **Pagi bersama 07.00–09.00**: ruang tenant dibersihkan SEMUA orang sebelum jam kantor. bagiZona.bagiPagi(): lantai utuh terberat dulu ke anggota Zona Tenant, lalu Zona Publik; orang lebih banyak dari lantai -> lantai teringan dipecah. Hasil: L3 & L4 -> 2 orang Tenant, L1 (Asuransi | PPNP) -> 2 orang Publik.
+2. **Cadangan pelayanan 11.00–14.00**: 1 orang Zona Publik bergiliran per hari kerja (cadanganHariIni). Dashboard OB: banner "kamu cadangan" + panel permintaan naik ke atas saat jamnya.
+3. **Area mingguan**: baris "Area | mingguan" (bobot × 0,2, dinilai 1x/minggu). Ditandai: Genset, Gudang, Mesin Air, Pompa (Basement & L5), Rooftop, Tandon.
+4. Checklist Zona staf: 3 bagian (Pagi bersama · Tugas zona · Mingguan) + Bantu area rekan; laporan sendiri dibaca 1 query (nama) & disaring di browser (✓ mingguan per minggu).
+5. Evaluasi: beban terukur menggeser porsi (cleaning tenant pagi ∝ jumlah orang Publik; kapasitas cadangan = jam ÷ 8) dari Tenant ke Publik; luas manual tenant (§174) mengalahkan Okupansi. Cakupan zona dihitung per AREA (siapa pun yang mengerjakan), area mingguan terpisah (kolom "Mingguan"); cakupan tugas sendiri = bagian pagi + area publik bagiannya.
+6. Admin Pengaturan: centang & jam Pagi bersama / Cadangan; pratinjau 3 kartu per minggu (pagi, Tenant, Publik + jadwal cadangan).
+7. Config live ob_settings/uji_pola_zona diperbarui via firebase-admin (cadangan config lama disimpan di scratchpad): area_tenant layout renovasi -- L1 Asuransi 63 & PPNP 52, L3 "Tenant A/B" 60, L4 "Tenant A-D" 30 (NAMA PT L3/L4 BELUM DIKETAHUI, ganti di admin); area_publik + 8 penanda mingguan; pagi_bersama & cadangan_publik aktif.

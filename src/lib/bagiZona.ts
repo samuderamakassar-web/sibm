@@ -57,26 +57,70 @@ export interface HasilBagi { orang: TugasOrang[]; bersama: string[] }
 
 // §174 luas manual per area: baris daftar area "Lantai 3 · PT X | 60" -> label "Lantai 3 · PT X", luas 60 m².
 // Dipakai saat data Okupansi tidak sesuai kondisi lapangan (mis. renovasi). Mengalahkan bobot dari Okupansi.
-export function uraiArea(baris: string[]): { area: string[]; luas: Record<string, number> } {
-  const area: string[] = [], luas: Record<string, number> = {};
+// §175 penanda "mingguan" (cukup 1x/minggu): "Lantai 5 · Rooftop | mingguan" atau "... | 70 | mingguan".
+export const FAKTOR_MINGGUAN = 0.2; // 1x dari 5 hari kerja -> bobot harian 1/5
+export function uraiArea(baris: string[]): { area: string[]; luas: Record<string, number>; mingguan: string[] } {
+  const area: string[] = [], luas: Record<string, number> = {}, mingguan: string[] = [];
   baris.map((b) => b.trim()).filter(Boolean).forEach((b) => {
-    const m = /^(.*?)\s*\|\s*([\d]+(?:[.,]\d+)?)\s*(?:m2|m²)?\s*$/i.exec(b);
-    const label = (m ? m[1] : b).trim();
+    const [kepala, ...ekor] = b.split("|").map((s) => s.trim());
+    const label = kepala;
     if (!label || area.includes(label)) return;
     area.push(label);
-    if (m) luas[label] = Number(m[2].replace(",", "."));
+    for (const t of ekor) {
+      if (/^mingguan$/i.test(t)) mingguan.push(label);
+      else { const m = /^([\d]+(?:[.,]\d+)?)\s*(?:m2|m²)?$/i.exec(t); if (m) luas[label] = Number(m[1].replace(",", ".")); }
+    }
   });
-  return { area, luas };
+  return { area, luas, mingguan };
 }
 /** Kebalikan uraiArea -- untuk mengisi kembali textarea admin. */
-export const gabungArea = (area: string[], luas: Record<string, number> = {}) => area.map((a) => (luas[a] ? `${a} | ${luas[a]}` : a));
+export const gabungArea = (area: string[], luas: Record<string, number> = {}, mingguan: string[] = []) =>
+  area.map((a) => [a, luas[a] ? String(luas[a]) : "", mingguan.includes(a) ? "mingguan" : ""].filter(Boolean).join(" | "));
 
-export function bagiPerOrang(area: string[], anggota: string[], zona: "Tenant" | "Publik", lantai: LantaiOk[], luasManual: Record<string, number> = {}): HasilBagi {
+/**
+ * §175 pagi bersama (ruang tenant oleh SEMUA): lantai utuh, terberat dulu, ke orang berurutan -- anggota Zona Tenant
+ * dulu (siangnya hanya pelayanan), lalu Zona Publik (siangnya masih area publik yang luas). Bila orang lebih banyak
+ * dari lantai, lantai terakhir yang dipegang (paling ringan) dipecah dengan orang yang belum kebagian.
+ * Contoh: L3, L4 -> 2 orang Tenant; L1 (Asuransi + PPNP) -> dibagi 2 orang Publik.
+ */
+export function bagiPagi(area: string[], urutanOrang: string[], lantai: LantaiOk[], luasManual: Record<string, number> = {}, mingguan: string[] = []): HasilBagi {
+  const per = bagiPerOrang(area, [], "Tenant", lantai, luasManual, mingguan); // hanya untuk memisah "bersama"
+  const dibagi = area.filter((a) => !per.bersama.includes(a));
+  const orang: TugasOrang[] = urutanOrang.map((nama) => ({ nama, area: [], m2: 0, lantai: [] }));
+  if (!orang.length) return { orang, bersama: per.bersama };
+  const bobot = (a: string) => (luasManual[a] > 0 ? luasManual[a] : bobotArea(a, "Tenant", lantai)) * (mingguan.includes(a) ? FAKTOR_MINGGUAN : 1);
+  const perLantai = new Map<string, string[]>();
+  dibagi.forEach((a) => { const l = lantaiDari(a); perLantai.set(l, [...(perLantai.get(l) || []), a]); });
+  const lantaiUrut = Array.from(perLantai.entries()).map(([l, items]) => ({ l, items, m2: items.reduce((t, a) => t + bobot(a), 0) }))
+    .sort((x, y) => y.m2 - x.m2 || x.l.localeCompare(y.l));
+  const beri = (o: TugasOrang, a: string) => { o.area.push(a); o.m2 += bobot(a); };
+  lantaiUrut.forEach((f, i) => {
+    if (i < orang.length) f.items.forEach((a) => beri(orang[i], a));
+    else f.items.forEach((a) => beri(orang.reduce((m, o) => (o.m2 < m.m2 ? o : m), orang[0]), a)); // lantai lebih banyak dari orang
+  });
+  // orang tanpa lantai -> ikut memecah lantai yang dipegang orang terakhir yang kebagian (yang paling ringan)
+  const tanpa = orang.filter((o) => !o.area.length);
+  if (tanpa.length && lantaiUrut.length) {
+    const pemegang = orang[Math.min(lantaiUrut.length, orang.length) - 1];
+    const items = [...pemegang.area].sort((x, y) => bobot(y) - bobot(x) || x.localeCompare(y));
+    const kelompok = [pemegang, ...tanpa];
+    kelompok.forEach((o) => { o.area = []; o.m2 = 0; });
+    items.forEach((a) => beri(kelompok.reduce((m, o) => (o.m2 < m.m2 ? o : m), kelompok[0]), a));
+  }
+  orang.forEach((o) => {
+    o.area.sort((x, y) => area.indexOf(x) - area.indexOf(y));
+    o.lantai = Array.from(new Set(o.area.map(lantaiDari)));
+    o.m2 = Math.round(o.m2 * 10) / 10;
+  });
+  return { orang, bersama: per.bersama };
+}
+
+export function bagiPerOrang(area: string[], anggota: string[], zona: "Tenant" | "Publik", lantai: LantaiOk[], luasManual: Record<string, number> = {}, mingguan: string[] = []): HasilBagi {
   const bersama = area.filter((a) => lantaiDari(a) === SEMUA);
   const dibagi = area.filter((a) => lantaiDari(a) !== SEMUA);
   const orang: TugasOrang[] = anggota.map((nama) => ({ nama, area: [], m2: 0, lantai: [] }));
   if (!orang.length) return { orang, bersama };
-  const bobot = new Map(dibagi.map((a) => [a, luasManual[a] > 0 ? luasManual[a] : bobotArea(a, zona, lantai)]));
+  const bobot = new Map(dibagi.map((a) => [a, (luasManual[a] > 0 ? luasManual[a] : bobotArea(a, zona, lantai)) * (mingguan.includes(a) ? FAKTOR_MINGGUAN : 1)]));
   const perLantai = new Map<string, string[]>();
   dibagi.forEach((a) => { const l = lantaiDari(a); perLantai.set(l, [...(perLantai.get(l) || []), a]); });
   const total = dibagi.reduce((t, a) => t + (bobot.get(a) || 0), 0);
