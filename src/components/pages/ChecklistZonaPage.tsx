@@ -3,11 +3,11 @@
 /**
  * Checklist Zona -- Uji Coba Pola Zona OB (§169). Staf melapor RONDE: centang area yang dikerjakan + 2-3 foto
  * (kamera atau galeri) + catatan opsional. Minimal `min_ronde` per hari (bawaan 1), boleh lebih.
- * §171 tanpa penilaian dari staf. §173/§175 tugas dibagi otomatis menurut luas:
+ * §171 tanpa penilaian dari staf. §176 tugas harian dari rencanaZona (pola Toilet / Area Lain):
  *   1. Pagi bersama (07.00-09.00): ruang tenant dibagi ke SEMUA peserta (Tenant + Publik)
- *   2. Tugas zona: Publik = area publik bagiannya; Tenant = pelayanan + keliling ruang tenant (berdua)
- *   3. Mingguan: area yang cukup 1x/minggu (gudang, pompa, rooftop, ...)
- *   + cadangan pelayanan: 1 orang Zona Publik bergiliran per hari di jam sibuk.
+ *   2. Tugas zona: Tenant = pelayanan lantai bagiannya; Publik = Toilet ATAU Area Lain (+ cadangan pelayanan)
+ *   3. Cek 1x (bila ada yang tidak hadir) & Mingguan
+ *   Bila Admin menandai ada yang tidak hadir, tugas hari itu otomatis dibagi ulang (skenario A/B).
  */
 
 import { useRouter } from "next/navigation";
@@ -23,7 +23,7 @@ import type { LantaiOk } from "@/lib/bagiZona";
 import AdminShell from "../admin/AdminShell";
 import Tile from "../admin/Tile";
 import {
-  akhirPekan, cadanganHariIni, FOTO_MAX, FOTO_MIN, KOLEKSI_LAPORAN_ZONA, mingguKe, tugasPagi, tugasZona, useUjiPolaZona, zonaUntuk,
+  akhirPekan, FOTO_MAX, FOTO_MIN, KOLEKSI_LAPORAN_ZONA, mingguKe, rencanaUntuk, useUjiPolaZona, zonaUntuk,
   type LaporanZona,
 } from "@/lib/ujiPolaZona";
 
@@ -65,19 +65,18 @@ export default function ChecklistZonaPage() {
   const sudahMingguIni = new Set(laporanSaya.filter((l) => l.tanggal >= awalMinggu && l.tanggal <= hariIni).flatMap((l) => l.area || []));
   const hariLibur = akhirPekan(hariIni) || libur.includes(hariIni);
 
-  // pembagian tugas (ringan -> dihitung tiap render)
-  const mingguan = new Set(config?.mingguan || []);
-  const pagi = config && zona && config.pagi_bersama ? tugasPagi(config, hariIni, lantaiOk) : null;
-  const pagiKu = pagi?.orang.find((o) => samaNama(o.nama, nama))?.area || [];
-  const zonaBagi = config && zona ? tugasZona(config, zona, hariIni, lantaiOk) : null;
-  const zonaKuSemua = zona === "Tenant" ? zonaBagi?.bersama || [] : [...(zonaBagi?.orang.find((o) => samaNama(o.nama, nama))?.area || []), ...(zonaBagi?.bersama || [])];
-  const zonaKu = zonaKuSemua.filter((a) => !mingguan.has(a));
-  const mingguanKu = zonaKuSemua.filter((a) => mingguan.has(a));
-  const rekanPublik = zona === "Publik" ? zonaBagi?.orang.filter((o) => !samaNama(o.nama, nama)) || [] : [];
-  const rekanPagi = pagi?.orang.filter((o) => !samaNama(o.nama, nama)) || [];
-  const tugasHarianKu = Array.from(new Set([...pagiKu, ...zonaKu]));
-  const cadangan = cadanganHariIni(config, hariIni);
-  const sayaCadangan = !!cadangan && samaNama(cadangan, nama);
+  // §176 rencana tugas hari ini (ringan -> dihitung tiap render)
+  const rencana = config && zona ? rencanaUntuk(config, hariIni, lantaiOk) : null;
+  const sayaR = rencana?.orang.find((o) => samaNama(o.nama, nama));
+  const sayaAbsen = !!rencana?.tidakHadir.some((n) => samaNama(n, nama));
+  const pagiKu = sayaR?.pagi || [];
+  const zonaKu = (sayaR?.area || []).filter((a) => !pagiKu.includes(a));
+  const cekKu = sayaR?.cekSekali || [];
+  const mingguanKu = sayaR?.mingguan || [];
+  const rekan = rencana?.orang.filter((o) => !samaNama(o.nama, nama)) || [];
+  const tugasHarianKu = Array.from(new Set([...pagiKu, ...zonaKu, ...cekKu]));
+  const cadangan = rencana?.orang.find((o) => o.cadangan);
+  const sayaCadangan = !!sayaR?.cadangan;
 
   if (!isReady || !session || !dimuat) return null;
 
@@ -149,13 +148,23 @@ export default function ChecklistZonaPage() {
       <>
         <Tile style={{ marginBottom: "16px" }}>
           <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--muted)" }}>Minggu ke-{mingguKe(config, hariIni)} · uji coba {config.mulai} s.d. {config.selesai}</div>
-          <h2 style={{ margin: "4px 0", fontSize: "22px" }}>Zona {zona}</h2>
+          <h2 style={{ margin: "4px 0", fontSize: "22px" }}>Zona {zona}{sayaR && sayaR.peran !== "Tenant" ? ` · ${sayaR.peran}` : ""}</h2>
+          {rencana && rencana.skenario !== "normal" && (
+            <div style={{ margin: "8px 0", padding: "10px 12px", borderRadius: "12px", background: "var(--warn-50)", border: "1px solid var(--warn)", fontSize: "13px" }}>
+              <b>⚠️ {rencana.judul}</b>
+              <div>Tidak hadir: {rencana.tidakHadir.join(", ")}. Tugas hari ini sudah dibagi ulang otomatis.</div>
+              {sayaR && sayaR.tugas !== sayaR.peran && <div>Tugasmu hari ini: <b>{sayaR.tugas}</b></div>}
+              {rencana.ditunda.length > 0 && <div style={{ color: "var(--muted)" }}>Ditunda: {rencana.ditunda.join(", ")}</div>}
+            </div>
+          )}
+          {sayaAbsen && <div style={{ margin: "8px 0", fontSize: "13px", fontWeight: 700, color: "var(--warn)" }}>Kamu ditandai tidak hadir hari ini. Bila ternyata masuk, minta Admin menghapus tandanya.</div>}
           <ol style={{ margin: "6px 0 0", paddingLeft: "18px", fontSize: "13px", color: "var(--ink-soft)", lineHeight: 1.7 }}>
-            {config.pagi_bersama && <li><b>{config.jam_pagi}</b> — bersihkan ruang tenant bagianmu (semua tim, sebelum jam kantor).</li>}
-            {zona === "Tenant"
-              ? <li>Setelah itu — <b>fokus pelayanan tenant</b> (minuman, meeting, permintaan portal) + keliling ruang tenant (sampah, tumpahan).</li>
-              : <li>Setelah itu — area publik bagianmu (toilet, lobby, tangga, dll){mingguanKu.length ? "; area mingguan cukup 1x minggu ini" : ""}.</li>}
-            {zona === "Publik" && cadangan && <li><b>Cadangan pelayanan {config.jam_cadangan}</b> hari ini: <b>{sayaCadangan ? "KAMU" : cadangan}</b>{sayaCadangan ? " — bantu ambil permintaan tenant di jam ini." : ""}</li>}
+            {pagiKu.length > 0 && <li><b>{config.jam_pagi}</b> — bersihkan ruang tenant bagianmu{rencana?.cepat ? " (cara cepat)" : ""} sebelum jam kantor.</li>}
+            {sayaR?.pelayanan.length ? <li>Setelah itu — <b>pelayanan tenant {sayaR.pelayanan.join(", ")}</b> (minuman, meeting, permintaan portal) + keliling ruang tenant lantai itu.</li> : null}
+            {sayaR?.peran === "Toilet" && sayaR.tugas === "Toilet" && <li>Setelah itu — <b>semua toilet</b>, ronde 07.45 · 10.30 · 13.30 · 16.00.</li>}
+            {sayaR?.peran === "Area Lain" && sayaR.tugas === "Area Lain" && <li>Setelah itu — lobby, basement, parkiran, pantry, mushallah, koridor{mingguanKu.length ? "; area mingguan cukup 1x minggu ini" : ""}.</li>}
+            {cadangan && <li><b>Cadangan pelayanan {cadangan.cadangan}</b> hari ini: <b>{sayaCadangan ? "KAMU" : cadangan.nama}</b>{sayaCadangan ? " — bantu ambil permintaan tenant di jam ini." : ""}</li>}
+            {sayaR?.catatan.map((t) => <li key={t}>{t}</li>)}
           </ol>
           <div style={{ marginTop: "10px", fontSize: "13px", fontWeight: 700, color: ronde.length >= config.min_ronde ? "var(--ok)" : "var(--warn)" }}>
             {ronde.length} ronde hari ini (minimal {config.min_ronde}) · {selesaiKu}/{tugasHarianKu.length} area harianmu sudah dikerjakan
@@ -167,25 +176,23 @@ export default function ChecklistZonaPage() {
           <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Centang area yang selesai dikerjakan di ronde ini. ✓ = sudah dikerjakan (hari ini / minggu ini untuk area mingguan).</div>
 
           {pagiKu.length > 0 && <>{judulBagian(`1. Pagi bersama ${config.jam_pagi} · ruang tenant`, "Bagianmu, dibagi menurut luas ke semua tim", pagiKu)}{daftarCentang(pagiKu)}</>}
-          {zonaKu.length > 0 && <>{judulBagian(zona === "Tenant" ? "2. Keliling ruang tenant (berdua)" : "2. Area publik bagianmu", zona === "Tenant" ? "Sampah, tumpahan, rapikan di sela pelayanan" : "Harian", zonaKu)}{daftarCentang(zonaKu)}</>}
-          {mingguanKu.length > 0 && <>{judulBagian("3. Mingguan", "Cukup 1x dalam minggu ini", mingguanKu)}{daftarCentang(mingguanKu, sudahMingguIni)}</>}
+          {zonaKu.length > 0 && <>{judulBagian(`2. ${sayaR?.tugas || "Area bagianmu"}`, sayaR?.pelayanan.length ? "Keliling ruang tenant & area tambahan di sela pelayanan" : "Harian", zonaKu)}{daftarCentang(zonaKu)}</>}
+          {cekKu.length > 0 && <>{judulBagian("3. Cukup dicek 1x hari ini", "Orang kurang — sapu/buang sampah seperlunya", cekKu)}{daftarCentang(cekKu)}</>}
+          {mingguanKu.length > 0 && <>{judulBagian("4. Mingguan", "Cukup 1x dalam minggu ini", mingguanKu)}{daftarCentang(mingguanKu, sudahMingguIni)}</>}
 
-          {(rekanPublik.length > 0 || rekanPagi.length > 0) && (
+          {rekan.length > 0 && (
             <div style={{ marginTop: "12px" }}>
               <button type="button" className="sa-btn is-soft" style={{ height: "32px" }} onClick={() => setLihatRekan(!lihatRekan)}>{lihatRekan ? "▾" : "▸"} Bantu area rekan</button>
               {lihatRekan && <>
-                {rekanPagi.filter((r) => r.area.length).map((r) => (
-                  <div key={`p${r.nama}`} style={{ marginTop: "8px" }}>
-                    <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--muted)" }}>Pagi · {r.nama} · {r.lantai.join(", ")}</div>
-                    {daftarCentang(r.area)}
-                  </div>
-                ))}
-                {rekanPublik.filter((r) => r.area.length).map((r) => (
-                  <div key={`z${r.nama}`} style={{ marginTop: "8px" }}>
-                    <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--muted)" }}>Publik · {r.nama} · {r.lantai.join(", ")}</div>
-                    {daftarCentang(r.area)}
-                  </div>
-                ))}
+                {rekan.map((r) => {
+                  const semua = Array.from(new Set([...r.pagi, ...r.area, ...r.cekSekali]));
+                  return semua.length ? (
+                    <div key={r.nama} style={{ marginTop: "8px" }}>
+                      <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--muted)" }}>{r.nama} · {r.tugas}</div>
+                      {daftarCentang(semua)}
+                    </div>
+                  ) : null;
+                })}
               </>}
             </div>
           )}

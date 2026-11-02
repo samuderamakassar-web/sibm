@@ -159,7 +159,9 @@ async function pengingatZona(uji) {
     console.log("Uji coba pola zona: hari libur, skip.");
     return;
   }
-  const peserta = [...(uji.tim_tenant || []), ...(uji.tim_publik || [])];
+  // §176 yang ditandai tidak hadir (sakit/izin) hari ini tidak diingatkan
+  const absen = ((uji.tidak_hadir || {})[hariIni] || []).map((n) => String(n).trim().toLowerCase());
+  const peserta = [...(uji.tim_tenant || []), ...(uji.tim_publik || [])].filter((n) => !absen.includes(n.trim().toLowerCase()));
   const laporan = (await db.collection("ob_zona_laporan").where("tanggal", "==", hariIni).get()).docs.map((d) => d.data());
   const minRonde = Math.max(1, Number(uji.min_ronde) || 1);
   const pesanPer = {};

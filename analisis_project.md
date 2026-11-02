@@ -3443,3 +3443,18 @@ Analisa (§171/§174): kebutuhan total ± 4,1 orang untuk 4 orang -> tidak perlu
 5. Evaluasi: beban terukur menggeser porsi (cleaning tenant pagi ∝ jumlah orang Publik; kapasitas cadangan = jam ÷ 8) dari Tenant ke Publik; luas manual tenant (§174) mengalahkan Okupansi. Cakupan zona dihitung per AREA (siapa pun yang mengerjakan), area mingguan terpisah (kolom "Mingguan"); cakupan tugas sendiri = bagian pagi + area publik bagiannya.
 6. Admin Pengaturan: centang & jam Pagi bersama / Cadangan; pratinjau 3 kartu per minggu (pagi, Tenant, Publik + jadwal cadangan).
 7. Config live ob_settings/uji_pola_zona diperbarui via firebase-admin (cadangan config lama disimpan di scratchpad): area_tenant layout renovasi -- L1 Asuransi 63 & PPNP 52, L3 "Tenant A/B" 60, L4 "Tenant A-D" 30 (NAMA PT L3/L4 BELUM DIKETAHUI, ganti di admin); area_publik + 8 penanda mingguan; pagi_bersama & cadangan_publik aktif.
+
+## 176. Pola Toilet / Area Lain + Skenario Tidak Hadir (2 November 2026)
+
+Analisa user "1 orang khusus toilet, 1 orang area publik lainnya, apakah sepadan?": dengan bobot §173, 8 toilet = 480 m² setara (80% kapasitas 600) vs area publik lain 211 (35%) -> timpang bila dibagi begitu saja. Seimbang bila Area Lain juga memegang koridor + cadangan pelayanan setiap hari (3 jam ≈ 37%) dan pagi bagian L1 yang lebih besar. Keputusan user "terapkan":
+1. **src/lib/rencanaZona.ts (baru, murni)** `rencanaHari()` -> rencana per orang per hari: pagi, area, cek 1x, mingguan, lantai pelayanan, cadangan, catatan + skenario & daftar ditunda.
+   - Normal: Tenant = pagi 1 lantai + pelayanan lantai bagiannya (jumlah tenant dibagi rata: L1+L3 | L4); Toilet = semua toilet + pagi L1 bagian kecil (PPNP); Area Lain = sisa publik + koridor + mingguan + pagi L1 bagian besar (Asuransi) + cadangan setiap hari.
+   - A1 1 Tenant absen: pagi lantainya -> Area Lain, pagi L1 Area Lain -> Toilet; Tenant yang hadir melayani semua lantai; Area Lain cadangan 09.00–15.00, hanya lobby/pantry/koridor, sisanya cek 1x; mingguan ditunda.
+   - A2 Toilet absen / A3 Area Lain absen: yang tersisa = toilet + lobby; orang Tenant jaga koridor + pantry/mushallah di lantai pelayanannya; sisanya cek 1x; tanpa cadangan; mingguan ditunda.
+   - B 2 orang hadir: X (Tenant bila ada) = pelayanan semua lantai + koridor; Y (pemegang toilet bila hadir) = toilet 2 ronde + lobby + pantry, mushallah cek 1x; pagi dibagi 2 (bagiPerOrang) cara cepat; area luar & mingguan ditunda. 1 orang = darurat (pelayanan, toilet, lobby).
+   - Diuji semua kombinasi absen dengan data live: setiap area terpegang atau masuk daftar ditunda.
+2. Config: `toilet_mg1`, `toilet_mg2` (pemegang toilet per minggu; live: Muhammad Ahmad / Syahrullah Ramadhan) & `tidak_hadir: {tanggal: [nama]}`. Simpan pengaturan admin mempertahankan tidak_hadir. ujiPolaZona: `rencanaUntuk()`, `toiletMinggu()`, `tidakHadirPada()`; `cadanganHariIni()` kini {nama, jam} (tugasPagi/tugasZona dihapus).
+3. Admin Uji Coba Pola Zona: kartu "Kehadiran & tugas hari ini" (pilih tanggal, tombol Hadir/Tidak hadir per orang -> updateDoc tidak_hadir.<tgl>, rencana langsung tampil); pratinjau per minggu memakai rencanaHari + pilihan pemegang toilet.
+4. Checklist Zona: judul "Zona Publik · Toilet/Area Lain", banner skenario (siapa absen, tugasmu hari ini, ditunda), bagian 3 "Cukup dicek 1x"; Bantu area rekan dari rencana. Dashboard OB: jam cadangan dari rencana (bisa diperpanjang).
+5. Evaluasi: tugas & cakupan per orang dari rencana HARI ITU; hari tidak hadir tidak dihitung wajib lapor (kepatuhan & hari ≥ min); cakupan zona tidak menghitung area yang ditunda; alasan kesimpulan menyebut hari kurang orang.
+6. scripts/fcm-reminder.mjs: peserta yang ditandai tidak hadir tidak diingatkan.

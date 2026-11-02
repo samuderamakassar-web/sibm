@@ -9,11 +9,13 @@
 //                               area_tenant[], area_publik[], min_ronde, dibuat_oleh, waktu_update }
 //   ob_zona_laporan/{id}      { jenis: "ronde", tanggal, nama, zona, minggu, area[], foto[] (2-3), catatan }
 //   Pembagian area per orang per lantai: src/lib/bagiZona.ts (§173, dari luas Okupansi)
+//   Rencana harian (pola Toilet / Area Lain, skenario tidak hadir): src/lib/rencanaZona.ts (§176)
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { CHECKLIST_OB_BAWAAN, type AreaChecklist } from "./sopChecklist";
-import { bagiPagi, bagiPerOrang, uraiArea, type HasilBagi, type LantaiOk } from "./bagiZona";
+import { uraiArea, type LantaiOk } from "./bagiZona";
+import { pemegangToilet, rencanaHari, type RencanaHari } from "./rencanaZona";
 
 export type Zona = "Tenant" | "Publik";
 export const DOC_UJI_POLA = () => doc(db, "ob_settings", "uji_pola_zona");
@@ -38,6 +40,10 @@ export interface UjiPolaZona {
   pagi_bersama: boolean; jam_pagi: string;
   cadangan_publik: boolean; jam_cadangan: string;
   min_ronde: number;
+  // §176 pola Toilet / Area Lain: pemegang toilet tiap minggu (anggota Zona Publik minggu itu)
+  toilet_mg1: string; toilet_mg2: string;
+  // §176 ketidakhadiran per tanggal (ditandai Admin) -> tugas hari itu dibagi ulang otomatis
+  tidak_hadir: Record<string, string[]>;
   dibuat_oleh?: string;
   waktu_update?: Timestamp | null;
 }
@@ -102,26 +108,25 @@ export function anggotaZona(c: UjiPolaZona, zona: Zona, tanggal: string): string
   return mingguKe(c, tanggal) === 1 ? m1 : m2;
 }
 
-// ---------- §175 tugas harian per orang ----------
-/** Ruang tenant pagi bersama: dibagi ke SEMUA peserta (Tenant + Publik) per lantai menurut luas. */
-export function tugasPagi(c: UjiPolaZona, tanggal: string, lantai: LantaiOk[]): HasilBagi {
-  const semua = [...anggotaZona(c, "Tenant", tanggal), ...anggotaZona(c, "Publik", tanggal)];
-  return bagiPagi(c.area_tenant, semua, lantai, c.luas_area, c.mingguan);
+// ---------- §176 tugas harian per orang (pola Toilet / Area Lain + ketidakhadiran) ----------
+/** Pemegang toilet minggu itu (pilihan admin; bawaan anggota pertama Zona Publik minggu itu). */
+export const toiletMinggu = (c: UjiPolaZona, tanggal: string) =>
+  pemegangToilet(anggotaZona(c, "Publik", tanggal), mingguKe(c, tanggal) === 1 ? c.toilet_mg1 : c.toilet_mg2);
+export const tidakHadirPada = (c: UjiPolaZona | null, tanggal: string): string[] => c?.tidak_hadir?.[tanggal] || [];
+
+/** Rencana tugas hari itu untuk semua peserta (null = di luar uji coba / akhir pekan). */
+export function rencanaUntuk(c: UjiPolaZona | null, tanggal: string, lantai: LantaiOk[]): RencanaHari | null {
+  if (!c || !dalamUjiCoba(c, tanggal) || akhirPekan(tanggal)) return null;
+  return rencanaHari({
+    tenant: anggotaZona(c, "Tenant", tanggal), publik: anggotaZona(c, "Publik", tanggal), toilet: toiletMinggu(c, tanggal),
+    areaTenant: c.area_tenant, areaPublik: c.area_publik, luas: c.luas_area, mingguan: c.mingguan, lantai,
+    tidakHadir: tidakHadirPada(c, tanggal), pagiBersama: c.pagi_bersama, cadangan: c.cadangan_publik, jamCadangan: c.jam_cadangan,
+  });
 }
-/** Tugas zona siang: Publik = area publik dibagi per orang; Tenant = keliling semua ruang tenant (dipegang berdua). */
-export function tugasZona(c: UjiPolaZona, zona: Zona, tanggal: string, lantai: LantaiOk[]): HasilBagi {
-  const anggota = anggotaZona(c, zona, tanggal);
-  if (zona === "Tenant") return { orang: anggota.map((nama) => ({ nama, area: [], m2: 0, lantai: [] })), bersama: c.area_tenant };
-  return bagiPerOrang(c.area_publik, anggota, "Publik", lantai, c.luas_area, c.mingguan);
-}
-/** Cadangan pelayanan hari itu: anggota Zona Publik bergiliran per hari kerja sejak mulai minggu berjalan. */
-export function cadanganHariIni(c: UjiPolaZona | null, tanggal: string): string | null {
-  if (!c || !c.cadangan_publik || !dalamUjiCoba(c, tanggal) || akhirPekan(tanggal)) return null;
-  const publik = anggotaZona(c, "Publik", tanggal);
-  if (!publik.length) return null;
-  const awalMinggu = mingguKe(c, tanggal) === 1 ? c.mulai : c.tukar_mulai;
-  const urutan = hariKerja(awalMinggu, tanggal).length - 1;
-  return publik[Math.max(0, urutan) % publik.length];
+/** Cadangan pelayanan hari itu = pemegang Area Lain (jam diperpanjang bila Zona Tenant kurang orang). */
+export function cadanganHariIni(c: UjiPolaZona | null, tanggal: string): { nama: string; jam: string } | null {
+  const o = rencanaUntuk(c, tanggal, [])?.orang.find((x) => x.cadangan);
+  return o ? { nama: o.nama, jam: o.cadangan! } : null;
 }
 /** Jam "11.00–14.00" -> apakah sekarang (menit WITA) di dalam rentang. */
 export function dalamJam(rentang: string, menitSekarang: number): boolean {
@@ -159,6 +164,14 @@ export function areaPublikBawaan(master: AreaChecklist[] = CHECKLIST_OB_BAWAAN):
   return Array.from(new Set(daftar));
 }
 
+function rapikanTidakHadir(v: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (v && typeof v === "object") Object.entries(v as Record<string, unknown>).forEach(([k, x]) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Array.isArray(x) && x.length) out[k] = x.map(String).filter(Boolean);
+  });
+  return out;
+}
+
 export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZona | null {
   if (!d || typeof d.mulai !== "string") return null;
   const arr = (v: unknown) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
@@ -177,6 +190,8 @@ export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZo
     pagi_bersama: d.pagi_bersama !== false, jam_pagi: String(d.jam_pagi || "07.00–09.00"),
     cadangan_publik: d.cadangan_publik !== false, jam_cadangan: String(d.jam_cadangan || "11.00–14.00"),
     min_ronde: Math.max(1, Number(d.min_ronde) || 1),
+    toilet_mg1: String(d.toilet_mg1 || ""), toilet_mg2: String(d.toilet_mg2 || ""),
+    tidak_hadir: rapikanTidakHadir(d.tidak_hadir),
     dibuat_oleh: typeof d.dibuat_oleh === "string" ? d.dibuat_oleh : "",
     waktu_update: (d.waktu_update as Timestamp) || null,
   };

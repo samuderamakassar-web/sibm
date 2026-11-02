@@ -134,11 +134,12 @@ export default function DashboardOBPage() {
   // §169 uji coba pola zona: selama periode aktif, zona menggantikan peran tugas & checklist lama
   const { config: ujiZona } = useUjiPolaZona();
   const zonaHariIni = zonaUntuk(ujiZona, picName, todayISO);
-  // §175 cadangan pelayanan: 1 orang Zona Publik bergiliran -- di jam cadangan panel permintaan naik ke atas
+  // §176 cadangan pelayanan: pemegang Area Lain (jam diperpanjang bila Zona Tenant kurang orang) -- di jam cadangan
+  // panel permintaan naik ke atas
   const cadangan = cadanganHariIni(ujiZona, todayISO);
-  const sayaCadangan = !!cadangan && cadangan.trim().toLowerCase() === picName.trim().toLowerCase();
+  const sayaCadangan = !!cadangan && cadangan.nama.trim().toLowerCase() === picName.trim().toLowerCase();
   const wita = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
-  const jamCadanganAktif = sayaCadangan && !!ujiZona && dalamJam(ujiZona.jam_cadangan, wita.getHours() * 60 + wita.getMinutes());
+  const jamCadanganAktif = sayaCadangan && dalamJam(cadangan.jam, wita.getHours() * 60 + wita.getMinutes());
   const isOBPelayanan = zonaHariIni ? zonaHariIni === "Tenant" || jamCadanganAktif : peranTugas === "OB Pelayanan";
   const peranPanel = zonaHariIni ? "" : peranTugas; // semua permintaan tampil; zona Tenant di atas
   const pathChecklist = zonaHariIni ? "/dashboard/ob/zona" : "/dashboard/ob/checklist";
@@ -384,9 +385,9 @@ export default function DashboardOBPage() {
         <AbsensiCard picName={picName} departemen="OB & CS" />
 
         {/* §123 OB Pelayanan: permintaan pelayanan paling atas */}
-        {sayaCadangan && ujiZona && (
+        {sayaCadangan && (
           <div style={{ marginBottom: "16px", padding: "12px 16px", borderRadius: "16px", background: jamCadanganAktif ? "var(--info-50)" : "var(--bg)", border: "1px solid var(--line)", fontSize: "13.5px" }}>
-            🙋 Hari ini kamu <b>cadangan pelayanan</b> pukul <b>{ujiZona.jam_cadangan}</b>{jamCadanganAktif ? " — sekarang jamnya, bantu ambil permintaan tenant di bawah." : "."}
+            🙋 Hari ini kamu <b>cadangan pelayanan</b> pukul <b>{cadangan.jam}</b>{jamCadanganAktif ? " — sekarang jamnya, bantu ambil permintaan tenant di bawah." : "."}
           </div>
         )}
         {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranPanel} />}
