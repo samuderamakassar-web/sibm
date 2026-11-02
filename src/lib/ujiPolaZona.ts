@@ -7,7 +7,8 @@
 //
 //   ob_settings/uji_pola_zona { aktif, mulai, tukar_mulai, selesai, tim_tenant[], tim_publik[],
 //                               area_tenant[], area_publik[], min_ronde, dibuat_oleh, waktu_update }
-//   ob_zona_laporan/{id}      { jenis: "ronde", tanggal, nama, zona, minggu, area[], foto_sebelum, foto_sesudah, catatan }
+//   ob_zona_laporan/{id}      { jenis: "ronde", tanggal, nama, zona, minggu, area[], foto[] (2-3), catatan }
+//   Pembagian area per orang per lantai: src/lib/bagiZona.ts (§173, dari luas Okupansi)
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
@@ -16,7 +17,9 @@ import { CHECKLIST_OB_BAWAAN, type AreaChecklist } from "./sopChecklist";
 export type Zona = "Tenant" | "Publik";
 export const DOC_UJI_POLA = () => doc(db, "ob_settings", "uji_pola_zona");
 export const KOLEKSI_LAPORAN_ZONA = "ob_zona_laporan";
-export const FOTO_PER_LAPORAN = 2; // sebelum & sesudah (keputusan user)
+// §173 foto ronde: minimal 2, maksimal 3, boleh dari galeri (keputusan user)
+export const FOTO_MIN = 2;
+export const FOTO_MAX = 3;
 
 export interface UjiPolaZona {
   aktif: boolean;
@@ -42,10 +45,14 @@ export interface LaporanZona {
   minggu: 1 | 2;
   waktu?: Timestamp | null;
   area?: string[];
-  foto_sebelum?: string;
+  foto?: string[];         // §173 2-3 foto
+  foto_sebelum?: string;   // laporan lama (2 Nov pagi, sebelum §173)
   foto_sesudah?: string;
   catatan?: string;
 }
+
+/** Semua foto laporan (format baru foto[] atau lama sebelum/sesudah). */
+export const fotoLaporan = (l: LaporanZona): string[] => (l.foto?.length ? l.foto : [l.foto_sebelum, l.foto_sesudah].filter((x): x is string => !!x));
 
 /** Tanggal ISO + n hari (aman zona waktu: dihitung di UTC murni). */
 export function tambahHari(iso: string, n: number): string {

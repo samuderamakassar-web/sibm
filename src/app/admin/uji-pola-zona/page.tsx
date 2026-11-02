@@ -18,8 +18,9 @@ import Tile from "../../../components/admin/Tile";
 import { tanggalISOWITASekarang } from "../../../lib/shift";
 import { CHECKLIST_OB_BAWAAN, useChecklistOB, type AreaChecklist } from "../../../lib/sopChecklist";
 import { ASUMSI_BAWAAN, WARNA_STATUS_BEBAN, type AsumsiBeban } from "../../../lib/sla";
+import { bagiPerOrang, BOBOT_RINGAN, M2_PER_TOILET, type LantaiOk } from "../../../lib/bagiZona";
 import {
-  areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, tambahHari, useUjiPolaZona,
+  areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, tambahHari, useUjiPolaZona,
   type LaporanZona,
 } from "../../../lib/ujiPolaZona";
 import { hitungEvaluasi, type ChecklistLama, type DataPendukung, type KlaimLembur, type Permintaan } from "../../../lib/evaluasiZona";
@@ -83,6 +84,12 @@ export default function UjiPolaZonaPage() {
   }
   // belum pernah diatur -> daftar area bawaan dari Okupansi & SOP (async, state diisi setelah data datang)
   const perluBawaan = dimuat && !config;
+  // §173 luas Okupansi -> pratinjau pembagian area per orang
+  const [lantaiOk, setLantaiOk] = useState<LantaiOk[]>([]);
+  useEffect(() => {
+    if (!isReady) return;
+    return onSnapshot(doc(db, "okupansi_gedung", "data"), (s) => setLantaiOk((s.data()?.lantai as LantaiOk[]) || []), () => setLantaiOk([]));
+  }, [isReady]);
   useEffect(() => {
     if (!perluBawaan) return;
     getDoc(doc(db, "okupansi_gedung", "data")).catch(() => null).then((ok) => {
@@ -203,12 +210,13 @@ export default function UjiPolaZonaPage() {
     }))), "Kerja per Zona");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hasil.orang.map((o) => ({
       Nama: o.nama, Minggu: o.minggu, Zona: o.zona, "Hari kerja": o.hari, Ronde: o.ronde, "Hari memenuhi minimal": o.hariPatuh,
+      "Area tugas (otomatis)": o.tugasArea, "Beban tugas (m² setara)": Math.round(o.tugasM2), "Cakupan tugas sendiri (%)": o.cakupanTugas === null ? "" : Math.round(o.cakupanTugas),
       "Area dikerjakan/hari": o.areaPerHari === null ? "" : +o.areaPerHari.toFixed(1), "Permintaan diterima": o.permintaan, "Menit pelayanan": o.menitPelayanan,
       "Respon rata-rata (menit)": o.responMenit === null ? "" : +o.responMenit.toFixed(0), "Lembur (jam)": +o.lemburJam.toFixed(1),
     }))), "Per Orang");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(laporan.filter((l) => l.jenis === "ronde").sort((a, b) => a.tanggal.localeCompare(b.tanggal)).map((l) => ({
       Tanggal: l.tanggal, Jam: l.waktu?.toDate().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }) || "", Nama: l.nama, Zona: l.zona, Minggu: l.minggu,
-      Area: (l.area || []).join(", "), Catatan: l.catatan || "", "Foto sebelum": l.foto_sebelum || "", "Foto sesudah": l.foto_sesudah || "",
+      Area: (l.area || []).join(", "), Catatan: l.catatan || "", ...Object.fromEntries(fotoLaporan(l).map((u, i) => [`Foto ${i + 1}`, u])),
     }))), "Ronde Harian");
     XLSX.writeFile(wb, `Evaluasi_Pola_Zona_OB_${config.mulai}.xlsx`);
   };
@@ -285,6 +293,39 @@ export default function UjiPolaZonaPage() {
                 <textarea className="sa-field" style={{ width: "100%", height: "220px", padding: "10px", cursor: "text", marginTop: "4px" }} value={areaPublik} onChange={(e) => setAreaPublik(e.target.value)} />
               </label>
             </div>
+          </Tile>
+
+          {/* §173 pratinjau pembagian area per orang (otomatis per lantai, seimbang menurut luas Okupansi) */}
+          <Tile style={{ marginBottom: "16px" }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: "16px" }}>Pembagian tugas per orang (otomatis)</h3>
+            <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>
+              Area tiap zona dibagi per lantai agar beban luas seimbang (data Okupansi; toilet = {M2_PER_TOILET} m² setara, parkir/taman/rooftop × {BOBOT_RINGAN}). Lantai yang terlalu besar untuk 1 orang dipecah. Area &quot;semua lantai&quot; dikerjakan bersama. Staf melihat tugasnya di Checklist Zona.
+            </div>
+            {[1, 2].map((mg) => (
+              <div key={mg} style={{ marginBottom: "10px" }}>
+                <b style={{ fontSize: "13.5px" }}>Minggu {mg}</b>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px", marginTop: "6px" }}>
+                  {(["Tenant", "Publik"] as const).map((z) => {
+                    const anggota = (z === "Tenant") === (mg === 1) ? timTenant : timPublik;
+                    const area = (z === "Tenant" ? areaTenant : areaPublik).split("\n").map((s) => s.trim()).filter(Boolean);
+                    const h = bagiPerOrang(area, anggota, z, lantaiOk);
+                    return (
+                      <div key={z} style={{ padding: "10px 12px", borderRadius: "14px", background: "var(--bg)", fontSize: "12.5px" }}>
+                        <b>Zona {z}</b>
+                        {h.orang.map((o) => (
+                          <div key={o.nama} style={{ marginTop: "6px" }}>
+                            <b>{o.nama}</b> · ± {Math.round(o.m2)} m² · {o.lantai.join(", ")}
+                            <div style={{ color: "var(--ink-soft)" }}>{o.area.join("; ")}</div>
+                          </div>
+                        ))}
+                        {h.bersama.length > 0 && <div style={{ marginTop: "6px", color: "var(--muted)" }}>Bersama: {h.bersama.join("; ")}</div>}
+                        {!h.orang.length && <div style={{ color: "var(--muted)", marginTop: "6px" }}>Belum ada anggota.</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </Tile>
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -366,17 +407,20 @@ export default function UjiPolaZonaPage() {
           <Tile style={{ marginBottom: "16px", overflowX: "auto" }}>
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "6px" }}>Zona ditukar di minggu 2: angka yang ikut pindah bersama zona = karena zonanya; yang tetap di kedua minggu = karena orangnya.</div>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
-              <thead><tr>{["Nama", "Mg", "Zona", "Ronde", "Hari ≥ min", "Area/hari", "Permintaan", "Menit pelayanan", "Respon", "Lembur"].map((h) => <th key={h} style={sel}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Nama", "Mg", "Zona", "Tugas", "Cakupan tugas", "Ronde", "Hari ≥ min", "Area/hari", "Permintaan", "Menit pelayanan", "Respon", "Lembur"].map((h) => <th key={h} style={sel}>{h}</th>)}</tr></thead>
               <tbody>
                 {hasil.orang.map((o) => (
                   <tr key={`${o.nama}-${o.minggu}`}>
-                    <td style={sel}><b>{o.nama}</b></td><td style={sel}>{o.minggu}</td><td style={sel}>{o.zona}</td><td style={sel}>{o.ronde}</td>
+                    <td style={sel}><b>{o.nama}</b></td><td style={sel}>{o.minggu}</td><td style={sel}>{o.zona}</td>
+                    <td style={sel}>{o.tugasArea} area · ± {Math.round(o.tugasM2)} m²</td>
+                    <td style={{ ...sel, color: o.cakupanTugas !== null && o.cakupanTugas < 80 ? "var(--red-600)" : "inherit" }}>{f1(o.cakupanTugas, 0)}%</td>
+                    <td style={sel}>{o.ronde}</td>
                     <td style={{ ...sel, color: o.hariPatuh < o.hari ? "var(--warn)" : "var(--ok)" }}>{o.hariPatuh}/{o.hari}</td>
                     <td style={sel}>{f1(o.areaPerHari)}</td><td style={sel}>{o.permintaan}</td><td style={sel}>{o.menitPelayanan} mnt</td>
                     <td style={sel}>{o.responMenit === null ? "–" : `${o.responMenit.toFixed(0)} mnt`}</td><td style={sel}>{f1(o.lemburJam)} j</td>
                   </tr>
                 ))}
-                {hasil.orang.length === 0 && <tr><td style={sel} colSpan={10}>Belum ada hari uji coba yang berjalan.</td></tr>}
+                {hasil.orang.length === 0 && <tr><td style={sel} colSpan={12}>Belum ada hari uji coba yang berjalan.</td></tr>}
               </tbody>
             </table>
           </Tile>

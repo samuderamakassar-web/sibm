@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -57,6 +57,18 @@ interface AparUnit {
 // inspeksi tgl 1 dini hari ke bulan sebelumnya.
 const bulanTahunSekarang = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()).slice(0, 7);
 
+/** §173 cari unit dari isi QR: URL label (…/qr-apar?id=ID), ID mentah, atau kode unit (APAR-L2-01). */
+function cariUnitDariQr(teks: string, daftar: AparUnit[]): AparUnit | null {
+  const bersih = teks.trim();
+  let id = "";
+  try { id = new URL(bersih).searchParams.get("id") || ""; } catch { /* bukan URL */ }
+  if (!id) { const m = /[?&]id=([^&#\s]+)/.exec(bersih); if (m) id = decodeURIComponent(m[1]); }
+  const kunci = (id || bersih).trim();
+  return daftar.find((u) => u.id === kunci)
+    || daftar.find((u) => (u.kode || "").trim().toLowerCase() === kunci.toLowerCase())
+    || null;
+}
+
 const KONDISI_TABUNG_OPSI = ["Baik", "Berkarat", "Bocor / Rusak"];
 const TEKANAN_OPSI = ["Normal", "Kurang", "Habis"];
 
@@ -69,7 +81,8 @@ export default function InspeksiAparPage() {
   const [unitApar, setUnitApar] = useState<AparUnit[]>([]);
   const [lantaiAktif, setLantaiAktif] = useState<string>("");
 
-  const [scanTarget, setScanTarget] = useState<AparUnit | null>(null);
+  // "SEMUA" = tombol Scan QR umum (unit dikenali dari QR); AparUnit = dibuka dari baris unit tertentu
+  const [scanTarget, setScanTarget] = useState<AparUnit | "SEMUA" | null>(null);
   const [formTarget, setFormTarget] = useState<AparUnit | null>(null);
   const [kondisiTabung, setKondisiTabung] = useState(KONDISI_TABUNG_OPSI[0]);
   const [tekanan, setTekanan] = useState(TEKANAN_OPSI[0]);
@@ -114,27 +127,36 @@ export default function InspeksiAparPage() {
   // SCAN QR — 2 fungsi: dari dalam app (petugas) buka form inspeksi;
   // kalau discan orang lain di luar app, URL yang sama membuka /qr-apar (halaman publik read-only).
   // ==========================================
+  // §173 scan dibuat mengenali unit dari isi QR (id di URL label, id mentah, atau kode unit) -- dulu WAJIB cocok
+  // dengan unit yang dipilih di daftar, sehingga label unit lain / salah pilih baris selalu "QR salah" tanpa
+  // keterangan. Sekarang: QR unit lain -> form unit itu langsung dibuka; QR yang bukan APAR -> isi QR ditampilkan.
+  const unitRef = useRef<AparUnit[]>([]);
+  useEffect(() => { unitRef.current = unitApar; }, [unitApar]);
+  const peringatanTerakhir = useRef(0);
   useEffect(() => {
     if (!scanTarget) return;
+    const target = scanTarget === "SEMUA" ? null : scanTarget;
     const scanner = new Html5QrcodeScanner("reader-apar", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
+    let selesai = false;
     scanner.render((decodedText) => {
-      let idHasilScan = "";
-      try {
-        idHasilScan = new URL(decodedText).searchParams.get("id") || "";
-      } catch {
-        idHasilScan = "";
-      }
-
-      if (idHasilScan && idHasilScan === scanTarget.id) {
-        scanner.clear();
-        setFormTarget(scanTarget);
+      if (selesai) return;
+      const unit = cariUnitDariQr(decodedText, unitRef.current);
+      if (unit) {
+        selesai = true;
+        scanner.clear().catch(() => {});
+        if (target && unit.id !== target.id) showToast(`QR terbaca: ${unit.kode} (bukan ${target.kode}). Form dibuka untuk ${unit.kode}.`, "info");
+        setFormTarget(unit);
         setScanTarget(null);
-      } else {
-        showToast(`QR Code salah! Ini bukan QR untuk ${scanTarget.kode}.`, "warning");
+        return;
       }
+      // decoder memanggil callback ~10x/detik -> peringatan dibatasi 1x per 3 detik
+      if (Date.now() - peringatanTerakhir.current < 3000) return;
+      peringatanTerakhir.current = Date.now();
+      const isi = decodedText.length > 60 ? `${decodedText.slice(0, 60)}…` : decodedText;
+      showToast(`QR ini bukan label APAR terdaftar. Terbaca: "${isi}"`, "warning");
     }, () => {});
 
-    return () => { scanner.clear().catch(e => console.error(e)); };
+    return () => { selesai = true; scanner.clear().catch(e => console.error(e)); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanTarget]);
 
@@ -212,6 +234,12 @@ export default function InspeksiAparPage() {
           <div style={{ width: "100%", background: "var(--line)", borderRadius: "50px", height: "12px", overflow: "hidden" }}>
             <div style={{ height: "100%", background: progressPersen === 100 ? "var(--ok)" : "linear-gradient(90deg, var(--red-600), var(--warn))", width: `${progressPersen}%`, transition: "width 0.5s ease-in-out" }}></div>
           </div>
+          {/* §173 scan langsung -- unit dikenali dari QR, tidak perlu memilih baris unit dulu */}
+          {unitApar.length > 0 && (
+            <button type="button" onClick={() => setScanTarget("SEMUA")} className="scan-btn" style={{ width: "100%", justifyContent: "center", marginTop: "14px", padding: "12px", fontSize: "14px" }}>
+              <IconQrCode size={16} /> Scan QR APAR
+            </button>
+          )}
         </div>
 
         {unitApar.length === 0 ? (
@@ -270,7 +298,7 @@ export default function InspeksiAparPage() {
       {scanTarget && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", flexDirection: "column", backdropFilter: "blur(5px)" }}>
           <div style={{ padding: "20px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconFireExtinguisher size={16} /> Scan QR: {scanTarget.kode}</span>
+            <span style={{ fontWeight: "bold", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}><IconFireExtinguisher size={16} /> {scanTarget === "SEMUA" ? "Scan QR APAR" : `Scan QR: ${scanTarget.kode}`}</span>
             <button onClick={() => setScanTarget(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "40px", height: "40px", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IconX size={16} color="white" /></button>
           </div>
           <div style={{ padding: "20px", background: "#1a202c", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", overflowY: "auto" }}>

@@ -11,6 +11,7 @@ import type { Timestamp } from "firebase/firestore";
 import { menitJenis, timJenis } from "./pelayanan";
 import { statusBeban, type AsumsiBeban, type StatusBeban } from "./sla";
 import type { AreaChecklist } from "./sopChecklist";
+import { bagiPerOrang } from "./bagiZona";
 import { hariKerja, tambahHari, zonaUntuk, anggotaZona, type LaporanZona, type UjiPolaZona, type Zona } from "./ujiPolaZona";
 
 export interface Permintaan { jenis?: string; jumlah?: number; diterima_oleh?: string; waktu_minta?: Timestamp | null; waktu_terima?: Timestamp | null; status?: string }
@@ -120,6 +121,8 @@ export interface KerjaZona {
 }
 export interface BarisOrang {
   nama: string; minggu: 1 | 2; zona: Zona; hari: number; ronde: number; hariPatuh: number; areaPerHari: number | null;
+  // §173 area tugas pembagian otomatis (bagiZona) & % yang ia kerjakan sendiri per hari
+  tugasArea: number; tugasM2: number; cakupanTugas: number | null;
   permintaan: number; menitPelayanan: number; responMenit: number | null; lemburJam: number;
 }
 export interface HasilEvaluasi {
@@ -166,8 +169,17 @@ export function hitungEvaluasi(cfg: UjiPolaZona, hariIni: string, libur: string[
     const r = ronde.filter((l) => samaNama(l.nama, nama) && hari.includes(l.tanggal));
     const p = permUji.filter((x) => samaNama(x.diterima_oleh, nama) && hari.includes(tglWITA(x.waktu_minta)));
     const areaHarian = hari.map((h) => new Set(r.filter((l) => l.tanggal === h).flatMap((l) => l.area || [])).size);
+    const zonaOrang = zonaUntuk(c, nama, hari[0])!;
+    const bagi = bagiPerOrang(zonaOrang === "Tenant" ? c.area_tenant : c.area_publik, anggotaZona(c, zonaOrang, hari[0]), zonaOrang, data.okupansi.lantai || []);
+    const tugas = bagi.orang.find((o) => samaNama(o.nama, nama));
+    const areaTugas = [...(tugas?.area || []), ...bagi.bersama];
+    const cakupanTugas = areaTugas.length ? rata(hari.map((h) => {
+      const dikerjakan = new Set(r.filter((l) => l.tanggal === h).flatMap((l) => l.area || []));
+      return (areaTugas.filter((a) => dikerjakan.has(a)).length / areaTugas.length) * 100;
+    })) : null;
     orang.push({
-      nama, minggu, zona: zonaUntuk(c, nama, hari[0])!, hari: hari.length, ronde: r.length,
+      tugasArea: areaTugas.length, tugasM2: tugas?.m2 || 0, cakupanTugas,
+      nama, minggu, zona: zonaOrang, hari: hari.length, ronde: r.length,
       hariPatuh: hari.filter((h) => r.filter((l) => l.tanggal === h).length >= c.min_ronde).length,
       areaPerHari: rata(areaHarian), permintaan: p.length, menitPelayanan: p.reduce((t, x) => t + menitPermintaan(x), 0),
       responMenit: rata(respon(p)), lemburJam: lemburJam(lembur, [nama], hari),
@@ -225,6 +237,9 @@ export function hitungEvaluasi(cfg: UjiPolaZona, hariIni: string, libur: string[
     if (k.cakupan < 80) { buruk++; alasan.push(`Zona ${k.zona}: rata-rata hanya ${Math.round(k.cakupan)}% area tercentang per hari — ada area yang tidak terpegang.`); }
     else if (k.cakupan >= 95) baik++;
   }
+  // §173 tugas per orang (pembagian otomatis per lantai): siapa yang area bagiannya sering tidak terpegang
+  const kurangTugas = orang.filter((o) => o.cakupanTugas !== null && o.cakupanTugas < 80);
+  if (kurangTugas.length) alasan.push(`Area tugas sendiri < 80% dikerjakan: ${kurangTugas.map((o) => `${o.nama} (mg ${o.minggu}, Zona ${o.zona}, ${Math.round(o.cakupanTugas!)}%)`).join("; ")}.`);
   if (bantuZonaLain > 0) alasan.push(`Zona Publik ikut mengambil ${bantuZonaLain} permintaan tenant (tanda Zona Tenant kewalahan bila sering).`);
   const warna: "hijau" | "oranye" | "merah" = !hariUji.length ? "oranye" : buruk >= 2 && buruk > baik ? "merah" : baik >= 2 && baik > buruk ? "hijau" : "oranye";
   const judul = !hariUji.length ? "Uji coba belum dimulai" : warna === "hijau" ? "Pola zona cenderung MERINGANKAN" : warna === "merah" ? "Pola zona cenderung MEMBERATKAN" : "Belum ada perbedaan jelas";
