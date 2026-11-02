@@ -55,12 +55,28 @@ export function bobotArea(area: string, zona: "Tenant" | "Publik", lantai: Lanta
 export interface TugasOrang { nama: string; area: string[]; m2: number; lantai: string[] }
 export interface HasilBagi { orang: TugasOrang[]; bersama: string[] }
 
-export function bagiPerOrang(area: string[], anggota: string[], zona: "Tenant" | "Publik", lantai: LantaiOk[]): HasilBagi {
+// §174 luas manual per area: baris daftar area "Lantai 3 · PT X | 60" -> label "Lantai 3 · PT X", luas 60 m².
+// Dipakai saat data Okupansi tidak sesuai kondisi lapangan (mis. renovasi). Mengalahkan bobot dari Okupansi.
+export function uraiArea(baris: string[]): { area: string[]; luas: Record<string, number> } {
+  const area: string[] = [], luas: Record<string, number> = {};
+  baris.map((b) => b.trim()).filter(Boolean).forEach((b) => {
+    const m = /^(.*?)\s*\|\s*([\d]+(?:[.,]\d+)?)\s*(?:m2|m²)?\s*$/i.exec(b);
+    const label = (m ? m[1] : b).trim();
+    if (!label || area.includes(label)) return;
+    area.push(label);
+    if (m) luas[label] = Number(m[2].replace(",", "."));
+  });
+  return { area, luas };
+}
+/** Kebalikan uraiArea -- untuk mengisi kembali textarea admin. */
+export const gabungArea = (area: string[], luas: Record<string, number> = {}) => area.map((a) => (luas[a] ? `${a} | ${luas[a]}` : a));
+
+export function bagiPerOrang(area: string[], anggota: string[], zona: "Tenant" | "Publik", lantai: LantaiOk[], luasManual: Record<string, number> = {}): HasilBagi {
   const bersama = area.filter((a) => lantaiDari(a) === SEMUA);
   const dibagi = area.filter((a) => lantaiDari(a) !== SEMUA);
   const orang: TugasOrang[] = anggota.map((nama) => ({ nama, area: [], m2: 0, lantai: [] }));
   if (!orang.length) return { orang, bersama };
-  const bobot = new Map(dibagi.map((a) => [a, bobotArea(a, zona, lantai)]));
+  const bobot = new Map(dibagi.map((a) => [a, luasManual[a] > 0 ? luasManual[a] : bobotArea(a, zona, lantai)]));
   const perLantai = new Map<string, string[]>();
   dibagi.forEach((a) => { const l = lantaiDari(a); perLantai.set(l, [...(perLantai.get(l) || []), a]); });
   const total = dibagi.reduce((t, a) => t + (bobot.get(a) || 0), 0);

@@ -59,7 +59,7 @@ export default function ChecklistZonaPage() {
   const sudahHariIni = new Set(ronde.flatMap((r) => r.area || []));
   const anggota = config && zona ? anggotaZona(config, zona, hariIni) : [];
   // perhitungan ringan (puluhan area) -> cukup tiap render
-  const pembagian = config && zona ? bagiPerOrang(zona === "Tenant" ? config.area_tenant : config.area_publik, anggota, zona, lantaiOk) : null;
+  const pembagian = config && zona ? bagiPerOrang(zona === "Tenant" ? config.area_tenant : config.area_publik, anggota, zona, lantaiOk, config.luas_area) : null;
   const tugasku = pembagian?.orang.find((o) => samaNama(o.nama, nama));
   const areaKu = [...(tugasku?.area || []), ...(pembagian?.bersama || [])];
   const rekan = pembagian?.orang.filter((o) => !samaNama(o.nama, nama)) || [];

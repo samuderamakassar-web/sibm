@@ -170,7 +170,7 @@ export function hitungEvaluasi(cfg: UjiPolaZona, hariIni: string, libur: string[
     const p = permUji.filter((x) => samaNama(x.diterima_oleh, nama) && hari.includes(tglWITA(x.waktu_minta)));
     const areaHarian = hari.map((h) => new Set(r.filter((l) => l.tanggal === h).flatMap((l) => l.area || [])).size);
     const zonaOrang = zonaUntuk(c, nama, hari[0])!;
-    const bagi = bagiPerOrang(zonaOrang === "Tenant" ? c.area_tenant : c.area_publik, anggotaZona(c, zonaOrang, hari[0]), zonaOrang, data.okupansi.lantai || []);
+    const bagi = bagiPerOrang(zonaOrang === "Tenant" ? c.area_tenant : c.area_publik, anggotaZona(c, zonaOrang, hari[0]), zonaOrang, data.okupansi.lantai || [], c.luas_area);
     const tugas = bagi.orang.find((o) => samaNama(o.nama, nama));
     const areaTugas = [...(tugas?.area || []), ...bagi.bersama];
     const cakupanTugas = areaTugas.length ? rata(hari.map((h) => {

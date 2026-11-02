@@ -18,7 +18,7 @@ import Tile from "../../../components/admin/Tile";
 import { tanggalISOWITASekarang } from "../../../lib/shift";
 import { CHECKLIST_OB_BAWAAN, useChecklistOB, type AreaChecklist } from "../../../lib/sopChecklist";
 import { ASUMSI_BAWAAN, WARNA_STATUS_BEBAN, type AsumsiBeban } from "../../../lib/sla";
-import { bagiPerOrang, BOBOT_RINGAN, M2_PER_TOILET, type LantaiOk } from "../../../lib/bagiZona";
+import { bagiPerOrang, BOBOT_RINGAN, gabungArea, M2_PER_TOILET, uraiArea, type LantaiOk } from "../../../lib/bagiZona";
 import {
   areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, tambahHari, useUjiPolaZona,
   type LaporanZona,
@@ -78,8 +78,8 @@ export default function UjiPolaZonaPage() {
       config.tim_tenant.forEach((n) => (p[n] = "Tenant"));
       config.tim_publik.forEach((n) => (p[n] = "Publik"));
       setPilihan(p);
-      setAreaTenant(config.area_tenant.join("\n"));
-      setAreaPublik(config.area_publik.join("\n"));
+      setAreaTenant(gabungArea(config.area_tenant, config.luas_area).join("\n"));
+      setAreaPublik(gabungArea(config.area_publik, config.luas_area).join("\n"));
     }
   }
   // belum pernah diatur -> daftar area bawaan dari Okupansi & SOP (async, state diisi setelah data datang)
@@ -299,7 +299,7 @@ export default function UjiPolaZonaPage() {
           <Tile style={{ marginBottom: "16px" }}>
             <h3 style={{ margin: "0 0 4px", fontSize: "16px" }}>Pembagian tugas per orang (otomatis)</h3>
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>
-              Area tiap zona dibagi per lantai agar beban luas seimbang (data Okupansi; toilet = {M2_PER_TOILET} m² setara, parkir/taman/rooftop × {BOBOT_RINGAN}). Lantai yang terlalu besar untuk 1 orang dipecah. Area &quot;semua lantai&quot; dikerjakan bersama. Staf melihat tugasnya di Checklist Zona.
+              Area tiap zona dibagi per lantai agar beban luas seimbang (data Okupansi; toilet = {M2_PER_TOILET} m² setara, parkir/taman/rooftop × {BOBOT_RINGAN}). Lantai yang terlalu besar untuk 1 orang dipecah. Area &quot;semua lantai&quot; dikerjakan bersama. Bila Okupansi tidak sesuai kondisi lapangan (mis. renovasi), tulis luas manual di daftar area: <code>Lantai 3 · PT X | 60</code>. Staf melihat tugasnya di Checklist Zona.
             </div>
             {[1, 2].map((mg) => (
               <div key={mg} style={{ marginBottom: "10px" }}>
@@ -307,8 +307,8 @@ export default function UjiPolaZonaPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px", marginTop: "6px" }}>
                   {(["Tenant", "Publik"] as const).map((z) => {
                     const anggota = (z === "Tenant") === (mg === 1) ? timTenant : timPublik;
-                    const area = (z === "Tenant" ? areaTenant : areaPublik).split("\n").map((s) => s.trim()).filter(Boolean);
-                    const h = bagiPerOrang(area, anggota, z, lantaiOk);
+                    const urai = uraiArea((z === "Tenant" ? areaTenant : areaPublik).split("\n"));
+                    const h = bagiPerOrang(urai.area, anggota, z, lantaiOk, urai.luas);
                     return (
                       <div key={z} style={{ padding: "10px 12px", borderRadius: "14px", background: "var(--bg)", fontSize: "12.5px" }}>
                         <b>Zona {z}</b>

@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { CHECKLIST_OB_BAWAAN, type AreaChecklist } from "./sopChecklist";
+import { uraiArea } from "./bagiZona";
 
 export type Zona = "Tenant" | "Publik";
 export const DOC_UJI_POLA = () => doc(db, "ob_settings", "uji_pola_zona");
@@ -30,6 +31,7 @@ export interface UjiPolaZona {
   tim_publik: string[]; // zona Publik minggu 1
   area_tenant: string[];
   area_publik: string[];
+  luas_area: Record<string, number>; // §174 luas manual per area (m²), dari baris "Area | luas"
   min_ronde: number;
   dibuat_oleh?: string;
   waktu_update?: Timestamp | null;
@@ -128,8 +130,10 @@ export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZo
     selesai: String(d.selesai || tambahHari(d.mulai, 11)),
     tim_tenant: arr(d.tim_tenant),
     tim_publik: arr(d.tim_publik),
-    area_tenant: arr(d.area_tenant),
-    area_publik: arr(d.area_publik),
+    // §174 baris "Area | luas" -> label bersih + luas manual (disimpan apa adanya di Firestore)
+    area_tenant: uraiArea(arr(d.area_tenant)).area,
+    area_publik: uraiArea(arr(d.area_publik)).area,
+    luas_area: { ...uraiArea(arr(d.area_tenant)).luas, ...uraiArea(arr(d.area_publik)).luas },
     min_ronde: Math.max(1, Number(d.min_ronde) || 1),
     dibuat_oleh: typeof d.dibuat_oleh === "string" ? d.dibuat_oleh : "",
     waktu_update: (d.waktu_update as Timestamp) || null,
