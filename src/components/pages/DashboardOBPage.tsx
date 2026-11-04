@@ -15,6 +15,7 @@ import { useMasterKondisiAset } from "@/lib/kondisiAset";
 import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
 import KinerjaSayaPanel from "../KinerjaSayaPanel";
 import { useUjiPolaZona, zonaUntuk, mingguKe, cadanganHariIni, dalamJam } from "@/lib/ujiPolaZona";
+import { JADWAL_OPNAME, statusSesi } from "@/lib/stokOB";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -114,6 +115,8 @@ export default function DashboardOBPage() {
 
   // State Fitur OB & CS
   const [stokMenipis, setStokMenipis] = useState<StockItem[]>([]);
+  // §177 opname stok harian (Pagi & Sore) yang sudah dikirim hari ini
+  const [sesiOpnameHariIni, setSesiOpnameHariIni] = useState<string[]>([]);
   const [tugasDeepCleaning, setTugasDeepCleaning] = useState<DeepCleaningTask[]>([]);
 
   // 💡 STATE BARU: PERIODE & MULTI-ROW OVERTIME
@@ -185,6 +188,11 @@ export default function DashboardOBPage() {
       setStokMenipis(items);
     });
 
+    // §177 opname stok hari ini (1 field -> tanpa index komposit)
+    const unsubOpname = onSnapshot(query(collection(db, "ob_opname"), where("tanggal", "==", todayISO)), (s) => {
+      setSesiOpnameHariIni(s.docs.map((d) => d.data()).filter((x) => x.status !== "Ditolak").map((x) => String(x.sesi || "")));
+    }, () => setSesiOpnameHariIni([]));
+
     // C. Listener Tugas Deep Cleaning Hari Ini
     const dcRef = collection(db, "deep_cleaning_tasks");
     const qDC = query(dcRef, where("tanggal", ">=", todayISO));
@@ -202,6 +210,7 @@ export default function DashboardOBPage() {
     return () => {
       unsubPlot();
       unsubStock();
+      unsubOpname();
       unsubDC();
     };
   }, [isAuthReady, session, picName, todayISO]);
@@ -391,6 +400,19 @@ export default function DashboardOBPage() {
           </div>
         )}
         {picName && isOBPelayanan && <PermintaanPelayananPanel nama={picName} peran={peranPanel} />}
+
+        {/* §177 jadwal opname stok harian: muncul saat jamnya / terlambat dan belum dihitung */}
+        {(() => {
+          const wNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
+          const menit = wNow.getHours() * 60 + wNow.getMinutes();
+          const hariKerja = wNow.getDay() !== 0 && wNow.getDay() !== 6;
+          const perlu = hariKerja ? JADWAL_OPNAME.map((j) => ({ j, st: statusSesi(j.sesi, menit, sesiOpnameHariIni.includes(j.sesi)) })).filter((x) => x.st === "berjalan" || x.st === "terlambat") : [];
+          return perlu.length ? (
+            <button type="button" onClick={() => router.push("/dashboard/ob/stok")} style={{ width: "100%", textAlign: "left", marginBottom: "16px", padding: "12px 16px", borderRadius: "16px", border: "1px solid var(--warn)", background: "var(--warn-50)", color: "var(--ink)", fontSize: "13.5px", cursor: "pointer", fontFamily: "inherit" }}>
+              📦 <b>Opname stok {perlu.map((x) => (x.j.sesi === "Pagi" ? "pagi" : "sebelum pulang")).join(" & ")}</b> belum dihitung ({perlu.map((x) => x.j.jam).join(", ")}){perlu.some((x) => x.st === "terlambat") ? " — terlambat" : ""}. Ketuk untuk menghitung.
+            </button>
+          ) : null;
+        })()}
 
         {/* ⚠️ BANNER PERINGATAN LOW STOCK */}
         {stokMenipis.length > 0 && (

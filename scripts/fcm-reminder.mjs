@@ -60,6 +60,9 @@ async function jalankan() {
     return;
   }
 
+  // §177 opname stok harian (Pagi 07.00-09.00, Sore 15.30-17.00) -- jalan juga selama uji coba zona
+  await pengingatOpname();
+
   // §169 uji coba pola zona OB: pengingat sesi lama diganti 2 pengingat per hari --
   // 12:00-12:29 & 16:30-16:59 bila ronde hari ini masih kurang dari minimal.
   const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
@@ -144,6 +147,34 @@ async function jalankan() {
     }
   });
   await tulisNotifPersonal(picBelumLapor, `Pengingat Checklist Sesi ${sesiSekarang}`, bodyPesan);
+}
+
+// §177 pengingat opname stok: 08:30-08:59 (pagi) & 16:30-16:59 (sebelum pulang) bila sesi itu belum dihitung.
+// Opname dikerjakan siapa saja di tim, jadi dikirim ke semua token OB & CS. Jadwal = src/lib/stokOB.ts JADWAL_OPNAME.
+async function pengingatOpname() {
+  const menit = now.getHours() * 60 + now.getMinutes();
+  const sesi = menit >= 8 * 60 + 30 && menit < 9 * 60 ? "Pagi" : menit >= 16 * 60 + 30 && menit < 17 * 60 ? "Sore" : null;
+  if (!sesi) return;
+  const libur = (await db.collection("settings").doc("validasi_karyawan").get()).data()?.hari_libur || [];
+  if (libur.includes(hariIni)) return;
+  const snap = await db.collection("ob_opname").where("tanggal", "==", hariIni).get();
+  if (snap.docs.some((d) => d.data().sesi === sesi && d.data().status !== "Ditolak")) {
+    console.log(`Opname ${sesi} sudah dihitung, skip pengingat.`);
+    return;
+  }
+  const judul = "Pengingat Opname Stok";
+  const pesan = `Opname stok ${sesi === "Pagi" ? "pagi (07.00-09.00)" : "sebelum pulang (15.30-17.00)"} belum dihitung. Buka Inventori Gudang OB.`;
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "OB & CS").get();
+  let terkirim = 0;
+  for (const d of tokenSnap.docs) {
+    const x = d.data();
+    if (!x.token) continue;
+    try {
+      await messaging.send({ token: x.token, notification: { title: judul, body: pesan }, webpush: { notification: { icon: "/icons/icon-192.png" } } });
+      terkirim++;
+    } catch (e) { console.log(`Gagal kirim ke ${x.pic_nama || d.id}: ${e.message}`); }
+  }
+  console.log(`Pengingat opname ${sesi}: ${terkirim} terkirim.`);
 }
 
 async function pengingatZona(uji) {

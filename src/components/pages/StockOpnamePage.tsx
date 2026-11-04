@@ -11,6 +11,11 @@ import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { tanggalISOWITASekarang } from "@/lib/shift";
+import {
+  JADWAL_OPNAME, KATEGORI, KET_KAT, WARNA_KAT, kategoriBarang, rekapHarian, sesiOpnameBawaan, statusSesi, tebakKategori,
+  type Kategori, type OpnameRingkas, type SesiOpname,
+} from "@/lib/stokOB";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain (DashboardOBPage/ChecklistOBPage)
@@ -52,31 +57,12 @@ interface StockItem {
   nama_barang: string;
   qty: number;
   batas_minimum: number;
-  kategori?: Kategori; // §97 -- kosong (data lama) = ditebak dari nama
+  kategori?: string; // §97/§177 -- kosong / kategori lama = ditebak dari nama (src/lib/stokOB.ts)
+  foto?: string;     // §177 foto barang
 }
 
-// ==========================================
-// §97 KATEGORI BARANG -- Chemical / Utilitas Gedung / Dapur & Rumah Tangga.
-// Barang lama tanpa field kategori ditebak dari namanya (bisa dikoreksi lewat Edit).
-// ==========================================
-const KATEGORI = ["Chemical", "Utilitas Gedung", "Dapur & Rumah Tangga"] as const;
-type Kategori = (typeof KATEGORI)[number];
-const WARNA_KAT: Record<Kategori, { bg: string; fg: string }> = {
-  "Chemical": { bg: "var(--info-50)", fg: "var(--info)" },
-  "Utilitas Gedung": { bg: "var(--warn-50)", fg: "var(--warn)" },
-  "Dapur & Rumah Tangga": { bg: "var(--ok-50)", fg: "var(--ok)" },
-};
-const POLA_DAPUR = /cuci piring|sunlight|mama lemon|gula|kopi|^teh|teh|susu|creamer|air mineral|galon|aqua|gelas|piring|sendok|tisu|tissue|kantong|plastik|kresek|kanebo|spons|sponge|sapu|pel|lap|serbet|ember|sikat|keset|sarung tangan|masker/i;
-const POLA_UTILITAS = /lampu|tl|led|bohlam|watt|kabel|stop ?kontak|terminal|baterai|batre|fitting|saklar|kran|keran|selang|kunci|gembok|filter|lem|isolasi|lakban|paku|sekring|mcb|starter|ballast|klep|pipa|engsel|obeng/i;
-const POLA_CHEMICAL = /sabun|vixal|wipol|porstex|karbol|kamper|kapur barus|pengharum|pewangi|stella|glade|baygon|hit|cairan|deterjen|detergen|rinso|soklin|so klin|desinfektan|disinfektan|alkohol|sanitizer|cleaner|cling|superpell|super pell|bayclin|molto|kispray|chemical|pembersih|semir|polish|lilin|wax|asam|soda|clorox|lysol|dettol|lifeboy|lifebuoy|hand ?soap/i;
-function tebakKategori(nama: string): Kategori {
-  if (POLA_DAPUR.test(nama)) return "Dapur & Rumah Tangga";
-  if (POLA_UTILITAS.test(nama)) return "Utilitas Gedung";
-  if (POLA_CHEMICAL.test(nama)) return "Chemical";
-  return "Dapur & Rumah Tangga";
-}
-const kategoriOf = (item: StockItem): Kategori => (item.kategori && KATEGORI.includes(item.kategori) ? item.kategori : tebakKategori(item.nama_barang));
-
+// §177 kategori: Chemical / Tools Cleaning / Pantry & Habis Pakai / Utilitas Gedung / Fasilitas / Tools & Lainnya
+const kategoriOf = (item: StockItem): Kategori => kategoriBarang(item);
 /** Baris pemisah kelompok di tabel (hanya saat filter "Semua"). */
 function BarisKelompok({ k, n, kolom }: { k: Kategori; n: number; kolom: number }) {
   return (
@@ -86,10 +72,11 @@ function BarisKelompok({ k, n, kolom }: { k: Kategori; n: number; kolom: number 
 
 // §116 opname fisik: selisih sistem vs fisik, wajib disetujui Koordinator OB / Admin (bukan pembuatnya)
 interface OpnameItem { id: string; nama: string; sistem: number; fisik: number; selisih: number; alasan: string }
-interface Opname { id: string; dibuat_oleh: string; dibuat_pada?: Timestamp | null; status: "Menunggu Persetujuan" | "Disetujui" | "Ditolak" | "Sesuai"; items: OpnameItem[]; disetujui_oleh?: string; alasan_tolak?: string }
+interface Opname { id: string; sesi?: SesiOpname | "Lainnya"; tanggal?: string; dibuat_oleh: string; dibuat_pada?: Timestamp | null; status: "Menunggu Persetujuan" | "Disetujui" | "Ditolak" | "Sesuai"; items: OpnameItem[]; disetujui_oleh?: string; alasan_tolak?: string }
+const tglWITA = (ts?: Timestamp | null) => (ts ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(ts.toDate()) : "");
+const menitWITA = () => { const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" })); return d.getHours() * 60 + d.getMinutes(); };
 type Transaksi = { item: StockItem; arah: "MASUK" | "KELUAR"; jumlah: string; keperluan: string; foto: string };
 const BATAS_FOTO_KELUAR = 5; // keluar >= 5 unit wajib foto
-const HARI_PENGINGAT_OPNAME = 30;
 
 interface StockLog {
   id: string;
@@ -176,7 +163,9 @@ export default function StockOpnamePage() {
   // Form States
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" as Kategori | "" });
+  const [formData, setFormData] = useState({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" as Kategori | "", foto: "" });
+  const [uploadFotoBarang, setUploadFotoBarang] = useState(false);
+  const [sesiForm, setSesiForm] = useState<SesiOpname | "Lainnya">("Pagi");
   const [filterKat, setFilterKat] = useState<Kategori | "Semua">("Semua");
   const [isLoading, setIsLoading] = useState(false);
   const [trx, setTrx] = useState<Transaksi | null>(null);
@@ -245,14 +234,14 @@ export default function StockOpnamePage() {
       if (isEditMode && editId) {
         // §116 jumlah stok TIDAK bisa diubah lewat Edit -- hanya lewat transaksi bertanda bukti atau opname fisik yang disetujui
         await updateDoc(doc(db, "ob_stock", editId), {
-          nama_barang: formData.nama_barang, batas_minimum: formData.batas_minimum, kategori, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
+          nama_barang: formData.nama_barang, batas_minimum: formData.batas_minimum, kategori, foto: formData.foto, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       } else {
         await addDoc(collection(db, "ob_stock"), { daerah: daerahTulis(),
-          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, kategori, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
+          nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, kategori, foto: formData.foto, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
         });
       }
-      setFormData({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" });
+      setFormData({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "", foto: "" });
       setIsEditMode(false);
       setEditId(null);
     } catch (error) {
@@ -289,7 +278,10 @@ export default function StockOpnamePage() {
     } finally { setIsLoading(false); }
   };
 
-  const mulaiOpname = () => setFormOpname(Object.fromEntries(items.map((i) => [i.id, { fisik: String(i.qty), alasan: "" }])));
+  const mulaiOpname = (sesi?: SesiOpname) => {
+    setSesiForm(sesi || sesiOpnameBawaan(menitWITA()));
+    setFormOpname(Object.fromEntries(items.map((i) => [i.id, { fisik: String(i.qty), alasan: "" }])));
+  };
   const kirimOpname = async () => {
     if (!formOpname) return;
     const baris: OpnameItem[] = items.map((i) => {
@@ -302,8 +294,9 @@ export default function StockOpnamePage() {
     const adaSelisih = baris.some((b) => b.selisih !== 0);
     setIsLoading(true);
     try {
-      await addDoc(collection(db, "ob_opname"), { daerah: daerahTulis(), dibuat_oleh: picRef.current, dibuat_pada: serverTimestamp(), status: adaSelisih ? "Menunggu Persetujuan" : "Sesuai", items: baris.filter((b) => b.selisih !== 0 || !adaSelisih) });
-      showToast(adaSelisih ? "Opname terkirim — menunggu persetujuan Koordinator / Admin." : "Opname selesai — fisik sesuai sistem.", "success");
+      // §177 semua barang disimpan (bukan hanya yang selisih) -> rekap pagi vs sore bisa dihitung otomatis
+      await addDoc(collection(db, "ob_opname"), { daerah: daerahTulis(), sesi: sesiForm, tanggal: tanggalISOWITASekarang(), dibuat_oleh: picRef.current, dibuat_pada: serverTimestamp(), status: adaSelisih ? "Menunggu Persetujuan" : "Sesuai", items: baris });
+      showToast(adaSelisih ? `Opname ${sesiForm} terkirim — ${baris.filter((b) => b.selisih !== 0).length} barang selisih, menunggu persetujuan Koordinator / Admin.` : `Opname ${sesiForm} selesai — fisik sesuai sistem.`, "success");
       setFormOpname(null);
     } catch (e) { console.error(e); showToast("Gagal mengirim opname.", "error"); }
     finally { setIsLoading(false); }
@@ -346,7 +339,7 @@ export default function StockOpnamePage() {
   const handleEdit = (item: StockItem) => {
     setIsEditMode(true);
     setEditId(item.id);
-    setFormData({ nama_barang: item.nama_barang, qty: item.qty, batas_minimum: item.batas_minimum, kategori: kategoriOf(item) });
+    setFormData({ nama_barang: item.nama_barang, qty: item.qty, batas_minimum: item.batas_minimum, kategori: kategoriOf(item), foto: item.foto || "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -371,8 +364,14 @@ export default function StockOpnamePage() {
     return minggu >= 3 && minggu > biasa * 2 ? { minggu, biasa: Math.max(1, Math.round(biasa)) } : null;
   };
   const opnameMenunggu = opnames.filter((o) => o.status === "Menunggu Persetujuan");
-  const opnameTerakhir = opnames.find((o) => o.status === "Disetujui" || o.status === "Sesuai");
-  const hariSejakOpname = opnameTerakhir?.dibuat_pada ? Math.floor((sekarang - opnameTerakhir.dibuat_pada.toMillis()) / 86400000) : null;
+  // §177 opname harian Pagi & Sore: status sesi hari ini + rekap selisih otomatis
+  const hariIniISO = tanggalISOWITASekarang();
+  const menitSekarang = menitWITA();
+  const opnameSesi = (s: SesiOpname) => opnames.find((o) => (o.tanggal || tglWITA(o.dibuat_pada)) === hariIniISO && o.sesi === s && o.status !== "Ditolak");
+  const ringkas = (o?: Opname): OpnameRingkas | undefined => (o ? { sesi: o.sesi, tanggal: o.tanggal, dibuat_oleh: o.dibuat_oleh, waktuMs: o.dibuat_pada?.toMillis() || sekarang, status: o.status, items: o.items } : undefined);
+  const opPagi = opnameSesi("Pagi"), opSore = opnameSesi("Sore");
+  const rekap = opPagi || opSore ? rekapHarian(items, ringkas(opPagi), ringkas(opSore), riwayatLogs.map((l) => ({ id_barang: l.id_barang, nama_barang: l.nama_barang, jenis_transaksi: l.jenis_transaksi, jumlah_perubahan: l.jumlah_perubahan, waktuMs: l.waktu_transaksi?.toMillis() || 0 }))) : [];
+  const rekapSelisih = rekap.filter((r) => r.selisih !== null && r.selisih !== 0);
   /** Sisipkan baris kelompok kategori di tabel saat filter "Semua". */
   const denganKelompok = (daftar: AnalisaPemakaian[], baris: (x: AnalisaPemakaian) => React.ReactNode, kolom: number) => {
     if (filterKat !== "Semua") return daftar.map(baris);
@@ -402,8 +401,9 @@ export default function StockOpnamePage() {
         .badge { font-size: 10.5px; font-weight: 800; padding: 4px 9px; border-radius: 20px; white-space: nowrap; display: inline-block; }
         .empty-state { padding: 30px 20px; text-align: center; color: var(--muted); border: 2px dashed var(--line); border-radius: 16px; font-size: 13px; }
         /* §98: 1 baris per barang (dulu kartu ~220px tinggi di HP) */
-        .stock-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 9px 10px 9px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+        .stock-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 9px 10px 9px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
         .stock-row.is-low { border-left: 4px solid var(--red-600); padding-left: 11px; }
+        .sr-foto { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
         .sr-nama { font-weight: 700; font-size: 14px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .sr-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
         .sr-qty { display: flex; align-items: center; gap: 4px; }
@@ -454,6 +454,20 @@ export default function StockOpnamePage() {
                 </select>
               </div>
 
+              {/* §177 foto barang (kamera atau galeri) */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>Foto barang</label>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "12px", border: "1px dashed var(--line)", cursor: "pointer", fontSize: "12.5px", color: "var(--ink-soft)", background: "var(--bg)" }}>
+                  {formData.foto ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- foto Cloudinary
+                    <img src={formData.foto} alt="Foto barang" style={{ width: "52px", height: "52px", objectFit: "cover", borderRadius: "8px" }} />
+                  ) : <span style={{ fontSize: "20px" }}>📷</span>}
+                  <span style={{ flex: 1 }}>{uploadFotoBarang ? "Mengunggah..." : formData.foto ? "Ganti foto" : "Tambah foto (kamera / galeri)"}</span>
+                  {formData.foto && !uploadFotoBarang && <button type="button" className="icon-btn" style={{ color: "var(--red-600)" }} aria-label="Hapus foto" onClick={(e) => { e.preventDefault(); setFormData((f) => ({ ...f, foto: "" })); }}><IconTrash size={14} /></button>}
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; handleFotoUpload(file, "sibm/stok-ob", () => setUploadFotoBarang(true), (url) => setFormData((f) => ({ ...f, foto: url })), (err) => { console.error(err); showToast("Gagal upload foto.", "error"); }, () => setUploadFotoBarang(false)); }} />
+                </label>
+              </div>
+
               <div style={{ display: "flex", gap: "15px" }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>{isEditMode ? "Stok (terkunci)" : "Stok awal"}</label>
@@ -468,11 +482,11 @@ export default function StockOpnamePage() {
               </div>
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "var(--accent-solid)" : "var(--warn-solid)"), color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", transition: "0.2s" }}>
+                <button type="submit" disabled={isLoading || uploadFotoBarang} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "var(--accent-solid)" : "var(--warn-solid)"), color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", transition: "0.2s" }}>
                   {isLoading ? "Memproses..." : (isEditMode ? "Simpan Perubahan" : "+ Tambahkan")}
                 </button>
                 {isEditMode && (
-                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" }); }} style={{ padding: "15px 20px", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", color: "var(--ink-soft)", transition: "0.2s" }}>
+                  <button type="button" onClick={() => { setIsEditMode(false); setEditId(null); setFormData({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "", foto: "" }); }} style={{ padding: "15px 20px", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", color: "var(--ink-soft)", transition: "0.2s" }}>
                     Batal
                   </button>
                 )}
@@ -485,22 +499,59 @@ export default function StockOpnamePage() {
           {/* ======================================= */}
           <div className="right-col" style={{ flex: "2 1 500px", display: "flex", flexDirection: "column", gap: "25px" }}>
 
-            {/* §116 OPNAME FISIK */}
-            <div className="card" style={{ padding: "16px 18px", borderLeft: `5px solid ${opnameMenunggu.length ? "var(--warn)" : hariSejakOpname === null || hariSejakOpname > HARI_PENGINGAT_OPNAME ? "var(--red-600)" : "var(--ok)"}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: "15px", color: "var(--ink)" }}>Opname fisik</div>
-                  <div style={{ fontSize: "12.5px", color: hariSejakOpname === null || hariSejakOpname > HARI_PENGINGAT_OPNAME ? "var(--red-600)" : "var(--muted)" }}>
-                    {hariSejakOpname === null ? "Belum pernah opname fisik — hitung stok sekarang." : `Opname terakhir ${hariSejakOpname} hari lalu (${opnameTerakhir?.dibuat_oleh})${hariSejakOpname > HARI_PENGINGAT_OPNAME ? " — sudah waktunya opname lagi" : ""}.`}
-                  </div>
-                </div>
-                <button type="button" className="sa-btn is-primary" onClick={mulaiOpname} disabled={!items.length}>Mulai opname fisik</button>
+            {/* §116/§177 OPNAME FISIK HARIAN: PAGI & SEBELUM PULANG */}
+            <div className="card" style={{ padding: "16px 18px", borderLeft: `5px solid ${opnameMenunggu.length || rekapSelisih.length ? "var(--warn)" : "var(--ok)"}` }}>
+              <div style={{ fontWeight: 800, fontSize: "15px", color: "var(--ink)" }}>Opname stok harian</div>
+              <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Hitung fisik 2x sehari. Selisih dihitung otomatis: fisik pagi + masuk − keluar tercatat = seharusnya sore.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px", marginTop: "10px" }}>
+                {JADWAL_OPNAME.map((j) => {
+                  const op = j.sesi === "Pagi" ? opPagi : opSore;
+                  const st = statusSesi(j.sesi, menitSekarang, !!op);
+                  const warna = st === "selesai" ? "var(--ok)" : st === "terlambat" ? "var(--red-600)" : st === "berjalan" ? "var(--warn)" : "var(--muted)";
+                  const nSelisih = op ? op.items.filter((b) => b.selisih !== 0).length : 0;
+                  return (
+                    <div key={j.sesi} style={{ padding: "10px 12px", borderRadius: "12px", background: "var(--bg)", border: `1px solid ${warna}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", alignItems: "center" }}>
+                        <b style={{ fontSize: "14px" }}>{j.sesi === "Pagi" ? "☀️ Pagi" : "🌇 Sebelum pulang"}</b>
+                        <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>{j.jam}</span>
+                      </div>
+                      <div style={{ fontSize: "12.5px", color: warna, fontWeight: 700, margin: "4px 0 8px" }}>
+                        {op ? `✓ ${op.dibuat_oleh} · ${formatJam(op.dibuat_pada || null)} · ${nSelisih ? `${nSelisih} barang selisih` : "sesuai"}` : st === "terlambat" ? "Belum dihitung — terlambat" : st === "berjalan" ? "Sekarang jadwalnya" : "Belum waktunya"}
+                      </div>
+                      <button type="button" className={`sa-btn ${!op && st !== "belum-mulai" ? "is-primary" : "is-soft"}`} style={{ width: "100%", height: "34px" }} onClick={() => mulaiOpname(j.sesi)} disabled={!items.length}>
+                        {op ? "Hitung ulang" : `Mulai opname ${j.sesi.toLowerCase()}`}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+              {rekap.length > 0 && (
+                <details style={{ marginTop: "10px" }} open={rekapSelisih.length > 0}>
+                  <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 800, color: rekapSelisih.length ? "var(--red-600)" : "var(--ok)" }}>
+                    Rekap hari ini · {rekapSelisih.length ? `${rekapSelisih.length} barang selisih (tidak tercatat)` : opSore ? "tidak ada selisih" : "menunggu opname sore"}
+                  </summary>
+                  <div style={{ overflowX: "auto", marginTop: "8px" }}>
+                    <table className="data-table">
+                      <thead><tr><th>Barang</th><th>Fisik pagi</th><th>Masuk</th><th>Keluar tercatat</th><th>Seharusnya</th><th>Fisik sore</th><th>Selisih</th></tr></thead>
+                      <tbody>
+                        {[...rekap].sort((a, b) => Math.abs(b.selisih || 0) - Math.abs(a.selisih || 0) || a.nama.localeCompare(b.nama)).map((r) => (
+                          <tr key={r.id}>
+                            <td style={{ fontWeight: 700 }}>{r.nama}</td><td>{r.pagi ?? "–"}</td><td>{r.masuk ? `+${r.masuk}` : "–"}</td><td>{r.keluar ? `−${r.keluar}` : "–"}</td>
+                            <td>{r.seharusnya ?? "–"}</td><td>{r.sore ?? "–"}</td>
+                            <td style={{ fontWeight: 800, color: r.selisih ? (r.selisih < 0 ? "var(--red-600)" : "var(--ok)") : "var(--muted)" }}>{r.selisih === null ? "–" : r.selisih > 0 ? `+${r.selisih}` : r.selisih}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "4px" }}>Minus = barang berkurang tanpa dicatat (lupa catat keluar / hilang). Plus = barang masuk tanpa dicatat. Koreksi stok tetap lewat persetujuan Koordinator / Admin di bawah.</div>
+                </details>
+              )}
               {opnameMenunggu.map((op) => (
                 <div key={op.id} style={{ marginTop: "12px", padding: "12px", borderRadius: "12px", background: "var(--warn-50)" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 800, color: "var(--ink)" }}>Menunggu persetujuan · oleh {op.dibuat_oleh} · {formatJam(op.dibuat_pada || null)}</div>
+                  <div style={{ fontSize: "13px", fontWeight: 800, color: "var(--ink)" }}>Menunggu persetujuan{op.sesi ? ` · opname ${op.sesi.toLowerCase()}` : ""} · oleh {op.dibuat_oleh} · {formatJam(op.dibuat_pada || null)}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px", margin: "8px 0", fontSize: "12.5px" }}>
-                    {op.items.map((b) => <div key={b.id}><b>{b.nama}</b>: sistem {b.sistem} → fisik {b.fisik} <b style={{ color: b.selisih < 0 ? "var(--red-600)" : "var(--ok)" }}>({b.selisih > 0 ? "+" : ""}{b.selisih})</b> — {b.alasan}</div>)}
+                    {op.items.filter((b) => b.selisih !== 0).map((b) => <div key={b.id}><b>{b.nama}</b>: sistem {b.sistem} → fisik {b.fisik} <b style={{ color: b.selisih < 0 ? "var(--red-600)" : "var(--ok)" }}>({b.selisih > 0 ? "+" : ""}{b.selisih})</b> — {b.alasan}</div>)}
                   </div>
                   {bisaSetujui && op.dibuat_oleh !== picName ? (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -511,6 +562,22 @@ export default function StockOpnamePage() {
                   ) : <div style={{ fontSize: "12px", color: "var(--muted)" }}>{op.dibuat_oleh === picName ? "Menunggu Koordinator OB / Admin GA lain menyetujui." : "Hanya Koordinator OB / Admin GA yang bisa menyetujui."}</div>}
                 </div>
               ))}
+            </div>
+
+            {/* §177 SISA STOK PER KATEGORI */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "8px" }}>
+              {KATEGORI.map((k) => {
+                const isi = items.filter((i) => kategoriOf(i) === k);
+                const tipis = isi.filter((i) => i.qty <= i.batas_minimum).length;
+                return (
+                  <button key={k} type="button" onClick={() => setFilterKat(filterKat === k ? "Semua" : k)} title={KET_KAT[k]}
+                    style={{ textAlign: "left", padding: "10px 12px", borderRadius: "14px", border: `1px solid ${filterKat === k ? WARNA_KAT[k].fg : "var(--line)"}`, background: WARNA_KAT[k].bg, cursor: "pointer", fontFamily: "inherit" }}>
+                    <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[k].fg }}>{k}</div>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)" }}>{isi.reduce((t, i) => t + i.qty, 0)} <span style={{ fontSize: "11.5px", fontWeight: 600, color: "var(--muted)" }}>unit · {isi.length} barang</span></div>
+                    <div style={{ fontSize: "11.5px", fontWeight: 700, color: tipis ? "var(--red-600)" : "var(--ok)" }}>{tipis ? `${tipis} menipis` : "aman"}</div>
+                  </button>
+                );
+              })}
             </div>
 
             {/* §97 FILTER KATEGORI */}
@@ -679,9 +746,15 @@ export default function StockOpnamePage() {
                     <div key={item.id} style={{ display: "contents" }}>
                     {judulKelompok && <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[kat].fg, marginTop: idx === 0 ? 0 : "6px", letterSpacing: ".02em" }}>{kat} · {jumlahPerKat(kat)}</div>}
                     <div className={`stock-row${isLowStock ? " is-low" : ""}`}>
+                      {item.foto ? (
+                        <a href={item.foto} target="_blank" rel="noopener noreferrer" aria-label={`Foto ${item.nama_barang}`}>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- foto Cloudinary */}
+                          <img src={item.foto} alt={item.nama_barang} className="sr-foto" loading="lazy" />
+                        </a>
+                      ) : <div className="sr-foto"><IconPackage size={18} /></div>}
                       <div style={{ minWidth: 0 }}>
                         <div className="sr-nama" title={item.nama_barang}>{item.nama_barang}</div>
-                        <div className="sr-sub">min. {item.batas_minimum}{isLowStock && <b style={{ color: "var(--red-600)" }}> · perlu beli</b>}{(() => { const an = anomali(item); return an ? <b style={{ color: "var(--warn)" }} title={`Keluar ${an.minggu} dalam 7 hari, biasanya ~${an.biasa}/minggu`}> · ⚠ pemakaian tidak wajar ({an.minggu}/7hr, biasa ~{an.biasa})</b> : null; })()}</div>
+                        <div className="sr-sub">sisa <b style={{ color: isLowStock ? "var(--red-600)" : "var(--ink-soft)" }}>{item.qty}</b> · min. {item.batas_minimum}{isLowStock && <b style={{ color: "var(--red-600)" }}> · perlu beli</b>}{(() => { const an = anomali(item); return an ? <b style={{ color: "var(--warn)" }} title={`Keluar ${an.minggu} dalam 7 hari, biasanya ~${an.biasa}/minggu`}> · ⚠ pemakaian tidak wajar ({an.minggu}/7hr, biasa ~{an.biasa})</b> : null; })()}</div>
                       </div>
                       <div className="sr-qty">
                         <button onClick={() => setTrx({ item, arah: "KELUAR", jumlah: "1", keperluan: "", foto: "" })} disabled={item.qty <= 0} className="qty-btn" aria-label={`Kurangi ${item.nama_barang}`} style={{ background: "var(--red-50)", borderColor: "rgba(220,38,38,0.25)", color: "var(--red-600)" }}>−</button>
@@ -785,13 +858,24 @@ export default function StockOpnamePage() {
         {formOpname && (
           <div>
             <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--ink)" }}>Opname fisik gudang</h3>
-            <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--muted)" }}>Hitung fisik tiap barang. Selisih wajib diberi alasan dan baru mengoreksi stok setelah disetujui Koordinator OB / Admin GA (bukan Anda).</p>
+            <p style={{ margin: "0 0 10px", fontSize: "12.5px", color: "var(--muted)" }}>Angka sudah terisi sisa stok sistem — ubah hanya yang fisiknya beda. Selisih wajib diberi alasan dan baru mengoreksi stok setelah disetujui Koordinator OB / Admin GA (bukan Anda).</p>
+            <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
+              {(["Pagi", "Sore", "Lainnya"] as const).map((s) => (
+                <button key={s} type="button" className={`sa-btn ${sesiForm === s ? "is-dark" : "is-soft"}`} style={{ height: "32px", flex: 1 }} onClick={() => setSesiForm(s)}>
+                  {s === "Pagi" ? "Pagi" : s === "Sore" ? "Sebelum pulang" : "Lainnya"}
+                </button>
+              ))}
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "55vh", overflowY: "auto" }}>
-              {items.map((i) => {
+              {[...items].sort(urutKat).map((i, idx, arr) => {
+                const kat = kategoriOf(i);
+                const judul = idx === 0 || kategoriOf(arr[idx - 1]) !== kat;
                 const v = formOpname[i.id] || { fisik: String(i.qty), alasan: "" };
                 const selisih = (parseInt(v.fisik, 10) || 0) - i.qty;
                 return (
-                  <div key={i.id} style={{ padding: "8px 10px", borderRadius: "10px", background: selisih ? "var(--warn-50)" : "var(--bg)" }}>
+                  <div key={i.id} style={{ display: "contents" }}>
+                  {judul && <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[kat].fg, marginTop: idx ? "6px" : 0 }}>{kat}</div>}
+                  <div style={{ padding: "8px 10px", borderRadius: "10px", background: selisih ? "var(--warn-50)" : "var(--bg)" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px 70px 54px", gap: "8px", alignItems: "center", fontSize: "13px" }}>
                       <b style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.nama_barang}</b>
                       <span style={{ color: "var(--muted)", fontSize: "12px" }}>sistem {i.qty}</span>
@@ -800,12 +884,13 @@ export default function StockOpnamePage() {
                     </div>
                     {selisih !== 0 && <input value={v.alasan} onChange={(e) => setFormOpname({ ...formOpname, [i.id]: { ...v, alasan: e.target.value } })} placeholder="Alasan selisih * (mis. tidak dicatat saat dipakai, rusak, salah hitung)" style={{ width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "7px 9px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: "12.5px" }} />}
                   </div>
+                  </div>
                 );
               })}
             </div>
             <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
               <button type="button" className="sa-btn is-soft" style={{ flex: 1 }} onClick={() => setFormOpname(null)} disabled={isLoading}>Batal</button>
-              <button type="button" className="sa-btn is-primary" style={{ flex: 1 }} onClick={kirimOpname} disabled={isLoading}>{isLoading ? "Mengirim..." : "Kirim opname"}</button>
+              <button type="button" className="sa-btn is-primary" style={{ flex: 1 }} onClick={kirimOpname} disabled={isLoading}>{isLoading ? "Mengirim..." : `Kirim opname ${sesiForm === "Sore" ? "sebelum pulang" : sesiForm.toLowerCase()}`}</button>
             </div>
           </div>
         )}
