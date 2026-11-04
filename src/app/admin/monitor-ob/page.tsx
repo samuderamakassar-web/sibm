@@ -9,6 +9,7 @@ import EvaluasiManualButton, { EvaluasiManualData } from "../../../components/Ev
 import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
+import { KATEGORI, KET_KAT, WARNA_KAT, kategoriBarang, type Kategori } from "../../../lib/stokOB";
 
 // ==========================================
 // INTERFACES — disamakan sama bentuk data ASLI yang ditulis oleh ChecklistOBPage,
@@ -77,6 +78,8 @@ interface StockItem {
   batas_minimum: number;
   diupdate_oleh?: string;
   terakhir_diupdate: Timestamp | null;
+  kategori?: string; // §177
+  foto?: string;     // §177
 }
 interface StockLog {
   id: string;
@@ -185,6 +188,7 @@ export default function MonitorOBPage() {
   const [inspeksiList, setInspeksiList] = useState<InspeksiLog[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterKatStok, setFilterKatStok] = useState<Kategori | "Semua">("Semua"); // §177
   // Kosong di render awal (server & client SAMA — hindari hydration mismatch dari jam
   // live), baru diisi pas tombol Export PDF diklik.
   const [waktuCetak, setWaktuCetak] = useState("");
@@ -237,8 +241,11 @@ export default function MonitorOBPage() {
     return timestamp.toDate().toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
   // Filter Data
-  const filteredStocks = stocks.filter((i) => i.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()));
-  const analisaSemuaBarang = stocks.map((item) => hitungAnalisaPemakaian(item, stockLogs));
+  // §177 dikelompokkan per kategori (urutan KATEGORI), bisa disaring per kategori
+  const urutKat = (a: StockItem, b: StockItem) => KATEGORI.indexOf(kategoriBarang(a)) - KATEGORI.indexOf(kategoriBarang(b)) || a.nama_barang.localeCompare(b.nama_barang);
+  const stokKat = stocks.filter((i) => filterKatStok === "Semua" || kategoriBarang(i) === filterKatStok).sort(urutKat);
+  const filteredStocks = stokKat.filter((i) => i.nama_barang?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const analisaSemuaBarang = stokKat.map((item) => hitungAnalisaPemakaian(item, stockLogs));
   const daftarUrgent = analisaSemuaBarang.filter((a) => a.isUrgent);
   const daftarBulanDepan = analisaSemuaBarang.filter((a) => a.isPerluBulanDepan);
 
@@ -600,6 +607,23 @@ export default function MonitorOBPage() {
           {activeTab === "STOCK" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
 
+              {/* §177 SISA STOK PER KATEGORI (klik = saring) */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "8px" }}>
+                {KATEGORI.map((k) => {
+                  const isi = stocks.filter((i) => kategoriBarang(i) === k);
+                  const tipis = isi.filter((i) => i.qty <= i.batas_minimum).length;
+                  return (
+                    <button key={k} type="button" title={KET_KAT[k]} onClick={() => setFilterKatStok(filterKatStok === k ? "Semua" : k)}
+                      style={{ textAlign: "left", padding: "10px 12px", borderRadius: "14px", border: `2px solid ${filterKatStok === k ? WARNA_KAT[k].fg : "transparent"}`, background: WARNA_KAT[k].bg, cursor: "pointer", fontFamily: "inherit" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[k].fg }}>{k}</div>
+                      <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)" }}>{isi.length} <span style={{ fontSize: "11.5px", fontWeight: 600, color: "var(--muted)" }}>barang · {isi.reduce((t, i) => t + (Number(i.qty) || 0), 0)} unit</span></div>
+                      <div style={{ fontSize: "11.5px", fontWeight: 700, color: tipis ? "var(--red-600)" : "var(--ok)" }}>{tipis ? `${tipis} menipis` : "aman"}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {filterKatStok !== "Semua" && <div style={{ fontSize: "12.5px", marginTop: "-15px" }}>Menampilkan <b>{filterKatStok}</b> · <button type="button" onClick={() => setFilterKatStok("Semua")} style={{ border: "none", background: "none", color: "var(--info)", cursor: "pointer", fontWeight: 700, padding: 0 }}>tampilkan semua</button></div>}
+
               {/* PENGADAAN URGENT */}
               <div>
                 <h3 style={{ margin: "0 0 4px 0", color: "var(--red-600)", fontSize: "15px", fontWeight: 700 }}>Pengadaan Urgent</h3>
@@ -608,12 +632,13 @@ export default function MonitorOBPage() {
                   <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
                     <table className="ob-table">
                       <thead><tr>
-                        <th>Nama Barang</th><th>Sisa</th><th>Batas Min.</th><th>Pemakaian/Bulan</th><th>Disarankan Beli</th>
+                        <th>Nama Barang</th><th>Kategori</th><th>Sisa</th><th>Batas Min.</th><th>Pemakaian/Bulan</th><th>Disarankan Beli</th>
                       </tr></thead>
                       <tbody>
                         {daftarUrgent.map((a) => (
                           <tr key={a.item.id}>
                             <td data-label="Nama Barang" style={{ fontWeight: "bold" }}>{a.item.nama_barang}</td>
+                            <td data-label="Kategori"><span style={{ background: WARNA_KAT[kategoriBarang(a.item)].bg, color: WARNA_KAT[kategoriBarang(a.item)].fg, padding: "3px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{kategoriBarang(a.item)}</span></td>
                             <td data-label="Sisa" style={{ color: "var(--red-600)", fontWeight: "bold" }}>{a.item.qty}</td>
                             <td data-label="Batas Min." style={{ color: "var(--muted)" }}>{a.item.batas_minimum}</td>
                             <td data-label="Pemakaian/Bulan">{a.adaDataPemakaian ? `${Math.round(a.rataRataPerBulan)} / bulan` : "Belum ada data"}</td>
@@ -634,12 +659,13 @@ export default function MonitorOBPage() {
                   <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
                     <table className="ob-table">
                       <thead><tr>
-                        <th>Nama Barang</th><th>Sisa</th><th>Pemakaian/Bulan</th><th>Proyeksi Akhir Bulan</th><th>Disarankan Beli</th>
+                        <th>Nama Barang</th><th>Kategori</th><th>Sisa</th><th>Pemakaian/Bulan</th><th>Proyeksi Akhir Bulan</th><th>Disarankan Beli</th>
                       </tr></thead>
                       <tbody>
                         {daftarBulanDepan.map((a) => (
                           <tr key={a.item.id}>
                             <td data-label="Nama Barang" style={{ fontWeight: "bold" }}>{a.item.nama_barang}</td>
+                            <td data-label="Kategori"><span style={{ background: WARNA_KAT[kategoriBarang(a.item)].bg, color: WARNA_KAT[kategoriBarang(a.item)].fg, padding: "3px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{kategoriBarang(a.item)}</span></td>
                             <td data-label="Sisa">{a.item.qty}</td>
                             <td data-label="Pemakaian/Bulan">{Math.round(a.rataRataPerBulan)} / bulan</td>
                             <td data-label="Proyeksi Akhir Bulan" style={{ color: "var(--warn)", fontWeight: "bold" }}>{a.proyeksiSisaAkhirBulan !== null && a.proyeksiSisaAkhirBulan > 0 ? `≈ ${a.proyeksiSisaAkhirBulan}` : "Bakal habis sebelum akhir bulan"}</td>
@@ -654,12 +680,14 @@ export default function MonitorOBPage() {
 
               {/* KONDISI STOK GUDANG (mentah) */}
               <div>
-                <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "15px", fontWeight: 700 }}>Kondisi Stok Gudang (Semua Item)</h3>
+                <h3 style={{ margin: "0 0 12px 0", color: "var(--ink)", fontSize: "15px", fontWeight: 700 }}>Kondisi Stok Gudang ({filterKatStok === "Semua" ? "Semua Item" : filterKatStok})</h3>
                 <div style={{ overflowX: "auto", borderRadius: "14px", border: "1px solid var(--line)" }}>
                   <table className="ob-table">
                     <thead>
                       <tr>
+                        <th>Foto</th>
                         <th>Nama Barang</th>
+                        <th>Kategori</th>
                         <th style={{ textAlign: "center" }}>Sisa Stok (Qty)</th>
                         <th style={{ textAlign: "center" }}>Batas Minimum</th>
                         <th>Diupdate Oleh</th>
@@ -667,19 +695,31 @@ export default function MonitorOBPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredStocks.length > 0 ? filteredStocks.map((item) => {
+                      {filteredStocks.length > 0 ? filteredStocks.map((item, idx) => {
                         const isLowStock = item.qty <= item.batas_minimum;
+                        const kat = kategoriBarang(item);
+                        const judul = filterKatStok === "Semua" && (idx === 0 || kategoriBarang(filteredStocks[idx - 1]) !== kat);
                         return (
-                          <tr key={item.id} style={{ background: isLowStock ? "var(--red-50)" : undefined }}>
+                          <Fragment key={item.id}>
+                          {judul && <tr><td colSpan={7} style={{ background: WARNA_KAT[kat].bg, color: WARNA_KAT[kat].fg, fontWeight: 800, fontSize: "12px", padding: "7px 12px" }}>{kat} · {filteredStocks.filter((x) => kategoriBarang(x) === kat).length}</td></tr>}
+                          <tr style={{ background: isLowStock ? "var(--red-50)" : undefined }}>
+                            <td data-label="Foto">{item.foto ? (
+                              <a href={item.foto} target="_blank" rel="noopener noreferrer">
+                                {/* eslint-disable-next-line @next/next/no-img-element -- foto Cloudinary */}
+                                <img src={item.foto} alt={item.nama_barang} loading="lazy" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "8px", display: "block" }} />
+                              </a>
+                            ) : <span style={{ color: "var(--muted)", fontSize: "11.5px" }}>–</span>}</td>
                             <td data-label="Nama Barang" style={{ fontWeight: "bold", color: "var(--ink)" }}>{item.nama_barang}</td>
+                            <td data-label="Kategori"><span style={{ background: WARNA_KAT[kategoriBarang(item)].bg, color: WARNA_KAT[kategoriBarang(item)].fg, padding: "3px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{kategoriBarang(item)}</span></td>
                             <td data-label="Sisa Stok (Qty)" style={{ textAlign: "center", fontWeight: 900, color: isLowStock ? "var(--red-600)" : "var(--ok)", fontSize: "14px" }}>{item.qty}</td>
                             <td data-label="Batas Minimum" style={{ textAlign: "center", color: "var(--muted)", fontWeight: "bold" }}>{item.batas_minimum}</td>
                             <td data-label="Diupdate Oleh" style={{ color: "var(--ink-soft)" }}><span style={{ background: "var(--hover)", padding: "4px 8px", borderRadius: "8px", fontSize: "11.5px", fontWeight: "bold" }}>{item.diupdate_oleh || "-"}</span></td>
                             <td data-label="Terakhir Diupdate" style={{ color: "var(--muted)", fontSize: "12px" }}>{formatWaktu(item.terakhir_diupdate)}</td>
                           </tr>
+                          </Fragment>
                         );
                       }) : (
-                        <tr><td colSpan={5} className="ob-empty" style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada data barang di inventori.</td></tr>
+                        <tr><td colSpan={7} className="ob-empty" style={{ padding: "50px", textAlign: "center", color: "var(--muted)" }}>Belum ada data barang di inventori.</td></tr>
                       )}
                     </tbody>
                   </table>
