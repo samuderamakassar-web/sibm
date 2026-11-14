@@ -150,7 +150,7 @@ export default function StockOpnamePage() {
   const confirm = useConfirm();
 
   const { session, isReady: isAuthReady } = useAuthGuard({
-    depts: ["OB & CS"],
+    depts: ["OB & CS", "Admin GA"], // §178 Admin GA ikut mengelola barang
     redirectTo: "/dashboard/ob",
     deniedMessage: "Akses Ditolak! Halaman ini khusus tim operasional OB & CS.",
   });
@@ -165,6 +165,9 @@ export default function StockOpnamePage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ nama_barang: "", qty: 0, batas_minimum: 5, kategori: "" as Kategori | "", foto: "" });
   const [uploadFotoBarang, setUploadFotoBarang] = useState(false);
+  const [alasanKoreksi, setAlasanKoreksi] = useState(""); // §178
+  // §178 Admin (Administrator / dept Admin GA) ikut mengelola barang: tambah, edit, foto, hapus, koreksi jumlah
+  const adminStok = !!session && (isAdministrator(session.role) || session.dept === "Admin GA");
   const [sesiForm, setSesiForm] = useState<SesiOpname | "Lainnya">("Pagi");
   const [filterKat, setFilterKat] = useState<Kategori | "Semua">("Semua");
   const [isLoading, setIsLoading] = useState(false);
@@ -232,10 +235,23 @@ export default function StockOpnamePage() {
     const kategori: Kategori = formData.kategori || tebakKategori(formData.nama_barang);
     try {
       if (isEditMode && editId) {
-        // §116 jumlah stok TIDAK bisa diubah lewat Edit -- hanya lewat transaksi bertanda bukti atau opname fisik yang disetujui
-        await updateDoc(doc(db, "ob_stock", editId), {
-          nama_barang: formData.nama_barang, batas_minimum: formData.batas_minimum, kategori, foto: formData.foto, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
+        // §116 staf tidak bisa mengubah jumlah lewat Edit (hanya transaksi bertanda bukti / opname disetujui).
+        // §178 Admin boleh mengoreksi jumlah langsung (salah input tim) -- wajib alasan, tercatat di riwayat.
+        const lama = items.find((i) => i.id === editId);
+        const qtyBaru = Math.max(0, Math.floor(Number(formData.qty) || 0));
+        const koreksi = adminStok && lama && qtyBaru !== lama.qty ? qtyBaru - lama.qty : 0;
+        if (koreksi && !alasanKoreksi.trim()) { setIsLoading(false); return showToast("Isi alasan koreksi jumlah stok.", "warning"); }
+        const batch = writeBatch(db);
+        batch.update(doc(db, "ob_stock", editId), {
+          nama_barang: formData.nama_barang, batas_minimum: formData.batas_minimum, kategori, foto: formData.foto, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current,
+          ...(koreksi ? { qty: qtyBaru } : {}),
         });
+        if (koreksi && lama) batch.set(doc(collection(db, "ob_stock_logs")), { daerah: daerahTulis(), id_barang: editId, nama_barang: formData.nama_barang,
+          jenis_transaksi: koreksi > 0 ? "KOREKSI ADMIN (+)" : "KOREKSI ADMIN (-)", jumlah_perubahan: Math.abs(koreksi), sisa_stok_akhir: qtyBaru,
+          pic_bertugas: picRef.current, keperluan: `Koreksi admin ${lama.qty} → ${qtyBaru}: ${alasanKoreksi.trim()}`, waktu_transaksi: serverTimestamp() });
+        await batch.commit();
+        setAlasanKoreksi("");
+        showToast(koreksi ? `${formData.nama_barang} disimpan · stok dikoreksi ${lama?.qty} → ${qtyBaru}.` : `${formData.nama_barang} disimpan.`, "success");
       } else {
         await addDoc(collection(db, "ob_stock"), { daerah: daerahTulis(),
           nama_barang: formData.nama_barang, qty: formData.qty, batas_minimum: formData.batas_minimum, kategori, foto: formData.foto, terakhir_diupdate: serverTimestamp(), diupdate_oleh: picRef.current
@@ -387,7 +403,7 @@ export default function StockOpnamePage() {
   const picName = session.nama || "";
 
   return (
-    <AdminShell title="Inventori Gudang OB" subtitle="Pantau stok, analisa pemakaian, dan rencana belanja supaya stok selalu sehat" userName={picName || "Staf"} backHref={"/dashboard/ob"} backLabel={"Dashboard OB"}>
+    <AdminShell title="Inventori Gudang OB" subtitle="Pantau stok, analisa pemakaian, dan rencana belanja supaya stok selalu sehat" userName={picName || "Staf"} backHref={adminStok && session.dept !== "OB & CS" ? "/admin/monitor-ob" : "/dashboard/ob"} backLabel={adminStok && session.dept !== "OB & CS" ? "Monitor OB" : "Dashboard OB"}>
 
       <style dangerouslySetInnerHTML={{__html: `
         * { box-sizing: border-box; }
@@ -470,8 +486,8 @@ export default function StockOpnamePage() {
 
               <div style={{ display: "flex", gap: "15px" }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>{isEditMode ? "Stok (terkunci)" : "Stok awal"}</label>
-                  {isEditMode
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--ink-soft)" }}>{isEditMode ? (adminStok ? "Stok (koreksi admin)" : "Stok (terkunci)") : "Stok awal"}</label>
+                  {isEditMode && !adminStok
                     ? <div style={{ padding: "12px", borderRadius: "10px", border: "1px dashed var(--line)", fontSize: "12px", color: "var(--muted)" }}>Ubah lewat −/+ atau opname fisik</div>
                     : <input type="number" name="qty" value={formData.qty} onChange={handleInputChange} required min="0" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", outline: "none", background: "var(--bg)" }} />}
                 </div>
@@ -480,6 +496,15 @@ export default function StockOpnamePage() {
                   <input type="number" name="batas_minimum" value={formData.batas_minimum} onChange={handleInputChange} required min="1" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--line)", fontSize: "14px", outline: "none", background: "var(--bg)" }} />
                 </div>
               </div>
+              {/* §178 koreksi jumlah oleh admin wajib alasan (tercatat di riwayat transaksi) */}
+              {isEditMode && adminStok && editId && formData.qty !== items.find((i) => i.id === editId)?.qty && (
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "var(--warn)" }}>
+                    Alasan koreksi ({items.find((i) => i.id === editId)?.qty} → {formData.qty}) *
+                  </label>
+                  <input value={alasanKoreksi} onChange={(e) => setAlasanKoreksi(e.target.value)} placeholder="Mis. tim salah input jumlah awal" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid var(--warn)", fontSize: "14px", outline: "none", background: "var(--bg)", color: "var(--ink)" }} />
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
                 <button type="submit" disabled={isLoading || uploadFotoBarang} style={{ flex: 1, padding: "15px", background: isLoading ? "#a0aec0" : (isEditMode ? "var(--accent-solid)" : "var(--warn-solid)"), color: "#fff", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: isLoading ? "not-allowed" : "pointer", transition: "0.2s" }}>

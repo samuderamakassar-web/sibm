@@ -3468,3 +3468,11 @@ Permintaan user: pisahkan stok chemical / tools cleaning / tools lainnya / utili
 4. DashboardOBPage: banner "Opname stok pagi/sebelum pulang belum dihitung" saat jamnya / terlambat (query ob_opname tanggal == hari ini), ketuk -> /dashboard/ob/stok.
 5. scripts/fcm-reminder.mjs `pengingatOpname()`: 08:30–08:59 & 16:30–16:59 WITA bila sesi itu belum dihitung -> push ke semua token OB & CS (jalan juga selama uji coba zona, hari libur dilewati).
 6. Lanjutan (temuan user: stok lama di Admin belum pindah kategori): Admin Monitor OB tab Stok kini memakai kategori §177 -- kartu sisa stok per kategori (klik = saring), kolom Kategori di Pengadaan Urgent & Rencana Belanja, tabel Kondisi Stok dikelompokkan per kategori + kolom Foto. Kategori tersimpan di ob_stock diperbarui via firebase-admin: 15 dari 18 barang (kosong / "Dapur & Rumah Tangga" -> kategori baru; cadangan nilai lama di scratchpad kategori-stok-sebelum-177.json).
+
+## 178. Admin Ikut Mengelola Barang Stok OB (14 November 2026)
+
+Permintaan user: Admin harus bisa tambah, edit, hapus barang & memperbaiki salah input tim (terutama foto).
+1. StockOpnamePage (/dashboard/ob/stok): akses dibuka untuk dept **Admin GA** (Administrator sudah lolos lewat adminBypass). `adminStok` = Administrator atau Admin GA. Tombol kembali admin -> Admin Monitor OB.
+2. **Koreksi jumlah oleh Admin**: di mode Edit kolom stok tidak lagi terkunci untuk admin; bila jumlah diubah wajib "Alasan koreksi", disimpan 1 batch (ob_stock.qty + log `KOREKSI ADMIN (+/-)` berisi "Koreksi admin lama → baru: alasan"). Staf OB tetap terkunci (§116: lewat transaksi bukti / opname disetujui). Rekap opname harian §177 tidak menghitung koreksi admin (bukan perpindahan barang fisik).
+3. Tambah, edit nama/kategori/foto, hapus (bisaSetujui) & setujui opname sudah berlaku untuk admin.
+4. Admin Monitor OB tab Stok: kartu "Kelola barang" + tombol "Buka Inventori Gudang".

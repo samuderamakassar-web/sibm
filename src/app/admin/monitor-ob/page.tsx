@@ -607,6 +607,12 @@ export default function MonitorOBPage() {
           {activeTab === "STOCK" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
 
+              {/* §178 admin ikut mengelola barang di halaman Inventori (tambah, edit, foto, hapus, koreksi jumlah) */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", padding: "12px 14px", borderRadius: "14px", background: "var(--info-50)" }}>
+                <div style={{ fontSize: "13px", color: "var(--ink)" }}><b>Kelola barang</b> — tambah, edit nama/kategori/foto, koreksi jumlah salah input, hapus, setujui opname.</div>
+                <button type="button" className="sa-btn is-primary" onClick={() => router.push("/dashboard/ob/stok")}>Buka Inventori Gudang</button>
+              </div>
+
               {/* §177 SISA STOK PER KATEGORI (klik = saring) */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "8px" }}>
                 {KATEGORI.map((k) => {
