@@ -42,6 +42,8 @@ export interface UjiPolaZona {
   min_ronde: number;
   // §176 pola Toilet / Area Lain: pemegang toilet tiap minggu (anggota Zona Publik minggu itu)
   toilet_mg1: string; toilet_mg2: string;
+  // §179 tukar lantai Zona Tenant per minggu (balik urutan -> orang ke-1 tidak selalu dapat lantai yang sama)
+  tukar_lantai_mg1: boolean; tukar_lantai_mg2: boolean;
   // §176 ketidakhadiran per tanggal (ditandai Admin) -> tugas hari itu dibagi ulang otomatis
   tidak_hadir: Record<string, string[]>;
   dibuat_oleh?: string;
@@ -113,12 +115,17 @@ export function anggotaZona(c: UjiPolaZona, zona: Zona, tanggal: string): string
 export const toiletMinggu = (c: UjiPolaZona, tanggal: string) =>
   pemegangToilet(anggotaZona(c, "Publik", tanggal), mingguKe(c, tanggal) === 1 ? c.toilet_mg1 : c.toilet_mg2);
 export const tidakHadirPada = (c: UjiPolaZona | null, tanggal: string): string[] => c?.tidak_hadir?.[tanggal] || [];
+/** §179 urutan anggota Zona Tenant minggu itu: urutan menentukan lantai pagi & pelayanan (orang ke-1 = lantai
+ *  terberat pertama). "Tukar lantai" membalik urutan supaya lantai bergilir antar periode. */
+export const tukarLantai = (tenant: string[], tukar: boolean) => (tukar ? [...tenant].reverse() : tenant);
+export const tenantMinggu = (c: UjiPolaZona, tanggal: string) =>
+  tukarLantai(anggotaZona(c, "Tenant", tanggal), mingguKe(c, tanggal) === 1 ? c.tukar_lantai_mg1 : c.tukar_lantai_mg2);
 
 /** Rencana tugas hari itu untuk semua peserta (null = di luar uji coba / akhir pekan). */
 export function rencanaUntuk(c: UjiPolaZona | null, tanggal: string, lantai: LantaiOk[]): RencanaHari | null {
   if (!c || !dalamUjiCoba(c, tanggal) || akhirPekan(tanggal)) return null;
   return rencanaHari({
-    tenant: anggotaZona(c, "Tenant", tanggal), publik: anggotaZona(c, "Publik", tanggal), toilet: toiletMinggu(c, tanggal),
+    tenant: tenantMinggu(c, tanggal), publik: anggotaZona(c, "Publik", tanggal), toilet: toiletMinggu(c, tanggal),
     areaTenant: c.area_tenant, areaPublik: c.area_publik, luas: c.luas_area, mingguan: c.mingguan, lantai,
     tidakHadir: tidakHadirPada(c, tanggal), pagiBersama: c.pagi_bersama, cadangan: c.cadangan_publik, jamCadangan: c.jam_cadangan,
   });
@@ -191,6 +198,7 @@ export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZo
     cadangan_publik: d.cadangan_publik !== false, jam_cadangan: String(d.jam_cadangan || "11.00–14.00"),
     min_ronde: Math.max(1, Number(d.min_ronde) || 1),
     toilet_mg1: String(d.toilet_mg1 || ""), toilet_mg2: String(d.toilet_mg2 || ""),
+    tukar_lantai_mg1: d.tukar_lantai_mg1 === true, tukar_lantai_mg2: d.tukar_lantai_mg2 === true,
     tidak_hadir: rapikanTidakHadir(d.tidak_hadir),
     dibuat_oleh: typeof d.dibuat_oleh === "string" ? d.dibuat_oleh : "",
     waktu_update: (d.waktu_update as Timestamp) || null,

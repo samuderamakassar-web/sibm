@@ -3476,3 +3476,12 @@ Permintaan user: Admin harus bisa tambah, edit, hapus barang & memperbaiki salah
 2. **Koreksi jumlah oleh Admin**: di mode Edit kolom stok tidak lagi terkunci untuk admin; bila jumlah diubah wajib "Alasan koreksi", disimpan 1 batch (ob_stock.qty + log `KOREKSI ADMIN (+/-)` berisi "Koreksi admin lama → baru: alasan"). Staf OB tetap terkunci (§116: lewat transaksi bukti / opname disetujui). Rekap opname harian §177 tidak menghitung koreksi admin (bukan perpindahan barang fisik).
 3. Tambah, edit nama/kategori/foto, hapus (bisaSetujui) & setujui opname sudah berlaku untuk admin.
 4. Admin Monitor OB tab Stok: kartu "Kelola barang" + tombol "Buka Inventori Gudang".
+
+## 179. Uji Coba Pola Zona Periode 2 (16–27 Nov): Tukar Lantai Zona Tenant (16 November 2026)
+
+Temuan user: uji coba dilanjutkan 2 minggu (mulai 16 Nov, min 2 ronde, pemegang toilet mg1 Zainal / mg2 Hilal), tapi lantai tidak bisa diubah -- Hilal (urutan pertama tim_tenant) selalu Lantai 3, padahal harusnya bergilir ke Lantai 4.
+Sebab: pagi bersama memberi lantai terberat ke anggota Tenant sesuai URUTAN daftar (bagiPagi), dan urutan tidak bisa diatur di admin.
+1. Config `tukar_lantai_mg1`, `tukar_lantai_mg2` (boolean). ujiPolaZona `tukarLantai()` membalik urutan anggota Zona Tenant, `tenantMinggu()` dipakai `rencanaUntuk()` (Checklist Zona, Kehadiran hari ini, Evaluasi ikut).
+2. Admin Pengaturan: tombol "⇄ Tukar lantai Tenant" per minggu di samping pilihan pemegang toilet; pratinjau langsung berubah.
+3. Config live diset mg1 & mg2 = true: minggu 1 Hilal -> Lantai 4 (+ pelayanan L4), Syahrullah -> Lantai 3 (+ pelayanan L1 & L3); minggu 2 Ahmad -> Lantai 4, Zainal -> Lantai 3 (kebalikan periode 1).
+4. Pengecekan update tertunda: deploy terakhir 14 Nov 11:05 sudah memuat §178; tinggal artefak deploy belum di-commit.
