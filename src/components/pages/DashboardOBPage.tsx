@@ -444,7 +444,8 @@ export default function DashboardOBPage() {
             <div
               className="coord-card"
               onClick={() => router.push("/dashboard/ob/plotting")}
-              style={{ background: "linear-gradient(to right, var(--info), #1d4ed8)", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
+              // §180 pola zona permanen -> plotting harian lama tidak dipakai
+              style={{ display: ujiZona?.permanen ? "none" : undefined, background: "linear-gradient(to right, var(--info), #1d4ed8)", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
             >
               <div className="coord-icon"><IconMap size={28} /></div>
               <div>

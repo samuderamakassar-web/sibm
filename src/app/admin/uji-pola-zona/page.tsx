@@ -21,6 +21,7 @@ import { CHECKLIST_OB_BAWAAN, useChecklistOB, type AreaChecklist } from "../../.
 import { ASUMSI_BAWAAN, WARNA_STATUS_BEBAN, type AsumsiBeban } from "../../../lib/sla";
 import { BOBOT_RINGAN, gabungArea, M2_PER_TOILET, uraiArea, type LantaiOk } from "../../../lib/bagiZona";
 import { pemegangToilet, rencanaHari, type RencanaHari } from "../../../lib/rencanaZona";
+import { rosterCuciPiring } from "../../../lib/rosterCuciPiring";
 import {
   akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, rencanaUntuk, tambahHari, tukarLantai, useUjiPolaZona,
   type LaporanZona,
@@ -93,6 +94,8 @@ export default function UjiPolaZonaPage() {
   // §179 tukar lantai Zona Tenant per minggu
   const [tukarMg1, setTukarMg1] = useState(false);
   const [tukarMg2, setTukarMg2] = useState(false);
+  // §180 rotasi zona: bergantian tiap minggu / tetap
+  const [rotasi, setRotasi] = useState<"mingguan" | "tetap">("mingguan");
   const [toiletMg2, setToiletMg2] = useState("");
   // §176 kehadiran: tanggal yang sedang diatur
   const [tglHadir, setTglHadir] = useState(hariIni);
@@ -124,6 +127,7 @@ export default function UjiPolaZonaPage() {
       setCadanganPublik(config.cadangan_publik); setJamCadangan(config.jam_cadangan);
       setToiletMg1(config.toilet_mg1); setToiletMg2(config.toilet_mg2);
       setTukarMg1(config.tukar_lantai_mg1); setTukarMg2(config.tukar_lantai_mg2);
+      setRotasi(config.rotasi);
       const p: Record<string, Pilihan> = {};
       config.tim_tenant.forEach((n) => (p[n] = "Tenant"));
       config.tim_publik.forEach((n) => (p[n] = "Publik"));
@@ -168,6 +172,7 @@ export default function UjiPolaZonaPage() {
         aktif, ...jadwal, tim_tenant: timTenant, tim_publik: timPublik, area_tenant: at, area_publik: ap,
         pagi_bersama: pagiBersama, jam_pagi: jamPagi.trim(), cadangan_publik: cadanganPublik, jam_cadangan: jamCadangan.trim(),
         min_ronde: Math.max(1, Number(minRonde) || 1), toilet_mg1: toilet1, toilet_mg2: toilet2, tukar_lantai_mg1: tukarMg1, tukar_lantai_mg2: tukarMg2,
+        rotasi, permanen: config?.permanen === true, // §180 status permanen tidak berubah saat pengaturan disimpan
         tidak_hadir: config?.tidak_hadir || {}, // §176 tanda tidak hadir tidak ikut terhapus saat pengaturan disimpan
         dibuat_oleh: session?.nama || "", waktu_update: serverTimestamp(),
       });
@@ -187,12 +192,24 @@ export default function UjiPolaZonaPage() {
     } catch (e) { console.error(e); showToast("Gagal menyimpan kehadiran.", "error"); }
   };
 
+  // §180 permanenkan pola zona: berlaku terus sejak tanggal mulai, plotting harian lama tidak dipakai lagi
+  const ubahPermanen = async (jadi: boolean) => {
+    const ok = await confirm(jadi
+      ? { title: "Permanenkan pola zona", message: "Pola zona berlaku terus tanpa tanggal selesai (pakai pengaturan rotasi & area di bawah). Plotting harian lama berhenti dibuat & disembunyikan, checklist sesi lama tetap nonaktif. Bisa dibatalkan kapan saja.", confirmText: "Permanenkan" }
+      : { title: "Kembali ke uji coba", message: `Pola zona kembali berbatas periode uji coba (${config ? tglIndo(config.selesai) : ""}). Setelah itu plotting & checklist lama berlaku lagi.`, confirmText: "Kembalikan", variant: "danger" });
+    if (!ok) return;
+    try {
+      await updateDoc(DOC_UJI_POLA(), { permanen: jadi, aktif: true, waktu_update: serverTimestamp() });
+      showToast(jadi ? "Pola zona permanen. Plotting lama tidak dipakai lagi." : "Kembali ke mode uji coba.", "success");
+    } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
+  };
+
   const hentikan = async () => {
     if (!(await confirm({ title: "Hentikan uji coba", message: "Checklist lama, pengingat sesi & potong poin kembali berlaku mulai hari ini. Data uji coba tetap tersimpan untuk evaluasi.", confirmText: "Hentikan", variant: "danger" }))) return;
     try {
       // dihentikan di tengah periode -> selesai dimajukan ke hari ini supaya evaluasi hanya menghitung hari yang berjalan
       const selesaiBaru = config && hariIni >= config.mulai && hariIni < config.selesai ? { selesai: hariIni } : {};
-      await updateDoc(DOC_UJI_POLA(), { aktif: false, ...selesaiBaru, waktu_update: serverTimestamp() });
+      await updateDoc(DOC_UJI_POLA(), { aktif: false, permanen: false, ...(config?.permanen ? {} : selesaiBaru), waktu_update: serverTimestamp() });
       showToast("Uji coba dihentikan. Pola lama berlaku lagi.", "success");
     } catch (e) { console.error(e); showToast("Gagal menghentikan.", "error"); }
   };
@@ -290,7 +307,7 @@ export default function UjiPolaZonaPage() {
 
   if (!isReady || !session) return null;
 
-  const statusTeks = !config ? "Belum diatur" : !config.aktif ? "Tidak aktif" : hariIni < config.mulai ? `Terjadwal mulai ${tglIndo(config.mulai)}` : hariIni > config.selesai ? "Selesai" : "Sedang berjalan";
+  const statusTeks = !config ? "Belum diatur" : !config.aktif ? "Tidak aktif" : hariIni < config.mulai ? `Terjadwal mulai ${tglIndo(config.mulai)}` : config.permanen ? "Pola zona PERMANEN" : hariIni > config.selesai ? "Selesai" : "Sedang berjalan";
   const warnaKes = { hijau: "var(--ok)", oranye: "var(--warn)", merah: "var(--red-600)" } as const;
   const sel: React.CSSProperties = { padding: "8px 10px", borderTop: "1px solid var(--line)", fontSize: "13px", textAlign: "left" };
 
@@ -308,9 +325,16 @@ export default function UjiPolaZonaPage() {
               <div>
                 <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--muted)" }}>Status</div>
                 <div style={{ fontSize: "18px", fontWeight: 800 }}>{statusTeks}</div>
-                {config && <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>{tglIndo(config.mulai)} – {tglIndo(config.selesai)} · tukar zona {tglIndo(config.tukar_mulai)}</div>}
+                {config && <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>
+                  {config.permanen ? `Berlaku sejak ${tglIndo(config.mulai)} tanpa tanggal selesai` : `${tglIndo(config.mulai)} – ${tglIndo(config.selesai)}`}
+                  {" · "}{config.rotasi === "tetap" ? "zona tetap (tanpa rotasi)" : "zona ditukar tiap minggu"}
+                </div>}
               </div>
-              {config?.aktif && <button type="button" className="sa-btn is-soft" onClick={hentikan}>Hentikan uji coba</button>}
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {config?.aktif && !config.permanen && <button type="button" className="sa-btn is-primary" onClick={() => void ubahPermanen(true)}>Permanenkan pola ini</button>}
+                {config?.permanen && <button type="button" className="sa-btn is-soft" onClick={() => void ubahPermanen(false)}>Kembali ke uji coba</button>}
+                {config?.aktif && <button type="button" className="sa-btn is-soft" onClick={hentikan}>{config.permanen ? "Hentikan pola zona" : "Hentikan uji coba"}</button>}
+              </div>
             </div>
             <p style={{ margin: "10px 0 0", fontSize: "12.5px", color: "var(--muted)" }}>
               Selama berjalan: checklist per lantai & 3 sesi disembunyikan dari staf peserta, potong poin checklist & pengingat sesi lama dilewati, semua permintaan portal tampil di Zona Tenant (Zona Publik sebagai cadangan).
@@ -328,7 +352,7 @@ export default function UjiPolaZonaPage() {
                     <h3 style={{ margin: 0, fontSize: "16px" }}>Kehadiran & tugas hari ini</h3>
                     <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Tandai yang sakit/izin — tugasnya otomatis dibagi ke yang hadir dan langsung tampil di Checklist Zona staf.</div>
                   </div>
-                  <input type="date" className="sa-field" value={tglHadir} min={config.mulai} max={config.selesai} onChange={(e) => setTglHadir(e.target.value || hariIni)} />
+                  <input type="date" className="sa-field" value={tglHadir} min={config.mulai} max={config.permanen ? undefined : config.selesai} onChange={(e) => setTglHadir(e.target.value || hariIni)} />
                 </div>
                 {!rHari ? <div style={{ marginTop: "10px", fontSize: "13px", color: "var(--muted)" }}>{akhirPekan(tglHadir) ? "Akhir pekan — tidak ada jadwal." : "Di luar periode uji coba."}</div> : (
                   <>
@@ -343,6 +367,12 @@ export default function UjiPolaZonaPage() {
                       })}
                     </div>
                     <KartuRencana r={rHari} jamPagi={config.jam_pagi} />
+                    {/* §180 roster cuci piring hari itu (giliran petugas hadir) */}
+                    <div style={{ marginTop: "8px", padding: "10px 12px", borderRadius: "14px", background: "var(--info-50)", fontSize: "12.5px" }}>
+                      <b>🍽️ Cuci piring/gelas pantry:</b>{" "}
+                      {rosterCuciPiring(tglHadir, rHari.orang.map((o) => o.nama)).map((s) => `${s.jam} ${s.nama.join(", ") || "–"}`).join(" · ")}
+                      <div style={{ color: "var(--muted)" }}>3x sehari (± 67 karyawan ≈ 130 gelas/hari → ± 45 gelas tiap putaran), bergiliran adil. Sabtu/Minggu oleh Security yang jaga (12.00 Shift 1, 21.00 Shift 2). Tampil di halaman utama.</div>
+                    </div>
                   </>
                 )}
               </Tile>
@@ -359,6 +389,14 @@ export default function UjiPolaZonaPage() {
                 <input className="sa-field" style={{ width: "140px", cursor: "text" }} value={jamPagi} onChange={(e) => setJamPagi(e.target.value)} /></label>
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}><input type="checkbox" checked={cadanganPublik} onChange={(e) => setCadanganPublik(e.target.checked)} /> Cadangan pelayanan (pemegang Area Lain, setiap hari)<br />
                 <input className="sa-field" style={{ width: "140px", cursor: "text" }} value={jamCadangan} onChange={(e) => setJamCadangan(e.target.value)} /></label>
+              {/* §180 rotasi zona */}
+              <div style={{ fontSize: "12.5px", fontWeight: 700 }}>Rotasi zona<br />
+                <div style={{ display: "flex", gap: "4px", marginTop: "2px" }}>
+                  {([["mingguan", "Ditukar tiap minggu"], ["tetap", "Tetap (tanpa rotasi)"]] as const).map(([v, l]) => (
+                    <button key={v} type="button" className={`sa-btn ${rotasi === v ? "is-dark" : "is-soft"}`} style={{ height: "34px" }} onClick={() => setRotasi(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
               <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Minggu 1: {tglIndo(jadwal.mulai)} – {tglIndo(tambahHari(jadwal.mulai, 4))}<br />Minggu 2 (zona ditukar): {tglIndo(jadwal.tukar_mulai)} – {tglIndo(jadwal.selesai)}</div>
             </div>
           </Tile>
@@ -405,7 +443,7 @@ export default function UjiPolaZonaPage() {
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>
               Pagi: ruang tenant dibagi per lantai menurut luas ke semua orang. Zona Tenant: pelayanan lantai bagiannya (jumlah tenant dibagi rata). Zona Publik: 1 orang <b>Toilet</b> (semua toilet, tanpa cadangan), 1 orang <b>Area Lain</b> (lobby, basement, parkiran, pantry, mushallah, koridor, area mingguan + cadangan pelayanan setiap hari). Bobot: toilet = {M2_PER_TOILET} m² setara, parkir/taman/rooftop × {BOBOT_RINGAN}; luas manual: <code>Lantai 3 · PT X | 60</code>. Staf melihat tugasnya di Checklist Zona.
             </div>
-            {[1, 2].map((mg) => {
+            {(rotasi === "tetap" ? [1] : [1, 2]).map((mg) => {
               const tukarMg = mg === 1 ? tukarMg1 : tukarMg2;
               const tenantMg = tukarLantai(mg === 1 ? timTenant : timPublik, tukarMg);
               const publikMg = mg === 1 ? timPublik : timTenant;
@@ -419,7 +457,7 @@ export default function UjiPolaZonaPage() {
               return (
                 <div key={mg} style={{ marginBottom: "12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    <b style={{ fontSize: "13.5px" }}>Minggu {mg}</b>
+                    <b style={{ fontSize: "13.5px" }}>{rotasi === "tetap" ? "Setiap minggu (tetap)" : `Minggu ${mg}`}</b>
                     {tenantMg.length > 1 && (
                       <button type="button" className={`sa-btn ${tukarMg ? "is-dark" : "is-soft"}`} style={{ height: "32px" }}
                         title="Balik pembagian lantai antar anggota Zona Tenant (pagi & pelayanan)"

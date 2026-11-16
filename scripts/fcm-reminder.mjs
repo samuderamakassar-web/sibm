@@ -66,7 +66,7 @@ async function jalankan() {
   // §169 uji coba pola zona OB: pengingat sesi lama diganti 2 pengingat per hari --
   // 12:00-12:29 & 16:30-16:59 bila ronde hari ini masih kurang dari minimal.
   const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
-  if (uji?.aktif && hariIni >= uji.mulai && hariIni <= uji.selesai) {
+  if (uji?.aktif && hariIni >= uji.mulai && (uji.permanen === true || hariIni <= uji.selesai)) {
     await pengingatZona(uji);
     return;
   }

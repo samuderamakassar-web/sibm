@@ -266,3 +266,15 @@ export function rencanaHari(c: InputRencana): RencanaHari {
   orang.sort((a, b) => semua.findIndex((n) => sama(n, a.nama)) - semua.findIndex((n) => sama(n, b.nama)));
   return { skenario, judul: JUDUL_SKENARIO[skenario], orang, tidakHadir, ditunda: unik(ditunda), cepat };
 }
+
+/** §180 ringkasan tugas 1 baris untuk portal/halaman utama, mis. "Pelayanan Lt 1/3 · pagi Lt 3". */
+export function ringkasTugas(o: RencanaOrang): string {
+  const lt = (l: string) => l.replace(/^Lantai\s*/i, "Lt ");
+  const bagian: string[] = [];
+  if (o.pelayanan.length) bagian.push(`Pelayanan ${o.pelayanan.map(lt).join("/")}`);
+  else bagian.push(o.tugas === "Toilet" ? "Toilet semua lantai" : o.tugas === "Area Lain" ? "Area publik, pantry & koridor" : o.tugas);
+  if (o.cadangan) bagian.push(`cadangan pelayanan ${o.cadangan}`);
+  const pagi = Array.from(new Set(o.pagi.map((a) => lt(lantaiDari(a)))));
+  if (pagi.length) bagian.push(`pagi ruang tenant ${pagi.join("/")}`);
+  return bagian.join(" · ");
+}

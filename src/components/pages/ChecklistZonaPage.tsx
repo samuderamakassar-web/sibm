@@ -19,11 +19,12 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { handleFotoUpload } from "@/lib/uploadFoto";
 import { tanggalISOWITASekarang } from "@/lib/shift";
 import { daerahTulis } from "@/lib/daerah";
+import { rosterCuciPiring, slotMilik } from "@/lib/rosterCuciPiring";
 import type { LantaiOk } from "@/lib/bagiZona";
 import AdminShell from "../admin/AdminShell";
 import Tile from "../admin/Tile";
 import {
-  akhirPekan, FOTO_MAX, FOTO_MIN, KOLEKSI_LAPORAN_ZONA, mingguKe, rencanaUntuk, useUjiPolaZona, zonaUntuk,
+  akhirPekan, dalamUjiCoba, FOTO_MAX, FOTO_MIN, KOLEKSI_LAPORAN_ZONA, mingguKe, rencanaUntuk, useUjiPolaZona, zonaUntuk,
   type LaporanZona,
 } from "@/lib/ujiPolaZona";
 
@@ -77,6 +78,8 @@ export default function ChecklistZonaPage() {
   const tugasHarianKu = Array.from(new Set([...pagiKu, ...zonaKu, ...cekKu]));
   const cadangan = rencana?.orang.find((o) => o.cadangan);
   const sayaCadangan = !!sayaR?.cadangan;
+  // §180 giliran cuci piring hari ini (petugas hadir, urutan rencana)
+  const cuciKu = rencana ? slotMilik(rosterCuciPiring(hariIni, rencana.orang.map((o) => o.nama)), nama) : [];
 
   if (!isReady || !session || !dimuat) return null;
 
@@ -135,7 +138,7 @@ export default function ChecklistZonaPage() {
   );
 
   let isi: React.ReactNode;
-  if (!config?.aktif || hariIni < (config?.mulai || "") || hariIni > (config?.selesai || "")) {
+  if (!config || !dalamUjiCoba(config, hariIni)) {
     isi = <Tile>Uji coba pola zona sedang tidak berjalan hari ini. Gunakan menu Checklist biasa.
       <div style={{ marginTop: "12px" }}><button type="button" className="sa-btn is-soft" onClick={() => router.push("/dashboard/ob/checklist")}>Buka Checklist biasa</button></div></Tile>;
   } else if (!zona) {
@@ -147,7 +150,7 @@ export default function ChecklistZonaPage() {
     isi = (
       <>
         <Tile style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--muted)" }}>Minggu ke-{mingguKe(config, hariIni)} · uji coba {config.mulai} s.d. {config.selesai}</div>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--muted)" }}>{config.rotasi === "tetap" ? "Pola tetap (tanpa rotasi)" : `Minggu ke-${mingguKe(config, hariIni)}`} · {config.permanen ? `pola permanen sejak ${config.mulai}` : `uji coba ${config.mulai} s.d. ${config.selesai}`}</div>
           <h2 style={{ margin: "4px 0", fontSize: "22px" }}>Zona {zona}{sayaR && sayaR.peran !== "Tenant" ? ` · ${sayaR.peran}` : ""}</h2>
           {rencana && rencana.skenario !== "normal" && (
             <div style={{ margin: "8px 0", padding: "10px 12px", borderRadius: "12px", background: "var(--warn-50)", border: "1px solid var(--warn)", fontSize: "13px" }}>
@@ -164,6 +167,7 @@ export default function ChecklistZonaPage() {
             {sayaR?.peran === "Toilet" && sayaR.tugas === "Toilet" && <li>Setelah itu — <b>semua toilet</b>, ronde 07.45 · 10.30 · 13.30 · 16.00.</li>}
             {sayaR?.peran === "Area Lain" && sayaR.tugas === "Area Lain" && <li>Setelah itu — lobby, basement, parkiran, pantry, mushallah, koridor{mingguanKu.length ? "; area mingguan cukup 1x minggu ini" : ""}.</li>}
             {cadangan && <li><b>Cadangan pelayanan {cadangan.cadangan}</b> hari ini: <b>{sayaCadangan ? "KAMU" : cadangan.nama}</b>{sayaCadangan ? " — bantu ambil permintaan tenant di jam ini." : ""}</li>}
+            {cuciKu.length > 0 && <li>🍽️ <b>Giliran cuci piring/gelas pantry: {cuciKu.map((s) => `${s.jam} (${s.ket})`).join(", ")}</b></li>}
             {sayaR?.catatan.map((t) => <li key={t}>{t}</li>)}
           </ol>
           <div style={{ marginTop: "10px", fontSize: "13px", fontWeight: 700, color: ronde.length >= config.min_ronde ? "var(--ok)" : "var(--warn)" }}>

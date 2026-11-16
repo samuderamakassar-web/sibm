@@ -46,6 +46,10 @@ export interface UjiPolaZona {
   tukar_lantai_mg1: boolean; tukar_lantai_mg2: boolean;
   // §176 ketidakhadiran per tanggal (ditandai Admin) -> tugas hari itu dibagi ulang otomatis
   tidak_hadir: Record<string, string[]>;
+  // §180 "mingguan" = zona ditukar tiap minggu; "tetap" = Tenant tetap Tenant, Publik tetap Publik (setelan minggu 1)
+  rotasi: "mingguan" | "tetap";
+  // §180 pola zona dipermanenkan: berlaku terus sejak `mulai` (tanpa tanggal selesai), plotting lama tidak dipakai
+  permanen: boolean;
   dibuat_oleh?: string;
   waktu_update?: Timestamp | null;
 }
@@ -89,8 +93,14 @@ export function hariKerja(a: string, b: string, libur: string[] = []): string[] 
   return out;
 }
 
-export const dalamUjiCoba = (c: UjiPolaZona | null, tanggal: string) => !!c && c.aktif && tanggal >= c.mulai && tanggal <= c.selesai;
-export const mingguKe = (c: UjiPolaZona, tanggal: string): 1 | 2 => (tanggal >= c.tukar_mulai ? 2 : 1);
+/** Pola zona berlaku pada tanggal tsb: periode uji coba, atau sejak `mulai` tanpa batas bila dipermanenkan (§180). */
+export const dalamUjiCoba = (c: UjiPolaZona | null, tanggal: string) => !!c && c.aktif && tanggal >= c.mulai && (c.permanen || tanggal <= c.selesai);
+/** Minggu ke-1/2 dalam siklus 2 minggu sejak `mulai` (bergantian terus bila permanen). §180 rotasi "tetap" = selalu 1. */
+export const mingguKe = (c: UjiPolaZona, tanggal: string): 1 | 2 => {
+  if (c.rotasi === "tetap") return 1;
+  const hari = Math.round((Date.parse(`${tanggal}T00:00:00Z`) - Date.parse(`${c.mulai}T00:00:00Z`)) / 86400000);
+  return hari >= 0 && Math.floor(hari / 7) % 2 === 1 ? 2 : 1;
+};
 
 /** Zona staf pada tanggal tsb (null = tidak ikut uji coba / di luar periode). */
 export function zonaUntuk(c: UjiPolaZona | null, nama: string, tanggal: string): Zona | null {
@@ -199,6 +209,8 @@ export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZo
     min_ronde: Math.max(1, Number(d.min_ronde) || 1),
     toilet_mg1: String(d.toilet_mg1 || ""), toilet_mg2: String(d.toilet_mg2 || ""),
     tukar_lantai_mg1: d.tukar_lantai_mg1 === true, tukar_lantai_mg2: d.tukar_lantai_mg2 === true,
+    rotasi: d.rotasi === "tetap" ? "tetap" : "mingguan",
+    permanen: d.permanen === true,
     tidak_hadir: rapikanTidakHadir(d.tidak_hadir),
     dibuat_oleh: typeof d.dibuat_oleh === "string" ? d.dibuat_oleh : "",
     waktu_update: (d.waktu_update as Timestamp) || null,

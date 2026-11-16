@@ -27,6 +27,9 @@ import VehicleIcon3D from "../components/VehicleIcon3D";
 import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../lib/unitBisnis";
 import AdminShell from "../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { rapikanConfig, rencanaUntuk, type UjiPolaZona } from "@/lib/ujiPolaZona";
+import { ringkasTugas } from "@/lib/rencanaZona";
+import { rosterCuciPiring } from "@/lib/rosterCuciPiring";
 
 // ==========================================
 // INTERFACES
@@ -200,6 +203,17 @@ export default function PortalSIBM() {
   // STATE EXISTING
   const [obBertugas, setObBertugas] = useState<ObStatusData[]>([]);
   const [obBesok, setObBesok] = useState<ObStatusData[]>([]);
+  // §180 pola zona OB (pembagian tugas otomatis, menggantikan plot harian) & roster security hari ini (cuci piring akhir pekan)
+  const [polaZona, setPolaZona] = useState<UjiPolaZona | null>(null);
+  const [securityHariIni, setSecurityHariIni] = useState<Record<string, string>>({});
+  useEffect(() => onSnapshot(doc(db, "ob_settings", "uji_pola_zona"), (s) => setPolaZona(rapikanConfig(s.data())), (e) => { console.error("[portal] pola zona:", e); setPolaZona(null); }), []);
+  useEffect(() => {
+    let batal = false;
+    getDoc(doc(db, "security_monthly_schedules", todayISO.slice(0, 7)))
+      .then((s) => { if (!batal) setSecurityHariIni(((s.data()?.data_hari || {}) as Record<string, Record<string, string>>)[todayISO] || {}); })
+      .catch((e) => console.error("[portal] roster security hari ini:", e));
+    return () => { batal = true; };
+  }, [todayISO]);
   const [logKendaraanMentah, setLogKendaraanMentah] = useState<KendaraanLog[]>([]);
   const [securityShift, setSecurityShift] = useState<SecurityShift>({ current: [], next: [], currentName: "Memuat...", nextName: "Memuat..." });
   // Driver diambil dari users_master (departemen "Driver"), bukan nama hardcode (§58T).
@@ -1119,7 +1133,22 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
     return { label: "TERJADWAL", nada: "muted", ket: "belum absen masuk" };
   };
 
-  const anggotaOB: AnggotaTim[] = previewBesokAktif
+  // §180 pola zona aktif -> tim OB dari rencana zona (pelayanan per lantai, toilet, area publik), bukan plot harian
+  const rencanaOB = rencanaUntuk(polaZona, previewBesokAktif ? tanggalPreviewOB : todayISO, []);
+  const rencanaHariIni = rencanaUntuk(polaZona, todayISO, []);
+  const rosterCuci = rosterCuciPiring(todayISO, rencanaHariIni?.orang.map((o) => o.nama) || [], securityHariIni);
+  const adaRosterCuci = rosterCuci.some((s) => s.nama.length > 0);
+  const menitWITASekarang = jamWITA * 60 + parseInt(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Makassar", minute: "numeric" }).format(now), 10);
+  const slotCuciBerikut = rosterCuci.findIndex((s) => { const [h, m] = s.jam.split(".").map(Number); return h * 60 + m + 30 > menitWITASekarang; });
+  const anggotaOBZona: AnggotaTim[] | null = rencanaOB ? [
+    ...rencanaOB.orang.map((o) => {
+      if (previewBesokAktif) return { key: `ob-next-${o.nama}`, nama: o.nama, foto: staffFotoMap[o.nama], label: "RENCANA", nada: "info" as NadaTim, sub: ringkasTugas(o) };
+      const s = statusAbsen(o.nama, todayISO, "HADIR");
+      return { key: `ob-${o.nama}`, nama: o.nama, foto: staffFotoMap[o.nama], label: s.label, nada: s.nada, sub: ringkasTugas(o) };
+    }),
+    ...rencanaOB.tidakHadir.map((nama) => ({ key: `ob-absen-${nama}`, nama, foto: staffFotoMap[nama], label: "TIDAK HADIR", nada: "muted" as NadaTim, sub: "tugasnya dibagi ke rekan" })),
+  ] : null;
+  const anggotaOB: AnggotaTim[] = anggotaOBZona ? anggotaOBZona : previewBesokAktif
     ? obBesok.map((o) => ({
         key: `ob-next-${o.nama}`, nama: o.nama, foto: staffFotoMap[o.nama], label: "RENCANA", nada: "info" as NadaTim,
         sub: o.lokasi.join(", ") || "Standby",
@@ -1156,7 +1185,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
   const kelompokTim: { key: string; judul: string; ket: string; anggota: AnggotaTim[]; kosong: string }[] = [
     {
       key: "ob", judul: "OB & CS", anggota: anggotaOB,
-      ket: previewBesokAktif ? `rencana plot ${tanggalPreviewOB === todayISO ? "hari ini" : "besok"} · tampil kembali 06:00` : "",
+      ket: rencanaOB ? (previewBesokAktif ? `pola zona · rencana ${tanggalPreviewOB === todayISO ? "hari ini" : "besok"}` : "pola zona") : previewBesokAktif ? `rencana plot ${tanggalPreviewOB === todayISO ? "hari ini" : "besok"} · tampil kembali 06:00` : "",
       kosong: isWeekend(previewBesokAktif ? tanggalPreviewOB : todayISO) ? "Libur akhir pekan" : "Belum ada plot",
     },
     { key: "sec", judul: "Security", ket: securityShift.currentName, anggota: anggotaSecurity, kosong: "Belum ada jadwal shift" },
@@ -1815,6 +1844,27 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
                 )}
               </div>
             ))}
+            {/* §180 roster cuci piring/gelas pantry hari ini (hari kerja: OB bergiliran 3x; Sabtu/Minggu: Security yang jaga) */}
+            {adaRosterCuci && (
+              <div>
+                <div className="tim-grup-judul"><span>🍽️ Cuci Piring Hari Ini</span><span className="tim-grup-ket">{isWeekend(todayISO) ? "Security yang jaga" : "OB bergiliran 3x sehari"}</span></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {rosterCuci.map((s, i) => {
+                    const berikut = i === slotCuciBerikut;
+                    return (
+                      <div className="team-row" key={s.jam} style={berikut ? { outline: "2px solid var(--info)", outlineOffset: "-2px" } : undefined}>
+                        <div className="team-avatar-fallback" style={{ background: berikut ? "var(--info-50)" : "var(--hover)", color: berikut ? "var(--info)" : "var(--muted)", fontSize: "11px" }}>{s.jam}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--ink)" }}>{s.nama.join(", ") || "–"}</div>
+                          <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "1px" }}>{s.ket}{s.shift ? ` · ${s.shift}` : ""}</div>
+                        </div>
+                        {berikut && <span className="tim-label" style={{ color: "var(--info)", background: "var(--info-50)" }}>BERIKUTNYA</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {securityShift.next.length > 0 && (
               <div className="tim-berikut">
                 <b>Security berikutnya</b> · {securityShift.nextName}: {securityShift.next.join(", ")}

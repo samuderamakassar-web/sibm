@@ -102,7 +102,10 @@ async function jadwalSecurity() {
 function acak(arr) { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 async function jadwalOB() {
-  const pelayanan = (await db.collection("ob_settings").doc("config").get()).data()?.pelayanan_tetap || "";
+  // §180 pola zona dipermanenkan -> pembagian tugas dari pola zona, plotting harian lama tidak dibuat lagi
+  const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
+  if (uji?.aktif && uji.permanen === true) { console.log("OB: pola zona permanen -> plotting harian tidak dibuat."); return; }
+  const pelayanan =(await db.collection("ob_settings").doc("config").get()).data()?.pelayanan_tetap || "";
   // Paket dari master SOP Checklist (settings/checklist_ob.area[].paket) -- sama dgn paketPlottingDari() di src/lib/sopChecklist.ts
   const areaMaster = (await db.collection("settings").doc("checklist_ob").get()).data()?.area;
   let paket = PAKET_OB_BAWAAN;

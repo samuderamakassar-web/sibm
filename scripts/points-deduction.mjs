@@ -224,7 +224,7 @@ async function cekOB() {
   }
   // §169 uji coba pola zona OB: checklist sesi lama dimatikan & tanpa potong poin selama periode aktif
   const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
-  if (uji?.aktif && kemarin >= uji.mulai && kemarin <= uji.selesai) {
+  if (uji?.aktif && kemarin >= uji.mulai && (uji.permanen === true || kemarin <= uji.selesai)) {
     console.log(`OB & CS: ${kemarin} dalam uji coba pola zona (${uji.mulai} s.d. ${uji.selesai}), tanpa potong poin.`);
     return tidakLengkap;
   }

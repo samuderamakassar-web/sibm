@@ -23,6 +23,7 @@ import AdminShell from "../admin/AdminShell";
 import { areaOpsional, paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
 import PetugasUtilitasPicker from "../PetugasUtilitasPicker";
 import JadwalOtomatisInfo from "../JadwalOtomatisInfo";
+import { useUjiPolaZona } from "../../lib/ujiPolaZona";
 
 // ==========================================
 // KONSTANTA
@@ -99,6 +100,7 @@ function buatRotasiCleaning(cleaningStaff: string[], paket: string[][]): Record<
 
 /** §117 dipakai di /dashboard/ob/plotting (Koordinator) & /admin/plotting-ob (Admin). */
 export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel = "Dashboard OB" }: { backHref?: string; backLabel?: string }) {
+  const { config: polaZona } = useUjiPolaZona(); // §180
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -427,6 +429,13 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
       `,
         }}
       />
+
+      {/* §180 pola zona permanen -> plotting harian lama tidak dipakai */}
+      {polaZona?.aktif && polaZona.permanen && (
+        <div style={{ marginBottom: "16px", padding: "14px 16px", borderRadius: "16px", background: "var(--warn-50)", border: "1px solid var(--warn)", fontSize: "13.5px", color: "var(--ink)" }}>
+          <b>Plotting harian tidak dipakai lagi.</b> Pola zona sudah dipermanenkan — pembagian tugas OB & CS diatur di <b>Admin → Uji Coba Pola Zona</b> dan tampil otomatis di Checklist Zona & halaman utama. Plot di bawah tidak berpengaruh.
+        </div>
+      )}
 
       <div>
         <div className="plot-wrapper">

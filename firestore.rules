@@ -212,7 +212,9 @@ service cloud.firestore {
           'employees_directory', 'master_atk', 'master_kendaraan',
           'operational_vehicle_logs', 'driver_status_logs', 'ga_overtime_requests', 'ga_atk_requests',
           'helpdesk_tickets', 'packages', 'security_visitor_logs', 'validasi_karyawan', 'attendance_logs',
-          'booking', 'permintaan_pelayanan'
+          'booking', 'permintaan_pelayanan',
+          // §180 portal (halaman utama) membaca pola zona OB: petugas pelayanan per lantai & roster cuci piring
+          'ob_settings'
         ];
     }
 
