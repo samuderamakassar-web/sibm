@@ -14,6 +14,7 @@ import Tile from "../admin/Tile";
 import { useMasterKondisiAset } from "@/lib/kondisiAset";
 import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
 import KinerjaSayaPanel from "../KinerjaSayaPanel";
+import PetugasUtilitasPicker from "@/components/PetugasUtilitasPicker";
 import { useUjiPolaZona, zonaUntuk, mingguKe, cadanganHariIni, dalamJam } from "@/lib/ujiPolaZona";
 import { JADWAL_OPNAME, statusSesi } from "@/lib/stokOB";
 
@@ -136,6 +137,7 @@ export default function DashboardOBPage() {
   }, [picName]);
   // §169 uji coba pola zona: selama periode aktif, zona menggantikan peran tugas & checklist lama
   const { config: ujiZona } = useUjiPolaZona();
+  const [tampilPetugas, setTampilPetugas] = useState(false); // §181 panel penunjukan petugas inspeksi (Koordinator)
   const zonaHariIni = zonaUntuk(ujiZona, picName, todayISO);
   // §176 cadangan pelayanan: pemegang Area Lain (jam diperpanjang bila Zona Tenant kurang orang) -- di jam cadangan
   // panel permintaan naik ke atas
@@ -441,16 +443,16 @@ export default function DashboardOBPage() {
         {/* 👑 PANEL KHUSUS KOORDINATOR */}
         {(picRole.includes("Koordinator") || picRole.includes("Administrator")) && (
           <div style={{ display: "flex", gap: "20px", marginBottom: "30px", flexWrap: "wrap" }}>
+            {/* §181 menu Plotting dihapus (tugas dari Pola Zona) -> penunjukan petugas inspeksi pindah ke sini */}
             <div
               className="coord-card"
-              onClick={() => router.push("/dashboard/ob/plotting")}
-              // §180 pola zona permanen -> plotting harian lama tidak dipakai
-              style={{ display: ujiZona?.permanen ? "none" : undefined, background: "linear-gradient(to right, var(--info), #1d4ed8)", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
+              onClick={() => setTampilPetugas((v) => !v)}
+              style={{ background: "linear-gradient(to right, var(--info), #1d4ed8)", boxShadow: "0 10px 15px -3px rgba(37,99,235,0.3)" }}
             >
               <div className="coord-icon"><IconMap size={28} /></div>
               <div>
-                <h2 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>Plotting Tugas Harian</h2>
-                <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>Atur area tugas staf OB & CS.</p>
+                <h2 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>Petugas Inspeksi</h2>
+                <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>Tunjuk petugas inspeksi gedung & utilitas.</p>
               </div>
             </div>
             <div
@@ -475,6 +477,17 @@ export default function DashboardOBPage() {
                 <h2 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>Alat Kerja Tim</h2>
                 <p style={{ margin: "0", fontSize: "12px", opacity: 0.8 }}>Daftar alat, rusak/hilang, inspeksi 2x sebulan.</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {tampilPetugas && (picRole.includes("Koordinator") || picRole.includes("Administrator")) && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px", marginBottom: "30px" }}>
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", border: "1px solid var(--line)" }}>
+              <PetugasUtilitasPicker oleh={picName || "Koordinator"} field="petugas_gedung" />
+            </div>
+            <div style={{ background: "var(--surface)", padding: "20px", borderRadius: "20px", border: "1px solid var(--line)" }}>
+              <PetugasUtilitasPicker oleh={picName || "Koordinator"} />
             </div>
           </div>
         )}

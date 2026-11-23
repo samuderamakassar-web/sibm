@@ -360,7 +360,7 @@ export default function MonitorOBPage() {
             { id: "CHECKLIST", label: "Log Pembersihan", icon: "broom", count: 0 },
             { id: "STOCK", label: "Stok & Pengadaan", icon: "box", count: daftarUrgent.length },
             { id: "INSPEKSI", label: "Inspeksi Fasilitas", icon: "search", count: rusakBaruBaruIni },
-            { id: "PLOT", label: "Plot Tugas Harian", icon: "clipboardList", count: 0 },
+            // §181 tab Plot Tugas Harian dihapus (pembagian tugas dari Pola Zona)
           ] as const).map((tab) => (
             <button
               key={tab.id}
@@ -437,8 +437,9 @@ export default function MonitorOBPage() {
                 <select className="sa-field" aria-label="Bulan plot" value={bulanPlotAktif} onChange={(e) => setBulanFilterPlot(e.target.value)}>
                   {bulanTersediaPlot.length > 0 ? bulanTersediaPlot.map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>) : <option value={bulanPlotAktif}>{formatBulanLabel(bulanPlotAktif)}</option>}
                 </select>
-                <button type="button" className="sa-btn is-dark" onClick={() => router.push("/dashboard/ob/plotting")}>
-                  + Buat Plot Baru
+                {/* §181 plotting harian diganti Pola Zona */}
+                <button type="button" className="sa-btn is-dark" onClick={() => router.push("/admin/uji-pola-zona")}>
+                  Atur Pola Zona
                 </button>
                 <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
                   <AdminIcon name="printer" size={16} /> Export PDF

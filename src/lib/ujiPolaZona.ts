@@ -46,7 +46,8 @@ export interface UjiPolaZona {
   tukar_lantai_mg1: boolean; tukar_lantai_mg2: boolean;
   // §176 ketidakhadiran per tanggal (ditandai Admin) -> tugas hari itu dibagi ulang otomatis
   tidak_hadir: Record<string, string[]>;
-  // §180 "mingguan" = zona ditukar tiap minggu; "tetap" = Tenant tetap Tenant, Publik tetap Publik (setelan minggu 1)
+  // §180 "mingguan" = zona ditukar tiap minggu; §181 "tetap" = Tenant tetap Tenant, Publik tetap Publik, tetapi
+  // tugas DI DALAM zona ditukar tiap pekan: lantai Tenant dibalik & pemegang Toilet / Area Lain bergantian.
   rotasi: "mingguan" | "tetap";
   // §180 pola zona dipermanenkan: berlaku terus sejak `mulai` (tanpa tanggal selesai), plotting lama tidak dipakai
   permanen: boolean;
@@ -95,12 +96,14 @@ export function hariKerja(a: string, b: string, libur: string[] = []): string[] 
 
 /** Pola zona berlaku pada tanggal tsb: periode uji coba, atau sejak `mulai` tanpa batas bila dipermanenkan (§180). */
 export const dalamUjiCoba = (c: UjiPolaZona | null, tanggal: string) => !!c && c.aktif && tanggal >= c.mulai && (c.permanen || tanggal <= c.selesai);
-/** Minggu ke-1/2 dalam siklus 2 minggu sejak `mulai` (bergantian terus bila permanen). §180 rotasi "tetap" = selalu 1. */
+/** Pekan ke-1/2 dalam siklus 2 minggu sejak `mulai` (bergantian terus bila permanen). */
 export const mingguKe = (c: UjiPolaZona, tanggal: string): 1 | 2 => {
-  if (c.rotasi === "tetap") return 1;
   const hari = Math.round((Date.parse(`${tanggal}T00:00:00Z`) - Date.parse(`${c.mulai}T00:00:00Z`)) / 86400000);
   return hari >= 0 && Math.floor(hari / 7) % 2 === 1 ? 2 : 1;
 };
+
+/** Pekan untuk penentuan ZONA: rotasi "tetap" -> zona tidak pernah ditukar. */
+const mingguZona = (c: UjiPolaZona, tanggal: string): 1 | 2 => (c.rotasi === "tetap" ? 1 : mingguKe(c, tanggal));
 
 /** Zona staf pada tanggal tsb (null = tidak ikut uji coba / di luar periode). */
 export function zonaUntuk(c: UjiPolaZona | null, nama: string, tanggal: string): Zona | null {
@@ -110,26 +113,44 @@ export function zonaUntuk(c: UjiPolaZona | null, nama: string, tanggal: string):
   const diPublik = c.tim_publik.some((x) => x.trim().toLowerCase() === n);
   if (!diTenant && !diPublik) return null;
   const awal: Zona = diTenant ? "Tenant" : "Publik";
-  return mingguKe(c, tanggal) === 1 ? awal : awal === "Tenant" ? "Publik" : "Tenant";
+  return mingguZona(c, tanggal) === 1 ? awal : awal === "Tenant" ? "Publik" : "Tenant";
 }
 
 /** Anggota zona pada tanggal tsb. */
 export function anggotaZona(c: UjiPolaZona, zona: Zona, tanggal: string): string[] {
   const m1 = zona === "Tenant" ? c.tim_tenant : c.tim_publik;
   const m2 = zona === "Tenant" ? c.tim_publik : c.tim_tenant;
-  return mingguKe(c, tanggal) === 1 ? m1 : m2;
+  return mingguZona(c, tanggal) === 1 ? m1 : m2;
 }
+
+/** §181 susunan satu pekan: siapa Zona Tenant (urutan = lantai), Zona Publik & pemegang toilet.
+ *  - rotasi "mingguan": pekan 2 zona ditukar (Tenant <-> Publik), setelan mg2 dipakai.
+ *  - rotasi "tetap": anggota zona tetap; pekan 2 = kebalikan pekan 1 (lantai Tenant dibalik, toilet ke rekan). */
+export function susunanPekan(p: { tetap: boolean; mg: 1 | 2; timTenant: string[]; timPublik: string[]; toiletMg1: string; toiletMg2: string; tukarMg1: boolean; tukarMg2: boolean }) {
+  if (p.tetap) {
+    const toilet1 = pemegangToilet(p.timPublik, p.toiletMg1);
+    const toilet = p.mg === 1 ? toilet1 : p.timPublik.find((n) => n.trim().toLowerCase() !== toilet1.trim().toLowerCase()) || toilet1;
+    return { tenant: tukarLantai(p.timTenant, p.mg === 1 ? p.tukarMg1 : !p.tukarMg1), publik: p.timPublik, toilet };
+  }
+  const tenant = p.mg === 1 ? p.timTenant : p.timPublik, publik = p.mg === 1 ? p.timPublik : p.timTenant;
+  // bawaan pemegang toilet pekan 2 = orang terakhir supaya tidak sama urutan dengan pekan 1
+  return { tenant: tukarLantai(tenant, p.mg === 1 ? p.tukarMg1 : p.tukarMg2), publik, toilet: pemegangToilet(p.mg === 1 ? publik : [...publik].reverse(), p.mg === 1 ? p.toiletMg1 : p.toiletMg2) };
+}
+const susunanUntuk = (c: UjiPolaZona, tanggal: string) => susunanPekan({
+  tetap: c.rotasi === "tetap", mg: mingguKe(c, tanggal), timTenant: c.tim_tenant, timPublik: c.tim_publik,
+  toiletMg1: c.toilet_mg1, toiletMg2: c.toilet_mg2, tukarMg1: c.tukar_lantai_mg1, tukarMg2: c.tukar_lantai_mg2,
+});
 
 // ---------- §176 tugas harian per orang (pola Toilet / Area Lain + ketidakhadiran) ----------
 /** Pemegang toilet minggu itu (pilihan admin; bawaan anggota pertama Zona Publik minggu itu). */
-export const toiletMinggu = (c: UjiPolaZona, tanggal: string) =>
-  pemegangToilet(anggotaZona(c, "Publik", tanggal), mingguKe(c, tanggal) === 1 ? c.toilet_mg1 : c.toilet_mg2);
+export const toiletMinggu = (c: UjiPolaZona, tanggal: string) => susunanUntuk(c, tanggal).toilet;
 export const tidakHadirPada = (c: UjiPolaZona | null, tanggal: string): string[] => c?.tidak_hadir?.[tanggal] || [];
 /** §179 urutan anggota Zona Tenant minggu itu: urutan menentukan lantai pagi & pelayanan (orang ke-1 = lantai
  *  terberat pertama). "Tukar lantai" membalik urutan supaya lantai bergilir antar periode. */
 export const tukarLantai = (tenant: string[], tukar: boolean) => (tukar ? [...tenant].reverse() : tenant);
-export const tenantMinggu = (c: UjiPolaZona, tanggal: string) =>
-  tukarLantai(anggotaZona(c, "Tenant", tanggal), mingguKe(c, tanggal) === 1 ? c.tukar_lantai_mg1 : c.tukar_lantai_mg2);
+export const tenantMinggu = (c: UjiPolaZona, tanggal: string) => susunanUntuk(c, tanggal).tenant;
+/** Senin pekan tanggal tsb. */
+export const seninPekan = (iso: string) => tambahHari(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7));
 
 /** Rencana tugas hari itu untuk semua peserta (null = di luar uji coba / akhir pekan). */
 export function rencanaUntuk(c: UjiPolaZona | null, tanggal: string, lantai: LantaiOk[]): RencanaHari | null {

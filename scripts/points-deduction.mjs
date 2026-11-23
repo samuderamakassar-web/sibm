@@ -18,7 +18,8 @@
 // dipertanggungjawabkan ke 1 ORANG tertentu (bukan tugas kolektif tanpa PIC
 // jelas). Yang masuk v1:
 //   1. OB & CS  -- gak lapor checklist utk sesi (Pagi/Siang/Sore) yang
-//      seharusnya dilaporkan sesuai plot harian.
+//      seharusnya dilaporkan sesuai plot harian. §181 bila pola zona aktif/permanen:
+//      dari jumlah laporan ronde zona per orang (cekOBZona).
 //   2. Security -- kepatuhan minimum sesi patroli (2 dari 3) per shift yang
 //      berakhir kemarin.
 //   3. Security -- Notifikasi Dadakan (siram tanaman) jendela Pagi/Malam yang
@@ -222,11 +223,10 @@ async function cekOB() {
     console.log("OB & CS: kemarin weekend, skip (gak ada jadwal).");
     return tidakLengkap;
   }
-  // §169 uji coba pola zona OB: checklist sesi lama dimatikan & tanpa potong poin selama periode aktif
+  // §181 pola zona aktif/permanen: poin dihitung dari laporan ronde zona (bukan plot harian & checklist sesi lama)
   const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
   if (uji?.aktif && kemarin >= uji.mulai && (uji.permanen === true || kemarin <= uji.selesai)) {
-    console.log(`OB & CS: ${kemarin} dalam uji coba pola zona (${uji.mulai} s.d. ${uji.selesai}), tanpa potong poin.`);
-    return tidakLengkap;
+    return cekOBZona(uji);
   }
   const plotSnap = await db.collection("daily_plots").doc(kemarin).get();
   if (!plotSnap.exists) {
@@ -269,6 +269,44 @@ async function cekOB() {
   }
   if (peringatan.length) {
     await tulisNotifPersonal(peringatan, "Peringatan Checklist", `Kemarin (${kemarin}) kamu hanya melapor 1 sesi checklist. Lapor 2 sesi = +1 poin, 3 sesi = +2 poin.`);
+  }
+  return tidakLengkap;
+}
+
+// §181 nilai harian pola zona: setiap peserta zona yang HADIR (tidak ditandai tidak hadir oleh Admin) dinilai dari
+// jumlah laporan ronde (ob_zona_laporan) kemarin, mengikuti skema bertingkat §172:
+//   0 ronde = −10 · 1..(min−1) = 0 + peringatan · tepat min = +1 · lebih dari min = +2.
+// Hari libur (/admin/hari-libur) tidak dinilai.
+async function cekOBZona(uji) {
+  const tidakLengkap = [];
+  const libur = (await db.collection("settings").doc("validasi_karyawan").get()).data()?.hari_libur || [];
+  if (libur.includes(kemarin)) {
+    console.log(`OB & CS (zona): ${kemarin} hari libur, skip.`);
+    return tidakLengkap;
+  }
+  const norm = (n) => String(n || "").trim().toLowerCase();
+  const absen = ((uji.tidak_hadir || {})[kemarin] || []).map(norm);
+  const peserta = Array.from(new Set([...(uji.tim_tenant || []), ...(uji.tim_publik || [])].map(String).filter(Boolean)));
+  const minRonde = Math.max(1, Number(uji.min_ronde) || 1);
+  const laporan = (await db.collection("ob_zona_laporan").where("tanggal", "==", kemarin).get()).docs.map((d) => d.data());
+  const peringatan = [];
+  for (const nama of peserta) {
+    if (absen.includes(norm(nama))) { console.log(`${nama} tidak hadir ${kemarin} (ditandai Admin), tidak dinilai.`); continue; }
+    const ronde = laporan.filter((l) => l.jenis === "ronde" && norm(l.nama) === norm(nama)).length;
+    if (ronde === 0) {
+      await potongPoin(nama, "OB & CS", `Tidak lapor ronde zona sama sekali (${kemarin})`, 10);
+      tidakLengkap.push({ nama, terlewat: [`0/${minRonde} ronde`] });
+    } else if (ronde < minRonde) {
+      peringatan.push(nama);
+      tidakLengkap.push({ nama, terlewat: [`${ronde}/${minRonde} ronde`] });
+      console.log(`Peringatan: ${nama} hanya ${ronde} ronde zona (${kemarin}), poin tetap.`);
+    } else {
+      const plus = ronde > minRonde ? 2 : 1;
+      await potongPoin(nama, "OB & CS", `Ronde zona ${ronde} (minimal ${minRonde})${plus === 2 ? " — melebihi target" : ""} (${kemarin})`, -plus);
+    }
+  }
+  if (peringatan.length) {
+    await tulisNotifPersonal(peringatan, "Peringatan Ronde Zona", `Kemarin (${kemarin}) laporan ronde zona kamu kurang dari minimal ${minRonde}. Ronde ${minRonde}x = +1 poin, lebih = +2 poin, tidak lapor = −10.`);
   }
   return tidakLengkap;
 }
@@ -428,8 +466,8 @@ async function jalankan() {
     console.log(`Kirim notifikasi Admin GA: ${obTidakLengkap.length} staf OB/CS checklist tidak lengkap.`);
     const daftar = obTidakLengkap.map((o) => `${o.nama} (${o.terlewat.join(", ")})`).join("; ");
     await kirimPushAdminGA(
-      "🧹 Checklist OB/CS Tidak Lengkap",
-      `${obTidakLengkap.length} staf OB/CS tidak lengkap checklist kemarin (${kemarin}): ${daftar}.`
+      "🧹 Laporan OB/CS Tidak Lengkap",
+      `${obTidakLengkap.length} staf OB/CS tidak lengkap laporan (checklist/ronde zona) kemarin (${kemarin}): ${daftar}.`
     );
   }
   if (securityTidakPatuh.length > 0) {

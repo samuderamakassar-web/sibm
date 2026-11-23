@@ -62,8 +62,8 @@ const MENU_GROUPS: MenuGroup[] = [
     name: "OB & CS",
     tone: "ok",
     items: [
-      { title: "Plotting OB & CS", desc: "Atur area tugas harian & petugas utilitas", path: "/admin/plotting-ob", icon: "calendar" },
-      { title: "Uji Coba Pola Zona", desc: "Office Boy zona Tenant vs Publik + evaluasi beban", path: "/admin/uji-pola-zona", icon: "clipboardList" },
+      // §181 menu Plotting dihapus -- pembagian tugas OB & CS sepenuhnya dari Pola Zona
+      { title: "Pola Zona OB & CS", desc: "Zona Tenant & Publik, kehadiran, petugas inspeksi + evaluasi", path: "/admin/uji-pola-zona", icon: "calendar" },
       { title: "Temuan & Kondisi Aset", desc: "Hasil inspeksi OB: perbaikan & penggantian", path: "/admin/kondisi-aset", icon: "search" },
       { title: "Alat Kerja OB & CS", desc: "Daftar alat, rusak/hilang, label", path: "/admin/alat-kerja", icon: "box" },
     ],

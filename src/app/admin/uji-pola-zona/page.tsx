@@ -20,10 +20,10 @@ import { tanggalISOWITASekarang } from "../../../lib/shift";
 import { CHECKLIST_OB_BAWAAN, useChecklistOB, type AreaChecklist } from "../../../lib/sopChecklist";
 import { ASUMSI_BAWAAN, WARNA_STATUS_BEBAN, type AsumsiBeban } from "../../../lib/sla";
 import { BOBOT_RINGAN, gabungArea, M2_PER_TOILET, uraiArea, type LantaiOk } from "../../../lib/bagiZona";
-import { pemegangToilet, rencanaHari, type RencanaHari } from "../../../lib/rencanaZona";
-import { rosterCuciPiring } from "../../../lib/rosterCuciPiring";
+import { rencanaHari, type RencanaHari } from "../../../lib/rencanaZona";
+import PetugasUtilitasPicker from "../../../components/PetugasUtilitasPicker";
 import {
-  akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, rencanaUntuk, tambahHari, tukarLantai, useUjiPolaZona,
+  akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, mingguKe, rencanaUntuk, susunanPekan, tambahHari, useUjiPolaZona,
   type LaporanZona,
 } from "../../../lib/ujiPolaZona";
 import { hitungEvaluasi, type ChecklistLama, type DataPendukung, type KlaimLembur, type Permintaan } from "../../../lib/evaluasiZona";
@@ -156,9 +156,10 @@ export default function UjiPolaZonaPage() {
   const jadwal = jadwalDariMulai(mulai);
   const timTenant = Object.keys(pilihan).filter((n) => pilihan[n] === "Tenant");
   const timPublik = Object.keys(pilihan).filter((n) => pilihan[n] === "Publik");
-  // minggu 1 Publik = timPublik, minggu 2 Publik = timTenant (ditukar); bawaan mg 2 = orang terakhir supaya tidak sama urutan
-  const toilet1 = pemegangToilet(timPublik, toiletMg1);
-  const toilet2 = pemegangToilet([...timTenant].reverse(), toiletMg2);
+  // §181 susunan pekan 1 & 2 (sama persis dengan yang dipakai staf: susunanPekan di lib/ujiPolaZona)
+  const pekan = ([1, 2] as const).map((mg) => susunanPekan({ tetap: rotasi === "tetap", mg, timTenant, timPublik, toiletMg1, toiletMg2, tukarMg1, tukarMg2 }));
+  const toilet1 = pekan[0].toilet, toilet2 = pekan[1].toilet;
+  const pekanIni = config ? mingguKe({ ...config, mulai }, hariIni) : 1;
 
   const simpanConfig = async (aktif: boolean) => {
     if (new Date(`${mulai}T00:00:00Z`).getUTCDay() !== 1) return showToast("Tanggal mulai harus hari Senin.", "warning");
@@ -312,7 +313,7 @@ export default function UjiPolaZonaPage() {
   const sel: React.CSSProperties = { padding: "8px 10px", borderTop: "1px solid var(--line)", fontSize: "13px", textAlign: "left" };
 
   return (
-    <AdminShell title="Uji Coba Pola Zona OB" subtitle="Office Boy per zona: Tenant vs Publik — 2 minggu, rotasi minggu ke-2" userName={session.nama} backHref="/admin" backLabel="Control Panel">
+    <AdminShell title="Pola Zona OB & CS" subtitle="Pembagian tugas Office Boy per zona Tenant & Publik (pengganti plotting harian)" userName={session.nama} backHref="/admin" backLabel="Control Panel">
       <div className="sa-tabs">
         <button type="button" className={`sa-tab ${tab === "atur" ? "is-active" : ""}`} onClick={() => setTab("atur")}>Pengaturan</button>
         <button type="button" className={`sa-tab ${tab === "evaluasi" ? "is-active" : ""}`} onClick={() => setTab("evaluasi")} disabled={!config}>Evaluasi</button>
@@ -337,9 +338,15 @@ export default function UjiPolaZonaPage() {
               </div>
             </div>
             <p style={{ margin: "10px 0 0", fontSize: "12.5px", color: "var(--muted)" }}>
-              Selama berjalan: checklist per lantai & 3 sesi disembunyikan dari staf peserta, potong poin checklist & pengingat sesi lama dilewati, semua permintaan portal tampil di Zona Tenant (Zona Publik sebagai cadangan).
+              Selama berjalan: checklist per lantai & 3 sesi disembunyikan, poin harian dihitung dari laporan ronde zona (0 ronde −10, kurang dari minimal 0 + peringatan, memenuhi minimal +1, lebih +2; yang ditandai tidak hadir tidak dinilai), semua permintaan portal tampil di Zona Tenant (Zona Publik sebagai cadangan).
             </p>
           </Tile>
+
+          {/* §181 dipindah dari menu Plotting (dihapus): petugas inspeksi fasilitas gedung & utilitas */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+            <Tile><PetugasUtilitasPicker oleh={session.nama || "Admin"} field="petugas_gedung" /></Tile>
+            <Tile><PetugasUtilitasPicker oleh={session.nama || "Admin"} /></Tile>
+          </div>
 
           {/* §176 kehadiran & rencana tugas hari itu */}
           {config?.aktif && (() => {
@@ -367,12 +374,6 @@ export default function UjiPolaZonaPage() {
                       })}
                     </div>
                     <KartuRencana r={rHari} jamPagi={config.jam_pagi} />
-                    {/* §180 roster cuci piring hari itu (giliran petugas hadir) */}
-                    <div style={{ marginTop: "8px", padding: "10px 12px", borderRadius: "14px", background: "var(--info-50)", fontSize: "12.5px" }}>
-                      <b>🍽️ Cuci piring/gelas pantry:</b>{" "}
-                      {rosterCuciPiring(tglHadir, rHari.orang.map((o) => o.nama)).map((s) => `${s.jam} ${s.nama.join(", ") || "–"}`).join(" · ")}
-                      <div style={{ color: "var(--muted)" }}>3x sehari (± 67 karyawan ≈ 130 gelas/hari → ± 45 gelas tiap putaran), bergiliran adil. Sabtu/Minggu oleh Security yang jaga (12.00 Shift 1, 21.00 Shift 2). Tampil di halaman utama.</div>
-                    </div>
                   </>
                 )}
               </Tile>
@@ -392,18 +393,18 @@ export default function UjiPolaZonaPage() {
               {/* §180 rotasi zona */}
               <div style={{ fontSize: "12.5px", fontWeight: 700 }}>Rotasi zona<br />
                 <div style={{ display: "flex", gap: "4px", marginTop: "2px" }}>
-                  {([["mingguan", "Ditukar tiap minggu"], ["tetap", "Tetap (tanpa rotasi)"]] as const).map(([v, l]) => (
+                  {([["tetap", "Zona tetap, tugas ditukar tiap pekan"], ["mingguan", "Zona ditukar tiap pekan"]] as const).map(([v, l]) => (
                     <button key={v} type="button" className={`sa-btn ${rotasi === v ? "is-dark" : "is-soft"}`} style={{ height: "34px" }} onClick={() => setRotasi(v)}>{l}</button>
                   ))}
                 </div>
               </div>
-              <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Minggu 1: {tglIndo(jadwal.mulai)} – {tglIndo(tambahHari(jadwal.mulai, 4))}<br />Minggu 2 (zona ditukar): {tglIndo(jadwal.tukar_mulai)} – {tglIndo(jadwal.selesai)}</div>
+              <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Pekan 1: {tglIndo(jadwal.mulai)} – {tglIndo(tambahHari(jadwal.mulai, 4))}<br />Pekan 2 ({rotasi === "tetap" ? "lantai & toilet ditukar" : "zona ditukar"}): {tglIndo(jadwal.tukar_mulai)} – {tglIndo(jadwal.selesai)}{config?.permanen ? <><br />Permanen: pekan 1 & 2 bergantian terus.</> : null}</div>
             </div>
           </Tile>
 
           <Tile style={{ marginBottom: "16px" }}>
-            <h3 style={{ margin: "0 0 4px", fontSize: "16px" }}>Pembagian zona minggu 1</h3>
-            <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>Disarankan 2 orang Tenant + 2 orang Publik. Minggu 2 otomatis ditukar.</div>
+            <h3 style={{ margin: "0 0 4px", fontSize: "16px" }}>Pembagian zona{rotasi === "tetap" ? "" : " pekan 1"}</h3>
+            <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>Disarankan 2 orang Tenant + 2 orang Publik. {rotasi === "tetap" ? "Zona tetap; di dalam zona tugas ditukar tiap pekan." : "Pekan 2 zona otomatis ditukar."}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               {staf.map((n) => (
                 <div key={n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "12px", background: "var(--bg)" }}>
@@ -443,13 +444,12 @@ export default function UjiPolaZonaPage() {
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>
               Pagi: ruang tenant dibagi per lantai menurut luas ke semua orang. Zona Tenant: pelayanan lantai bagiannya (jumlah tenant dibagi rata). Zona Publik: 1 orang <b>Toilet</b> (semua toilet, tanpa cadangan), 1 orang <b>Area Lain</b> (lobby, basement, parkiran, pantry, mushallah, koridor, area mingguan + cadangan pelayanan setiap hari). Bobot: toilet = {M2_PER_TOILET} m² setara, parkir/taman/rooftop × {BOBOT_RINGAN}; luas manual: <code>Lantai 3 · PT X | 60</code>. Staf melihat tugasnya di Checklist Zona.
             </div>
-            {(rotasi === "tetap" ? [1] : [1, 2]).map((mg) => {
+            {([1, 2] as const).map((mg) => {
               const tukarMg = mg === 1 ? tukarMg1 : tukarMg2;
-              const tenantMg = tukarLantai(mg === 1 ? timTenant : timPublik, tukarMg);
-              const publikMg = mg === 1 ? timPublik : timTenant;
+              const { tenant: tenantMg, publik: publikMg, toilet: toiletMg } = pekan[mg - 1];
+              const otomatis = rotasi === "tetap" && mg === 2; // §181 pekan 2 = kebalikan pekan 1
               const ut = uraiArea(areaTenant.split("\n"));
               const up = uraiArea(areaPublik.split("\n"));
-              const toiletMg = mg === 1 ? toilet1 : toilet2;
               const r = rencanaHari({
                 tenant: tenantMg, publik: publikMg, toilet: toiletMg, areaTenant: ut.area, areaPublik: up.area, luas: { ...ut.luas, ...up.luas },
                 mingguan: [...ut.mingguan, ...up.mingguan], lantai: lantaiOk, tidakHadir: [], pagiBersama, cadangan: cadanganPublik, jamCadangan,
@@ -457,13 +457,14 @@ export default function UjiPolaZonaPage() {
               return (
                 <div key={mg} style={{ marginBottom: "12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    <b style={{ fontSize: "13.5px" }}>{rotasi === "tetap" ? "Setiap minggu (tetap)" : `Minggu ${mg}`}</b>
-                    {tenantMg.length > 1 && (
+                    <b style={{ fontSize: "13.5px" }}>Pekan {mg}{config && pekanIni === mg ? " (pekan ini)" : ""}</b>
+                    {otomatis && <span style={{ fontSize: "12.5px", color: "var(--muted)" }}>otomatis kebalikan pekan 1 (lantai Tenant dibalik, toilet ke rekan)</span>}
+                    {!otomatis && tenantMg.length > 1 && (
                       <button type="button" className={`sa-btn ${tukarMg ? "is-dark" : "is-soft"}`} style={{ height: "32px" }}
                         title="Balik pembagian lantai antar anggota Zona Tenant (pagi & pelayanan)"
                         onClick={() => (mg === 1 ? setTukarMg1 : setTukarMg2)(!tukarMg)}>⇄ Tukar lantai Tenant{tukarMg ? " (ditukar)" : ""}</button>
                     )}
-                    {publikMg.length > 1 && (
+                    {!otomatis && publikMg.length > 1 && (
                       <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Pemegang toilet:{" "}
                         <select className="sa-field" value={toiletMg} onChange={(e) => (mg === 1 ? setToiletMg1 : setToiletMg2)(e.target.value)}>
                           {publikMg.map((n) => <option key={n} value={n}>{n}</option>)}

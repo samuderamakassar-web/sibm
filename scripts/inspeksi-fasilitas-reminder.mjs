@@ -128,7 +128,7 @@ async function jalankan() {
     if (!belum.length) console.log(`Semua area gedung sudah diinspeksi minggu ini (${formatRentangMinggu(seninMingguIni)}).`);
     else if (!petugasGedung.length) {
       console.log("Belum ada petugas inspeksi gedung ditunjuk.");
-      if (iniHariTerakhir) await kirimNotifAdminGA("🧽 Petugas Inspeksi Gedung Belum Ditunjuk", `${belum.length} area belum diinspeksi minggu ini & belum ada petugas inspeksi gedung. Koordinator OB menunjuk lewat menu Plotting.`);
+      if (iniHariTerakhir) await kirimNotifAdminGA("🧽 Petugas Inspeksi Gedung Belum Ditunjuk", `${belum.length} area belum diinspeksi minggu ini & belum ada petugas inspeksi gedung. Koordinator OB menunjuk lewat Dashboard OB (Petugas Inspeksi) atau Admin di Pola Zona.`);
     } else {
       const pesan = `Inspeksi Fasilitas Gedung minggu ini (${formatRentangMinggu(seninMingguIni)}) belum untuk: ${belum.join(", ")}. Cukup tekan "Semua aman" atau lapor temuan.${iniHariTerakhir ? " Ini hari kerja terakhir minggu ini!" : ""}`;
       await tulisNotifPersonal(petugasGedung, "🧽 Inspeksi Fasilitas Gedung Belum Selesai", pesan);
