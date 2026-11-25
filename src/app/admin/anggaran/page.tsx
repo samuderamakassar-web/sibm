@@ -18,7 +18,7 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { isAdministrator, useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
@@ -298,6 +298,8 @@ export default function AnggaranPage() {
     await updateDoc(doc(db, "realisasi_biaya", r.id), { item_id: itemId }).catch(() => showToast("Gagal mengalokasikan.", "error"));
   };
   const hapusRealisasi = async (r: Realisasi) => {
+    // §184 catatan dari menu Tagihan & Pembelian dihapus di sana (stok OB & file ikut dibereskan)
+    if (r.catat) { showToast("Catatan ini dari menu Tagihan & Pembelian — hapus/ubah dari sana.", "warning"); return; }
     if (!(await confirm({ title: "Hapus realisasi", message: `Hapus "${r.uraian}" (${rupiah(r.jumlah)})?`, confirmText: "Hapus", variant: "danger" }))) return;
     await deleteDoc(doc(db, "realisasi_biaya", r.id)).catch(() => showToast("Gagal menghapus.", "error"));
   };
@@ -311,7 +313,12 @@ export default function AnggaranPage() {
 
   return (
     <AdminShell title="Anggaran & Realisasi" subtitle="RAB (CAPEX / OPEX / PL) vs biaya aktual — otomatis dari Helpdesk, servis kendaraan & ATK" userName={session?.nama || "Admin"}
-      actions={<select className="sa-field" value={tahun} onChange={(e) => setTahun(Number(e.target.value))} aria-label="Tahun anggaran">{[tahunIni + 1, tahunIni, tahunIni - 1, tahunIni - 2].map((t) => <option key={t} value={t}>{t}</option>)}</select>}>
+      actions={<div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        {/* §184 menu terkait digabung ke sini: input tagihan/pembelian & evaluasi tahunan */}
+        <a className="sa-btn is-soft" href="/admin/tagihan">Tagihan & Pembelian</a>
+        {isAdministrator(session?.role || "") && <a className="sa-btn is-soft" href="/admin/evaluasi-biaya">Evaluasi tahunan</a>}
+        <select className="sa-field" value={tahun} onChange={(e) => setTahun(Number(e.target.value))} aria-label="Tahun anggaran">{[tahunIni + 1, tahunIni, tahunIni - 1, tahunIni - 2].map((t) => <option key={t} value={t}>{t}</option>)}</select>
+      </div>}>
       <style dangerouslySetInnerHTML={{ __html: `
         .rab-tabel { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 980px; }
         .rab-tabel th { text-align: left; padding: 9px 10px; background: var(--bg); color: var(--ink-soft); font-size: 11.5px; font-weight: 800; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; }
@@ -573,7 +580,7 @@ export default function AnggaranPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: "13px", color: "var(--ink)", fontWeight: 600 }}>{r.uraian}
                         <span style={{ marginLeft: "6px", fontSize: "10.5px", fontWeight: 800, padding: "1px 7px", borderRadius: "7px", background: r.sumber === "manual" ? "var(--line)" : "var(--info-50)", color: r.sumber === "manual" ? "var(--ink-soft)" : "var(--info)" }}>
-                          {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : r.sumber === "temuan_gedung" ? "Temuan gedung" : r.sumber === "temuan_alat" ? "Alat kebersihan" : "Manual"}
+                          {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : r.sumber === "temuan_gedung" ? "Temuan gedung" : r.sumber === "temuan_alat" ? "Alat kebersihan" : r.catat === "PLN" ? "Tagihan PLN" : r.catat === "PDAM" ? "Tagihan PDAM" : r.catat === "BELI" ? "Pembelian" : "Manual"}
                         </span>
                       </div>
                       {r.sumber === "manual" && items.length > 0 ? (

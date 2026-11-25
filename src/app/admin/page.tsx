@@ -102,8 +102,9 @@ const MENU_GROUPS: MenuGroup[] = [
     tone: "red",
     items: [
       { title: "Dashboard Eksekutif", desc: "Ringkasan untuk Eksekutif Tenant", path: "/dashboard/eksekutif", icon: "activity" },
-      { title: "Anggaran & Realisasi", desc: "RAB CAPEX/OPEX vs biaya aktual", path: "/admin/anggaran", icon: "chart" },
-      { title: "Evaluasi Biaya Tahunan", desc: "Tahun lalu, naik/turun, target reduksi & saran", path: "/admin/evaluasi-biaya", icon: "chart", khususAdmin: true },
+      // §184 biaya jadi 2 kartu: input (Tagihan & Pembelian) + RAB/realisasi; Evaluasi tahunan dibuka dari halaman Anggaran
+      { title: "Tagihan & Pembelian", desc: "PLN, PDAM, belanja rutin, solar genset, ESG + rekap meeting", path: "/admin/tagihan", icon: "clipboardList" },
+      { title: "Anggaran & Realisasi", desc: "RAB CAPEX/OPEX vs biaya aktual + evaluasi tahunan", path: "/admin/anggaran", icon: "chart" },
       { title: "Project Tracker", desc: "Target, kuartal, task & review mingguan", path: "/admin/project-tracker", icon: "clipboardList" },
       { title: "Hari Libur", desc: "Tanggal merah & cuti bersama", path: "/admin/hari-libur", icon: "calendar" },
       { title: "Kesehatan Notifikasi", desc: "Status cron reminder", path: "/admin/monitor-cron", icon: "activity" },
@@ -113,6 +114,7 @@ const MENU_GROUPS: MenuGroup[] = [
 
 /** Halaman yang digabung ke menu induk -- tidak tampil sebagai kartu, tetap bisa dicari. */
 const MENU_PENCARIAN: MenuItem[] = [
+  { title: "Evaluasi Biaya Tahunan", desc: "Bagian dari Anggaran & Realisasi", path: "/admin/evaluasi-biaya", icon: "chart", khususAdmin: true },
   { title: "Hasil Uji Emisi", desc: "Bagian dari Kendaraan & Uji Emisi", path: "/admin/uji-emisi", icon: "car" },
   { title: "Kendaraan & Uji Emisi", desc: "Bagian dari Daftar Aset", path: "/admin/kendaraan", icon: "truck" },
   { title: "Master Data Laptop", desc: "Bagian dari Daftar Aset", path: "/admin/laptop", icon: "laptop" },

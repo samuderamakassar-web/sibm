@@ -21,7 +21,7 @@ export interface ItemRab {
 export interface PetaOtomatis { helpdesk?: string; servis?: string; atk?: string; temuan_gedung?: string; temuan_alat?: string }
 export type Sumber = "manual" | "helpdesk" | "servis" | "atk" | "temuan_gedung" | "temuan_alat";
 /** daerah = wilayah dokumen sumber (data lama tanpa field dianggap DAERAH_DEFAULT, sesuai migrasi §78). */
-export interface Realisasi { id: string; sumber: Sumber; item_id?: string; tanggal: string; uraian: string; jumlah: number; kategori?: string; daerah?: string }
+export interface Realisasi { id: string; sumber: Sumber; item_id?: string; tanggal: string; uraian: string; jumlah: number; kategori?: string; daerah?: string; /** §184 dari menu Tagihan & Pembelian */ catat?: "PLN" | "PDAM" | "BELI" }
 export const LABEL_SUMBER: Record<Sumber, string> = { manual: "Input manual", helpdesk: "Helpdesk", servis: "Servis kendaraan", atk: "ATK", temuan_gedung: "Temuan gedung", temuan_alat: "Temuan alat" };
 
 export const angkaRupiah = (v: unknown) => (typeof v === "number" ? v : Number(String(v ?? "").replace(/[^\d]/g, "")) || 0);

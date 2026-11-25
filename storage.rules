@@ -31,6 +31,14 @@ service firebase.storage {
           && request.resource.contentType.matches('application/pdf|image/.*|application/acad|application/dxf')));
     }
 
+    // §184 Tagihan PLN/PDAM & nota pembelian -- khusus Admin GA; maks 15 MB; PDF / gambar
+    match /tagihan/{allPaths=**} {
+      allow read: if adminGA();
+      allow write: if adminGA()
+        && (request.resource == null || (request.resource.size < 15 * 1024 * 1024
+          && request.resource.contentType.matches('application/pdf|image/.*')));
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
