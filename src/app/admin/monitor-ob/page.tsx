@@ -10,6 +10,7 @@ import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
 import { KATEGORI, KET_KAT, WARNA_KAT, kategoriBarang, type Kategori } from "../../../lib/stokOB";
+import RondeZonaPanel from "../../../components/admin/RondeZonaPanel";
 
 // ==========================================
 // INTERFACES — disamakan sama bentuk data ASLI yang ditulis oleh ChecklistOBPage,
@@ -168,7 +169,7 @@ export default function MonitorOBPage() {
   });
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"CHECKLIST" | "STOCK" | "INSPEKSI" | "PLOT">("CHECKLIST");
+  const [activeTab, setActiveTab] = useState<"ZONA" | "CHECKLIST" | "STOCK" | "INSPEKSI" | "PLOT">("ZONA"); // §183 Ronde Zona = tab utama
   // Filter Bulan & Tahun Log Pembersihan (dipisah jadi 2 dropdown independen)
   const [filterBulanChecklist, setFilterBulanChecklist] = useState<string>("SEMUA");
   const [filterTahunChecklist, setFilterTahunChecklist] = useState<string>("SEMUA");
@@ -357,7 +358,8 @@ export default function MonitorOBPage() {
         {/* NAVIGASI TAB */}
         <div className="sa-tabs no-print" role="tablist" aria-label="Jenis laporan OB & CS">
           {([
-            { id: "CHECKLIST", label: "Log Pembersihan", icon: "broom", count: 0 },
+            { id: "ZONA", label: "Ronde Zona", icon: "broom", count: 0 },
+            { id: "CHECKLIST", label: "Log Checklist Lama", icon: "clipboardList", count: 0 },
             { id: "STOCK", label: "Stok & Pengadaan", icon: "box", count: daftarUrgent.length },
             { id: "INSPEKSI", label: "Inspeksi Fasilitas", icon: "search", count: rusakBaruBaruIni },
             // §181 tab Plot Tugas Harian dihapus (pembagian tugas dari Pola Zona)
@@ -381,7 +383,10 @@ export default function MonitorOBPage() {
         <Tile>
 
           {/* SEARCH BAR + FILTER BULAN (Checklist) + Export PDF */}
-          {activeTab !== "PLOT" && (
+          {/* §183 ronde pola zona (laporan harian OB & CS sekarang) */}
+          {activeTab === "ZONA" && <RondeZonaPanel />}
+
+          {activeTab !== "PLOT" && activeTab !== "ZONA" && (
             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
               <h2 style={{ margin: 0, color: "var(--ink)", fontSize: "17px", fontWeight: 700 }}>
                 {activeTab === "CHECKLIST" ? "Laporan Pembersihan" : activeTab === "STOCK" ? "Inventory & Pengadaan Gudang OB" : "Inspeksi Fasilitas Mingguan"}

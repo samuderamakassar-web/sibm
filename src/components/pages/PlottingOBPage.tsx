@@ -433,7 +433,7 @@ export default function PlottingOBPage({ backHref = "/dashboard/ob", backLabel =
       {/* §180 pola zona permanen -> plotting harian lama tidak dipakai */}
       {polaZona?.aktif && polaZona.permanen && (
         <div style={{ marginBottom: "16px", padding: "14px 16px", borderRadius: "16px", background: "var(--warn-50)", border: "1px solid var(--warn)", fontSize: "13.5px", color: "var(--ink)" }}>
-          <b>Plotting harian tidak dipakai lagi.</b> Pola zona sudah dipermanenkan — pembagian tugas OB & CS diatur di <b>Admin → Uji Coba Pola Zona</b> dan tampil otomatis di Checklist Zona & halaman utama. Plot di bawah tidak berpengaruh.
+          <b>Plotting harian tidak dipakai lagi.</b> Pola zona sudah dipermanenkan — pembagian tugas OB & CS diatur di <b>Admin → Pola Zona OB &amp; CS</b> dan tampil otomatis di Checklist Zona & halaman utama. Plot di bawah tidak berpengaruh.
         </div>
       )}
 

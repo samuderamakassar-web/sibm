@@ -143,7 +143,7 @@ interface PantauItem {
 }
 
 const PANTAU: PantauItem[] = [
-  { key: "ob", title: "OB & CS", sub: "checklist hari ini", path: "/admin/monitor-ob", icon: "broom", tone: "ok" },
+  { key: "ob", title: "OB & CS", sub: "ronde zona hari ini", path: "/admin/monitor-ob", icon: "broom", tone: "ok" },
   { key: "security", title: "Security", sub: "laporan patroli hari ini", path: "/admin/monitor-security", icon: "shield", tone: "info" },
   { key: "driver", title: "Driver", sub: "catatan armada hari ini", path: "/admin/monitor-driver", icon: "truck", tone: "warn" },
   { key: "tukarShift", title: "Tukar Shift", sub: "scan telat bulan ini", path: "/admin/monitor-tukar-shift", icon: "swap", tone: "red" },
@@ -199,9 +199,8 @@ async function muatHitungan(): Promise<Hitungan> {
   const awalBulan = new Date(`${hariIni.slice(0, 7)}-01T00:00:00+08:00`).getTime();
 
   const tugas: Record<KunciHitungan, () => Promise<number>> = {
-    // §169 + laporan Checklist Zona (uji coba pola zona OB)
-    ob: async () => (await hitung(query(collection(db, "ob_checklists"), where("tanggal", "==", hariIni))))
-      + (await hitung(query(collection(db, "ob_zona_laporan"), where("tanggal", "==", hariIni))).catch(() => 0)),
+    // §183 pola zona permanen: laporan harian OB & CS = ronde zona (checklist sesi lama tidak dipakai)
+    ob: () => hitung(query(collection(db, "ob_zona_laporan"), where("tanggal", "==", hariIni))),
     security: () => hitung(query(collection(db, "security_patrols"), where("waktu_laporan", ">=", awalHari))),
     driver: () => hitung(query(collection(db, "operational_vehicle_logs"), where("waktu_catat", ">=", awalHari))),
     tukarShift: async () => {

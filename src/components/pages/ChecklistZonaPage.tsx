@@ -140,7 +140,7 @@ export default function ChecklistZonaPage() {
     isi = <Tile>Uji coba pola zona sedang tidak berjalan hari ini. Gunakan menu Checklist biasa.
       <div style={{ marginTop: "12px" }}><button type="button" className="sa-btn is-soft" onClick={() => router.push("/dashboard/ob/checklist")}>Buka Checklist biasa</button></div></Tile>;
   } else if (!zona) {
-    isi = <Tile>Kamu tidak masuk daftar petugas uji coba pola zona. Hubungi Admin GA bila ini keliru.</Tile>;
+    isi = <Tile>Kamu tidak masuk daftar petugas pola zona. Hubungi Admin GA bila ini keliru.</Tile>;
   } else if (hariLibur) {
     isi = <Tile>Hari ini libur — tidak ada jadwal zona.</Tile>;
   } else {

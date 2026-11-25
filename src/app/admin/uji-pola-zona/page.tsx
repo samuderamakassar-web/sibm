@@ -13,7 +13,6 @@ import * as XLSX from "xlsx";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import { tanggalISOWITASekarang } from "../../../lib/shift";
@@ -46,7 +45,6 @@ function seninBerikut(hariIni: string) {
 
 export default function UjiPolaZonaPage() {
   const showToast = useToast();
-  const confirm = useConfirm();
   const { session, isReady } = useAuthGuard({ roles: ["Admin"], redirectTo: "/", deniedMessage: "Akses Ditolak! Halaman ini khusus Administrator." });
   const hariIni = tanggalISOWITASekarang();
   const { config, dimuat } = useUjiPolaZona();
@@ -147,7 +145,7 @@ export default function UjiPolaZonaPage() {
         aktif, ...jadwal, tim_tenant: timTenant, tim_publik: timPublik, area_tenant: at, area_publik: ap,
         pagi_bersama: pagiBersama, jam_pagi: jamPagi.trim(), cadangan_publik: cadanganPublik, jam_cadangan: jamCadangan.trim(),
         min_ronde: Math.max(1, Number(minRonde) || 1), toilet_mg1: toilet1, toilet_mg2: toilet2, tukar_lantai_mg1: tukarMg1, tukar_lantai_mg2: tukarMg2,
-        rotasi, permanen: config?.permanen === true, // §180 status permanen tidak berubah saat pengaturan disimpan
+        rotasi, permanen: true, // §183 pola zona sudah permanen (tidak ada lagi mode uji coba)
         tidak_hadir: config?.tidak_hadir || {}, // §176 tanda tidak hadir tidak ikut terhapus saat pengaturan disimpan
         paket_zona: config?.paket_zona ?? null, // §182 paket area tetap tidak ikut terhapus
         dibuat_oleh: session?.nama || "", waktu_update: serverTimestamp(),
@@ -166,28 +164,6 @@ export default function UjiPolaZonaPage() {
       await updateDoc(DOC_UJI_POLA(), { [`tidak_hadir.${tglHadir}`]: baru.length ? baru : deleteField(), waktu_update: serverTimestamp() });
       showToast(absen ? `${nama} ditandai hadir.` : `${nama} ditandai tidak hadir — tugas hari itu dibagi ulang.`, "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan kehadiran.", "error"); }
-  };
-
-  // §180 permanenkan pola zona: berlaku terus sejak tanggal mulai, plotting harian lama tidak dipakai lagi
-  const ubahPermanen = async (jadi: boolean) => {
-    const ok = await confirm(jadi
-      ? { title: "Permanenkan pola zona", message: "Pola zona berlaku terus tanpa tanggal selesai (pakai pengaturan rotasi & area di bawah). Plotting harian lama berhenti dibuat & disembunyikan, checklist sesi lama tetap nonaktif. Bisa dibatalkan kapan saja.", confirmText: "Permanenkan" }
-      : { title: "Kembali ke uji coba", message: `Pola zona kembali berbatas periode uji coba (${config ? tglIndo(config.selesai) : ""}). Setelah itu plotting & checklist lama berlaku lagi.`, confirmText: "Kembalikan", variant: "danger" });
-    if (!ok) return;
-    try {
-      await updateDoc(DOC_UJI_POLA(), { permanen: jadi, aktif: true, waktu_update: serverTimestamp() });
-      showToast(jadi ? "Pola zona permanen. Plotting lama tidak dipakai lagi." : "Kembali ke mode uji coba.", "success");
-    } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
-  };
-
-  const hentikan = async () => {
-    if (!(await confirm({ title: "Hentikan uji coba", message: "Checklist lama, pengingat sesi & potong poin kembali berlaku mulai hari ini. Data uji coba tetap tersimpan untuk evaluasi.", confirmText: "Hentikan", variant: "danger" }))) return;
-    try {
-      // dihentikan di tengah periode -> selesai dimajukan ke hari ini supaya evaluasi hanya menghitung hari yang berjalan
-      const selesaiBaru = config && hariIni >= config.mulai && hariIni < config.selesai ? { selesai: hariIni } : {};
-      await updateDoc(DOC_UJI_POLA(), { aktif: false, permanen: false, ...(config?.permanen ? {} : selesaiBaru), waktu_update: serverTimestamp() });
-      showToast("Uji coba dihentikan. Pola lama berlaku lagi.", "success");
-    } catch (e) { console.error(e); showToast("Gagal menghentikan.", "error"); }
   };
 
   // ---------- data evaluasi (semua otomatis dari aplikasi) ----------
@@ -283,7 +259,7 @@ export default function UjiPolaZonaPage() {
 
   if (!isReady || !session) return null;
 
-  const statusTeks = !config ? "Belum diatur" : !config.aktif ? "Tidak aktif" : hariIni < config.mulai ? `Terjadwal mulai ${tglIndo(config.mulai)}` : config.permanen ? "Pola zona PERMANEN" : hariIni > config.selesai ? "Selesai" : "Sedang berjalan";
+  const statusTeks = !config ? "Belum diatur" : !config.aktif ? "Tidak aktif" : hariIni < config.mulai ? `Terjadwal mulai ${tglIndo(config.mulai)}` : "Pola zona berlaku (permanen)";
   const warnaKes = { hijau: "var(--ok)", oranye: "var(--warn)", merah: "var(--red-600)" } as const;
   const sel: React.CSSProperties = { padding: "8px 10px", borderTop: "1px solid var(--line)", fontSize: "13px", textAlign: "left" };
 
@@ -302,18 +278,14 @@ export default function UjiPolaZonaPage() {
                 <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--muted)" }}>Status</div>
                 <div style={{ fontSize: "18px", fontWeight: 800 }}>{statusTeks}</div>
                 {config && <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>
-                  {config.permanen ? `Berlaku sejak ${tglIndo(config.mulai)} tanpa tanggal selesai` : `${tglIndo(config.mulai)} – ${tglIndo(config.selesai)}`}
-                  {" · "}{config.rotasi === "tetap" ? "zona tetap (tanpa rotasi)" : "zona ditukar tiap minggu"}
+                  Berlaku sejak {tglIndo(config.mulai)} · {config.rotasi === "tetap" ? "zona tetap, pemegang paket ditukar tiap pekan" : "zona ditukar tiap pekan"}
                 </div>}
               </div>
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {config?.aktif && !config.permanen && <button type="button" className="sa-btn is-primary" onClick={() => void ubahPermanen(true)}>Permanenkan pola ini</button>}
-                {config?.permanen && <button type="button" className="sa-btn is-soft" onClick={() => void ubahPermanen(false)}>Kembali ke uji coba</button>}
-                {config?.aktif && <button type="button" className="sa-btn is-soft" onClick={hentikan}>{config.permanen ? "Hentikan pola zona" : "Hentikan uji coba"}</button>}
               </div>
             </div>
             <p style={{ margin: "10px 0 0", fontSize: "12.5px", color: "var(--muted)" }}>
-              Selama berjalan: checklist per lantai & 3 sesi disembunyikan, poin harian dihitung dari laporan ronde zona (0 ronde −10, kurang dari minimal 0 + peringatan, memenuhi minimal +1, lebih +2; yang ditandai tidak hadir tidak dinilai), semua permintaan portal tampil di Zona Tenant (Zona Publik sebagai cadangan).
+              Pola kerja OB & CS: checklist per lantai & 3 sesi tidak dipakai lagi, poin harian dihitung dari laporan ronde zona (0 ronde −10, kurang dari minimal 0 + peringatan, memenuhi minimal +1, lebih +2; yang ditandai tidak hadir tidak dinilai), semua permintaan portal tampil di Zona Tenant (Zona Publik sebagai cadangan).
             </p>
           </Tile>
 
@@ -372,7 +344,7 @@ export default function UjiPolaZonaPage() {
           <Tile style={{ marginBottom: "16px" }}>
             <h3 style={{ margin: "0 0 10px", fontSize: "16px" }}>Jadwal</h3>
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "end" }}>
-              <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Mulai (Senin)<br /><input type="date" className="sa-field" value={mulai} onChange={(e) => setMulai(e.target.value)} /></label>
+              <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Berlaku sejak (Senin)<br /><input type="date" className="sa-field" value={mulai} onChange={(e) => setMulai(e.target.value)} /></label>
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Minimal ronde / hari<br /><input type="number" min={1} className="sa-field" style={{ width: "90px", cursor: "text" }} value={minRonde} onChange={(e) => setMinRonde(e.target.value)} /></label>
               {/* §175 pembagian beban */}
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}><input type="checkbox" checked={pagiBersama} onChange={(e) => setPagiBersama(e.target.checked)} /> Pagi bersama (ruang tenant oleh semua)<br />
@@ -380,14 +352,14 @@ export default function UjiPolaZonaPage() {
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}><input type="checkbox" checked={cadanganPublik} onChange={(e) => setCadanganPublik(e.target.checked)} /> Cadangan pelayanan (pemegang Area Lain, setiap hari)<br />
                 <input className="sa-field" style={{ width: "140px", cursor: "text" }} value={jamCadangan} onChange={(e) => setJamCadangan(e.target.value)} /></label>
               {/* §180 rotasi zona */}
-              <div style={{ fontSize: "12.5px", fontWeight: 700 }}>Rotasi zona<br />
+              {!paketBerlaku(config) && <div style={{ fontSize: "12.5px", fontWeight: 700 }}>Rotasi zona<br />
                 <div style={{ display: "flex", gap: "4px", marginTop: "2px" }}>
                   {([["tetap", "Zona tetap, tugas ditukar tiap pekan"], ["mingguan", "Zona ditukar tiap pekan"]] as const).map(([v, l]) => (
                     <button key={v} type="button" className={`sa-btn ${rotasi === v ? "is-dark" : "is-soft"}`} style={{ height: "34px" }} onClick={() => setRotasi(v)}>{l}</button>
                   ))}
                 </div>
-              </div>
-              <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Pekan 1: {tglIndo(jadwal.mulai)} – {tglIndo(tambahHari(jadwal.mulai, 4))}<br />Pekan 2 ({rotasi === "tetap" ? "lantai & toilet ditukar" : "zona ditukar"}): {tglIndo(jadwal.tukar_mulai)} – {tglIndo(jadwal.selesai)}{config?.permanen ? <><br />Permanen: pekan 1 & 2 bergantian terus.</> : null}</div>
+              </div>}
+              {!paketBerlaku(config) && <div style={{ fontSize: "12.5px", color: "var(--ink-soft)" }}>Pekan 1: {tglIndo(jadwal.mulai)} – {tglIndo(tambahHari(jadwal.mulai, 4))}<br />Pekan 2 ({rotasi === "tetap" ? "lantai & toilet ditukar" : "zona ditukar"}): mulai {tglIndo(jadwal.tukar_mulai)}, lalu bergantian terus.</div>}
             </div>
           </Tile>
 
@@ -474,8 +446,7 @@ export default function UjiPolaZonaPage() {
           )}
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button type="button" className="sa-btn is-primary" disabled={simpan} onClick={() => simpanConfig(true)}>{simpan ? "Menyimpan…" : "Simpan & aktifkan uji coba"}</button>
-            <button type="button" className="sa-btn is-soft" disabled={simpan} onClick={() => simpanConfig(false)}>Simpan sebagai draf</button>
+            <button type="button" className="sa-btn is-primary" disabled={simpan} onClick={() => simpanConfig(true)}>{simpan ? "Menyimpan…" : "Simpan pengaturan"}</button>
           </div>
         </>
       )}
@@ -531,7 +502,7 @@ export default function UjiPolaZonaPage() {
             </div>
           </Tile>
 
-          <h3 style={{ margin: "4px 0 8px", fontSize: "16px" }}>3. Pola lama vs uji coba</h3>
+          <h3 style={{ margin: "4px 0 8px", fontSize: "16px" }}>3. Pola lama vs pola zona</h3>
           <Tile style={{ marginBottom: "16px", overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "460px" }}>
               <thead><tr><th style={sel}>Ukuran</th><th style={sel}>Pola lama<br /><small>{hasil.lama.dari || "–"} – {hasil.lama.sampai || "–"}</small></th><th style={sel}>Uji coba<br /><small>{hasil.uji.dari || "–"} – {hasil.uji.sampai || "–"}</small></th></tr></thead>

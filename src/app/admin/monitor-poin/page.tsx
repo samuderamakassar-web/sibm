@@ -245,7 +245,7 @@ export default function MonitorPoinPage() {
         <details style={{ background: "var(--tile)", borderRadius: "20px", padding: "14px 18px", marginBottom: "16px" }}>
           <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: "14px", color: "var(--ink)" }}>Aturan potongan poin (otomatis, dihitung tiap pagi untuk hari kemarin)</summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginTop: "12px", fontSize: "12.5px", color: "var(--ink-soft)", lineHeight: 1.6 }}>
-            <div><b style={{ color: "var(--ink)" }}>OB & CS</b><br />Per hari, dari jumlah sesi checklist (Pagi/Siang/Sore) yang dilaporkan: tidak lapor sama sekali −10 · 1 sesi 0 + peringatan · 2 sesi +1 · 3 sesi (sempurna) +2. Poin bisa lebih dari 100. Tanpa potongan selama uji coba pola zona.</div>
+            <div><b style={{ color: "var(--ink)" }}>OB & CS</b><br />Per hari, dari jumlah laporan ronde pola zona (minimal ronde diatur di Pola Zona): tidak lapor sama sekali −10 · kurang dari minimal 0 + peringatan · tepat minimal +1 · lebih dari minimal +2. Yang ditandai sakit/izin & hari libur tidak dinilai. Poin bisa lebih dari 100.</div>
             <div><b style={{ color: "var(--ink)" }}>Security</b><br />−10 per shift di bawah minimum 2 sesi patroli.</div>
             <div><b style={{ color: "var(--ink)" }}>Driver</b> <span style={{ fontSize: "11px" }}>(hanya kendaraan bertanda &quot;dikelola tim Driver&quot; di Master Kendaraan)</span><br />
               −3 per trip &quot;Keluar&quot; yang tidak dicatat tiba/pulang dalam 12 jam (driver pembawa).<br />
