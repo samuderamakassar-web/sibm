@@ -15,6 +15,7 @@
 //   B  2 orang hadir   : X = pelayanan semua tenant + koridor, Y = toilet (2 ronde) + lobby + pantry; pagi cara cepat
 //   1 orang hadir      : darurat -- pelayanan, toilet, lobby; lainnya ditunda
 import { bagiPagi, bagiPerOrang, lantaiDari, type HasilBagi, type LantaiOk } from "./bagiZona";
+import type { IsiPaket } from "./paketZona";
 
 export type Peran = "Tenant" | "Toilet" | "Area Lain";
 export type Skenario = "normal" | "kurang-tenant" | "kurang-toilet" | "kurang-arealain" | "dua-orang" | "satu-orang" | "kosong";
@@ -45,6 +46,9 @@ export interface InputRencana {
   areaTenant: string[]; areaPublik: string[]; luas: Record<string, number>; mingguan: string[];
   lantai: LantaiOk[]; tidakHadir: string[];
   pagiBersama: boolean; cadangan: boolean; jamCadangan: string;
+  // §182 paket area tetap per orang (nama huruf kecil -> isi paket yang dipegang pekan itu). Bila ada, pembagian
+  // normal diambil dari sini (bukan dihitung dari luas) dan skenario tidak hadir membagi ulang isi paket ini.
+  tetap?: Record<string, IsiPaket>;
 }
 
 export const JUDUL_SKENARIO: Record<Skenario, string> = {
@@ -109,13 +113,16 @@ function bagiPagiOrang(c: InputRencana, urutan: string[]): HasilBagi {
 export function rencanaHari(c: InputRencana): RencanaHari {
   const mingguanSet = new Set(c.mingguan);
   const harianPublik = c.areaPublik.filter((a) => !mingguanSet.has(a));
-  const mingguanPublik = c.areaPublik.filter((a) => mingguanSet.has(a));
-  const toiletList = harianPublik.filter(areaToilet);
-  const lainList = harianPublik.filter((a) => !areaToilet(a));
-
   const absen = (n: string) => ada(c.tidakHadir, n);
   const toilet = pemegangToilet(c.publik, c.toilet);
   const areaLain = c.publik.filter((n) => !sama(n, toilet));
+  // §182 paket tetap: daftar toilet / area lain / mingguan = isi paket pemegangnya
+  const paket = (n: string): IsiPaket | undefined => c.tetap?.[n.trim().toLowerCase()];
+  const pkToilet = toilet ? paket(toilet) : undefined;
+  const pkLain = areaLain.map(paket).filter((x): x is IsiPaket => !!x);
+  const mingguanPublik = c.tetap ? unik([...(pkToilet?.mingguan || []), ...pkLain.flatMap((x) => x.mingguan)]) : c.areaPublik.filter((a) => mingguanSet.has(a));
+  const toiletList = c.tetap ? [...(pkToilet?.area || [])] : harianPublik.filter(areaToilet);
+  const lainList = c.tetap ? unik(pkLain.flatMap((x) => x.area)) : harianPublik.filter((a) => !areaToilet(a));
   const tH = c.tenant.filter((n) => !absen(n));
   const toiletH = !!toilet && !absen(toilet);
   const lainH = areaLain.filter((n) => !absen(n));
@@ -145,7 +152,7 @@ export function rencanaHari(c: InputRencana): RencanaHari {
 
   // ---------- pagi: rencana normal dulu, lalu bagian yang tidak hadir dipindah ----------
   const pagiNormal = bagiPagiOrang(c, [...c.tenant, ...areaLain, ...(toilet ? [toilet] : [])]);
-  const pagiDari = (n: string) => pagiNormal.orang.find((o) => sama(o.nama, n))?.area || [];
+  const pagiDari = (n: string) => (c.tetap ? paket(n)?.pagi || [] : pagiNormal.orang.find((o) => sama(o.nama, n))?.area || []);
   const pindahPagi = (dari: string, ke: string) => { cari(ke).pagi.push(...pagiDari(dari)); };
 
   if (skenario === "dua-orang" || skenario === "satu-orang") {
@@ -199,6 +206,8 @@ export function rencanaHari(c: InputRencana): RencanaHari {
     if (skenario === "kurang-tenant") {
       const semuaLantai = Array.from(lantaiTenant(c.areaTenant).keys()).sort();
       tenantO.forEach((o) => { o.pelayanan = semuaLantai; o.tugas = "Pelayanan semua tenant"; });
+    } else if (c.tetap) {
+      tenantO.forEach((o) => { o.pelayanan = [...(paket(o.nama)?.pelayanan || [])]; });
     } else {
       const p = bagiPelayanan(tenantO.map((o) => ({ nama: o.nama, pagi: o.pagi })), c.areaTenant);
       tenantO.forEach((o) => { o.pelayanan = p.get(o.nama) || []; });
@@ -211,11 +220,17 @@ export function rencanaHari(c: InputRencana): RencanaHari {
       const alO = lainH.map(cari);
       if (alO.length) {
         // area lain dibagi per orang bila lebih dari 1 (koridor tetap bersama)
-        const bagi = bagiPerOrang(lainList, alO.map((o) => o.nama), "Publik", c.lantai, c.luas, c.mingguan);
-        alO.forEach((o) => { o.area = [...(bagi.orang.find((x) => sama(x.nama, o.nama))?.area || []), ...bagi.bersama]; });
+        if (c.tetap) alO.forEach((o) => { o.area = [...(paket(o.nama)?.area || [])]; });
+        else {
+          const bagi = bagiPerOrang(lainList, alO.map((o) => o.nama), "Publik", c.lantai, c.luas, c.mingguan);
+          alO.forEach((o) => { o.area = [...(bagi.orang.find((x) => sama(x.nama, o.nama))?.area || []), ...bagi.bersama]; });
+        }
         if (!toiletH) alO[0].area.unshift(...toiletList);
         if (skenario === "normal") {
-          alO.forEach((o) => { o.mingguan = mingguanPublik.filter((_, i) => i % alO.length === alO.indexOf(o)); });
+          if (c.tetap) {
+            alO.forEach((o) => { o.mingguan = [...(paket(o.nama)?.mingguan || [])]; });
+            if (toiletH) cari(toilet).mingguan = [...(pkToilet?.mingguan || [])];
+          } else alO.forEach((o) => { o.mingguan = mingguanPublik.filter((_, i) => i % alO.length === alO.indexOf(o)); });
           if (c.cadangan) alO[0].cadangan = c.jamCadangan;
         } else {
           // A1: Area Lain jadi cadangan panjang, hanya area prioritas; sisanya cek 1x, mingguan ditunda

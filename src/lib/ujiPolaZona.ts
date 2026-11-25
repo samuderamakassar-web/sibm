@@ -16,6 +16,7 @@ import { db } from "./firebase";
 import { CHECKLIST_OB_BAWAAN, type AreaChecklist } from "./sopChecklist";
 import { uraiArea, type LantaiOk } from "./bagiZona";
 import { pemegangToilet, rencanaHari, type RencanaHari } from "./rencanaZona";
+import { isiPaket, paketCocok, pekanDitukar, pemegangPada, rapikanPaket, type PaketZona } from "./paketZona";
 
 export type Zona = "Tenant" | "Publik";
 export const DOC_UJI_POLA = () => doc(db, "ob_settings", "uji_pola_zona");
@@ -51,6 +52,8 @@ export interface UjiPolaZona {
   rotasi: "mingguan" | "tetap";
   // §180 pola zona dipermanenkan: berlaku terus sejak `mulai` (tanpa tanggal selesai), plotting lama tidak dipakai
   permanen: boolean;
+  // §182 paket area tetap (pembagian dibekukan, pemegang bergantian tiap pekan) -- null = dihitung otomatis
+  paket_zona: PaketZona | null;
   dibuat_oleh?: string;
   waktu_update?: Timestamp | null;
 }
@@ -98,9 +101,15 @@ export function hariKerja(a: string, b: string, libur: string[] = []): string[] 
 export const dalamUjiCoba = (c: UjiPolaZona | null, tanggal: string) => !!c && c.aktif && tanggal >= c.mulai && (c.permanen || tanggal <= c.selesai);
 /** Pekan ke-1/2 dalam siklus 2 minggu sejak `mulai` (bergantian terus bila permanen). */
 export const mingguKe = (c: UjiPolaZona, tanggal: string): 1 | 2 => {
+  const pk = paketBerlaku(c);
+  if (pk) return pekanDitukar(pk, tanggal) ? 2 : 1; // §182 pekan 1 = pekan acuan paket
   const hari = Math.round((Date.parse(`${tanggal}T00:00:00Z`) - Date.parse(`${c.mulai}T00:00:00Z`)) / 86400000);
   return hari >= 0 && Math.floor(hari / 7) % 2 === 1 ? 2 : 1;
 };
+
+/** §182 paket area tetap yang berlaku (rotasi "tetap" + pemegang cocok dengan anggota zona), selain itu null. */
+export const paketBerlaku = (c: UjiPolaZona | null): PaketZona | null =>
+  c && c.rotasi === "tetap" && paketCocok(c.paket_zona, c.tim_tenant, c.tim_publik) ? c.paket_zona : null;
 
 /** Pekan untuk penentuan ZONA: rotasi "tetap" -> zona tidak pernah ditukar. */
 const mingguZona = (c: UjiPolaZona, tanggal: string): 1 | 2 => (c.rotasi === "tetap" ? 1 : mingguKe(c, tanggal));
@@ -143,7 +152,10 @@ const susunanUntuk = (c: UjiPolaZona, tanggal: string) => susunanPekan({
 
 // ---------- §176 tugas harian per orang (pola Toilet / Area Lain + ketidakhadiran) ----------
 /** Pemegang toilet minggu itu (pilihan admin; bawaan anggota pertama Zona Publik minggu itu). */
-export const toiletMinggu = (c: UjiPolaZona, tanggal: string) => susunanUntuk(c, tanggal).toilet;
+export const toiletMinggu = (c: UjiPolaZona, tanggal: string) => {
+  const pk = paketBerlaku(c);
+  return pk ? pemegangPada(pk, tanggal).TOILET : susunanUntuk(c, tanggal).toilet;
+};
 export const tidakHadirPada = (c: UjiPolaZona | null, tanggal: string): string[] => c?.tidak_hadir?.[tanggal] || [];
 /** §179 urutan anggota Zona Tenant minggu itu: urutan menentukan lantai pagi & pelayanan (orang ke-1 = lantai
  *  terberat pertama). "Tukar lantai" membalik urutan supaya lantai bergilir antar periode. */
@@ -155,6 +167,18 @@ export const seninPekan = (iso: string) => tambahHari(iso, -((new Date(`${iso}T0
 /** Rencana tugas hari itu untuk semua peserta (null = di luar uji coba / akhir pekan). */
 export function rencanaUntuk(c: UjiPolaZona | null, tanggal: string, lantai: LantaiOk[]): RencanaHari | null {
   if (!c || !dalamUjiCoba(c, tanggal) || akhirPekan(tanggal)) return null;
+  const pk = paketBerlaku(c);
+  if (pk) {
+    // §182 paket tetap: pemegang pekan itu + isi paket (tidak bergantung luas Okupansi -> sama di semua halaman)
+    const h = pemegangPada(pk, tanggal);
+    const { isi } = isiPaket(pk, c.area_tenant, c.area_publik, c.mingguan);
+    const tetap = Object.fromEntries((["T1", "T2", "TOILET", "LAIN"] as const).filter((k) => h[k]).map((k) => [h[k].trim().toLowerCase(), isi[k]]));
+    return rencanaHari({
+      tenant: [h.T1, h.T2].filter(Boolean), publik: [h.TOILET, h.LAIN].filter(Boolean), toilet: h.TOILET,
+      areaTenant: c.area_tenant, areaPublik: c.area_publik, luas: c.luas_area, mingguan: c.mingguan, lantai,
+      tidakHadir: tidakHadirPada(c, tanggal), pagiBersama: c.pagi_bersama, cadangan: c.cadangan_publik, jamCadangan: c.jam_cadangan, tetap,
+    });
+  }
   return rencanaHari({
     tenant: tenantMinggu(c, tanggal), publik: anggotaZona(c, "Publik", tanggal), toilet: toiletMinggu(c, tanggal),
     areaTenant: c.area_tenant, areaPublik: c.area_publik, luas: c.luas_area, mingguan: c.mingguan, lantai,
@@ -232,6 +256,7 @@ export function rapikanConfig(d: Record<string, unknown> | undefined): UjiPolaZo
     tukar_lantai_mg1: d.tukar_lantai_mg1 === true, tukar_lantai_mg2: d.tukar_lantai_mg2 === true,
     rotasi: d.rotasi === "tetap" ? "tetap" : "mingguan",
     permanen: d.permanen === true,
+    paket_zona: rapikanPaket(d.paket_zona),
     tidak_hadir: rapikanTidakHadir(d.tidak_hadir),
     dibuat_oleh: typeof d.dibuat_oleh === "string" ? d.dibuat_oleh : "",
     waktu_update: (d.waktu_update as Timestamp) || null,

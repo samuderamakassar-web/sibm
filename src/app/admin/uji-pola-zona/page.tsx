@@ -20,10 +20,13 @@ import { tanggalISOWITASekarang } from "../../../lib/shift";
 import { CHECKLIST_OB_BAWAAN, useChecklistOB, type AreaChecklist } from "../../../lib/sopChecklist";
 import { ASUMSI_BAWAAN, WARNA_STATUS_BEBAN, type AsumsiBeban } from "../../../lib/sla";
 import { BOBOT_RINGAN, gabungArea, M2_PER_TOILET, uraiArea, type LantaiOk } from "../../../lib/bagiZona";
-import { rencanaHari, type RencanaHari } from "../../../lib/rencanaZona";
+import { rencanaHari } from "../../../lib/rencanaZona";
+import RencanaZonaKartu from "../../../components/admin/RencanaZonaKartu";
+import PaketZonaEditor from "../../../components/admin/PaketZonaEditor";
+import { LABEL_PAKET, pemegangPada, SEMUA_PAKET } from "../../../lib/paketZona";
 import PetugasUtilitasPicker from "../../../components/PetugasUtilitasPicker";
 import {
-  akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, mingguKe, rencanaUntuk, susunanPekan, tambahHari, useUjiPolaZona,
+  akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, mingguKe, paketBerlaku, rencanaUntuk, susunanPekan, tambahHari, useUjiPolaZona,
   type LaporanZona,
 } from "../../../lib/ujiPolaZona";
 import { hitungEvaluasi, type ChecklistLama, type DataPendukung, type KlaimLembur, type Permintaan } from "../../../lib/evaluasiZona";
@@ -33,35 +36,6 @@ const f1 = (n: number | null | undefined, d = 1) => (n === null || n === undefin
 const tglIndo = (iso: string) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "–");
 
 const samaNama = (a = "", b = "") => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-/** §176 kartu rencana tugas per orang untuk satu hari. */
-function KartuRencana({ r, jamPagi }: { r: RencanaHari; jamPagi: string }) {
-  const pendek = (a: string[]) => a.join("; ");
-  return (
-    <>
-      {r.skenario !== "normal" && (
-        <div style={{ margin: "6px 0", padding: "8px 12px", borderRadius: "12px", background: "var(--warn-50)", border: "1px solid var(--warn)", fontSize: "12.5px" }}>
-          <b>⚠️ {r.judul}</b> — tidak hadir: {r.tidakHadir.join(", ")}
-          {r.ditunda.length > 0 && <div style={{ color: "var(--muted)" }}>Ditunda: {pendek(r.ditunda)}</div>}
-        </div>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "8px", marginTop: "6px" }}>
-        {r.orang.map((o) => (
-          <div key={o.nama} style={{ padding: "10px 12px", borderRadius: "14px", background: "var(--bg)", fontSize: "12.5px", lineHeight: 1.55 }}>
-            <b style={{ fontSize: "13.5px" }}>{o.nama}</b>
-            <div style={{ fontWeight: 700, color: "var(--muted)" }}>Zona {o.zona} · {o.tugas}</div>
-            {o.pagi.length > 0 && <div><b>{jamPagi}{r.cepat ? " (cepat)" : ""}:</b> {pendek(o.pagi)}</div>}
-            {o.pelayanan.length > 0 && <div><b>Pelayanan:</b> {o.pelayanan.join(", ")}</div>}
-            {o.area.filter((a) => !o.pagi.includes(a)).length > 0 && <div><b>Area:</b> {pendek(o.area.filter((a) => !o.pagi.includes(a)))}</div>}
-            {o.cekSekali.length > 0 && <div><b>Cek 1x:</b> {pendek(o.cekSekali)}</div>}
-            {o.mingguan.length > 0 && <div><b>Mingguan:</b> {pendek(o.mingguan)}</div>}
-            {o.cadangan && <div><b>Cadangan pelayanan:</b> {o.cadangan}</div>}
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
 
 /** Senin terdekat setelah hari ini (atau hari ini bila Senin). */
 function seninBerikut(hariIni: string) {
@@ -175,6 +149,7 @@ export default function UjiPolaZonaPage() {
         min_ronde: Math.max(1, Number(minRonde) || 1), toilet_mg1: toilet1, toilet_mg2: toilet2, tukar_lantai_mg1: tukarMg1, tukar_lantai_mg2: tukarMg2,
         rotasi, permanen: config?.permanen === true, // §180 status permanen tidak berubah saat pengaturan disimpan
         tidak_hadir: config?.tidak_hadir || {}, // §176 tanda tidak hadir tidak ikut terhapus saat pengaturan disimpan
+        paket_zona: config?.paket_zona ?? null, // §182 paket area tetap tidak ikut terhapus
         dibuat_oleh: session?.nama || "", waktu_update: serverTimestamp(),
       });
       showToast(aktif ? "Uji coba disimpan & aktif sesuai tanggal." : "Disimpan sebagai draf (belum aktif).", "success");
@@ -352,14 +327,24 @@ export default function UjiPolaZonaPage() {
           {config?.aktif && (() => {
             const rHari = rencanaUntuk(config, tglHadir, lantaiOk);
             const peserta = [...config.tim_tenant, ...config.tim_publik];
+            // §182 label paket per orang (pemegang paket tanggal itu) + pilihan cepat tanggal
+            const pk = paketBerlaku(config);
+            const pemegang = pk ? pemegangPada(pk, tglHadir) : null;
+            const labelPaket = (nama: string) => (pemegang ? SEMUA_PAKET.find((k) => samaNama(pemegang[k], nama)) : undefined);
+            let besok = tambahHari(hariIni, 1);
+            while (akhirPekan(besok)) besok = tambahHari(besok, 1);
             return (
               <Tile style={{ marginBottom: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: "16px" }}>Kehadiran & tugas hari ini</h3>
-                    <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Tandai yang sakit/izin — tugasnya otomatis dibagi ke yang hadir dan langsung tampil di Checklist Zona staf.</div>
+                    <h3 style={{ margin: 0, fontSize: "16px" }}>Kehadiran & tugas · {tglIndo(tglHadir)}</h3>
+                    <div style={{ fontSize: "12.5px", color: "var(--muted)" }}>Klik nama yang sakit/izin — tugasnya otomatis dibagi ke yang hadir dan langsung tampil di Checklist Zona staf & halaman utama.</div>
                   </div>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                  <button type="button" className={`sa-btn ${tglHadir === hariIni ? "is-dark" : "is-soft"}`} style={{ height: "34px" }} onClick={() => setTglHadir(hariIni)}>Hari ini</button>
+                  <button type="button" className={`sa-btn ${tglHadir === besok ? "is-dark" : "is-soft"}`} style={{ height: "34px" }} onClick={() => setTglHadir(besok)}>{akhirPekan(tambahHari(hariIni, 1)) ? "Senin" : "Besok"}</button>
                   <input type="date" className="sa-field" value={tglHadir} min={config.mulai} max={config.permanen ? undefined : config.selesai} onChange={(e) => setTglHadir(e.target.value || hariIni)} />
+                  </div>
                 </div>
                 {!rHari ? <div style={{ marginTop: "10px", fontSize: "13px", color: "var(--muted)" }}>{akhirPekan(tglHadir) ? "Akhir pekan — tidak ada jadwal." : "Di luar periode uji coba."}</div> : (
                   <>
@@ -367,18 +352,22 @@ export default function UjiPolaZonaPage() {
                       {peserta.map((n) => {
                         const absen = tidakHadirTgl.some((x) => samaNama(x, n));
                         return (
-                          <button key={n} type="button" className={`sa-btn ${absen ? "is-dark" : "is-soft"}`} style={{ height: "34px" }} onClick={() => void ubahHadir(n)}>
-                            {absen ? "✕ Tidak hadir" : "✓ Hadir"} · {n}
+                          <button key={n} type="button" className="sa-btn" onClick={() => void ubahHadir(n)}
+                            style={{ height: "36px", fontWeight: 700, background: absen ? "var(--red-600)" : "var(--ok-50)", color: absen ? "#fff" : "var(--ok)", border: `1px solid ${absen ? "var(--red-600)" : "var(--ok)"}` }}>
+                            {absen ? "✕ Sakit/izin" : "✓ Hadir"} · {n}
                           </button>
                         );
                       })}
                     </div>
-                    <KartuRencana r={rHari} jamPagi={config.jam_pagi} />
+                    <RencanaZonaKartu r={rHari} jamPagi={config.jam_pagi} label={(o) => { const k = labelPaket(o.nama); return k ? LABEL_PAKET[k].replace("Publik · ", "") : undefined; }} />
                   </>
                 )}
               </Tile>
             );
           })()}
+
+          {/* §182 paket area tetap: isi dibekukan, pemegang bergantian tiap pekan */}
+          {config?.aktif && <PaketZonaEditor config={config} hariIni={hariIni} lantaiOk={lantaiOk} />}
 
           <Tile style={{ marginBottom: "16px" }}>
             <h3 style={{ margin: "0 0 10px", fontSize: "16px" }}>Jadwal</h3>
@@ -439,6 +428,11 @@ export default function UjiPolaZonaPage() {
           </Tile>
 
           {/* §173 pratinjau pembagian area per orang (otomatis per lantai, seimbang menurut luas Okupansi) */}
+          {paketBerlaku(config) ? (
+            <Tile style={{ marginBottom: "16px", fontSize: "13px", color: "var(--ink-soft)" }}>
+              <b>Pembagian tugas per orang</b> sudah dikunci di <b>📦 Paket area tetap</b> di atas — ubah isinya lewat tombol ✏️ Ubah isi paket. Area baru yang ditambahkan di daftar area perlu dipilihkan paketnya.
+            </Tile>
+          ) : (
           <Tile style={{ marginBottom: "16px" }}>
             <h3 style={{ margin: "0 0 4px", fontSize: "16px" }}>Pembagian tugas per orang (otomatis)</h3>
             <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "10px" }}>
@@ -472,11 +466,12 @@ export default function UjiPolaZonaPage() {
                       </label>
                     )}
                   </div>
-                  <KartuRencana r={r} jamPagi={jamPagi} />
+                  <RencanaZonaKartu r={r} jamPagi={jamPagi} />
                 </div>
               );
             })}
           </Tile>
+          )}
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button type="button" className="sa-btn is-primary" disabled={simpan} onClick={() => simpanConfig(true)}>{simpan ? "Menyimpan…" : "Simpan & aktifkan uji coba"}</button>
