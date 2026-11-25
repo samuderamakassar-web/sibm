@@ -3532,3 +3532,12 @@ User: catat tagihan PLN (unggah dokumen -> nilai kWh LWBP/WBP dll terbaca otomat
 5. Tab ESG (lingkungan): kWh, m3 air, liter solar, intensitas per m2 (luas dari Okupansi), emisi Scope 1 (solar x 2,68 kg/L) & Scope 2 (kWh x faktor grid). Faktor grid disimpan di settings/esg_faktor, default 0 = belum diisi (harus diisi dari faktor emisi sistem Sulbagsel ESDM).
 6. Menu biaya diringkas: kartu Manajemen = "Tagihan & Pembelian" + "Anggaran & Realisasi"; Evaluasi Biaya Tahunan pindah ke pencarian + tombol di header Anggaran (khusus administrator). Anggaran tab Realisasi menandai sumber Tagihan PLN/PDAM/Pembelian dan menolak hapus dari sana (harus dari menu Tagihan agar stok/file ikut dibereskan).
 7. Validasi RAB (data live, tidak diubah): 2026 155 baris, 2027 154 baris. Temuan untuk dirapikan user: listrik ada 2 baris (A17 "Biaya listrik (nett tenant)" & A28 "PLN"); asuransi gedung 2 baris (GA A28 & Perizinan B8); telepon 2 baris (A19 & A28); kode A28 dipakai 4 baris; "Pengadaan accu genset" di kelompok PLUMBING; OPEX belum ada jadwal kuartal (Q kosong -> status "Terlambat" baru muncul akhir tahun).
+
+## 185. Gabung Baris RAB Dobel (25 November 2026)
+
+User: gabungkan baris RAB yang dobel (temuan §184). Data live anggaran_rab diubah lewat skrip admin (cadangan: scratchpad backup-anggaran-rab-185.json); realisasi_biaya & peta_otomatis yang menunjuk baris lama dialihkan (tidak ada yang terdampak).
+1. Aturan: nilai berbeda -> pagu dijumlahkan ke baris yang dipertahankan (total RAB tetap); nilai sama persis -> dihitung 1x. Keterangan asal digabung ditulis di deskripsi baris.
+2. 2026 (155 -> 152 baris, total tetap Rp 4.776.394.163): A17 Biaya listrik + A28 PLN -> A17 Rp 37 jt/bln; B8 Biaya asuransi gedung + A28 Asuransi gedung -> B8 Rp 6,2 jt/bln; A19 Biaya telepon + A28 Telepon -> A19 Rp 320 rb/bln.
+3. 2027 (154 -> 151 baris, total Rp 1.484.600.000 -> Rp 1.469.000.000): listrik & asuransi (baris A28 bernilai 0) digabung; telepon dobel persis Rp 1,3 jt/bln dihitung 1x.
+4. Accu genset dipindah dari PLUMBING ke GENSET (2026 A5, 2027 A4). Kode A28 kini tinggal 1 baris (PAM/PDAM).
+5. Catatan: peta_otomatis RAB 2026 (helpdesk/servis/atk/temuan_gedung) menunjuk ID baris yang sudah tidak ada (sisa impor ulang RAB) -> biaya otomatis 2026 tampil "belum dialokasikan" sampai dipetakan ulang di tab Realisasi.
