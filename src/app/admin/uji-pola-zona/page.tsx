@@ -25,9 +25,10 @@ import PaketZonaEditor from "../../../components/admin/PaketZonaEditor";
 import { LABEL_PAKET, pemegangPada, SEMUA_PAKET } from "../../../lib/paketZona";
 import PetugasUtilitasPicker from "../../../components/PetugasUtilitasPicker";
 import {
-  akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, mingguKe, paketBerlaku, rencanaUntuk, susunanPekan, tambahHari, useUjiPolaZona,
+  akhirPekan, areaPublikBawaan, areaTenantBawaan, DOC_UJI_POLA, sinkronAreaTenantZona, fotoLaporan, jadwalDariMulai, KOLEKSI_LAPORAN_ZONA, mingguKe, paketBerlaku, rencanaUntuk, susunanPekan, tambahHari, useUjiPolaZona,
   type LaporanZona,
 } from "../../../lib/ujiPolaZona";
+import { bersamaBelumDiZona } from "../../../lib/areaOkupansi";
 import { hitungEvaluasi, type ChecklistLama, type DataPendukung, type KlaimLembur, type Permintaan } from "../../../lib/evaluasiZona";
 
 type Pilihan = "Tenant" | "Publik" | "";
@@ -112,6 +113,15 @@ export default function UjiPolaZonaPage() {
   const perluBawaan = dimuat && !config;
   // §173 luas Okupansi -> pratinjau pembagian area per orang
   const [lantaiOk, setLantaiOk] = useState<LantaiOk[]>([]);
+  // §186 ruang tenant mengikuti Okupansi: bila berbeda (mis. Okupansi diubah sebelum fitur ini), samakan otomatis
+  const tenantOk = useMemo(() => areaTenantBawaan(lantaiOk), [lantaiOk]);
+  const tenantBeda = !!config && lantaiOk.length > 0 && !tenantOk[0]?.startsWith("Ruang tenant")
+    && JSON.stringify(tenantOk.map((x) => x.split("|")[0].trim())) !== JSON.stringify(config.area_tenant);
+  useEffect(() => {
+    if (!tenantBeda) return;
+    sinkronAreaTenantZona(lantaiOk).catch((e) => console.error("[pola zona] sinkron okupansi:", e));
+  }, [tenantBeda, lantaiOk]);
+  const saranPublik = bersamaBelumDiZona(lantaiOk, areaPublik.split("\n").map((s) => s.split("|")[0].trim()).filter(Boolean));
   useEffect(() => {
     if (!isReady) return;
     return onSnapshot(doc(db, "okupansi_gedung", "data"), (s) => setLantaiOk((s.data()?.lantai as LantaiOk[]) || []), () => setLantaiOk([]));
@@ -136,7 +146,9 @@ export default function UjiPolaZonaPage() {
   const simpanConfig = async (aktif: boolean) => {
     if (new Date(`${mulai}T00:00:00Z`).getUTCDay() !== 1) return showToast("Tanggal mulai harus hari Senin.", "warning");
     if (!timTenant.length || !timPublik.length) return showToast("Pilih minimal 1 orang di Zona Tenant dan 1 di Zona Publik.", "warning");
-    const at = areaTenant.split("\n").map((s) => s.trim()).filter(Boolean);
+    // §186 Zona Tenant selalu dari Okupansi (teks lama hanya dipakai bila Okupansi belum punya unit terisi)
+    const dariOk = areaTenantBawaan(lantaiOk);
+    const at = lantaiOk.length && !dariOk[0].startsWith("Ruang tenant") ? dariOk : areaTenant.split("\n").map((s) => s.trim()).filter(Boolean);
     const ap = areaPublik.split("\n").map((s) => s.trim()).filter(Boolean);
     if (!at.length || !ap.length) return showToast("Daftar area Tenant & Publik tidak boleh kosong.", "warning");
     setSimpan(true);
@@ -150,7 +162,8 @@ export default function UjiPolaZonaPage() {
         paket_zona: config?.paket_zona ?? null, // §182 paket area tetap tidak ikut terhapus
         dibuat_oleh: session?.nama || "", waktu_update: serverTimestamp(),
       });
-      showToast(aktif ? "Uji coba disimpan & aktif sesuai tanggal." : "Disimpan sebagai draf (belum aktif).", "success");
+      await sinkronAreaTenantZona(lantaiOk).catch(() => false); // selaraskan paket pagi dengan ruang tenant terbaru
+      showToast(aktif ? "Pengaturan pola zona disimpan." : "Pengaturan disimpan (belum aktif).", "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
     setSimpan(false);
   };
@@ -387,14 +400,25 @@ export default function UjiPolaZonaPage() {
           <Tile style={{ marginBottom: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               <h3 style={{ margin: 0, fontSize: "16px" }}>Daftar area (1 baris = 1 item centang)</h3>
-              <button type="button" className="sa-btn is-soft" onClick={() => void isiAreaBawaan()}>Isi ulang dari Okupansi & SOP</button>
+              <button type="button" className="sa-btn is-soft" onClick={() => void isiAreaBawaan()}>Isi ulang Zona Publik dari SOP</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px", marginTop: "10px" }}>
-              <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Zona Tenant (semua lantai, semua tenant)
-                <textarea className="sa-field" style={{ width: "100%", height: "220px", padding: "10px", cursor: "text", marginTop: "4px" }} value={areaTenant} onChange={(e) => setAreaTenant(e.target.value)} />
-              </label>
+              <div style={{ fontSize: "12.5px", fontWeight: 700 }}>Zona Tenant — otomatis dari Okupansi ({tenantOk.length} ruang)
+                <div style={{ marginTop: "4px", padding: "10px", borderRadius: "12px", border: "1px solid var(--line)", background: "var(--bg)", height: "220px", overflowY: "auto", boxSizing: "border-box" }}>
+                  {tenantOk.map((a) => <div key={a} style={{ fontWeight: 400, fontSize: "12.5px", padding: "2px 0" }}>{a.split("|")[0].trim()} <span style={{ color: "var(--muted)" }}>{a.split("|")[1] ? `· ${a.split("|")[1].trim()} m²` : ""}</span></div>)}
+                </div>
+                <div style={{ fontWeight: 400, fontSize: "11.5px", color: "var(--muted)", marginTop: "4px" }}>Tenant pindah/tambah/keluar → ubah di menu <a href="/admin/okupansi">Okupansi</a>; ruang tenant & paket pagi ikut menyesuaikan.</div>
+              </div>
               <label style={{ fontSize: "12.5px", fontWeight: 700 }}>Zona Publik
                 <textarea className="sa-field" style={{ width: "100%", height: "220px", padding: "10px", cursor: "text", marginTop: "4px" }} value={areaPublik} onChange={(e) => setAreaPublik(e.target.value)} />
+                {saranPublik.length > 0 && (
+                  <div style={{ fontWeight: 400, fontSize: "11.5px", color: "var(--muted)", marginTop: "4px" }}>
+                    Area bersama di Okupansi yang belum ada di Zona Publik (klik untuk menambah):
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
+                      {saranPublik.map((s) => <button key={s} type="button" className="sa-btn is-soft" style={{ height: "26px", fontSize: "11.5px", padding: "0 8px" }} onClick={() => setAreaPublik((v) => `${v.trim()}\n${s}`)}>+ {s}</button>)}
+                    </div>
+                  </div>
+                )}
               </label>
             </div>
           </Tile>

@@ -17,6 +17,7 @@ import KinerjaSayaPanel from "../KinerjaSayaPanel";
 import PetugasUtilitasPicker from "@/components/PetugasUtilitasPicker";
 import { useUjiPolaZona, zonaUntuk, mingguKe, cadanganHariIni, dalamJam } from "@/lib/ujiPolaZona";
 import { JADWAL_OPNAME, statusSesi } from "@/lib/stokOB";
+import TugasZonaSayaPanel from "../TugasZonaSayaPanel";
 
 // ==========================================
 // IKON — SVG garis, set sama dengan portal utama & shell admin (src/app/page.tsx, src/app/admin/page.tsx)
@@ -394,6 +395,9 @@ export default function DashboardOBPage() {
         </div>
 
         <AbsensiCard picName={picName} departemen="OB & CS" />
+
+        {/* §186 tugas pola zona saya hari ini + progres ronde + poin bulan ini */}
+        {picName && zonaHariIni && <TugasZonaSayaPanel nama={picName} config={ujiZona} />}
 
         {/* §123 OB Pelayanan: permintaan pelayanan paling atas */}
         {sayaCadangan && (

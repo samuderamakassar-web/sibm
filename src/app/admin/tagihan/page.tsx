@@ -23,14 +23,15 @@ import type { ItemRab } from "../../../lib/realisasiBiaya";
 import { bacaBarisPdf } from "../../../lib/bacaPdf";
 import {
   bacaPDAM, bacaPLN, FAKTOR_DEFAULT, hitungEsg, KATEGORI_BELI, KATEGORI_GENSET, kwhTotal, literBeli, PDAM_KOSONG, PLN_KOSONG, rekapBulanan,
-  rentangPekan, saranBarisRab,
-  type CatatanBiaya, type DataBeli, type DataPDAM, type DataPLN, type FaktorEsg, type ItemBeli, type JenisCatat, type KategoriBeli,
+  rentangPekan, saranBarisRab, JENIS_PEMDA, INSTANSI_PEMDA, TAGIHAN_BULANAN, kunciTagihan,
+  type CatatanBiaya, type JenisPemda, type DataBeli, type DataPDAM, type DataPLN, type FaktorEsg, type ItemBeli, type JenisCatat, type KategoriBeli,
 } from "../../../lib/tagihanUtilitas";
 
-type Tab = "REKAP" | "PLN" | "PDAM" | "BELI" | "ESG";
+type Tab = "REKAP" | "PLN" | "PDAM" | "PEMDA" | "BELI" | "ESG";
 interface Stok { id: string; nama_barang: string; qty: number; kategori?: string; satuan?: string }
 interface Real { id: string; item_id?: string; jumlah: number; tanggal: string; catat?: JenisCatat }
 interface FormTagihan { jenis: "PLN" | "PDAM"; editId?: string; periode: string; tanggal: string; item_id: string; jumlah: string; catatan: string; pln: DataPLN; pdam: DataPDAM; file: File | null; file_path?: string; file_nama?: string; info: string }
+interface FormPemda { editId?: string; jenis: JenisPemda; instansi: string; nomor: string; periode: string; tanggal: string; jatuh_tempo: string; jumlah: string; item_id: string; catatan: string; file: File | null; file_path?: string }
 interface FormBeli { tanggal: string; kategori: KategoriBeli; vendor: string; item_id: string; items: (Omit<ItemBeli, "qty" | "harga"> & { qty: string; harga: string })[]; jam_genset: string; catatan: string; file: File | null }
 
 const rupiah = (n: number) => "Rp " + new Intl.NumberFormat("id-ID").format(Math.round(n));
@@ -40,7 +41,8 @@ const num = (s: string) => Number(String(s).replace(/\./g, "").replace(",", ".")
 const NAMA_BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const labelBulan = (ym: string) => (ym ? `${NAMA_BULAN[+ym.slice(5, 7) - 1]} ${ym.slice(0, 4)}` : "—");
 const tglPendek = (iso: string) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "—");
-const WARNA: Record<JenisCatat, string> = { PLN: "#d97706", PDAM: "#0284c7", BELI: "#7c3aed" };
+const WARNA: Record<JenisCatat, string> = { PLN: "#d97706", PDAM: "#0284c7", BELI: "#7c3aed", PEMDA: "#be123c" };
+const LABEL_JENIS: Record<JenisCatat, string> = { PLN: "Listrik PLN", PDAM: "Air PDAM", BELI: "Pembelian", PEMDA: "Pemda & retribusi" };
 const ITEM_BARU = { nama: "", qty: "1", satuan: "pcs", harga: "" };
 const MAKS_MB = 15;
 
@@ -105,6 +107,7 @@ export default function TagihanPage() {
   const [luas, setLuas] = useState(0);
   const [formT, setFormT] = useState<FormTagihan | null>(null);
   const [formB, setFormB] = useState<FormBeli | null>(null);
+  const [formP, setFormP] = useState<FormPemda | null>(null);
   const [membaca, setMembaca] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
   const [modeRekap, setModeRekap] = useState<"PEKAN" | "BULAN" | "TAHUN">("PEKAN");
@@ -141,7 +144,7 @@ export default function TagihanPage() {
   const cat = useMemo(() => catatan || [], [catatan]);
   const bulanTahun = useMemo(() => Array.from({ length: 12 }, (_, i) => `${tahun}-${String(i + 1).padStart(2, "0")}`), [tahun]);
   const rekap = useMemo(() => rekapBulanan(cat), [cat]);
-  const perBulan = bulanTahun.map((b) => rekap.get(b) || { bulan: b, kwh: 0, rpPln: 0, m3: 0, rpPdam: 0, literSolar: 0, rpSolar: 0, rpOli: 0, rpBeli: 0, perKategori: {} as Record<string, number> });
+  const perBulan = bulanTahun.map((b) => rekap.get(b) || { bulan: b, kwh: 0, rpPln: 0, m3: 0, rpPdam: 0, literSolar: 0, rpSolar: 0, rpOli: 0, rpBeli: 0, rpPemda: 0, perKategori: {} as Record<string, number>, perPemda: {} as Record<string, number> });
 
   if (!isReady) return null;
 
@@ -159,6 +162,43 @@ export default function TagihanPage() {
   const pln = cat.filter((c) => c.catat === "PLN").sort((a, b) => a.periode.localeCompare(b.periode));
   const pdam = cat.filter((c) => c.catat === "PDAM").sort((a, b) => a.periode.localeCompare(b.periode));
   const beli = cat.filter((c) => c.catat === "BELI");
+  const pemda = cat.filter((c) => c.catat === "PEMDA");
+
+  // ---------- form tagihan Pemda (§186) ----------
+  const bukaFormPemda = (c?: CatatanBiaya, jenis: JenisPemda = "Iuran Sampah") => {
+    if (c?.pemda) {
+      setFormP({ editId: c.id, jenis: c.pemda.jenis, instansi: c.pemda.instansi, nomor: c.pemda.nomor, periode: c.periode, tanggal: c.tanggal, jatuh_tempo: c.pemda.jatuh_tempo, jumlah: String(c.jumlah), item_id: c.item_id || "", catatan: c.catatan || "", file: null, file_path: c.file_path });
+      return;
+    }
+    // isi dari catatan terakhir jenis yang sama (instansi, nomor, nominal biasanya tetap)
+    const lalu = pemda.filter((x) => x.pemda?.jenis === jenis).sort((a, b) => b.periode.localeCompare(a.periode))[0];
+    setFormP({ jenis, instansi: lalu?.pemda?.instansi || INSTANSI_PEMDA[jenis], nomor: lalu?.pemda?.nomor || "", periode: hariIni.slice(0, 7), tanggal: hariIni, jatuh_tempo: "", jumlah: lalu ? String(lalu.jumlah) : "", item_id: lalu?.item_id || saranBarisRab(items, jenis), catatan: "", file: null });
+  };
+  const simpanPemda = async () => {
+    if (!formP) return;
+    const f = formP, jumlah = num(f.jumlah);
+    if (!/^\d{4}-\d{2}$/.test(f.periode)) return showToast("Periode wajib diisi.", "warning");
+    if (!f.tanggal) return showToast("Tanggal bayar wajib diisi.", "warning");
+    if (!(jumlah > 0)) return showToast("Jumlah wajib diisi.", "warning");
+    const kembar = pemda.find((c) => c.id !== f.editId && c.periode === f.periode && c.pemda?.jenis === f.jenis && (c.pemda?.nomor || "") === f.nomor.trim());
+    if (kembar && !(await confirm(`${f.jenis} ${labelBulan(f.periode)} sudah tercatat (${rupiah(kembar.jumlah)}). Tetap simpan sebagai catatan kedua?`))) return;
+    setMenyimpan(true);
+    try {
+      let file: { path: string; nama: string } | null = null;
+      if (f.file) file = await unggah(f.file, `${f.periode.slice(0, 4)}/pemda`);
+      const data = { catat: "PEMDA", periode: f.periode, tanggal: f.tanggal, item_id: f.item_id, kategori: itemPerId.get(f.item_id)?.kelompok || "Pemda",
+        uraian: `${f.jenis} ${labelBulan(f.periode)}${f.instansi.trim() ? ` · ${f.instansi.trim()}` : ""}`, jumlah, catatan: f.catatan.trim(),
+        pemda: { jenis: f.jenis, instansi: f.instansi.trim(), nomor: f.nomor.trim(), jatuh_tempo: f.jatuh_tempo },
+        ...(file ? { file_path: file.path, file_nama: file.nama } : {}) };
+      if (f.editId) {
+        await updateDoc(doc(db, "realisasi_biaya", f.editId), { ...data, diubah_oleh: session?.nama || "-", diubah_pada: serverTimestamp() });
+        if (file && f.file_path) deleteObject(ref(storage, f.file_path)).catch(() => {});
+      } else await setDoc(doc(collection(db, "realisasi_biaya")), { ...data, daerah: daerahTulis(), dicatat_oleh: session?.nama || "-", dibuat_pada: serverTimestamp() });
+      showToast(`${f.jenis} ${labelBulan(f.periode)} tersimpan.`, "success");
+      setFormP(null);
+    } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
+    finally { setMenyimpan(false); }
+  };
 
   // ---------- form tagihan ----------
   const bukaFormTagihan = (jenis: "PLN" | "PDAM", c?: CatatanBiaya) => {
@@ -288,7 +328,7 @@ export default function TagihanPage() {
   };
   const isiRekap = cat.filter(dalamRekap);
   const totalRekap = isiRekap.reduce((a, c) => a + c.jumlah, 0);
-  const perJenis = (["PLN", "PDAM", "BELI"] as JenisCatat[]).map((j) => ({ j, n: isiRekap.filter((c) => c.catat === j).reduce((a, c) => a + c.jumlah, 0) }));
+  const perJenis = (["PLN", "PDAM", "PEMDA", "BELI"] as JenisCatat[]).map((j) => ({ j, n: isiRekap.filter((c) => c.catat === j).reduce((a, c) => a + c.jumlah, 0) }));
   const perKat = new Map<string, number>();
   isiRekap.filter((c) => c.catat === "BELI").forEach((c) => perKat.set(c.beli?.kategori || "Lainnya", (perKat.get(c.beli?.kategori || "Lainnya") || 0) + c.jumlah));
   // anggaran: baris RAB yang dipakai menu ini
@@ -303,7 +343,9 @@ export default function TagihanPage() {
 
   const salinRingkasan = async () => {
     const baris = [`*Rekap Tagihan & Pembelian — ${judulRekap}*`, `Total: ${rupiah(totalRekap)} (${isiRekap.length} catatan)`];
-    perJenis.forEach(({ j, n }) => { if (n) baris.push(`• ${j === "BELI" ? "Pembelian" : j}: ${rupiah(n)}`); });
+    perJenis.forEach(({ j, n }) => { if (n) baris.push(`• ${LABEL_JENIS[j]}: ${rupiah(n)}`); });
+    const belumBayar = TAGIHAN_BULANAN.filter((t) => !cat.some((c) => kunciTagihan(c) === t.kunci && c.periode === bulanRekap));
+    if (modeRekap !== "TAHUN" && belumBayar.length) baris.push(`⏳ Belum tercatat ${labelBulan(bulanRekap)}: ${belumBayar.map((t) => t.label).join(", ")}`);
     perKat.forEach((n, k) => baris.push(`   – ${k}: ${rupiah(n)}`));
     const r = modeRekap === "BULAN" ? rekap.get(bulanRekap) : null;
     if (r?.kwh) baris.push(`Listrik: ${fmt(r.kwh)} kWh (${rupiah(r.rpPln / r.kwh)}/kWh)`);
@@ -320,12 +362,15 @@ export default function TagihanPage() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perBulan.map((r) => ({
       Bulan: labelBulan(r.bulan), "Listrik kWh": r.kwh, "PLN (Rp)": r.rpPln, "Rp/kWh": r.kwh ? Math.round(r.rpPln / r.kwh) : "", "Air m3": r.m3, "PDAM (Rp)": r.rpPdam,
       "Solar (L)": r.literSolar, "Solar (Rp)": r.rpSolar, "Oli & cons. genset (Rp)": r.rpOli, ...Object.fromEntries(KATEGORI_BELI.filter((k) => !KATEGORI_GENSET.includes(k)).map((k) => [`${k} (Rp)`, r.perKategori[k] || 0])),
-      "Total (Rp)": r.rpPln + r.rpPdam + r.rpBeli,
+      ...Object.fromEntries(JENIS_PEMDA.map((k) => [`${k} (Rp)`, r.perPemda[k] || 0])),
+      "Total (Rp)": r.rpPln + r.rpPdam + r.rpPemda + r.rpBeli,
     }))), "Rekap Bulanan");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pln.map((c) => ({ Rekening: labelBulan(c.periode), "Tgl bayar": c.tanggal, "ID Pel": c.pln?.id_pel, "Stand awal LWBP": c.pln?.lwbp_awal, "Stand akhir LWBP": c.pln?.lwbp_akhir, "Faktor kali": c.pln?.faktor_kali,
       "kWh LWBP": c.pln?.kwh_lwbp, "kWh WBP": c.pln?.kwh_wbp, kVArh: c.pln?.kvarh, "Rp TTL": c.pln?.rp_ttl, PPN: c.pln?.ppn, "PBJT/PPJ": c.pln?.ppj, Materai: c.pln?.materai, "Total tagihan": c.pln?.total, Dibayar: c.jumlah, Subsidi: c.pln?.subsidi }))), "PLN");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pdam.map((c) => ({ Bulan: labelBulan(c.periode), "Tgl": c.tanggal, "No Air": c.pdam?.no_air, "Meter awal": c.pdam?.m_awal, "Meter akhir": c.pdam?.m_akhir, "Pakai m3": c.pdam?.pakai,
       "By. pakai": c.pdam?.by_pakai, "By. adm": c.pdam?.by_adm, "By. pem": c.pdam?.by_pem, Denda: c.pdam?.denda, Total: c.jumlah }))), "PDAM");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pemda.map((c) => ({ Periode: labelBulan(c.periode), "Tgl bayar": c.tanggal, Jenis: c.pemda?.jenis, Instansi: c.pemda?.instansi, "No. tagihan / objek": c.pemda?.nomor,
+      "Jatuh tempo": c.pemda?.jatuh_tempo || "", Jumlah: c.jumlah, "Baris RAB": itemPerId.get(c.item_id)?.uraian || "", Catatan: c.catatan || "" }))), "Pemda");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(beli.flatMap((c) => (c.beli?.items || []).map((i) => ({ Tanggal: c.tanggal, Kategori: c.beli?.kategori, Vendor: c.beli?.vendor, Barang: i.nama, Qty: i.qty, Satuan: i.satuan, Harga: i.harga, Subtotal: i.qty * i.harga,
       "Ke stok OB": i.stok_nama || "", "Jam genset": c.beli?.jam_genset || "", "Baris RAB": itemPerId.get(c.item_id)?.uraian || "", "Dicatat": c.dicatat_oleh || "" })))), "Pembelian");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(barisDipakai.map((x) => ({ Kelompok: x.i!.kelompok, Kode: x.i!.kode, Uraian: x.i!.uraian, "Pagu tahun": x.p, Realisasi: x.r, "Serapan %": x.p ? Math.round((x.r / x.p) * 100) : "", Sisa: x.p - x.r }))), "Anggaran");
@@ -343,7 +388,7 @@ export default function TagihanPage() {
   );
   const barisCatat = (c: CatatanBiaya) => (
     <div key={c.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "9px 0", borderBottom: "1px solid var(--line)" }}>
-      <span style={{ fontSize: "10.5px", fontWeight: 800, padding: "2px 7px", borderRadius: "999px", background: WARNA[c.catat], color: "#fff", flexShrink: 0 }}>{c.catat === "BELI" ? c.beli?.kategori || "Beli" : c.catat}</span>
+      <span style={{ fontSize: "10.5px", fontWeight: 800, padding: "2px 7px", borderRadius: "999px", background: WARNA[c.catat], color: "#fff", flexShrink: 0 }}>{c.catat === "BELI" ? c.beli?.kategori || "Beli" : c.catat === "PEMDA" ? c.pemda?.jenis || "Pemda" : c.catat}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: "13px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis" }}>{c.uraian}</div>
         <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{tglPendek(c.tanggal)} · {itemPerId.get(c.item_id)?.uraian ? `RAB: ${itemPerId.get(c.item_id)!.uraian}` : <span style={{ color: "var(--warn)" }}>belum dialokasikan ke RAB</span>}{c.dicatat_oleh ? ` · ${c.dicatat_oleh}` : ""}</div>
@@ -351,7 +396,7 @@ export default function TagihanPage() {
       <div style={{ fontSize: "13px", fontWeight: 800, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{rupiah(c.jumlah)}</div>
       <div style={{ display: "flex", gap: "4px" }}>
         {c.file_path && <button type="button" className="sa-btn is-soft" style={{ height: "30px", padding: "0 9px" }} title="Buka file" onClick={() => bukaFile(c.file_path!).catch(() => showToast("Gagal membuka file.", "error"))}>📄</button>}
-        {c.catat !== "BELI" && <button type="button" className="sa-btn is-soft" style={{ height: "30px", padding: "0 9px" }} title="Ubah" onClick={() => bukaFormTagihan(c.catat as "PLN" | "PDAM", c)}>✎</button>}
+        {c.catat !== "BELI" && <button type="button" className="sa-btn is-soft" style={{ height: "30px", padding: "0 9px" }} title="Ubah" onClick={() => (c.catat === "PEMDA" ? bukaFormPemda(c) : bukaFormTagihan(c.catat as "PLN" | "PDAM", c))}>✎</button>}
         <button type="button" className="sa-btn is-soft" style={{ height: "30px", padding: "0 9px", color: "var(--red-600)" }} title="Hapus" onClick={() => hapus(c)}>✕</button>
       </div>
     </div>
@@ -374,13 +419,14 @@ export default function TagihanPage() {
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
         <button type="button" className="sa-btn is-primary" onClick={() => bukaFormTagihan("PLN")}>⚡ Tagihan PLN</button>
         <button type="button" className="sa-btn is-primary" onClick={() => bukaFormTagihan("PDAM")}>💧 Tagihan PDAM</button>
+        <button type="button" className="sa-btn is-primary" onClick={() => bukaFormPemda()}>🏛️ Tagihan Pemda</button>
         <button type="button" className="sa-btn is-primary" onClick={() => bukaFormBeli()}>🛒 Pembelian</button>
         <button type="button" className="sa-btn is-soft" onClick={() => bukaFormBeli("Solar Genset")}>⛽ Solar / Oli genset</button>
         <a className="sa-btn is-soft" href="/admin/anggaran" style={{ marginLeft: "auto" }}>Anggaran & Realisasi →</a>
       </div>
 
       <div className="sa-tabs" role="tablist" style={{ width: "fit-content", maxWidth: "100%", marginBottom: "16px" }}>
-        {([["REKAP", "Rekap & Meeting"], ["PLN", `Listrik PLN (${pln.length})`], ["PDAM", `Air PDAM (${pdam.length})`], ["BELI", `Pembelian (${beli.length})`], ["ESG", "ESG"]] as const).map(([k, l]) => (
+        {([["REKAP", "Rekap & Meeting"], ["PLN", `Listrik PLN (${pln.length})`], ["PDAM", `Air PDAM (${pdam.length})`], ["PEMDA", `Pemda & Retribusi (${pemda.length})`], ["BELI", `Pembelian (${beli.length})`], ["ESG", "ESG"]] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sa-tab${tab === k ? " is-active" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -401,7 +447,7 @@ export default function TagihanPage() {
             <h2 style={{ margin: "12px 0 8px", fontSize: "16px", fontWeight: 800 }}>{judulRekap}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
               <Kpi label="Total pengeluaran" nilai={rupiah(totalRekap)} sub={`${isiRekap.length} catatan`} />
-              {perJenis.map(({ j, n }) => <Kpi key={j} label={j === "BELI" ? "Pembelian" : j === "PLN" ? "Listrik PLN" : "Air PDAM"} nilai={rupiah(n)} warna={WARNA[j]} />)}
+              {perJenis.map(({ j, n }) => <Kpi key={j} label={LABEL_JENIS[j]} nilai={rupiah(n)} warna={WARNA[j]} />)}
             </div>
             {perKat.size > 0 && (
               <div style={{ marginTop: "12px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -410,18 +456,36 @@ export default function TagihanPage() {
             )}
           </Tile>
 
+          {modeRekap !== "TAHUN" && (
+            <Tile style={{ marginBottom: "14px" }}>
+              <h3 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 800 }}>Tagihan rutin {labelBulan(bulanRekap)}</h3>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {TAGIHAN_BULANAN.map((t) => {
+                  const c = cat.find((x) => kunciTagihan(x) === t.kunci && x.periode === bulanRekap);
+                  return (
+                    <button key={t.kunci} type="button" onClick={() => { if (c) return; if (t.kunci === "PLN" || t.kunci === "PDAM") bukaFormTagihan(t.kunci); else bukaFormPemda(undefined, t.kunci as JenisPemda); }}
+                      style={{ border: `1px solid ${c ? "var(--ok)" : "var(--warn)"}`, background: c ? "var(--ok-50)" : "var(--warn-50)", borderRadius: "12px", padding: "8px 12px", textAlign: "left", cursor: c ? "default" : "pointer", fontFamily: "inherit", color: "var(--ink)" }}>
+                      <div style={{ fontSize: "12.5px", fontWeight: 800 }}>{c ? "✓" : "⏳"} {t.label}</div>
+                      <div style={{ fontSize: "11.5px", color: "var(--muted)" }}>{c ? rupiah(c.jumlah) : "belum dicatat — klik untuk isi"}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Tile>
+          )}
+
           {modeRekap === "TAHUN" && (
             <Tile style={{ marginBottom: "14px", overflowX: "auto" }}>
               <h3 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 800 }}>Per bulan {tahun}</h3>
               <table className="tg-tabel" style={{ minWidth: "760px" }}>
-                <thead><tr><th>Bulan</th><th className="n">kWh</th><th className="n">PLN</th><th className="n">m³</th><th className="n">PDAM</th><th className="n">Solar L</th><th className="n">Genset Rp</th><th className="n">Pembelian lain</th><th className="n">Total</th></tr></thead>
+                <thead><tr><th>Bulan</th><th className="n">kWh</th><th className="n">PLN</th><th className="n">m³</th><th className="n">PDAM</th><th className="n">Pemda</th><th className="n">Solar L</th><th className="n">Genset Rp</th><th className="n">Pembelian lain</th><th className="n">Total</th></tr></thead>
                 <tbody>
                   {perBulan.map((r) => (
-                    <tr key={r.bulan}><td>{labelBulan(r.bulan)}</td><td className="n">{r.kwh ? fmt(r.kwh) : "–"}</td><td className="n">{r.rpPln ? ringkas(r.rpPln) : "–"}</td><td className="n">{r.m3 ? fmt(r.m3) : "–"}</td><td className="n">{r.rpPdam ? ringkas(r.rpPdam) : "–"}</td>
-                      <td className="n">{r.literSolar ? fmt(r.literSolar) : "–"}</td><td className="n">{r.rpSolar + r.rpOli ? ringkas(r.rpSolar + r.rpOli) : "–"}</td><td className="n">{r.rpBeli - r.rpSolar - r.rpOli ? ringkas(r.rpBeli - r.rpSolar - r.rpOli) : "–"}</td><td className="n"><b>{ringkas(r.rpPln + r.rpPdam + r.rpBeli)}</b></td></tr>
+                    <tr key={r.bulan}><td>{labelBulan(r.bulan)}</td><td className="n">{r.kwh ? fmt(r.kwh) : "–"}</td><td className="n">{r.rpPln ? ringkas(r.rpPln) : "–"}</td><td className="n">{r.m3 ? fmt(r.m3) : "–"}</td><td className="n">{r.rpPdam ? ringkas(r.rpPdam) : "–"}</td><td className="n">{r.rpPemda ? ringkas(r.rpPemda) : "–"}</td>
+                      <td className="n">{r.literSolar ? fmt(r.literSolar) : "–"}</td><td className="n">{r.rpSolar + r.rpOli ? ringkas(r.rpSolar + r.rpOli) : "–"}</td><td className="n">{r.rpBeli - r.rpSolar - r.rpOli ? ringkas(r.rpBeli - r.rpSolar - r.rpOli) : "–"}</td><td className="n"><b>{ringkas(r.rpPln + r.rpPdam + r.rpPemda + r.rpBeli)}</b></td></tr>
                   ))}
-                  <tr style={{ fontWeight: 800 }}><td>Total</td><td className="n">{fmt(esg.kwh)}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPln, 0))}</td><td className="n">{fmt(esg.m3)}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPdam, 0))}</td>
-                    <td className="n">{fmt(esg.literSolar)}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpSolar + r.rpOli, 0))}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpBeli - r.rpSolar - r.rpOli, 0))}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPln + r.rpPdam + r.rpBeli, 0))}</td></tr>
+                  <tr style={{ fontWeight: 800 }}><td>Total</td><td className="n">{fmt(esg.kwh)}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPln, 0))}</td><td className="n">{fmt(esg.m3)}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPdam, 0))}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPemda, 0))}</td>
+                    <td className="n">{fmt(esg.literSolar)}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpSolar + r.rpOli, 0))}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpBeli - r.rpSolar - r.rpOli, 0))}</td><td className="n">{ringkas(perBulan.reduce((a, r) => a + r.rpPln + r.rpPdam + r.rpPemda + r.rpBeli, 0))}</td></tr>
                 </tbody>
               </table>
             </Tile>
@@ -542,6 +606,35 @@ export default function TagihanPage() {
               </tbody>
             </table>
             <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "8px" }}>⚠ = meter awal tidak sama dengan meter akhir bulan sebelumnya (cek kemungkinan salah catat / meter diganti).</div>
+          </Tile>
+        </>
+      )}
+
+      {catatan !== null && tab === "PEMDA" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px", marginBottom: "14px" }}>
+            <Kpi label={`Total Pemda ${tahun}`} nilai={rupiah(pemda.reduce((a, c) => a + c.jumlah, 0))} sub={`${pemda.length} tagihan`} warna={WARNA.PEMDA} />
+            {JENIS_PEMDA.map((j) => { const n = pemda.filter((c) => c.pemda?.jenis === j); return n.length ? <Kpi key={j} label={j} nilai={rupiah(n.reduce((a, c) => a + c.jumlah, 0))} sub={`${n.length}× · ${n[0].pemda?.instansi || ""}`} /> : null; })}
+          </div>
+          <Tile style={{ marginBottom: "14px", overflowX: "auto" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 800 }}>Status per bulan {tahun}</h3>
+            <table className="tg-tabel" style={{ minWidth: "640px" }}>
+              <thead><tr><th>Jenis</th>{NAMA_BULAN.map((b) => <th key={b} className="n">{b}</th>)}</tr></thead>
+              <tbody>{JENIS_PEMDA.map((j) => {
+                const bulanan = j === "Iuran Sampah" || j === "Retribusi Parkir";
+                return (
+                  <tr key={j}><td style={{ whiteSpace: "nowrap" }}>{j}</td>{bulanTahun.map((b) => {
+                    const n = pemda.filter((c) => c.pemda?.jenis === j && c.periode === b).reduce((a, c) => a + c.jumlah, 0);
+                    const telat = !n && bulanan && b <= hariIni.slice(0, 7);
+                    return <td key={b} className="n" style={{ color: n ? "var(--ink)" : telat ? "var(--warn)" : "var(--muted)" }}>{n ? ringkas(n) : telat ? "belum" : "–"}</td>;
+                  })}</tr>
+                );
+              })}</tbody>
+            </table>
+            <div style={{ fontSize: "11.5px", color: "var(--muted)", marginTop: "6px" }}>Iuran sampah & PD Parkir diharapkan tiap bulan; reklame & PBB biasanya tahunan.</div>
+          </Tile>
+          <Tile>
+            {pemda.length === 0 ? <div style={{ fontSize: "13px", color: "var(--muted)" }}>Belum ada tagihan Pemda. Klik “🏛️ Tagihan Pemda”.</div> : pemda.map((c) => barisCatat(c))}
           </Tile>
         </>
       )}
@@ -715,6 +808,34 @@ export default function TagihanPage() {
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "14px" }}>
               <button type="button" className="sa-btn is-soft" disabled={menyimpan} onClick={() => setFormT(null)}>Batal</button>
               <button type="button" className="sa-btn is-primary" disabled={menyimpan || membaca} onClick={simpanTagihan}>{menyimpan ? "Menyimpan…" : "Simpan"}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ---------- modal tagihan Pemda ---------- */}
+      <Modal open={!!formP} onClose={() => !menyimpan && setFormP(null)} maxWidth="640px">
+        {formP && (
+          <div style={{ maxHeight: "85vh", overflowY: "auto" }}>
+            <h2 style={{ margin: "0 0 4px", fontSize: "18px", fontWeight: 800 }}>🏛️ {formP.editId ? "Ubah" : "Catat"} tagihan Pemda</h2>
+            <div style={{ fontSize: "12.5px", color: "var(--muted)", marginBottom: "12px" }}>Iuran sampah, PD Parkir Makassar Raya, pajak reklame, PBB & retribusi lain. Instansi, nomor & nominal terisi dari tagihan terakhir jenis yang sama.</div>
+            <div className="tg-grid">
+              <label><span style={lbl}>Jenis</span><select className={inp} value={formP.jenis} disabled={!!formP.editId} onChange={(e) => bukaFormPemda(undefined, e.target.value as JenisPemda)}>{JENIS_PEMDA.map((j) => <option key={j}>{j}</option>)}</select></label>
+              <label><span style={lbl}>Instansi</span><input className={inp} value={formP.instansi} onChange={(e) => setFormP({ ...formP, instansi: e.target.value })} /></label>
+              <label><span style={lbl}>No. tagihan / NOP / objek</span><input className={inp} value={formP.nomor} onChange={(e) => setFormP({ ...formP, nomor: e.target.value })} placeholder="opsional" /></label>
+              <label><span style={lbl}>Periode (bulan)</span><input className={inp} type="month" value={formP.periode} onChange={(e) => setFormP({ ...formP, periode: e.target.value })} /></label>
+              <label><span style={lbl}>Tanggal bayar</span><input className={inp} type="date" value={formP.tanggal} onChange={(e) => setFormP({ ...formP, tanggal: e.target.value })} /></label>
+              <label><span style={lbl}>Jatuh tempo</span><input className={inp} type="date" value={formP.jatuh_tempo} onChange={(e) => setFormP({ ...formP, jatuh_tempo: e.target.value })} /></label>
+              <label><span style={lbl}>Jumlah (Rp)</span><input className={inp} inputMode="numeric" value={formP.jumlah} onChange={(e) => setFormP({ ...formP, jumlah: e.target.value.replace(/[^\d]/g, "") })} /></label>
+            </div>
+            <div className="tg-grid" style={{ marginTop: "10px", gridTemplateColumns: "1fr" }}>
+              <label><span style={lbl}>Baris anggaran (RAB)</span><select className={inp} value={formP.item_id} onChange={(e) => setFormP({ ...formP, item_id: e.target.value })}>{opsiRab}</select></label>
+              <label><span style={lbl}>Bukti / SKRD / kuitansi (opsional)</span><input className={inp} type="file" accept="application/pdf,image/*" onChange={(e) => setFormP({ ...formP, file: e.target.files?.[0] || null })} /></label>
+              <label><span style={lbl}>Catatan (opsional)</span><input className={inp} value={formP.catatan} onChange={(e) => setFormP({ ...formP, catatan: e.target.value })} /></label>
+            </div>
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "14px" }}>
+              <button type="button" className="sa-btn is-soft" disabled={menyimpan} onClick={() => setFormP(null)}>Batal</button>
+              <button type="button" className="sa-btn is-primary" disabled={menyimpan} onClick={simpanPemda}>{menyimpan ? "Menyimpan…" : "Simpan"}</button>
             </div>
           </div>
         )}

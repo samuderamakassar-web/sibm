@@ -67,6 +67,7 @@ async function jalankan() {
   // 12:00-12:29 & 16:30-16:59 bila ronde hari ini masih kurang dari minimal.
   const uji = (await db.collection("ob_settings").doc("uji_pola_zona").get()).data();
   if (uji?.aktif && hariIni >= uji.mulai && (uji.permanen === true || hariIni <= uji.selesai)) {
+    await pengingatMisiPagi(uji);
     await pengingatZona(uji);
     return;
   }
@@ -175,6 +176,58 @@ async function pengingatOpname() {
     } catch (e) { console.log(`Gagal kirim ke ${x.pic_nama || d.id}: ${e.message}`); }
   }
   console.log(`Pengingat opname ${sesi}: ${terkirim} terkirim.`);
+}
+
+// §186 pengingat misi pagi (07:30-08:59 WITA, 1x per hari): tugas paket hari ini + poin bulan ini;
+// poin rendah (< AMBANG_POIN_RENDAH) diberi peringatan agar rajin upload ronde + foto.
+const AMBANG_POIN_RENDAH = 85;
+const LABEL_PAKET = { T1: "Tenant A", T2: "Tenant B", TOILET: "Publik · Toilet", LAIN: "Publik · Area Lain" };
+const PASANGAN = { T1: "T2", T2: "T1", TOILET: "LAIN", LAIN: "TOILET" };
+function seninDari(iso) { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d; }
+/** Duplikat pemegangPada (src/lib/paketZona.ts) -- kode -> nama pemegang pada tanggal tsb. */
+function pemegangHariIni(paket, tanggal) {
+  const n = Math.round((seninDari(tanggal) - seninDari(paket.acuan)) / (7 * 86400000));
+  const tukar = ((n % 2) + 2) % 2 === 1;
+  const out = {};
+  for (const k of Object.keys(LABEL_PAKET)) out[k] = (tukar ? paket.pemegang?.[PASANGAN[k]] : paket.pemegang?.[k]) || "";
+  return out;
+}
+async function pengingatMisiPagi(uji) {
+  const menit = now.getHours() * 60 + now.getMinutes();
+  if (menit < 7 * 60 + 30 || menit >= 9 * 60) return;
+  const libur = (await db.collection("settings").doc("validasi_karyawan").get()).data()?.hari_libur || [];
+  if (libur.includes(hariIni)) return;
+  // kunci 1x per hari (cron 30 menit + pemicu cron-job.org bisa dobel)
+  try { await db.collection("reminder_points_log").doc(`misi-ob-${hariIni}`).create({ waktu: FieldValue.serverTimestamp() }); }
+  catch { console.log("Pengingat misi pagi OB sudah terkirim hari ini, skip."); return; }
+  const norm = (n) => String(n || "").trim().toLowerCase();
+  const absen = ((uji.tidak_hadir || {})[hariIni] || []).map(norm);
+  const peserta = [...(uji.tim_tenant || []), ...(uji.tim_publik || [])].filter((n) => !absen.includes(norm(n)));
+  const pemegang = uji.paket_zona?.acuan ? pemegangHariIni(uji.paket_zona, hariIni) : {};
+  const minRonde = Math.max(1, Number(uji.min_ronde) || 1);
+  const bulan = hariIni.slice(0, 7);
+  const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", "OB & CS").get();
+  const tokenPerNama = {};
+  tokenSnap.forEach((d) => { const x = d.data(); if (x.token && x.pic_nama) (tokenPerNama[norm(x.pic_nama)] ||= []).push(x.token); });
+  for (const nama of peserta) {
+    const kode = Object.keys(pemegang).find((k) => norm(pemegang[k]) === norm(nama));
+    const poinDoc = (await db.collection("staff_points_bulanan").doc(`${bulan}_${nama.trim().replace(/\//g, "-")}`).get()).data();
+    const poin = poinDoc ? poinDoc.poin : 100;
+    const rendah = poin < AMBANG_POIN_RENDAH;
+    const judul = rendah ? "⚠️ Poin kamu rendah — ayo kejar hari ini" : "🎯 Misi hari ini";
+    const pesan = [
+      `Pagi ${nama.split(" ")[0]}! ${kode ? `Hari ini kamu pegang paket ${LABEL_PAKET[kode]}.` : "Cek tugasmu di Checklist Zona."}`,
+      absen.length ? "Ada rekan sakit/izin, tugasmu bisa bertambah — cek Checklist Zona." : "",
+      `Selesaikan misi sebanyak mungkin: minimal ${minRonde} ronde + foto (+1 poin), lebih dari ${minRonde} = +2 poin, tidak lapor = −10.`,
+      rendah ? `Poin bulan ini tinggal ${poin}. Rajin upload ronde & foto tiap selesai keliling supaya naik lagi.` : `Poin bulan ini: ${poin}.`,
+    ].filter(Boolean).join(" ");
+    for (const token of tokenPerNama[norm(nama)] || []) {
+      try { await messaging.send({ token, notification: { title: judul, body: pesan }, webpush: { notification: { icon: "/icons/icon-192.png" } } }); }
+      catch (e) { console.log(`Gagal kirim misi ke ${nama}:`, e?.code); }
+    }
+    await tulisNotifPersonal([nama], judul, pesan);
+    console.log(`Misi pagi -> ${nama} (poin ${poin}${rendah ? ", RENDAH" : ""})`);
+  }
 }
 
 async function pengingatZona(uji) {

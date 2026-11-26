@@ -18,6 +18,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
+import { sinkronAreaTenantZona } from "../../../lib/ujiPolaZona";
 
 type Status = "terisi" | "kosong" | "bersama";
 interface Unit { id: string; nama: string; tenant: string; luas: number; status: Status }
@@ -85,7 +86,9 @@ export default function OkupansiPage() {
     try {
       await setDoc(REF(), { lantai: JSON.parse(JSON.stringify(data)), gedung, diperbarui_oleh: session?.nama || "-", diperbarui_pada: serverTimestamp() });
       setBerubah(false); setEdit(false);
-      showToast("Data okupansi tersimpan.", "success");
+      // §186 ruang tenant Pola Zona OB & CS mengikuti Okupansi
+      const zona = await sinkronAreaTenantZona(data).catch((e) => { console.error("[okupansi] sinkron zona:", e); return false; });
+      showToast(zona ? "Data okupansi tersimpan · ruang tenant Pola Zona ikut diperbarui." : "Data okupansi tersimpan.", "success");
     } catch (e) { console.error(e); showToast("Gagal menyimpan.", "error"); }
     finally { setMenyimpan(false); }
   };

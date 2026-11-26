@@ -62,7 +62,9 @@ export function isiPaket(p: PaketZona, areaTenant: string[], areaPublik: string[
   const mg = new Set(mingguan);
   areaTenant.forEach((a) => {
     const e = p.pagi.find((x) => x.area === a);
-    if (e) isi[e.kode].pagi.push(a); else belum.push(a);
+    // §186 ruang tenant baru (dari Okupansi) yang belum dipetakan -> paket pemegang pelayanan lantainya
+    if (e) isi[e.kode].pagi.push(a);
+    else { belum.push(a); isi[p.pelayanan.find((x) => x.lantai === lantaiDari(a))?.kode || "T1"].pagi.push(a); }
   });
   const lantai = Array.from(new Set(areaTenant.map(lantaiDari).filter((l) => l !== "Bersama"))).sort();
   lantai.forEach((l) => {

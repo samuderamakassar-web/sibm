@@ -483,6 +483,43 @@ async function jalankan() {
   }
 
   await logRef.set({ diproses_pada: FieldValue.serverTimestamp() });
+
+  // §186 setelah poin kemarin dihitung: pengingat misi + peringatan poin rendah untuk Security & Driver
+  // (OB & CS sudah dapat pengingat misi pagi berisi poin dari fcm-reminder.mjs).
+  await pengingatPoinHarian().catch((e) => console.error("Pengingat poin gagal (poin tetap tersimpan):", e));
+}
+
+const AMBANG_POIN_RENDAH = 85;
+async function pengingatPoinHarian() {
+  const bulan = hariIni.slice(0, 7);
+  const akhirPekan = isWeekend(hariIni);
+  const norm = (n) => String(n || "").trim().toLowerCase();
+  for (const dept of ["Security", "Driver"]) {
+    if (dept === "Driver" && akhirPekan) continue;
+    const staf = (await db.collection("users_master").where("departemen", "==", dept).get()).docs
+      .map((d) => d.data()).filter((u) => u.nama && !/magang/i.test(u.role || "")).map((u) => String(u.nama).trim());
+    const poinSnap = await db.collection("staff_points_bulanan").where("bulan", "==", bulan).get();
+    const poinPer = {};
+    poinSnap.forEach((d) => { poinPer[norm(d.data().nama)] = d.data().poin; });
+    const tokenSnap = await db.collection("fcm_tokens").where("dept", "==", dept).get();
+    const token = {};
+    tokenSnap.forEach((d) => { const x = d.data(); if (x.token && x.pic_nama) (token[norm(x.pic_nama)] ||= []).push(x.token); });
+    const tugas = dept === "Security" ? "patroli minimal 2 dari 3 sesi + scan titik & foto, siram tanaman & tugas tambahan" : "update status kendaraan tiap keluar/masuk & lengkapi data perjalanan";
+    for (const nama of staf) {
+      const poin = poinPer[norm(nama)] ?? 100;
+      const rendah = poin < AMBANG_POIN_RENDAH;
+      const judul = rendah ? "⚠️ Poin kamu rendah — ayo kejar" : "🎯 Misi hari ini";
+      const pesan = rendah
+        ? `Poin bulan ini tinggal ${poin}. Rajin upload tugas: ${tugas}. Setiap tugas yang terlewat memotong poin.`
+        : `Selesaikan misi sebanyak mungkin hari ini untuk poin maksimal: ${tugas}. Poin bulan ini: ${poin}.`;
+      for (const t of token[norm(nama)] || []) {
+        try { await messaging.send({ token: t, notification: { title: judul, body: pesan }, webpush: { notification: { icon: "/icons/icon-192.png" } } }); }
+        catch (e) { console.log(`Gagal kirim pengingat poin ke ${nama}:`, e?.code); }
+      }
+      if (rendah) await tulisNotifPersonal([nama], judul, pesan); // kotak masuk hanya untuk peringatan (bukan motivasi harian)
+      console.log(`Pengingat poin -> ${nama} (${dept}, poin ${poin}${rendah ? ", RENDAH" : ""})`);
+    }
+  }
 }
 
 jalankan()

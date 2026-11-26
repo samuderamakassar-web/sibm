@@ -18,6 +18,7 @@ import Modal from "../../../components/ui/Modal";
 import { ASUMSI_BAWAAN, LABEL_ASUMSI, WARNA_STATUS_BEBAN, statusBeban, type AsumsiBeban } from "../../../lib/sla";
 import { menitJenis, timJenis } from "../../../lib/pelayanan";
 import { CHECKLIST_OB_BAWAAN, paketPlottingDari, type AreaChecklist } from "../../../lib/sopChecklist";
+import { rapikanConfig, tidakHadirPada } from "../../../lib/ujiPolaZona";
 
 const tz = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
 const tzJam = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "2-digit", hourCycle: "h23" });
@@ -77,6 +78,28 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     getDocs(query(collection(db, "permintaan_pelayanan"), where("waktu_minta", ">=", tsAwal), where("waktu_minta", "<", tsAkhir))).catch(() => null),
     getDoc(doc(db, "settings", "checklist_ob")),
   ]);
+  // §186 pola zona OB & CS permanen: tim & kepatuhan ronde dari pola zona (bukan plotting / checklist sesi lama)
+  const [zonaSnap, rondeSnap, liburSnap] = await Promise.all([
+    getDoc(doc(db, "ob_settings", "uji_pola_zona")).catch(() => null),
+    getDocs(query(collection(db, "ob_zona_laporan"), where("tanggal", ">=", dari), where("tanggal", "<=", batas))).catch(() => null),
+    getDoc(doc(db, "settings", "validasi_karyawan")).catch(() => null),
+  ]);
+  const zona = rapikanConfig(zonaSnap?.data());
+  const pakaiZona = !!zona && zona.aktif && zona.permanen && zona.tim_tenant.length > 0;
+  const libur = new Set<string>(((liburSnap?.data()?.hari_libur as string[]) || []).map(String));
+  const rondeZona = { Tenant: { isi: 0, target: 0, absen: 0 }, Publik: { isi: 0, target: 0, absen: 0 } };
+  if (pakaiZona) {
+    const laporan = (rondeSnap?.docs || []).map((d) => d.data()).filter((x) => x.jenis === "ronde");
+    hariKerjaList.filter((t) => t >= zona.mulai && t <= hariIni && !libur.has(t)).forEach((t) => {
+      const absen = tidakHadirPada(zona, t).map(norm);
+      (["Tenant", "Publik"] as const).forEach((z) => (z === "Tenant" ? zona.tim_tenant : zona.tim_publik).forEach((nama) => {
+        if (absen.includes(norm(nama))) { rondeZona[z].absen++; return; }
+        const n = laporan.filter((l) => l.tanggal === t && norm(l.nama) === norm(nama)).length;
+        rondeZona[z].isi += Math.min(n, zona.min_ronde);
+        rondeZona[z].target += t === hariIni ? Math.min(n, zona.min_ronde) : zona.min_ronde;
+      }));
+    });
+  }
   const akun = users.docs.map((d) => d.data() as { nama?: string; departemen?: string; role?: string; peran_tugas?: string }).filter((u) => u.nama && !/magang/i.test(u.role || ""));
   const namaDept = (dept: string) => akun.filter((u) => u.departemen === dept).map((u) => String(u.nama).trim());
 
@@ -98,15 +121,17 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const stafOB = namaDept("OB & CS");
   // §123 peran tugas di Master User menang; yang belum diisi masih ditebak dari plotting
   const peranDari = (n: string) => akun.find((u) => u.departemen === "OB & CS" && String(u.nama).trim() === n)?.peran_tugas || "";
-  const namaOB = stafOB.filter((n) => peranDari(n) ? peranDari(n) === "OB Pelayanan" : (hariPelayanan[n] || 0) > (hariLantai[n] || 0));
-  const namaCS = stafOB.filter((n) => !namaOB.includes(n));
+  // §186 pola zona: Zona Tenant = OB pelayanan (+ ruang tenant), Zona Publik = CS cleaning
+  const namaOB = pakaiZona ? zona.tim_tenant : stafOB.filter((n) => peranDari(n) ? peranDari(n) === "OB Pelayanan" : (hariPelayanan[n] || 0) > (hariLantai[n] || 0));
+  const namaCS = pakaiZona ? zona.tim_publik : stafOB.filter((n) => !namaOB.includes(n));
+  const teksRonde = (z: "Tenant" | "Publik") => `Ronde zona terpenuhi ${pct(rondeZona[z].isi, rondeZona[z].target)} (${rondeZona[z].isi}/${rondeZona[z].target} ronde)${rondeZona[z].absen ? ` · ${rondeZona[z].absen} hari-orang sakit/izin` : ""}`;
   const pct = (x: number, t: number) => (t ? `${Math.round((x / t) * 100)}%` : "—");
 
   // ---------- CS: luas dari Okupansi (§131 ikut angka tingkat gedung) + SOP checklist ----------
   const okData = okupansi.data() || {};
   const lantai = ((okData.lantai as { nama: string; luas_total?: number; unit: { nama: string; luas: number; status: string }[] }[]) || []);
   const gedung = (okData.gedung as { luas_total?: number; luas_bersama?: number } | undefined) || {};
-  let intensif = 0, ringan = 0, toiletUnit = 0, terisiU = 0, kosongU = 0, bersamaU = 0, totalLantai = 0;
+  let intensif = 0, ringan = 0, toiletUnit = 0, terisiU = 0, kosongU = 0, bersamaU = 0, totalLantai = 0, tenantIntensif = 0;
   lantai.forEach((l) => {
     let tercatat = 0;
     (l.unit || []).forEach((u) => {
@@ -115,7 +140,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
       if (u.status === "terisi") terisiU += luas; else if (u.status === "kosong") kosongU += luas; else if (u.status === "bersama") bersamaU += luas;
       if (/gudang|pompa|server|rooftop|panel/i.test(n)) return;
       if (/toilet|wc/i.test(n)) { toiletUnit++; intensif += luas; return; }
-      if (u.status === "kosong" || /parkir|teras|garden|taman/i.test(n)) ringan += luas; else intensif += luas;
+      if (u.status === "kosong" || /parkir|teras|garden|taman/i.test(n)) ringan += luas; else { intensif += luas; if (u.status === "terisi") tenantIntensif += luas; }
     });
     totalLantai += Math.max(Number(l.luas_total) || 0, tercatat);
   });
@@ -133,8 +158,12 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const toiletSop = segAktif.filter((s) => /toilet|wc/i.test(s.nama)).length;
   const itemSop = segAktif.reduce((s, x) => s + x.pertanyaan.length, 0);
   const toilet = Math.max(toiletUnit, toiletSop);
-  const bebanM2 = intensif + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
+  // §186 pola zona: ruang tenant dibersihkan Zona Tenant (OB), jadi keluar dari beban CS dan masuk beban OB
+  const intensifCS = pakaiZona ? intensif - tenantIntensif : intensif;
+  const bebanM2 = intensifCS + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
   const kebutuhanLuas = (bebanM2 / a.cs_m2_per_orang) * cadangan;
+  const posisiHarian = pakaiZona ? Math.max(1, zona.tim_publik.length) : paketSop;
+  const tenantOB = pakaiZona ? (tenantIntensif / a.cs_m2_per_orang) * cadangan : 0;
   // §124 permintaan cleaning dari karyawan -> sinyal beban CS (kebutuhan CS tetap dari luas area)
   const semuaPerm = (pelayanan?.docs || []).map((d) => d.data()).filter((x) => x.status !== "Batal" && x.waktu_minta);
   const permCS = semuaPerm.filter((x) => timJenis(x.jenis) === "CS");
@@ -142,17 +171,17 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const csPenilaian: Penilaian = {
     kunci: "CS", judul: "CS · Cleaning", sekarang: namaCS.length, nama: namaCS,
     // §131 kebutuhan = yang lebih besar: beban luas (Okupansi) atau posisi harian menurut pembagian area SOP
-    kebutuhan: Math.max(kebutuhanLuas, paketSop),
+    kebutuhan: Math.max(kebutuhanLuas, posisiHarian),
     dasar: [
-      `Area intensif ${f1(intensif)} m² (tenant terisi + area bersama ${f1(bersamaGedung)} m²: lobi, koridor, toilet, tangga)`,
+      pakaiZona ? `Pola zona: Zona Publik (${namaCS.join(", ")}) — area bersama ${f1(intensifCS)} m² (ruang tenant ${f1(tenantIntensif)} m² dikerjakan Zona Tenant)` : `Area intensif ${f1(intensif)} m² (tenant terisi + area bersama ${f1(bersamaGedung)} m²: lobi, koridor, toilet, tangga)`,
       `Area ringan ${f1(ringan)} m² × bobot ${a.cs_bobot_ringan} (area kosong, teras, parkir)`,
       `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara (${toiletSop >= toiletUnit ? "dari segmen SOP checklist" : "dari unit Okupansi"})`,
       `Beban luas: ${f1(bebanM2)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}% = ${f1(kebutuhanLuas)} orang`,
-      `SOP checklist: area dibagi ${paketSop} paket plotting = ${paketSop} CS bertugas setiap hari · ${itemSop} item × 3 sesi = ${itemSop * 3} pengecekan/hari`,
-      `Dipakai yang lebih besar: ${kebutuhanLuas >= paketSop ? "beban luas" : "posisi harian SOP (belum termasuk pengganti saat cuti)"}`,
+      pakaiZona ? `Pola zona: Zona Publik dibagi ${posisiHarian} paket tetap (Toilet & Area Lain) = ${posisiHarian} orang setiap hari` : `SOP checklist: area dibagi ${paketSop} paket plotting = ${paketSop} CS bertugas setiap hari · ${itemSop} item × 3 sesi = ${itemSop * 3} pengecekan/hari`,
+      `Dipakai yang lebih besar: ${kebutuhanLuas >= posisiHarian ? "beban luas" : "posisi harian (belum termasuk pengganti saat cuti)"}`,
     ],
     sinyal: [
-      `Checklist sesi area lantai terisi ${pct(csSesi, csSesiTotal)} (${csSesi}/${csSesiTotal})`,
+      pakaiZona ? teksRonde("Publik") : `Checklist sesi area lantai terisi ${pct(csSesi, csSesiTotal)} (${csSesi}/${csSesiTotal})`,
       permCS.length ? `${permCS.length} permintaan cleaning dari karyawan (${f1(permCS.length / hariKerja)}/hari kerja)${responCS.length ? ` · respon rata-rata ${f1(responCS.reduce((x, y) => x + y, 0) / responCS.length)} menit` : ""}` : "",
     ].filter(Boolean),
     dataKurang: lantai.length ? undefined : "Isi luas lantai di menu Okupansi agar beban CS terhitung.",
@@ -169,10 +198,10 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const pakaiPermintaan = perm.length >= a.ob_min_permintaan;
   const obPenilaian: Penilaian = {
     kunci: "OB", judul: "OB · Pelayanan", sekarang: namaOB.length, nama: namaOB,
-    kebutuhan: pakaiPermintaan
+    kebutuhan: (pakaiPermintaan
       ? ((menitPerm / hariKerja) / a.ob_menit_produktif) * cadangan
-      : ((jumlahKaryawan + meetingPerHari * a.ob_karyawan_per_meeting) / a.ob_karyawan_per_orang) * cadangan,
-    dasar: pakaiPermintaan ? [
+      : ((jumlahKaryawan + meetingPerHari * a.ob_karyawan_per_meeting) / a.ob_karyawan_per_orang) * cadangan) + tenantOB,
+    dasar: (pakaiPermintaan ? [
       `DATA NYATA: ${perm.length} permintaan pelayanan (${f1(perm.length / hariKerja)}/hari kerja)`,
       `Total ± ${Math.round(menitPerm)} menit kerja (${f1(menitPerm / hariKerja)} menit/hari) — minuman 10, meeting 25, dokumen 15, lainnya 15 menit`,
       `÷ ${a.ob_menit_produktif} menit efektif per OB per hari × cadangan ${a.cadangan_pct}%`,
@@ -181,13 +210,13 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
       `${meeting} booking ruang meeting (${f1(meetingPerHari)}/hari kerja) × ${a.ob_karyawan_per_meeting} karyawan setara`,
       `÷ ${a.ob_karyawan_per_orang} karyawan per OB × cadangan ${a.cadangan_pct}%`,
       `Perkiraan — data permintaan pelayanan baru ${perm.length} (dipakai setelah ≥ ${a.ob_min_permintaan})`,
-    ],
+    ]).concat(pakaiZona ? [`+ Pola zona: Zona Tenant juga membersihkan ruang tenant ${f1(tenantIntensif)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan = ${f1(tenantOB)} orang`] : []),
     sinyal: [
       respon.length ? `Respon rata-rata ${f1(respon.reduce((x, y) => x + y, 0) / respon.length)} menit · ${pct(respon.filter((m) => m <= 10).length, respon.length)} direspon ≤ 10 menit` : "",
-      `Checklist pelayanan terisi ${pct(obSesi, obSesiTotal)} (${obSesi}/${obSesiTotal})`,
+      pakaiZona ? teksRonde("Tenant") : `Checklist pelayanan terisi ${pct(obSesi, obSesiTotal)} (${obSesi}/${obSesiTotal})`,
       namaOB.length === 1 ? "Hanya 1 orang: saat cuti/sakit pelayanan berhenti total" : "",
     ].filter(Boolean),
-    dataKurang: namaOB.length ? undefined : "Belum ada OB yang diplot di area Pelayanan Khusus OB pada periode ini.",
+    dataKurang: namaOB.length ? undefined : "Belum ada OB di Zona Tenant / area Pelayanan pada periode ini.",
   };
 
   // ---------- Driver: jam di jalan dari log armada ----------

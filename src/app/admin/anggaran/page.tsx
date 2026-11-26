@@ -580,7 +580,7 @@ export default function AnggaranPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: "13px", color: "var(--ink)", fontWeight: 600 }}>{r.uraian}
                         <span style={{ marginLeft: "6px", fontSize: "10.5px", fontWeight: 800, padding: "1px 7px", borderRadius: "7px", background: r.sumber === "manual" ? "var(--line)" : "var(--info-50)", color: r.sumber === "manual" ? "var(--ink-soft)" : "var(--info)" }}>
-                          {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : r.sumber === "temuan_gedung" ? "Temuan gedung" : r.sumber === "temuan_alat" ? "Alat kebersihan" : r.catat === "PLN" ? "Tagihan PLN" : r.catat === "PDAM" ? "Tagihan PDAM" : r.catat === "BELI" ? "Pembelian" : "Manual"}
+                          {r.sumber === "helpdesk" ? "Helpdesk" : r.sumber === "servis" ? "Servis" : r.sumber === "atk" ? "ATK" : r.sumber === "temuan_gedung" ? "Temuan gedung" : r.sumber === "temuan_alat" ? "Alat kebersihan" : r.catat === "PLN" ? "Tagihan PLN" : r.catat === "PDAM" ? "Tagihan PDAM" : r.catat === "BELI" ? "Pembelian" : r.catat === "PEMDA" ? "Tagihan Pemda" : "Manual"}
                         </span>
                       </div>
                       {r.sumber === "manual" && items.length > 0 ? (

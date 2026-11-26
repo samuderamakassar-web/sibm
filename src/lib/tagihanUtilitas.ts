@@ -7,7 +7,7 @@
 //   PDAM : dibaca dari PDF "Informasi Tagihan" PDAM Makassar -> meter awal/akhir, pakai m3, rincian biaya.
 //   BELI : pembelian utilitas/fasilitas/tools cleaning/chemical/solar & oli genset; item bisa menambah stok OB.
 
-export type JenisCatat = "PLN" | "PDAM" | "BELI";
+export type JenisCatat = "PLN" | "PDAM" | "BELI" | "PEMDA";
 
 export interface DataPLN {
   id_pel: string; golongan: string; daya_va: number; faktor_kali: number;
@@ -24,12 +24,25 @@ export interface DataPDAM {
 }
 export interface ItemBeli { nama: string; qty: number; satuan: string; harga: number; stok_id?: string; stok_nama?: string }
 export interface DataBeli { kategori: KategoriBeli; vendor: string; items: ItemBeli[]; jam_genset?: number }
+/** §186 tagihan/retribusi pemerintah daerah (iuran sampah, PD Parkir, reklame, PBB, dll). */
+export const JENIS_PEMDA = ["Iuran Sampah", "Retribusi Parkir", "Pajak Reklame", "PBB", "Retribusi / Pajak Lainnya"] as const;
+export type JenisPemda = (typeof JENIS_PEMDA)[number];
+export const INSTANSI_PEMDA: Record<JenisPemda, string> = {
+  "Iuran Sampah": "DLH Pemkot Makassar", "Retribusi Parkir": "Perumda Parkir Makassar Raya", "Pajak Reklame": "Bapenda Kota Makassar",
+  PBB: "Bapenda Kota Makassar", "Retribusi / Pajak Lainnya": "",
+};
+/** Tagihan yang diharapkan ada TIAP BULAN (panel "Tagihan bulan ini"). Reklame & PBB tahunan. */
+export const TAGIHAN_BULANAN: { kunci: string; label: string }[] = [
+  { kunci: "PLN", label: "Listrik PLN" }, { kunci: "PDAM", label: "Air PDAM" },
+  { kunci: "Iuran Sampah", label: "Iuran sampah" }, { kunci: "Retribusi Parkir", label: "PD Parkir" },
+];
+export interface DataPemda { jenis: JenisPemda; instansi: string; nomor: string; jatuh_tempo: string }
 
 /** Dokumen realisasi_biaya yang dibuat menu Tagihan & Pembelian. */
 export interface CatatanBiaya {
   id: string; catat: JenisCatat; tanggal: string; periode: string; item_id: string; kategori: string;
   uraian: string; jumlah: number; daerah?: string; file_path?: string; file_nama?: string;
-  pln?: DataPLN; pdam?: DataPDAM; beli?: DataBeli; catatan?: string; dicatat_oleh?: string;
+  pln?: DataPLN; pdam?: DataPDAM; beli?: DataBeli; pemda?: DataPemda; catatan?: string; dicatat_oleh?: string;
 }
 
 export const KATEGORI_BELI = ["Utilitas", "Fasilitas", "Tools & Alat Cleaning", "Chemical & Consumable OB", "Solar Genset", "Oli & Consumable Genset", "Pantry & Rumah Tangga", "Lainnya"] as const;
@@ -41,6 +54,7 @@ export const SARAN_RAB: Record<string, string[]> = {
   "Solar Genset": ["solar"], "Oli & Consumable Genset": ["consumabel goods", "consumable goods", "servis genset"],
   "Tools & Alat Cleaning": ["soap dispenser", "floor cleaner"], "Chemical & Consumable OB": ["soap dispenser", "floor cleaner", "pewangi"],
   Utilitas: [], Fasilitas: [], "Pantry & Rumah Tangga": ["pantry"], Lainnya: [],
+  "Iuran Sampah": ["angkut sampah", "sampah"], "Retribusi Parkir": ["parkir"], "Pajak Reklame": ["reklame"], PBB: ["pbb"], "Retribusi / Pajak Lainnya": ["retribusi"],
 };
 
 /** Pilih baris RAB pertama yang uraiannya memuat kata kunci (kosong bila tidak ada). */
@@ -163,19 +177,20 @@ export interface FaktorEsg { grid_kgco2_kwh: number; solar_kgco2_liter: number }
  *  sesuai faktor emisi sistem Sulbagsel terbitan ESDM -- 0 = belum diisi (Scope 2 tidak dihitung). */
 export const FAKTOR_DEFAULT: FaktorEsg = { grid_kgco2_kwh: 0, solar_kgco2_liter: 2.68 };
 
-export interface RekapBulan { bulan: string; kwh: number; rpPln: number; m3: number; rpPdam: number; literSolar: number; rpSolar: number; rpOli: number; rpBeli: number; perKategori: Record<string, number> }
+export interface RekapBulan { bulan: string; kwh: number; rpPln: number; m3: number; rpPdam: number; literSolar: number; rpSolar: number; rpOli: number; rpBeli: number; rpPemda: number; perKategori: Record<string, number>; perPemda: Record<string, number> }
 
 /** Rekap per bulan (YYYY-MM) dari catatan. Tagihan memakai `periode`, pembelian memakai `tanggal`. */
 export function rekapBulanan(cat: CatatanBiaya[]): Map<string, RekapBulan> {
   const out = new Map<string, RekapBulan>();
   const ambil = (b: string) => {
-    if (!out.has(b)) out.set(b, { bulan: b, kwh: 0, rpPln: 0, m3: 0, rpPdam: 0, literSolar: 0, rpSolar: 0, rpOli: 0, rpBeli: 0, perKategori: {} });
+    if (!out.has(b)) out.set(b, { bulan: b, kwh: 0, rpPln: 0, m3: 0, rpPdam: 0, literSolar: 0, rpSolar: 0, rpOli: 0, rpBeli: 0, rpPemda: 0, perKategori: {}, perPemda: {} });
     return out.get(b)!;
   };
   cat.forEach((c) => {
     const r = ambil(c.catat === "BELI" ? c.tanggal.slice(0, 7) : c.periode || c.tanggal.slice(0, 7));
     if (c.catat === "PLN") { r.kwh += kwhTotal(c.pln); r.rpPln += c.jumlah; }
     else if (c.catat === "PDAM") { r.m3 += c.pdam?.pakai || 0; r.rpPdam += c.jumlah; }
+    else if (c.catat === "PEMDA") { const k = c.pemda?.jenis || "Retribusi / Pajak Lainnya"; r.rpPemda += c.jumlah; r.perPemda[k] = (r.perPemda[k] || 0) + c.jumlah; }
     else {
       const k = c.beli?.kategori || "Lainnya";
       r.rpBeli += c.jumlah;
@@ -194,6 +209,9 @@ export function hitungEsg(bulan: RekapBulan[], f: FaktorEsg): Esg {
   const scope2 = f.grid_kgco2_kwh > 0 ? (kwh * f.grid_kgco2_kwh) / 1000 : null;
   return { kwh, m3, literSolar, scope1, scope2, total: scope2 === null ? null : scope1 + scope2 };
 }
+
+/** Kunci tagihan bulanan sebuah catatan (PLN / PDAM / jenis Pemda). */
+export const kunciTagihan = (c: CatatanBiaya) => (c.catat === "PEMDA" ? c.pemda?.jenis || "" : c.catat);
 
 /** Senin-Minggu pekan tanggal tsb. */
 export function rentangPekan(iso: string): [string, string] {
