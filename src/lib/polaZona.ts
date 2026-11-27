@@ -17,7 +17,7 @@ import { CHECKLIST_OB_BAWAAN, type AreaChecklist } from "./sopChecklist";
 import { uraiArea, type LantaiOk } from "./bagiZona";
 import { pemegangToilet, rencanaHari, type RencanaHari } from "./rencanaZona";
 import { isiPaket, paketCocok, pekanDitukar, pemegangPada, rapikanPaket, type PaketZona } from "./paketZona";
-import { barisAreaTenant, ruangTenantOkupansi, selaraskanPagi } from "./areaOkupansi";
+import { barisAreaTenant, ruangTenantOkupansi, selaraskanPagi, selaraskanPelayanan } from "./areaOkupansi";
 
 export type Zona = "Tenant" | "Publik";
 export const DOC_UJI_POLA = () => doc(db, "ob_settings", "uji_pola_zona");
@@ -228,14 +228,16 @@ export async function sinkronAreaTenantZona(lantai: LantaiOkupansi[] | undefined
   const baris = barisAreaTenant(ruang);
   const lama = Array.isArray(d.area_tenant) ? (d.area_tenant as string[]).map(String) : [];
   // pertahankan penanda "| mingguan" bila ada di baris lama yang sama
-  const mingguan = new Set(lama.filter((x) => /|s*mingguan/i.test(x)).map((x) => x.split("|")[0].trim()));
+  const mingguan = new Set(lama.filter((x) => /\|\s*mingguan/i.test(x)).map((x) => x.split("|")[0].trim()));
   const final = baris.map((b) => (mingguan.has(b.split("|")[0].trim()) ? `${b} | mingguan` : b));
   const paket = rapikanPaket(d.paket_zona);
   const pagiBaru = paket ? selaraskanPagi(paket, ruang) : null;
+  // §187 pelayanan per lantai juga ikut Okupansi (lantai kosong dilepas, lantai baru ke paket Tenant yang lebih ringan)
+  const pelayananBaru = paket ? selaraskanPelayanan(paket, ruang) : null;
   const samaArea = JSON.stringify(final) === JSON.stringify(lama);
-  const samaPagi = !paket || JSON.stringify(pagiBaru) === JSON.stringify(paket.pagi);
+  const samaPagi = !paket || (JSON.stringify(pagiBaru) === JSON.stringify(paket.pagi) && JSON.stringify(pelayananBaru) === JSON.stringify(paket.pelayanan));
   if (samaArea && samaPagi) return false;
-  await updateDoc(DOC_UJI_POLA(), { area_tenant: final, ...(paket ? { paket_zona: { ...paket, pagi: pagiBaru } } : {}) });
+  await updateDoc(DOC_UJI_POLA(), { area_tenant: final, ...(paket ? { paket_zona: { ...paket, pagi: pagiBaru, pelayanan: pelayananBaru } } : {}) });
   return true;
 }
 
@@ -290,7 +292,7 @@ export function useUjiPolaZona() {
   const [config, setConfig] = useState<UjiPolaZona | null>(null);
   const [dimuat, setDimuat] = useState(false);
   useEffect(() => onSnapshot(DOC_UJI_POLA(), (s) => { setConfig(rapikanConfig(s.data())); setDimuat(true); }, (e) => {
-    console.error("[uji-pola-zona]", e); setDimuat(true);
+    console.error("[pola-zona]", e); setDimuat(true);
   }), []);
   return { config, dimuat };
 }

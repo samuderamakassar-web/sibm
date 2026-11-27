@@ -17,7 +17,7 @@ import Tile from "../../components/admin/Tile";
 import Modal from "../../components/ui/Modal";
 import QrLokal from "../../components/QrLokal";
 import { daerahTulis } from "../../lib/daerah";
-import { dataUrlKeCloudinary } from "../../lib/uploadFoto";
+import { dataUrlKeStorage } from "../../lib/uploadFoto";
 import { KATEGORI_ALAT, PEMEGANG_GUDANG, STATUS_ALAT, WARNA_STATUS_ALAT, kodeBerikut, type AlatKerja, type StatusAlat } from "../../lib/alatKerja";
 
 const tgl = (ts?: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
@@ -76,7 +76,7 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
       if (aksi.jenis === "tambah") {
         if (!form.nama.trim()) return showToast("Isi nama alat.", "warning");
         const n = Math.min(30, Math.max(1, parseInt(form.jumlah, 10) || 1));
-        const foto = form.foto ? await dataUrlKeCloudinary(form.foto, "sibm/alat-kerja") : "";
+        const foto = form.foto ? await dataUrlKeStorage(form.foto, "sibm/alat-kerja") : "";
         const terpakai: { kode: string }[] = [...alat];
         for (let i = 0; i < n; i++) {
           const kode = kodeBerikut(form.nama, terpakai);
@@ -98,7 +98,7 @@ export default function AlatKerjaPage({ backHref = "/dashboard/ob", backLabel = 
       } else if (aksi.jenis === "status") {
         if (form.status === aksi.a.status) return showToast("Status tidak berubah.", "warning");
         if ((form.status === "Hilang" || form.status === "Rusak") && !form.kronologi.trim()) return showToast("Kronologi wajib diisi.", "warning");
-        const foto = form.foto ? await dataUrlKeCloudinary(form.foto, "sibm/alat-kerja") : "";
+        const foto = form.foto ? await dataUrlKeStorage(form.foto, "sibm/alat-kerja") : "";
         await updateDoc(doc(db, "aset_alat", aksi.a.id), {
           status: form.status,
           riwayat: arrayUnion(riwayat(`Status → ${form.status}`, { dari: aksi.a.status, catatan: `${form.kronologi.trim()}${aksi.a.pemegang ? ` (pemegang: ${aksi.a.pemegang})` : ""}`, ...(foto ? { foto } : {}) })),

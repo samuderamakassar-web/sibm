@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 type IconProps = { size?: number; color?: string };
 const IconBook = ({ size = 22, color = "currentColor" }: IconProps) => (
@@ -96,7 +97,7 @@ export default function SopViewerPage({ dept, backPath, labelTim }: SopViewerPag
               <div style={{ fontSize: "11px", color: "var(--muted)", display: "flex", alignItems: "center", gap: "5px" }}>
                 <IconFileText size={13} /> {sop.file_name || "Dokumen"} • Diterbitkan {formatTanggal(sop.waktu_upload)}
               </div>
-              <a href={sop.file_url} target="_blank" rel="noopener noreferrer" className="sop-open-btn">
+              <a href={sop.file_url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(sop.file_url, sop.file_name)} className="sop-open-btn">
                 <IconFileText size={13} /> Buka Dokumen
               </a>
             </div>

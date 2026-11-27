@@ -15,7 +15,7 @@ import {
   isiPaket, LABEL_PAKET, PAKET_PUBLIK, PAKET_TENANT, paketCocok, paketDariRencana, pemegangPada, SEMUA_PAKET, seninDari, tambahHariISO, WARNA_PAKET,
   type KodePaket, type PaketZona,
 } from "../../lib/paketZona";
-import { DOC_UJI_POLA, rencanaUntuk, tenantMinggu, type UjiPolaZona } from "../../lib/ujiPolaZona";
+import { DOC_UJI_POLA, rencanaUntuk, tenantMinggu, type UjiPolaZona } from "../../lib/polaZona";
 
 const tglPendek = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 const pendek = (a: string) => a.replace(/^Lantai\s*/i, "Lt ").replace(/\s{2,}/g, " ");

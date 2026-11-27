@@ -5,7 +5,7 @@ import Link from "next/link";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp, where } from "firebase/firestore";
 import { daftarTahunSejak, rentangBulanTahun } from "../../../lib/rentangFilter";
 import * as XLSX from "xlsx";
-import { dataUrlKeCloudinary } from "../../../lib/uploadFoto";
+import { dataUrlKeStorage } from "../../../lib/uploadFoto";
 import { db } from "../../../lib/firebase";
 import { kirimEmail } from "../../../lib/notify";
 import { buildHelpdeskUpdateEmailHtml } from "../../../lib/emailTemplates";
@@ -235,7 +235,7 @@ export default function AdminHelpdeskPage() {
       const ref = doc(db, "helpdesk_tickets", selectedTicket.id);
       await updateDoc(ref, {
         status: statusUbah,
-        foto_proses: (await dataUrlKeCloudinary(fotoHasil, "sibm/helpdesk")) || null,
+        foto_proses: (await dataUrlKeStorage(fotoHasil, "sibm/helpdesk")) || null,
         // §105 perbaikan bug: dulu /D/g (bukan \D) -> biaya selalu 0
         ...(statusUbah === "Selesai" ? { biaya: Number(biayaPerbaikan.replace(/\D/g, "")) || 0 } : {}),
         ...(statusUbah === STATUS_TIDAK_DIJALANKAN ? { alasan_tidak_dijalankan: alasanTutup.trim(), ditutup_oleh: session?.nama || "-", waktu_ditutup: serverTimestamp() } : {}),

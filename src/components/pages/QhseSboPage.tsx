@@ -8,6 +8,7 @@ import { useToast } from "../ui/ToastProvider";
 import { useConfirm } from "../ui/ConfirmProvider";
 import { logoutWithConfirm, useAuthGuard } from "../../hooks/useAuthGuard";
 import AdminShell from "../admin/AdminShell";
+import { uploadFoto } from "@/lib/uploadFoto";
 
 interface ReportSBO {
   id: string;
@@ -85,19 +86,8 @@ export default function QhseSboPage() {
   // FUNGSI KOMPRESI FOTO AFTER
   // ==============================================
 
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-    formData.append("folder", "sibm/qhse-sbo");
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData }
-    );
-    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-    const data = await res.json();
-    return data.secure_url as string;
+  async function uploadKeStorage(blob: Blob): Promise<string> {
+    return uploadFoto(blob, "sibm/qhse-sbo");
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,7 +111,7 @@ export default function QhseSboPage() {
           if (!blob) return;
           setIsUploadingFoto(true);
           try {
-            const url = await uploadToCloudinary(blob);
+            const url = await uploadKeStorage(blob);
             setFotoAfter(url);
           } catch (err) {
             console.error(err);

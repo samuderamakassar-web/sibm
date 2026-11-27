@@ -1,6 +1,6 @@
 // §186 Area Zona Tenant langsung dari Okupansi (keputusan user 26 Nov 2026) -- murni, tanpa Firebase.
 // Setiap unit "terisi" di okupansi_gedung = 1 ruang tenant di pola zona ("Lantai 3 · SAG | 50").
-// Okupansi disimpan -> area_tenant pola zona disinkronkan (ujiPolaZona.sinkronAreaTenantZona), jadi tenant
+// Okupansi disimpan -> area_tenant pola zona disinkronkan (polaZona.sinkronAreaTenantZona), jadi tenant
 // pindah / tambah / keluar otomatis ikut. Ruang baru masuk paket pagi yang cocok dengan nama lama, atau ke
 // paket pemegang pelayanan lantai itu.
 import type { PaketZona, KodePaket } from "./paketZona";
@@ -49,13 +49,34 @@ const lantaiLabel = (a: string) => namaLantai(/^(lantai\s*\d+|basement)/i.exec(a
  * yang memegang pelayanan lantai itu (T1 bila lantai belum punya pemegang).
  */
 export function selaraskanPagi(p: PaketZona, ruang: RuangTenant[]): PaketZona["pagi"] {
+  const pelayanan = selaraskanPelayanan(p, ruang);
   return ruang.map((r) => {
     const persis = p.pagi.find((e) => e.area === r.area);
     if (persis) return { area: r.area, kode: persis.kode };
     const mirip = p.pagi.find((e) => lantaiLabel(e.area) === r.lantai && r.kata.some((k) => e.area.split("·").slice(1).join("·").toLowerCase().includes(k)));
-    const kode: KodePaket = mirip?.kode || p.pelayanan.find((x) => x.lantai === r.lantai)?.kode || "T1";
+    const kode: KodePaket = mirip?.kode || pelayanan.find((x) => x.lantai === r.lantai)?.kode || "T1";
     return { area: r.area, kode };
   });
+}
+
+/**
+ * §187 Pelayanan per lantai ikut Okupansi (renovasi: tenant pindah lantai, lantai jadi kosong).
+ * Lantai yang masih ada tenant -> pemegang lama dipertahankan; lantai tanpa tenant lagi -> dilepas;
+ * lantai baru berisi tenant -> paket Tenant (A/B) yang bebannya (luas ruang tenant) lebih ringan.
+ */
+export function selaraskanPelayanan(p: PaketZona, ruang: RuangTenant[]): PaketZona["pelayanan"] {
+  const luasLantai = new Map<string, number>();
+  ruang.forEach((r) => luasLantai.set(r.lantai, (luasLantai.get(r.lantai) || 0) + (r.luas || 0)));
+  const lantai = Array.from(luasLantai.keys()).sort((a, b) => a.localeCompare(b, "id", { numeric: true }));
+  const out: PaketZona["pelayanan"] = lantai.flatMap((l) => {
+    const e = p.pelayanan.find((x) => x.lantai === l);
+    return e ? [{ lantai: l, kode: e.kode }] : [];
+  });
+  const beban = (k: "T1" | "T2") => out.filter((x) => x.kode === k).reduce((s, x) => s + (luasLantai.get(x.lantai) || 0), 0);
+  lantai.filter((l) => !out.some((x) => x.lantai === l))
+    .sort((a, b) => (luasLantai.get(b) || 0) - (luasLantai.get(a) || 0))
+    .forEach((l) => out.push({ lantai: l, kode: beban("T1") <= beban("T2") ? "T1" : "T2" }));
+  return out.sort((a, b) => a.lantai.localeCompare(b.lantai, "id", { numeric: true }));
 }
 
 /** Unit area bersama di Okupansi yang belum tercakup daftar Zona Publik (saran tambahan untuk admin). */

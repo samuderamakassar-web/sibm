@@ -9,6 +9,7 @@ import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { useAuthGuard, isSuperAdmin as cekSuperAdmin } from "../../../hooks/useAuthGuard";
 import AdminShell from "../../../components/admin/AdminShell";
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
+import { uploadFoto } from "@/lib/uploadFoto";
 
 type IconProps = { size?: number; color?: string };
 const IconPencil = ({ size = 14, color = "currentColor" }: IconProps) => (
@@ -52,19 +53,8 @@ interface UserData {
   peran_tugas?: string;
 }
 
-async function uploadFotoToCloudinary(blob: Blob): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", blob);
-  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-  formData.append("folder", "sibm/staf");
-
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-    { method: "POST", body: formData }
-  );
-  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-  const data = await res.json();
-  return data.secure_url as string;
+async function uploadFotoKeStorage(blob: Blob): Promise<string> {
+  return uploadFoto(blob, "sibm/staf");
 }
 
 export default function UserManagementPage() {
@@ -142,7 +132,7 @@ export default function UserManagementPage() {
           if (!blob) return;
           setIsUploadingFoto(true);
           try {
-            const url = await uploadFotoToCloudinary(blob);
+            const url = await uploadFotoKeStorage(blob);
             setFormData((prev) => ({ ...prev, foto_url: url }));
           } catch (err) {
             console.error(err);

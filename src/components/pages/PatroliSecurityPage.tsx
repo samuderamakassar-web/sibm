@@ -11,6 +11,7 @@ import AdminShell from "../admin/AdminShell";
 import { qrLantai, useQrLantaiAktif, useTitikPatroli, type LantaiPatroli } from "../../lib/titikPatroli";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { daerahTulis } from "@/lib/daerah";
+import { uploadFoto } from "@/lib/uploadFoto";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -288,19 +289,8 @@ export default function PatroliSecurityPage() {
     setPhotoTarget(null);
   };
 
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-    formData.append("folder", "sibm/patroli-security");
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData }
-    );
-    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-    const data = await res.json();
-    return data.secure_url as string;
+  async function uploadKeStorage(blob: Blob): Promise<string> {
+    return uploadFoto(blob, "sibm/patroli-security");
   }
 
   const ambilFotoWatermark = () => {
@@ -337,7 +327,7 @@ export default function PatroliSecurityPage() {
       if (!blob) return;
       setIsUploadingFoto(true);
       try {
-        const url = await uploadToCloudinary(blob);
+        const url = await uploadKeStorage(blob);
         setScannedItems(prev => [...prev, { id: targetSaatIni.id, waktu_patroli: jamSekarang, kondisi: kondisiTitik, foto: url }]);
       } catch (err) {
         console.error(err);

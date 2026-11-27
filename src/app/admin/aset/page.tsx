@@ -13,6 +13,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { deleteObject, ref } from "firebase/storage";
+import { bukaDokumen } from "@/components/ui/PratinjauDokumen";
 import * as XLSX from "xlsx";
 import { db, storage } from "../../../lib/firebase";
 import { isMagangSaatIni, useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -303,14 +304,14 @@ export default function AsetPage() {
     } catch (e) { console.error(e); showToast(`${(e as Error).message || "Gagal mengunggah."} (${ok} berhasil)`, "error"); }
     finally { setMenyimpan(false); setProgres(""); }
   };
+  // §187 PDF/gambar dibuka di modal pratinjau (print & unduh); DWG/DXF langsung diunduh
   const bukaRevisi = async (r: RevisiGambar) => {
-    const tabBaru = bisaPratinjau(r.file_nama) ? window.open("", "_blank") : null;
+    if (bisaPratinjau(r.file_nama)) { bukaDokumen({ path: r.file_path, nama: r.file_nama }); return; }
     try {
       const url = await urlGambar(r.file_path);
-      if (tabBaru) tabBaru.location.href = url;
-      else { const a = document.createElement("a"); a.href = url; a.download = r.file_nama; a.click(); }
+      const a = document.createElement("a"); a.href = url; a.download = r.file_nama; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 120000);
-    } catch (e) { console.error(e); tabBaru?.close(); showToast("File tidak bisa dibuka (izin / koneksi).", "error"); }
+    } catch (e) { console.error(e); showToast("File tidak bisa dibuka (izin / koneksi).", "error"); }
   };
   const mulaiBanding = async (a: RevisiGambar, b: RevisiGambar) => {
     if (!bisaPratinjau(a.file_nama) || !bisaPratinjau(b.file_nama)) return showToast("Perbandingan hanya untuk PDF / gambar. File DWG silakan diunduh.", "warning");

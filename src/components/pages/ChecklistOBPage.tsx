@@ -9,7 +9,8 @@ import { sesiOBSekarang, waktuWITASekarang, JENDELA_SESI_OB, SesiOB } from "@/li
 import { getSegmenUntukArea, ID_SEGMENT_PELAYANAN, useChecklistOB } from "@/lib/sopChecklist";
 import AdminShell from "../admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
-import { useUjiPolaZona, zonaUntuk } from "@/lib/ujiPolaZona";
+import { useUjiPolaZona, zonaUntuk } from "@/lib/polaZona";
+import { uploadFoto } from "@/lib/uploadFoto";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/ob (components/pages/DashboardOBPage.tsx)
@@ -290,19 +291,8 @@ export default function ChecklistOBPage() {
   // ==========================================
   // UPLOAD FOTO (menggantikan live-camera)
   // ==========================================
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-    formData.append("folder", "sibm/checklist-ob");
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData }
-    );
-    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-    const data = await res.json();
-    return data.secure_url as string;
+  async function uploadKeStorage(blob: Blob): Promise<string> {
+    return uploadFoto(blob, "sibm/checklist-ob");
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, index: number, type: "before" | "after") => {
@@ -327,7 +317,7 @@ export default function ChecklistOBPage() {
           if (!blob) return;
           setUploadingTask(`${index}-${type}`);
           try {
-            const url = await uploadToCloudinary(blob);
+            const url = await uploadKeStorage(blob);
             setFotoList(prev => {
               const next = [...prev];
               next[index] = { ...next[index], [type]: url };
@@ -347,7 +337,7 @@ export default function ChecklistOBPage() {
     e.target.value = "";
   };
 
-  // Foto bukti alasan "Tidak" khusus segment Pelayanan -- reuse uploadToCloudinary yang sama.
+  // Foto bukti alasan "Tidak" khusus segment Pelayanan -- reuse uploadKeStorage yang sama.
   const handleFotoAlasanTidak = (e: React.ChangeEvent<HTMLInputElement>, pertanyaanId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -370,7 +360,7 @@ export default function ChecklistOBPage() {
           if (!blob) return;
           setUploadingAlasanId(pertanyaanId);
           try {
-            const url = await uploadToCloudinary(blob);
+            const url = await uploadKeStorage(blob);
             setFotoTidakPelayanan(prev => ({ ...prev, [pertanyaanId]: url }));
           } catch (err) {
             console.error(err);

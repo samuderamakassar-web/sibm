@@ -192,7 +192,9 @@ service cloud.firestore {
           // §167 Daftar aset terpadu & §168 As-built drawing (metadata; file di Storage asbuilt/**)
           'aset_gedung', 'asbuilt_gambar',
           // §169 Uji coba pola zona OB: laporan ronde & penilaian akhir shift (config di ob_settings/uji_pola_zona)
-          'ob_zona_laporan'
+          'ob_zona_laporan',
+          // §187 Perjalanan dinas luar kota (Driver isi sendiri, Admin GA rekap)
+          'driver_perjalanan_dinas'
         ];
     }
 

@@ -15,7 +15,7 @@ import { useMasterKondisiAset } from "@/lib/kondisiAset";
 import PermintaanPelayananPanel from "../PermintaanPelayananPanel";
 import KinerjaSayaPanel from "../KinerjaSayaPanel";
 import PetugasUtilitasPicker from "@/components/PetugasUtilitasPicker";
-import { useUjiPolaZona, zonaUntuk, mingguKe, cadanganHariIni, dalamJam } from "@/lib/ujiPolaZona";
+import { useUjiPolaZona, zonaUntuk, mingguKe, cadanganHariIni, dalamJam } from "@/lib/polaZona";
 import { JADWAL_OPNAME, statusSesi } from "@/lib/stokOB";
 import TugasZonaSayaPanel from "../TugasZonaSayaPanel";
 

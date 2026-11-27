@@ -3,8 +3,8 @@
 // dan tombol link opsional. Dokumen lama (tanpa field baru) otomatis dianggap jenis "teks", tayang
 // tanpa batas tanggal, tidak penting -- jadi tidak ada pengumuman lama yang rusak.
 import type { Timestamp } from "firebase/firestore";
-import { uploadFotoToCloudinary } from "./uploadFoto";
-import { uploadDokumenToCloudinary } from "./uploadDokumen";
+import { uploadFoto } from "./uploadFoto";
+import { uploadDokumen } from "./uploadDokumen";
 
 export type JenisPengumuman = "teks" | "gambar" | "video";
 
@@ -18,7 +18,7 @@ export interface PengumumanGedung {
   dibuatOleh?: string;
   jenis?: JenisPengumuman;
   gambar_url?: string;
-  /** "youtube" = link YouTube (disarankan untuk video panjang), "upload" = klip pendek di Cloudinary. */
+  /** "youtube" = link YouTube (disarankan untuk video panjang), "upload" = klip pendek (Firebase Storage; data lama di Cloudinary). */
   video_sumber?: "youtube" | "upload";
   youtube_id?: string;
   video_url?: string;
@@ -95,8 +95,8 @@ export function ambilYoutubeId(link: string): string | null {
 /** Gambar sampul video untuk carousel. */
 export function sampulVideo(p: PengumumanGedung): string | null {
   if (p.video_sumber === "youtube" && p.youtube_id) return `https://i.ytimg.com/vi/${p.youtube_id}/hqdefault.jpg`;
-  if (p.video_url) {
-    // Cloudinary bisa membuat frame detik ke-1 sebagai JPG lewat transformasi URL.
+  if (p.video_url && p.video_url.includes("res.cloudinary.com")) {
+    // klip lama Cloudinary bisa membuat frame detik ke-1 sebagai JPG lewat transformasi URL.
     return p.video_url.replace("/video/upload/", "/video/upload/so_1/").replace(/\.[a-z0-9]+$/i, ".jpg");
   }
   return null;
@@ -109,7 +109,7 @@ export function urlPemutar(p: PengumumanGedung): string | null {
   return p.video_url || null;
 }
 
-/** Klip video yang diunggah langsung dibatasi supaya kuota bandwidth Cloudinary (dipakai juga untuk
+/** Klip video yang diunggah langsung dibatasi supaya kuota unduhan Storage (dipakai juga untuk
  *  foto patroli/checklist staf) tidak cepat habis. Video panjang -> pakai link YouTube Unlisted. */
 export const MAX_KLIP_VIDEO_MB = 20;
 
@@ -140,12 +140,12 @@ export async function uploadGambarPengumuman(file: File): Promise<string> {
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Gagal mengompres gambar"))), "image/jpeg", 0.85)
   );
-  return uploadFotoToCloudinary(blob, "sibm/pengumuman");
+  return uploadFoto(blob, "sibm/pengumuman");
 }
 
 export async function uploadKlipPengumuman(file: File): Promise<string> {
   if (file.size > MAX_KLIP_VIDEO_MB * 1024 * 1024) {
     throw new Error(`Klip ${(file.size / 1024 / 1024).toFixed(1)} MB melebihi batas ${MAX_KLIP_VIDEO_MB} MB. Untuk video panjang gunakan link YouTube (Unlisted).`);
   }
-  return uploadDokumenToCloudinary(file, "sibm/pengumuman");
+  return uploadDokumen(file, "sibm/pengumuman");
 }

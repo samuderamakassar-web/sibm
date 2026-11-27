@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ui/ConfirmProvider";
 import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "@/lib/uploadDokumen";
 import AdminShell from "../../../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 type IconProps = { size?: number; color?: string };
 const IconBook = ({ size = 20, color = "currentColor" }: IconProps) => (
@@ -238,7 +239,7 @@ export default function AdminSopPage() {
                       </div>
                       <div style={{ fontWeight: "800", color: "var(--ink)", fontSize: "14px" }}>{sop.judul}</div>
                       {sop.deskripsi && <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--ink-soft)" }}>{sop.deskripsi}</p>}
-                      <a href={sop.file_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginTop: "8px", fontSize: "11px", fontWeight: "bold", color: "var(--info)", textDecoration: "none" }}>
+                      <a href={sop.file_url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(sop.file_url, sop.file_name)} style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginTop: "8px", fontSize: "11px", fontWeight: "bold", color: "var(--info)", textDecoration: "none" }}>
                         <IconFileText size={13} /> {sop.file_name || "Lihat dokumen"}
                       </a>
                     </div>

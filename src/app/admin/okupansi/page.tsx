@@ -18,7 +18,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import AdminShell from "../../../components/admin/AdminShell";
 import Tile from "../../../components/admin/Tile";
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
-import { sinkronAreaTenantZona } from "../../../lib/ujiPolaZona";
+import { sinkronAreaTenantZona } from "../../../lib/polaZona";
 
 type Status = "terisi" | "kosong" | "bersama";
 interface Unit { id: string; nama: string; tenant: string; luas: number; status: Status }

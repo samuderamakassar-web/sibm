@@ -23,7 +23,7 @@ import AdminShell from "../admin/AdminShell";
 import { areaOpsional, paketPlottingDari, useChecklistOB } from "../../lib/sopChecklist";
 import PetugasUtilitasPicker from "../PetugasUtilitasPicker";
 import JadwalOtomatisInfo from "../JadwalOtomatisInfo";
-import { useUjiPolaZona } from "../../lib/ujiPolaZona";
+import { useUjiPolaZona } from "../../lib/polaZona";
 
 // ==========================================
 // KONSTANTA

@@ -16,6 +16,7 @@ import {
   JADWAL_OPNAME, KATEGORI, KET_KAT, WARNA_KAT, kategoriBarang, rekapHarian, sesiOpnameBawaan, statusSesi, tebakKategori,
   type Kategori, type OpnameRingkas, type SesiOpname,
 } from "@/lib/stokOB";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan halaman OB lain (DashboardOBPage/ChecklistOBPage)
@@ -772,7 +773,7 @@ export default function StockOpnamePage() {
                     {judulKelompok && <div style={{ fontSize: "12px", fontWeight: 800, color: WARNA_KAT[kat].fg, marginTop: idx === 0 ? 0 : "6px", letterSpacing: ".02em" }}>{kat} · {jumlahPerKat(kat)}</div>}
                     <div className={`stock-row${isLowStock ? " is-low" : ""}`}>
                       {item.foto ? (
-                        <a href={item.foto} target="_blank" rel="noopener noreferrer" aria-label={`Foto ${item.nama_barang}`}>
+                        <a href={item.foto} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(item.foto)} aria-label={`Foto ${item.nama_barang}`}>
                           {/* eslint-disable-next-line @next/next/no-img-element -- foto Cloudinary */}
                           <img src={item.foto} alt={item.nama_barang} className="sr-foto" loading="lazy" />
                         </a>

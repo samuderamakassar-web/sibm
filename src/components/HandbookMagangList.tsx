@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 type IconProps = { size?: number; color?: string };
 const IconGraduationCap = ({ size = 18, color = "currentColor" }: IconProps) => (
@@ -69,7 +70,7 @@ export default function HandbookMagangList() {
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         {daftar.map((item) => (
           <div key={item.id} style={{ background: "var(--bg, #f7f6f5)", borderRadius: "14px", padding: "14px 16px", border: "1px solid var(--line, #e7e5e4)" }}>
-            <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none" }}>
+            <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(item.url, item.judul)} style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none" }}>
               <div style={{ width: "34px", height: "34px", borderRadius: "10px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: item.jenis === "pdf" ? "var(--red-50, #fef2f2)" : "#f5f3ff", color: item.jenis === "pdf" ? "var(--red-600, #dc2626)" : "var(--accent, #7c3aed)" }}>
                 {item.jenis === "pdf" ? <IconFileText size={17} /> : <IconPlayCircle size={17} />}
               </div>

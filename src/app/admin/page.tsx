@@ -63,7 +63,7 @@ const MENU_GROUPS: MenuGroup[] = [
     tone: "ok",
     items: [
       // §181 menu Plotting dihapus -- pembagian tugas OB & CS sepenuhnya dari Pola Zona
-      { title: "Pola Zona OB & CS", desc: "Zona Tenant & Publik, kehadiran, petugas inspeksi + evaluasi", path: "/admin/uji-pola-zona", icon: "calendar" },
+      { title: "Pola Zona OB & CS", desc: "Zona Tenant & Publik, kehadiran, petugas inspeksi + evaluasi", path: "/admin/pola-zona", icon: "calendar" },
       { title: "Temuan & Kondisi Aset", desc: "Hasil inspeksi OB: perbaikan & penggantian", path: "/admin/kondisi-aset", icon: "search" },
       { title: "Alat Kerja OB & CS", desc: "Daftar alat, rusak/hilang, label", path: "/admin/alat-kerja", icon: "box" },
     ],
@@ -92,6 +92,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { title: "Manajemen Pengguna", desc: "Akun login staf & peran tugas", path: "/admin/users", icon: "idCard" },
       { title: "Master Data Karyawan", desc: "Direktori karyawan SIBM + email", path: "/admin/karyawan", icon: "building" },
       { title: "Beban Kerja & Personel", desc: "Perlu tambah OB, CS, Driver, Security?", path: "/admin/sla", icon: "trophy" },
+      { title: "Perjalanan Dinas Driver", desc: "Dinas luar kota: hari, KM, biaya + banding tahun lalu", path: "/admin/perjalanan-dinas", icon: "car" },
       { title: "Rekap Poin Staf", desc: "Skor bulanan per departemen", path: "/admin/monitor-poin", icon: "trophy" },
       { title: "SOP & Checklist", desc: "Checklist harian/inspeksi + dokumen SOP/IK", path: "/admin/sop-checklist", icon: "book" },
       { title: "Handbook Magang", desc: "Materi belajar PDF/video", path: "/admin/handbook-magang", icon: "graduationCap" },

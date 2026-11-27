@@ -8,7 +8,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, getDoc, increment, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
-import { deleteObject, getBlob, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, ref, uploadBytes } from "firebase/storage";
+import { bukaDokumen } from "@/components/ui/PratinjauDokumen";
 import * as XLSX from "xlsx";
 import { db, storage } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -84,11 +85,9 @@ async function unggah(file: File, folder: string): Promise<{ path: string; nama:
   await uploadBytes(ref(storage, path), file, { contentType: file.type || "application/pdf" });
   return { path, nama: file.name };
 }
+// §187 file tagihan/nota dibuka di modal pratinjau (print & unduh)
 async function bukaFile(path: string) {
-  const tab = window.open("", "_blank");
-  const url = URL.createObjectURL(await getBlob(ref(storage, path)));
-  if (tab) tab.location.href = url; else window.location.href = url;
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  bukaDokumen({ path });
 }
 
 export default function TagihanPage() {

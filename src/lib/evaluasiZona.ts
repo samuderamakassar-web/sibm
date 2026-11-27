@@ -11,7 +11,7 @@ import type { Timestamp } from "firebase/firestore";
 import { menitJenis, timJenis } from "./pelayanan";
 import { statusBeban, type AsumsiBeban, type StatusBeban } from "./sla";
 import type { AreaChecklist } from "./sopChecklist";
-import { hariKerja, lamaJam, tambahHari, rencanaUntuk, tidakHadirPada, zonaUntuk, anggotaZona, type LaporanZona, type UjiPolaZona, type Zona } from "./ujiPolaZona";
+import { hariKerja, lamaJam, tambahHari, rencanaUntuk, tidakHadirPada, zonaUntuk, anggotaZona, type LaporanZona, type UjiPolaZona, type Zona } from "./polaZona";
 import { bobotArea, FAKTOR_MINGGUAN } from "./bagiZona";
 
 export interface Permintaan { jenis?: string; jumlah?: number; diterima_oleh?: string; waktu_minta?: Timestamp | null; waktu_terima?: Timestamp | null; status?: string }

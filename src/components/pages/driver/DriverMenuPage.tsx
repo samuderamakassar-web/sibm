@@ -109,7 +109,8 @@ export default function DriverMenuPage() {
     { title: "Inspeksi Mingguan", desc: "Checklist kondisi kendaraan tiap minggu.", path: "/dashboard/driver/inspeksi", action: "link", token: "ok", icon: IconSearch, hideOnMobile: true },
     { title: "Servis, Emisi & Odometer", desc: "Laporan servis, uji emisi, & catat odometer.", path: "/dashboard/driver/servis", action: "link", token: "warn", icon: IconWrench, hideOnMobile: true },
     { title: "Riwayat Armada Saya", desc: "Lihat semua log perjalanan Anda.", path: "/dashboard/driver/riwayat", action: "link", token: "accent", icon: IconClipboardList, hideOnMobile: false },
-    { title: "Klaim Lembur / Perjalanan Dinas", desc: "Rekap & input lemburan periode berjalan.", path: "", action: "modal_lembur", token: "red", icon: IconClock, hideOnMobile: false },
+    { title: "Perjalanan Dinas Luar Kota", desc: "Catat kota tujuan, hari, KM & biaya — lengkapi sejak Januari.", path: "/dashboard/driver/dinas", action: "link", token: "ok", icon: IconCar, hideOnMobile: false },
+    { title: "Klaim Lembur", desc: "Rekap & input lemburan periode berjalan.", path: "", action: "modal_lembur", token: "red", icon: IconClock, hideOnMobile: false },
     { title: "SOP & Instruksi Kerja", desc: "Pelajari dokumen SOP/IK terbaru untuk Tim Driver.", path: "/dashboard/driver/sop", action: "link", token: "info", icon: IconBook, hideOnMobile: false },
   ];
 

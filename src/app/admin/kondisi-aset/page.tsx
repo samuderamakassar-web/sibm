@@ -22,7 +22,7 @@ import Tile from "../../../components/admin/Tile";
 import Modal from "../../../components/ui/Modal";
 import { daerahTulis } from "../../../lib/daerah";
 import PetugasUtilitasPicker from "../../../components/PetugasUtilitasPicker";
-import { dataUrlKeCloudinary } from "../../../lib/uploadFoto";
+import { dataUrlKeStorage } from "../../../lib/uploadFoto";
 import {
   JENIS_INSPEKSI, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, MASTER_KONDISI_BAWAAN, CARA_MUSNAH, LABEL_STATUS_TEMUAN, STATUS_TEMUAN_DISPOSAL, STATUS_TEMUAN_FINAL, STATUS_TEMUAN_TERBUKA, WARNA_KONDISI, WARNA_STATUS_TEMUAN,
   kodeTemuan, kondisiBermasalah, tebakJenisDariItem, useMasterKondisiAset,
@@ -136,7 +136,7 @@ export default function KondisiAsetPage() {
     setMenyimpan(true);
     try {
       const oleh = session?.nama || "-";
-      const fotoUrl = form.foto_hasil && form.foto_hasil !== pilih.foto_hasil ? (await dataUrlKeCloudinary(form.foto_hasil, "sibm/temuan-aset")) || form.foto_hasil : form.foto_hasil;
+      const fotoUrl = form.foto_hasil && form.foto_hasil !== pilih.foto_hasil ? (await dataUrlKeStorage(form.foto_hasil, "sibm/temuan-aset")) || form.foto_hasil : form.foto_hasil;
       const alasanLog = s === "Ditolak" ? form.alasan_tolak : s === "Ditunda" ? form.alasan_tunda : s === "Disposal" ? form.alasan_disposal : form.catatan_admin;
       await updateDoc(doc(db, "temuan_aset", pilih.id), {
         status: s, rencana: form.rencana, catatan_admin: form.catatan_admin.trim(), ditangani_oleh: oleh,

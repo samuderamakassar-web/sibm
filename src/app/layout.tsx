@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "../components/ui/ToastProvider";
 import { ConfirmProvider } from "../components/ui/ConfirmProvider";
+import PratinjauDokumenHost from "../components/ui/PratinjauDokumen";
 import NotifikasiPatroliListener from "../components/NotifikasiPatroliListener";
 import NotifikasiKendaraanListener from "../components/NotifikasiKendaraanListener";
 import InstallPrompt from "../components/InstallPrompt";
@@ -69,6 +70,7 @@ export default function RootLayout({
             <NotifikasiKendaraanListener />
             {children}
             <InstallPrompt />
+            <PratinjauDokumenHost />
           </ConfirmProvider>
         </ToastProvider>
       </body>

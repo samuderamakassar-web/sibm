@@ -9,7 +9,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { tanggalISOWITASekarang } from "../../lib/shift";
 import { ringkasTugas } from "../../lib/rencanaZona";
-import { fotoLaporan, KOLEKSI_LAPORAN_ZONA, rencanaUntuk, tambahHari, useUjiPolaZona, type LaporanZona } from "../../lib/ujiPolaZona";
+import { fotoLaporan, KOLEKSI_LAPORAN_ZONA, rencanaUntuk, tambahHari, useUjiPolaZona, type LaporanZona } from "../../lib/polaZona";
 import { WARNA_PERAN } from "./RencanaZonaKartu";
 
 const sama = (a = "", b = "") => a.trim().toLowerCase() === b.trim().toLowerCase();

@@ -9,6 +9,7 @@ import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import { handleDokumenUpload, MAX_UKURAN_DOKUMEN_MB } from "../../../lib/uploadDokumen";
 import AdminShell from "../../../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 // Ikon SVG garis — konsisten dengan admin/broadcast & admin/sop
 type IconProps = { size?: number; color?: string };
@@ -249,7 +250,7 @@ export default function HandbookMagangAdminPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: "15px", fontWeight: 800, color: "var(--ink)" }}>{item.judul}</div>
                     {item.deskripsi && <div style={{ fontSize: "12.5px", color: "var(--muted)", marginTop: "3px" }}>{item.deskripsi}</div>}
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "var(--info)", display: "inline-block", marginTop: "6px" }}>Lihat file/link &rarr;</a>
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(item.url, item.judul)} style={{ fontSize: "11px", color: "var(--info)", display: "inline-block", marginTop: "6px" }}>Lihat file/link &rarr;</a>
                   </div>
                 </div>
                 <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed var(--line)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>

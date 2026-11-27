@@ -14,6 +14,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { jamWITA, lemburDihitung, tanggalWITA, type ValidasiKaryawan } from "../lib/validasiKaryawan";
 import KehadiranSecurityPanel from "./KehadiranSecurityPanel";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 const jam = (ts?: { toDate: () => Date } | null) => (ts ? jamWITA(ts.toDate()) : "-");
 const geser = (iso: string, n: number) => tanggalWITA(new Date(new Date(`${iso}T12:00:00+08:00`).getTime() + n * 86400000));
@@ -57,7 +58,7 @@ export default function KehadiranKaryawanPanel() {
   const Kotak = ({ v, isi }: { v: Kartu; isi: React.ReactNode }) => (
     <div style={{ display: "flex", gap: "12px", alignItems: "center", padding: "10px 12px", borderRadius: "14px", background: "var(--bg)" }}>
       {v.foto_url ? (
-        <a href={v.foto_url} target="_blank" rel="noopener noreferrer" aria-label={`Foto validasi ${v.nama}`} style={{ flexShrink: 0 }}>
+        <a href={v.foto_url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(v.foto_url)} aria-label={`Foto validasi ${v.nama}`} style={{ flexShrink: 0 }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- foto Cloudinary */}
           <img src={v.foto_url} alt="" style={{ width: "52px", height: "52px", borderRadius: "12px", objectFit: "cover", display: "block" }} />
         </a>

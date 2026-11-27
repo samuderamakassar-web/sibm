@@ -18,7 +18,7 @@ import Modal from "../../../components/ui/Modal";
 import { ASUMSI_BAWAAN, LABEL_ASUMSI, WARNA_STATUS_BEBAN, statusBeban, type AsumsiBeban } from "../../../lib/sla";
 import { menitJenis, timJenis } from "../../../lib/pelayanan";
 import { CHECKLIST_OB_BAWAAN, paketPlottingDari, type AreaChecklist } from "../../../lib/sopChecklist";
-import { rapikanConfig, tidakHadirPada } from "../../../lib/ujiPolaZona";
+import { rapikanConfig, tidakHadirPada } from "../../../lib/polaZona";
 
 const tz = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" });
 const tzJam = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", hour: "2-digit", hourCycle: "h23" });

@@ -4,7 +4,7 @@ import WajibLogin from "@/components/WajibLogin";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, orderBy, doc, updateDoc, Timestamp, getDocs, where, limit, type QuerySnapshot } from "firebase/firestore";
-import { dataUrlKeCloudinary } from "../../../../lib/uploadFoto";
+import { dataUrlKeStorage } from "../../../../lib/uploadFoto";
 import { db } from "../../../../lib/firebase";
 import { kirimEmail } from "../../../..//lib/notify";
 import { buildPaketEmailHtml } from "../../../../lib/emailTemplates";
@@ -18,6 +18,7 @@ import Badge from "../../../../components/ui/Badge";
 import { Table, THead, TBody, Tr, Th, Td } from "../../../../components/ui/Table";
 import AdminShell from "../../../../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -271,7 +272,7 @@ function PaketPage() {
 
     try {
       const waktuKirim = new Date(); // serverTimestamp() belum resolve saat itu juga -- pakai jam lokal untuk isi notif/email
-      const fotoUrl = await dataUrlKeCloudinary(previewUrl, "sibm/paket");
+      const fotoUrl = await dataUrlKeStorage(previewUrl, "sibm/paket");
       await addDoc(collection(db, "packages"), { daerah: daerahTulis(),
         jenis_barang: jenisBarang,
         penerima: penerima,
@@ -319,7 +320,7 @@ function PaketPage() {
       await updateDoc(doc(db, "packages", serahkanTarget.id), {
         waktu_diambil: serverTimestamp(),
         status: "Sudah Diambil",
-        foto_bukti_ambil_url: await dataUrlKeCloudinary(fotoSerahTerima, "sibm/paket"),
+        foto_bukti_ambil_url: await dataUrlKeStorage(fotoSerahTerima, "sibm/paket"),
         petugas_ambil: picName,
       });
       showToast(`Paket berhasil diserahkan ke ${serahkanTarget.penerima}.`, "success");
@@ -646,7 +647,7 @@ function PaketPage() {
               <div style={{ background: "var(--bg)", borderRadius: "14px", padding: "14px", border: "1px solid var(--line)" }}>
                 <div style={{ fontSize: "10px", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "8px" }}>Diterima (Masuk)</div>
                 {detailTarget.foto_bukti_url ? (
-                  <a href={detailTarget.foto_bukti_url} target="_blank" rel="noopener noreferrer">
+                  <a href={detailTarget.foto_bukti_url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(detailTarget.foto_bukti_url)}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={detailTarget.foto_bukti_url} alt="Foto diterima" style={{ width: "100%", height: "110px", objectFit: "cover", borderRadius: "10px", border: "1px solid var(--line)", marginBottom: "10px" }} />
                   </a>
@@ -662,7 +663,7 @@ function PaketPage() {
                 {detailTarget.status === "Sudah Diambil" ? (
                   <>
                     {detailTarget.foto_bukti_ambil_url ? (
-                      <a href={detailTarget.foto_bukti_ambil_url} target="_blank" rel="noopener noreferrer">
+                      <a href={detailTarget.foto_bukti_ambil_url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(detailTarget.foto_bukti_ambil_url)}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={detailTarget.foto_bukti_ambil_url} alt="Foto diambil" style={{ width: "100%", height: "110px", objectFit: "cover", borderRadius: "10px", border: "1px solid rgba(22,163,74,0.3)", marginBottom: "10px" }} />
                       </a>

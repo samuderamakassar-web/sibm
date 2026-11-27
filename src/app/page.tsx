@@ -11,6 +11,7 @@ import BookingModal from "../components/BookingModal";
 import PelayananModal from "../components/PelayananModal";
 import { RUANGAN_BOOKING, rentangWaktu, type Booking, type JenisBooking } from "../lib/booking";
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, getCountFromServer, Timestamp, where, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { uploadFoto } from "@/lib/uploadFoto";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import { kirimEmail } from "../lib/notify";
@@ -27,7 +28,7 @@ import VehicleIcon3D from "../components/VehicleIcon3D";
 import { DAFTAR_UNIT_BISNIS, DAFTAR_DEPARTEMEN_INTERNAL } from "../lib/unitBisnis";
 import AdminShell from "../components/admin/AdminShell";
 import { daerahTulis } from "@/lib/daerah";
-import { rapikanConfig, rencanaUntuk, type UjiPolaZona } from "@/lib/ujiPolaZona";
+import { rapikanConfig, rencanaUntuk, type UjiPolaZona } from "@/lib/polaZona";
 import { ringkasTugas } from "@/lib/rencanaZona";
 
 // ==========================================
@@ -603,20 +604,9 @@ export default function PortalSIBM() {
     }));
   };
 
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", blob);
-  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-  formData.append("folder", "sibm/portal-publik");
-
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-    { method: "POST", body: formData }
-  );
-  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-  const data = await res.json();
-  return data.secure_url as string;
-}
+  async function uploadKeStorage(blob: Blob): Promise<string> {
+    return uploadFoto(blob, "sibm/portal-publik");
+  }
 
 const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState: React.Dispatch<React.SetStateAction<string>>) => {
   const file = e.target.files?.[0];
@@ -637,7 +627,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setFotoState:
         if (!blob) return;
         setIsUploadingFoto(true);
         try {
-          const url = await uploadToCloudinary(blob);
+          const url = await uploadKeStorage(blob);
           setFotoState(url);
         } catch (err) {
           console.error(err);

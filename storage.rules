@@ -3,7 +3,7 @@ rules_version = '2';
 
 // §143 Bank Dokumen Legal: file legal (akta, NPWP, kontrak, izin) TIDAK publik -- hanya Admin GA / Administrator
 // yang login (dicek ke users_master). Eksekutif Tenant hanya melihat daftar dokumen (Firestore), tidak mengunduh file.
-// Path lain ditutup (aplikasi belum memakai Firebase Storage untuk keperluan lain; foto tetap di Cloudinary).
+// §187 foto & dokumen operasional pindah dari Cloudinary ke Storage (foto/, dokumen/, publik/). Path lain ditutup.
 service firebase.storage {
   match /b/{bucket}/o {
     function profil() {
@@ -37,6 +37,26 @@ service firebase.storage {
       allow write: if adminGA()
         && (request.resource == null || (request.resource.size < 15 * 1024 * 1024
           && request.resource.contentType.matches('application/pdf|image/.*')));
+    }
+
+    // §187 Foto operasional (patroli, checklist, paket, buku tamu, profil, dll.) -- akun staf login; maks 10 MB gambar.
+    // Dibaca lewat URL unduhan (token) di <img>; baca langsung juga boleh (foto bukan data rahasia).
+    match /foto/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+    // §187 Dokumen SOP/IK, handbook, lampiran pengumuman (PDF / gambar / Office / klip video) -- akun staf login; maks 25 MB.
+    match /dokumen/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.resource.size < 25 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/.*|video/.*|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-excel|application/vnd.ms-powerpoint');
+      allow delete: if request.auth != null;
+    }
+    // §187 Foto dari portal publik tanpa login (lapor kerusakan, SBO, dll.) -- hanya membuat, gambar maks 5 MB.
+    match /publik/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
     }
 
     match /{allPaths=**} {

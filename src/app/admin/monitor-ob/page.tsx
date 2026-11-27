@@ -11,6 +11,7 @@ import AdminIcon from "../../../components/admin/AdminIcon";
 import Tile from "../../../components/admin/Tile";
 import { KATEGORI, KET_KAT, WARNA_KAT, kategoriBarang, type Kategori } from "../../../lib/stokOB";
 import RondeZonaPanel from "../../../components/admin/RondeZonaPanel";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 // ==========================================
 // INTERFACES — disamakan sama bentuk data ASLI yang ditulis oleh ChecklistOBPage,
@@ -443,7 +444,7 @@ export default function MonitorOBPage() {
                   {bulanTersediaPlot.length > 0 ? bulanTersediaPlot.map((b) => <option key={b} value={b}>{formatBulanLabel(b)}</option>) : <option value={bulanPlotAktif}>{formatBulanLabel(bulanPlotAktif)}</option>}
                 </select>
                 {/* §181 plotting harian diganti Pola Zona */}
-                <button type="button" className="sa-btn is-dark" onClick={() => router.push("/admin/uji-pola-zona")}>
+                <button type="button" className="sa-btn is-dark" onClick={() => router.push("/admin/pola-zona")}>
                   Atur Pola Zona
                 </button>
                 <button type="button" className="sa-btn is-primary" onClick={handlePrint}>
@@ -716,7 +717,7 @@ export default function MonitorOBPage() {
                           {judul && <tr><td colSpan={7} style={{ background: WARNA_KAT[kat].bg, color: WARNA_KAT[kat].fg, fontWeight: 800, fontSize: "12px", padding: "7px 12px" }}>{kat} · {filteredStocks.filter((x) => kategoriBarang(x) === kat).length}</td></tr>}
                           <tr style={{ background: isLowStock ? "var(--red-50)" : undefined }}>
                             <td data-label="Foto">{item.foto ? (
-                              <a href={item.foto} target="_blank" rel="noopener noreferrer">
+                              <a href={item.foto} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(item.foto)}>
                                 {/* eslint-disable-next-line @next/next/no-img-element -- foto Cloudinary */}
                                 <img src={item.foto} alt={item.nama_barang} loading="lazy" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "8px", display: "block" }} />
                               </a>

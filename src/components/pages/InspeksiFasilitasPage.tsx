@@ -24,6 +24,7 @@ import { useChecklistOB } from "@/lib/sopChecklist";
 import AdminShell from "../admin/AdminShell";
 import Modal from "../ui/Modal";
 import { daerahTulis } from "@/lib/daerah";
+import { uploadFoto } from "@/lib/uploadFoto";
 import {
   AREA_TETAP, KONDISI, LABEL_JENIS, LABEL_TINDAKAN, STATUS_TEMUAN_KUNCI, WARNA_KONDISI, kodeTemuan, kondisiBermasalah, kondisiDefaultTindakan,
   useMasterKondisiAset, type HasilInspeksiItem, type InspeksiAsetLog, type JenisInspeksi, type TemuanAset,
@@ -71,14 +72,8 @@ function formatRentangMinggu(seninISO: string): string {
 }
 const tglRingkas = (ts?: Timestamp | null) => (ts ? ts.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
 
-async function uploadToCloudinary(blob: Blob): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", blob);
-  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-  formData.append("folder", "sibm/inspeksi-fasilitas");
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-  return (await res.json()).secure_url as string;
+async function uploadKeStorage(blob: Blob): Promise<string> {
+  return uploadFoto(blob, "sibm/inspeksi-fasilitas");
 }
 /** Kecilkan foto (lebar 700px) lalu unggah. */
 function kecilkanLaluUnggah(file: File): Promise<string> {
@@ -94,7 +89,7 @@ function kecilkanLaluUnggah(file: File): Promise<string> {
         const ctx = canvas.getContext("2d");
         if (!ctx) return reject(new Error("canvas"));
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => (blob ? uploadToCloudinary(blob).then(resolve, reject) : reject(new Error("blob"))), "image/jpeg", 0.65);
+        canvas.toBlob((blob) => (blob ? uploadKeStorage(blob).then(resolve, reject) : reject(new Error("blob"))), "image/jpeg", 0.65);
       };
       img.onerror = () => reject(new Error("gambar"));
       if (typeof ev.target?.result === "string") img.src = ev.target.result;

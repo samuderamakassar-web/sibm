@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { tanggalISOWITASekarang } from "@/lib/shift";
-import { KOLEKSI_LAPORAN_ZONA, rencanaUntuk, type UjiPolaZona } from "@/lib/ujiPolaZona";
+import { KOLEKSI_LAPORAN_ZONA, rencanaUntuk, type UjiPolaZona } from "@/lib/polaZona";
 import { KartuOrang } from "./admin/RencanaZonaKartu";
 
 const AMBANG_POIN_RENDAH = 85; // sama dengan scripts/fcm-reminder.mjs

@@ -13,6 +13,7 @@ import AdminShell from "../admin/AdminShell";
 import { jamWITA, normalNama, selesaikanLemburSaatCheckout, tanggalWITA } from "../../lib/validasiKaryawan";
 import { daerahTulis } from "@/lib/daerah";
 import { MODA_KELUAR, STATUS_KELUAR_KENDARAAN, STATUS_TIBA_KENDARAAN, catatKendaraanDariBukuTamu, kendaraanSedangDipakai, pesanDipakai, tandaiKeluar, tandaiKembali } from "@/lib/keluarKaryawan";
+import { uploadFoto } from "@/lib/uploadFoto";
 
 // ==========================================
 // IKON — SVG garis, satu ekosistem dengan dashboard/security & dashboard/ob
@@ -358,19 +359,8 @@ export default function BukuTamuSecurity() {
     setIsCameraOpen(false);
   };
 
-  async function uploadToCloudinary(blob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-    formData.append("folder", "sibm/buku-tamu");
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData }
-    );
-    if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-    const data = await res.json();
-    return data.secure_url as string;
+  async function uploadKeStorage(blob: Blob): Promise<string> {
+    return uploadFoto(blob, "sibm/buku-tamu");
   }
 
   const ambilFoto = () => {
@@ -392,7 +382,7 @@ export default function BukuTamuSecurity() {
       if (!blob) return;
       setIsUploadingFoto(true);
       try {
-        const url = await uploadToCloudinary(blob);
+        const url = await uploadKeStorage(blob);
         setFotoBukti(url);
       } catch (err) {
         console.error(err);

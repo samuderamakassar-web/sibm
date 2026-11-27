@@ -185,7 +185,7 @@ export default function AdminLegalitasPage() {
     try { await deleteDoc(doc(db, "master_legalitas", d.id)); showToast("Dokumen dihapus.", "success"); }
     catch (e) { console.error(e); showToast("Gagal menghapus.", "error"); }
   };
-  const lihat = (v: { file_path?: string; file_url?: string }) => bukaFileLegal(v).catch((e) => { console.error(e); showToast("File tidak bisa dibuka (tidak berhak atau file hilang).", "error"); });
+  const lihat = (v: { file_path?: string; file_url?: string; nama_file?: string }) => bukaFileLegal(v).catch((e) => { console.error(e); showToast("File tidak bisa dibuka (tidak berhak atau file hilang).", "error"); });
 
   // §147 proses perpanjangan
   const mulaiProses = async () => {

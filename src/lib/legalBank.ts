@@ -6,7 +6,8 @@
 //                 (lewat rules, tanpa link publik). Data lama (Cloudinary, file_url) tetap bisa dibuka.
 //   Eksekutif Tenant: hanya daftar (tanpa file) untuk PT miliknya (users_master.unit_bisnis ada di pt[]), lihat firestore.rules.
 
-import { getBlob, ref, uploadBytes } from "firebase/storage";
+import { ref, uploadBytes } from "firebase/storage";
+import { bukaDokumen } from "@/components/ui/PratinjauDokumen";
 import { storage } from "./firebase";
 
 export interface PerusahaanLegal { kode: string; nama: string }
@@ -86,17 +87,10 @@ export async function unggahFileLegal(file: File, kodeArsip: string): Promise<{ 
   }
   return { path, nama: file.name };
 }
-/** Buka file privat di tab baru (lewat rules Storage, tanpa link publik). */
-export async function bukaFileLegal(v: { file_path?: string; file_url?: string }): Promise<void> {
-  if (v.file_path) {
-    const tab = window.open("", "_blank");
-    const blob = await getBlob(ref(storage, v.file_path));
-    const url = URL.createObjectURL(blob);
-    if (tab) tab.location.href = url; else window.location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    return;
-  }
-  if (v.file_url) window.open(v.file_url, "_blank", "noopener");
+/** §187 Buka file privat di modal pratinjau (lewat rules Storage, tanpa link publik) -- bisa print & unduh. */
+export async function bukaFileLegal(v: { file_path?: string; file_url?: string; nama_file?: string }): Promise<void> {
+  if (v.file_path) { bukaDokumen({ path: v.file_path, nama: v.nama_file }); return; }
+  if (v.file_url) bukaDokumen({ url: v.file_url, nama: v.nama_file });
 }
 
 // ===================== §147 Tahap 2 =====================

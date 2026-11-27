@@ -25,7 +25,7 @@ import Tile from "../admin/Tile";
 import {
   akhirPekan, dalamUjiCoba, FOTO_MAX, FOTO_MIN, KOLEKSI_LAPORAN_ZONA, mingguKe, rencanaUntuk, seninPekan, useUjiPolaZona, zonaUntuk,
   type LaporanZona,
-} from "@/lib/ujiPolaZona";
+} from "@/lib/polaZona";
 
 const jam = (l: LaporanZona) => l.waktu?.toDate().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Makassar" }) || "…";
 const samaNama = (a = "", b = "") => a.trim().toLowerCase() === b.trim().toLowerCase();

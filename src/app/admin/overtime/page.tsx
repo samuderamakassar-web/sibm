@@ -13,6 +13,7 @@ import Modal from "../../../components/ui/Modal";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { useConfirm } from "../../../components/ui/ConfirmProvider";
 import AdminShell from "../../../components/admin/AdminShell";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 
 // ==========================================
@@ -614,7 +615,7 @@ export default function AdminOvertimePage() {
                         {req.validasi_security?.oleh && (
                           <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>
                             Divalidasi Security: {req.validasi_security.oleh}
-                            {req.validasi_security.foto_url && <> · <a href={req.validasi_security.foto_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)", fontWeight: 700 }}>lihat foto</a></>}
+                            {req.validasi_security.foto_url && <> · <a href={req.validasi_security.foto_url} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(req.validasi_security.foto_url)} style={{ color: "var(--info)", fontWeight: 700 }}>lihat foto</a></>}
                           </div>
                         )}
                       </td>

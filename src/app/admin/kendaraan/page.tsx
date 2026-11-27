@@ -22,6 +22,8 @@ import VehicleIcon3D, { KATEGORI_KENDARAAN, WARNA_KENDARAAN } from "../../../com
 import { DAFTAR_UNIT_BISNIS } from "../../../lib/unitBisnis";
 import AdminShell from "../../../components/admin/AdminShell";
 import AdminIcon from "../../../components/admin/AdminIcon";
+import { uploadFoto } from "@/lib/uploadFoto";
+import { klikDokumen } from "@/components/ui/PratinjauDokumen";
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "neutral";
 
@@ -176,19 +178,8 @@ function parseKendaraanLama(raw: string): { plat_nomor: string; pic_kendaraan: s
   return { plat_nomor: raw, pic_kendaraan: "", unit_bisnis: "" };
 }
 
-async function uploadFotoToCloudinary(blob: Blob, folder: string = "sibm/kendaraan"): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", blob);
-  formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-  formData.append("folder", folder);
-
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-    { method: "POST", body: formData }
-  );
-  if (!res.ok) throw new Error("Upload ke Cloudinary gagal");
-  const data = await res.json();
-  return data.secure_url as string;
+async function uploadFotoKeStorage(blob: Blob, folder: string = "sibm/kendaraan"): Promise<string> {
+  return uploadFoto(blob, folder);
 }
 
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -646,7 +637,7 @@ export default function ManajemenKendaraanPage() {
           if (!blob) return;
           setIsUploadingFoto(true);
           try {
-            const url = await uploadFotoToCloudinary(blob);
+            const url = await uploadFotoKeStorage(blob);
             setFormData((prev) => ({ ...prev, foto_url: url }));
           } catch (err) {
             console.error(err);
@@ -879,7 +870,7 @@ export default function ManajemenKendaraanPage() {
           if (!blob) return;
           setIsUploadingEmisi(true);
           try {
-            const url = await uploadFotoToCloudinary(blob, "sibm/uji-emisi");
+            const url = await uploadFotoKeStorage(blob, "sibm/uji-emisi");
             setFormService((prev) => ({ ...prev, foto_emisi_url: url }));
           } catch (err) {
             console.error(err);
@@ -1372,7 +1363,7 @@ export default function ManajemenKendaraanPage() {
                           </Td>
                           <Td style={{ textAlign: "center" }}>
                             {entry.foto ? (
-                              <a href={entry.foto} target="_blank" rel="noopener noreferrer">
+                              <a href={entry.foto} target="_blank" rel="noopener noreferrer" onClick={klikDokumen(entry.foto)}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={entry.foto} alt="Lampiran" style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "8px" }} />
                               </a>
