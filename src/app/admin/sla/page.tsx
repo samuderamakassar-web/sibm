@@ -157,7 +157,9 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   const segAktif = areaCleaning.flatMap((x) => x.segmen.filter((s) => s.aktif !== false));
   const toiletSop = segAktif.filter((s) => /toilet|wc/i.test(s.nama)).length;
   const itemSop = segAktif.reduce((s, x) => s + x.pertanyaan.length, 0);
-  const toilet = Math.max(toiletUnit, toiletSop);
+  // §187 toilet nyata = ruang toilet di Zona Publik (Pria/Wanita per lantai), bukan 1 unit gabungan di Okupansi
+  const toiletZona = pakaiZona ? zona.area_publik.filter((x) => /toilet|wc/i.test(x) && !zona.mingguan.includes(x)).length : 0;
+  const toilet = Math.max(toiletUnit, toiletSop, toiletZona);
   // §186 pola zona: ruang tenant dibersihkan Zona Tenant (OB), jadi keluar dari beban CS dan masuk beban OB
   const intensifCS = pakaiZona ? intensif - tenantIntensif : intensif;
   const bebanM2 = intensifCS + ringan * a.cs_bobot_ringan + toilet * a.cs_m2_per_toilet;
@@ -175,7 +177,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
     dasar: [
       pakaiZona ? `Pola zona: Zona Publik (${namaCS.join(", ")}) — area bersama ${f1(intensifCS)} m² (ruang tenant ${f1(tenantIntensif)} m² dikerjakan Zona Tenant)` : `Area intensif ${f1(intensif)} m² (tenant terisi + area bersama ${f1(bersamaGedung)} m²: lobi, koridor, toilet, tangga)`,
       `Area ringan ${f1(ringan)} m² × bobot ${a.cs_bobot_ringan} (area kosong, teras, parkir)`,
-      `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara (${toiletSop >= toiletUnit ? "dari segmen SOP checklist" : "dari unit Okupansi"})`,
+      `${toilet} toilet × ${a.cs_m2_per_toilet} m² setara (${toilet === toiletZona ? "ruang toilet di Zona Publik" : toiletSop >= toiletUnit ? "dari segmen SOP checklist" : "dari unit Okupansi"})`,
       `Beban luas: ${f1(bebanM2)} m² ÷ ${a.cs_m2_per_orang} m²/orang × cadangan ${a.cadangan_pct}% = ${f1(kebutuhanLuas)} orang`,
       pakaiZona ? `Pola zona: Zona Publik dibagi ${posisiHarian} paket tetap (Toilet & Area Lain) = ${posisiHarian} orang setiap hari` : `SOP checklist: area dibagi ${paketSop} paket plotting = ${paketSop} CS bertugas setiap hari · ${itemSop} item × 3 sesi = ${itemSop * 3} pengecekan/hari`,
       `Dipakai yang lebih besar: ${kebutuhanLuas >= posisiHarian ? "beban luas" : "posisi harian (belum termasuk pengganti saat cuti)"}`,
@@ -188,7 +190,10 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
   };
 
   // ---------- OB pelayanan ----------
-  const jumlahKaryawan = karyawan.size;
+  // §187 yang dilayani OB = karyawan tenant; staf operasional gedung sendiri (Driver, Security, Cleaning, OB, BM) tidak dihitung
+  const INTERNAL = /^(driver|security|cleaning|office boy|ob & cs|ob|cs|building management)$/i;
+  const jumlahKaryawan = karyawan.docs.filter((d) => !INTERNAL.test(String(d.data().departemen || "").trim())).length;
+  const karyawanInternal = karyawan.size - jumlahKaryawan;
   const meeting = booking.docs.map((d) => d.data()).filter((b) => b.jenis === "ruangan" && b.status !== "dibatalkan" && /meeting/i.test(String(b.objek_id || b.objek_nama || ""))).length;
   const meetingPerHari = meeting / hariKerja;
   // §122 data nyata permintaan pelayanan (bila cukup) -> menit kerja; selain itu perkiraan dari jumlah karyawan
@@ -206,7 +211,7 @@ async function hitung(p: Periode, hariIni: string, a: AsumsiBeban): Promise<Hasi
       `Total ± ${Math.round(menitPerm)} menit kerja (${f1(menitPerm / hariKerja)} menit/hari) — minuman 10, meeting 25, dokumen 15, lainnya 15 menit`,
       `÷ ${a.ob_menit_produktif} menit efektif per OB per hari × cadangan ${a.cadangan_pct}%`,
     ] : [
-      `${jumlahKaryawan} karyawan di Master Data`,
+      `${jumlahKaryawan} karyawan tenant di Master Data${karyawanInternal ? ` (${karyawanInternal} staf gedung sendiri tidak dihitung)` : ""}`,
       `${meeting} booking ruang meeting (${f1(meetingPerHari)}/hari kerja) × ${a.ob_karyawan_per_meeting} karyawan setara`,
       `÷ ${a.ob_karyawan_per_orang} karyawan per OB × cadangan ${a.cadangan_pct}%`,
       `Perkiraan — data permintaan pelayanan baru ${perm.length} (dipakai setelah ≥ ${a.ob_min_permintaan})`,

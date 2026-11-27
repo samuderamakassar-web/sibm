@@ -3564,3 +3564,11 @@ User: nama file ujiPolaZona.ts diganti; setiap push pastikan merge dev->main tan
 6. Perbaikan bug §186: regex penanda mingguan di sinkronAreaTenantZona kehilangan backslash (/|s*mingguan/ cocok semua baris) -- belum sempat ter-deploy, data live aman.
 7. Rename: src/lib/ujiPolaZona.ts -> src/lib/polaZona.ts; route /admin/uji-pola-zona -> /admin/pola-zona (alamat lama dialihkan). Dokumen Firestore tetap ob_settings/uji_pola_zona (tidak dipindah supaya cron & data lama aman).
 8. Fitur tanpa data (27 Nov): booking 0, uji emisi 0, handbook magang 0, Daftar Aset terpadu (aset_gedung) 0, opname gudang OB (ob_opname) 0, survei 1, permintaan pelayanan 2, pengumuman 3, dokumen SOP 2.
+
+## 188. Asumsi Beban Kerja Diselaraskan dengan Okupansi & Pola Zona (27 November 2026)
+
+User: apakah asumsi beban kerja sudah selaras dengan okupansi & plotting area; bila tidak atur ideal & simpan.
+1. Dicek dengan data live: bobot toilet 60 m² & area ringan 0,3 sudah sama dengan pola zona (bagiZona.ts); CS 600 m²/orang, cadangan 10%, driver & security tetap.
+2. Tidak selaras: (a) karyawan dilayani OB menghitung 67 orang termasuk 10 staf gedung sendiri (Driver, Security, Cleaning, Office Boy, BM) -> sekarang hanya karyawan tenant (57); (b) toilet dihitung 6 (segmen SOP) padahal Zona Publik 8 ruang toilet + toilet basement -> sekarang dari Zona Publik; (c) 6 area bersama Okupansi belum masuk Zona Publik.
+3. Disimpan: ob_karyawan_per_orang 35 -> 40 (standar, setelah staf internal dikeluarkan). Zona Publik + Basement · Toilet (TOILET), Basement · Mushallah, Lantai 1 · UKS, Lantai 2 · Ruang Tunggu, Lantai 3 · Teras, Lantai 3 · Gudang | mingguan (LAIN). Cadangan scratchpad backup-beban-zona-187.json.
+4. Hasil: CS kebutuhan 2 (luas 1,67 orang; posisi harian 2) = 100% Seimbang; OB 57/40 x 1,1 + ruang tenant 0,66 = 2,23 vs 2 = 111% Padat (sebelumnya 2,76 = 138%). Area Lantai 2 & 3 yang direnovasi (241,8 m² kosong) masih dihitung ringan x 0,3.
